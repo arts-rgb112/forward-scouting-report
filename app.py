@@ -11,43 +11,34 @@ from rankings import (
     get_top_leagues_shot_quality,
 )
 
+# 화면 레이아웃을 wide로 변경하여 비교 모드 시 쾌적하게 렌더링되도록 수정 완료
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="wide")
-
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_search(term: str):
     return search_players(term)
 
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_player_data(player_id: str):
     return fetch_player_multi_season_data(player_id)
-
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_percentiles(player_id: str, season: str, metrics: DecisionMetrics, min_xg: float):
     return calculate_league_percentiles(player_id, season, metrics, minimum_xg=min_xg)
 
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_top20():
     return get_top_leagues_shot_quality("25/26")
-
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_league_medians(league_id: int, season_name: str) -> dict[str, float | None]:
     return get_league_metric_medians(league_id, season_name)
 
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_tactical_matrix(league_id: int, season_name: str) -> pd.DataFrame:
     return get_tactical_matrix(league_id, season_name)
 
-
-def render_tactical_matrix(
-    matrix: pd.DataFrame, selected_player_id: str, selected_name: str
-) -> None:
-    """Render a logo-free, interactive Net Progression vs finishing matrix."""
+def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, selected_name: str) -> None:
     if matrix.empty:
         st.info("사분면을 구성할 수 있는 비교군 데이터가 없습니다.")
         return
@@ -107,9 +98,7 @@ def render_tactical_matrix(
     )
     st.plotly_chart(figure, use_container_width=True, config={"displaylogo": False})
 
-
 def get_gradient_color(percentile: float) -> str:
-    """백분위에 따라 파랑(Poor) -> 노랑(Avg) -> 빨강(Great)으로 변환"""
     if percentile <= 50:
         ratio = percentile / 50.0
         r, g, b = int(30 + (255 - 30) * ratio), int(136 + (193 - 136) * ratio), int(229 + (7 - 229) * ratio)
@@ -117,7 +106,6 @@ def get_gradient_color(percentile: float) -> str:
         ratio = (percentile - 50.0) / 50.0
         r, g, b = int(255 + (229 - 255) * ratio), int(193 + (57 - 193) * ratio), int(7 + (53 - 7) * ratio)
     return f"rgb({r}, {g}, {b})"
-
 
 def render_unified_bar(
     title: str,
@@ -128,8 +116,7 @@ def render_unified_bar(
     total_players: int | None = None,
     suffix: str = ""
 ) -> None:
-    """랭킹(%)과 중앙값(다이아몬드)을 동시에 렌더링하는 궁극의 통합 UI (HTML 줄바꿈 버그 픽스 완료)"""
-    
+    # 데이터가 없을 때의 처리
     if player_value is None and top_percent is None:
         st.markdown(f"""
         <div style="margin-bottom: 28px; padding: 0 4px; opacity: 0.5;">
@@ -142,7 +129,6 @@ def render_unified_bar(
         """, unsafe_allow_html=True)
         return
 
-    # 마커 위치 및 색상 기준점 계산 (0~100%)
     if top_percent is not None:
         player_pos = 100.0 - top_percent
         median_pos = 50.0  
@@ -162,12 +148,10 @@ def render_unified_bar(
         median_label_str = f"{median_value:.2f} {suffix}" if median_value is not None else "없음"
 
     dynamic_color = get_gradient_color(color_pos)
-
-    # 텍스트 라벨 포맷팅
     player_label = f"선수 {player_value:.2f} <span style='font-size:11.5px; font-weight:400; color:#888;'>{suffix}</span>" if player_value is not None else "수치 없음"
     rank_label = f"{rank_val}위 <span style='font-size:12px; font-weight:400; color:#888;'>/ {total_players}명 · 상위 {top_percent}%</span>" if (rank_val is not None and top_percent is not None) else ""
-
-    # HTML 렌더링 에러 방지를 위해 태그 내부의 줄바꿈을 완벽히 제거 (한 줄로 작성)
+    
+    # HTML 마크다운 오작동 방지를 위해 한 줄로 처리
     median_marker_html = ""
     if median_pos is not None:
         median_marker_html = f'<div style="position: absolute; top: -6px; left: calc({median_pos}% - 9px); width: 18px; height: 18px; background-color: #aaa; transform: rotate(45deg); border: 2px solid #262730; z-index: 5;"></div>'
@@ -192,72 +176,10 @@ def render_unified_bar(
         </div>
     </div>
     """, unsafe_allow_html=True)
-        return
-
-    # 마커 위치 및 색상 기준점 계산 (0~100%)
-    if top_percent is not None:
-        player_pos = 100.0 - top_percent
-        median_pos = 50.0  # 백분위 기준 50%가 중앙값
-        color_pos = player_pos
-        median_label_str = f"{median_value:.2f} {suffix}" if median_value is not None else "50%"
-    else:
-        safe_player = player_value if player_value is not None else 0.0
-        safe_median = median_value if median_value is not None else 0.0
-        scale_max = max(safe_player, safe_median, 0.1) * 1.2
-        player_pos = min((safe_player / scale_max) * 100, 100)
-        median_pos = min((safe_median / scale_max) * 100, 100) if median_value is not None else None
-        
-        # 중앙값 대비 상대적인 위치로 색상 결정
-        if safe_median > 0:
-            color_pos = min(max(50.0 + ((safe_player - safe_median) / safe_median * 25), 0), 100)
-        else:
-            color_pos = player_pos
-        median_label_str = f"{median_value:.2f} {suffix}" if median_value is not None else "없음"
-
-    dynamic_color = get_gradient_color(color_pos)
-
-    # 텍스트 라벨 포맷팅
-    player_label = f"선수 {player_value:.2f} <span style='font-size:11.5px; font-weight:400; color:#888;'>{suffix}</span>" if player_value is not None else "수치 없음"
-    rank_label = f"{rank_val}위 <span style='font-size:12px; font-weight:400; color:#888;'>/ {total_players}명 · 상위 {top_percent}%</span>" if (rank_val is not None and top_percent is not None) else ""
-
-    median_marker_html = ""
-    if median_pos is not None:
-        median_marker_html = f"""
-        <div style="position: absolute; top: -6px; left: calc({median_pos}% - 9px); 
-                    width: 18px; height: 18px; background-color: #aaa; 
-                    transform: rotate(45deg); border: 2px solid #262730; z-index: 5;">
-        </div>
-        """
-
-    st.markdown(f"""
-    <div style="margin-bottom: 28px; padding: 0 4px;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
-            <div style="display: flex; align-items: baseline; gap: 10px;">
-                <span style="font-size: 16px; font-weight: 700; color: #f8f9fa;">{title}</span>
-                <span style="font-size: 14px; font-weight: 600; color: {dynamic_color};">{player_label}</span>
-            </div>
-            <span style="font-size: 14px; font-weight: 600; color: {dynamic_color}; text-align: right;">{rank_label}</span>
-        </div>
-        <div style="position: relative; width: 100%; height: 6px; background-color: #333; border-radius: 3px;">
-            {median_marker_html}
-            <div style="position: absolute; top: -6px; left: calc({player_pos}% - 9px); 
-                        width: 18px; height: 18px; border-radius: 50%; background-color: {dynamic_color}; 
-                        border: 2.5px solid #262730; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 10;">
-            </div>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; font-weight: 500; color: #888;">
-            <span>Poor</span>
-            <span><span style="color: #aaa;">◆</span> 중앙값 ({median_label_str})</span>
-            <span>Great</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
 
 def style_dataframe(df: pd.DataFrame):
     if df.empty:
         return df
-    
     try:
         return df.style.background_gradient(
             cmap="RdYlBu_r", subset=["슈팅 퀄리티 (xGOT-xG)"]
@@ -269,9 +191,7 @@ def style_dataframe(df: pd.DataFrame):
     except Exception:
         return df
 
-
 def select_player(query: str, key: str):
-    """Search and select one player, keeping comparison-side widget keys unique."""
     if not query.strip():
         return None
     try:
@@ -284,7 +204,6 @@ def select_player(query: str, key: str):
         return None
     labels = [f"{row.name} · {row.team_name}" if row.team_name else row.name for row in candidates]
     return candidates[st.selectbox("선수 선택", range(len(candidates)), format_func=lambda i: labels[i], key=key)]
-
 
 def render_player_report(player, selected_seasons: list[str], competition_filter: str) -> None:
     try:
@@ -318,7 +237,6 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
             except Exception:
                 medians = {}
 
-            # 전술 사분면 매트릭스를 가장 상단에 고정
             try:
                 matrix = cached_tactical_matrix(stats.league_id, season_name)
                 if str(player.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist():
@@ -334,7 +252,6 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
 
             st.divider()
 
-            # 랭킹 데이터 Fetch
             try:
                 minimum_xg = 1.5 if stats.league_id == 42 else 5.0
                 rank = cached_percentiles(player.player_id, season_str, stats, min_xg=minimum_xg)
@@ -344,7 +261,6 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
             def get_rank(attr):
                 return getattr(rank, attr, None) if rank else None
 
-            # 1. 90분당 세부 전진 기여도 (통합 UI 적용)
             st.caption("🏃 순수 전진 기여도 = 성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
             
             elite_eligible = get_rank("elite_dribbler_eligible") or 0
@@ -370,10 +286,8 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
 
             st.divider()
             
-            # 2. 결정력 상대평가 (통합 UI 적용)
             if rank and rank.eligible_players:
                 st.caption(f"🎯 결정력 상대평가 (동일 대회, xG {minimum_xg} 이상 {rank.eligible_players}명 기준)")
-                
                 render_unified_bar("득점", stats.goals, None, 
                                    rank.goals_top_percent, rank.goals_rank, rank.eligible_players, "골")
                 render_unified_bar("순수결정력", stats.shot_quality, None, 
@@ -382,7 +296,6 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
                                    rank.overall_finishing_top_percent, rank.overall_finishing_rank, rank.eligible_players, "골")
             else:
                 st.caption("결정력 상대평가 비교군을 불러오지 못했습니다.")
-
 
 def main() -> None:
     st.title("🎯 스트라이커 전술 스카우팅 리포트")
@@ -423,7 +336,6 @@ def main() -> None:
                     st.dataframe(style_dataframe(ranking_tables.get(name, pd.DataFrame())), use_container_width=True, height=735)
     except Exception as exc:
         st.info(f"랭킹 데이터를 불러오지 못했습니다: {exc}")
-
 
 if __name__ == "__main__":
     main()
