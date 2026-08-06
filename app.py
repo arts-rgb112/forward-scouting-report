@@ -117,7 +117,6 @@ def render_unified_bar(
     suffix: str = ""
 ) -> None:
     
-    # 0.0도 유효한 값으로 처리하기 위해 None 체크만 수행
     if player_value is None and top_percent is None:
         st.markdown(f"""
         <div style="margin-bottom: 28px; padding: 0 4px; opacity: 0.5;">
@@ -130,17 +129,14 @@ def render_unified_bar(
         """, unsafe_allow_html=True)
         return
 
-    # 중앙값을 가운데 억지 배치하지 않고, 실제 수치(절대값)를 기준으로 스케일링
     safe_player = player_value if player_value is not None else 0.0
     safe_median = median_value if median_value is not None else 0.0
     
-    scale_max = max(safe_player, safe_median, 0.1) * 1.25  # 여백 25% 추가
+    scale_max = max(safe_player, safe_median, 0.1) * 1.25
     
-    # 절대값 기반 실제 물리적 위치 계산 (0 ~ 100%)
     player_pos = min((safe_player / scale_max) * 100.0, 100.0)
     median_pos = min((safe_median / scale_max) * 100.0, 100.0)
     
-    # 색상 적용 기준: 랭킹 퍼센트가 있으면 퍼센트 기준, 없으면 상대 평가 적용
     if top_percent is not None:
         color_pos = 100.0 - top_percent
     else:
@@ -155,7 +151,6 @@ def render_unified_bar(
     player_label = f"선수 {safe_player:.2f} <span style='font-size:11.5px; font-weight:400; color:#888;'>{suffix}</span>"
     rank_label = f"{rank_val}위 <span style='font-size:12px; font-weight:400; color:#888;'>/ {total_players}명 · 상위 {top_percent}%</span>" if (rank_val is not None and top_percent is not None) else ""
     
-    # HTML 마크다운 오작동 방지를 위해 한 줄로 처리
     median_marker_html = f'<div style="position: absolute; top: -6px; left: calc({median_pos}% - 9px); width: 18px; height: 18px; background-color: #aaa; transform: rotate(45deg); border: 2px solid #262730; z-index: 5;"></div>'
 
     st.markdown(f"""
@@ -234,19 +229,20 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
                 st.caption(f"소속팀: {stats.team_name}")
             season_name = f"20{season_str[:2]}/20{season_str[3:]}"
             
-            # --- Yamal 등 데이터 누락(None)에 대한 자동 방어 및 0.0 치환 로직 ---
-            stats.aerial_duels_won_per90 = stats.aerial_duels_won_per90 or 0.0
-            stats.aerial_duels_lost_per90 = stats.aerial_duels_lost_per90 or 0.0
-            stats.duels_won_per90 = stats.duels_won_per90 or 0.0
-            stats.duels_lost_per90 = stats.duels_lost_per90 or 0.0
-            stats.dribbles_succeeded_per90 = stats.dribbles_succeeded_per90 or 0.0
-            stats.dribbles_failed_per90 = stats.dribbles_failed_per90 or 0.0
+            # --- AttributeError 방지: 객체를 직접 수정하지 않고 지역 변수로 우회 ---
+            aerial_won = getattr(stats, "aerial_duels_won_per90", None) or 0.0
+            aerial_lost = getattr(stats, "aerial_duels_lost_per90", None) or 0.0
+            duels_won = getattr(stats, "duels_won_per90", None) or 0.0
+            duels_lost = getattr(stats, "duels_lost_per90", None) or 0.0
+            dribbles_succeeded = getattr(stats, "dribbles_succeeded_per90", None) or 0.0
+            dribbles_failed = getattr(stats, "dribbles_failed_per90", None) or 0.0
 
             # 누락 스탯으로 인해 순수 전진 기여도가 계산되지 않았을 경우를 위한 백업 계산
-            if getattr(stats, "net_progression_per90", None) is None:
-                stats.net_progression_per90 = (
-                    stats.dribbles_succeeded_per90 + stats.duels_won_per90 + stats.aerial_duels_won_per90
-                    - stats.duels_lost_per90 - stats.aerial_duels_lost_per90 - stats.dribbles_failed_per90
+            net_progression = getattr(stats, "net_progression_per90", None)
+            if net_progression is None:
+                net_progression = (
+                    dribbles_succeeded + duels_won + aerial_won
+                    - duels_lost - aerial_lost - dribbles_failed
                 )
             # -----------------------------------------------------------
 
@@ -260,7 +256,8 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
                 if str(player.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist():
                     matrix = pd.concat([matrix, pd.DataFrame([{
                         "player_id": str(player.player_id), "player_name": player.name,
-                        "team_name": stats.team_name or "", "net_progression_per90": stats.net_progression_per90,
+                        "team_name": stats.team_name or "", 
+                        "net_progression_per90": net_progression,  # 수정한 지역 변수 사용
                         "xgot_minus_xg": stats.shot_quality,
                     }])], ignore_index=True)
                 st.caption("📊 전술 사분면 매트릭스")
@@ -281,32 +278,31 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
 
             st.caption("🏃 순수 전진 기여도 = 성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
             
-            # 비교군 랭킹 계산시 볼륨(per90) 랭킹 변수 사용으로 일원화
             elite_eligible = get_rank("elite_dribbler_eligible") or 0
             duels_eligible = get_rank("duels_eligible") or 0
             aerials_eligible = get_rank("aerials_eligible") or 0
             net_eligible = get_rank("net_progression_eligible") or 0
 
-            render_unified_bar("성공 드리블", stats.dribbles_succeeded_per90, medians.get("dribbles_succeeded_per90"), 
+            # 원본 stats 대신 안전하게 치환된 지역 변수(dribbles_succeeded 등) 사용
+            render_unified_bar("성공 드리블", dribbles_succeeded, medians.get("dribbles_succeeded_per90"), 
                                get_rank("dribbles_succeeded_per90_top_percent"), get_rank("dribbles_succeeded_per90_rank"), elite_eligible, "/90분")
             
-            render_unified_bar("실패 드리블", stats.dribbles_failed_per90, medians.get("dribbles_failed_per90"), 
+            render_unified_bar("실패 드리블", dribbles_failed, medians.get("dribbles_failed_per90"), 
                                get_rank("dribbles_failed_per90_top_percent"), get_rank("dribbles_failed_per90_rank"), elite_eligible, "/90분")
             
-            # 승률(pct) 대신 볼륨(per90) 랭킹을 가져오도록 변수 수정 적용
-            render_unified_bar("볼 경합 성공", stats.duels_won_per90, medians.get("duels_won_per90"), 
+            render_unified_bar("볼 경합 성공", duels_won, medians.get("duels_won_per90"), 
                                get_rank("duels_won_per90_top_percent"), get_rank("duels_won_per90_rank"), duels_eligible, "/90분")
             
-            render_unified_bar("볼 경합 실패", stats.duels_lost_per90, medians.get("duels_lost_per90"), 
+            render_unified_bar("볼 경합 실패", duels_lost, medians.get("duels_lost_per90"), 
                                get_rank("duels_lost_per90_top_percent"), get_rank("duels_lost_per90_rank"), duels_eligible, "/90분")
             
-            render_unified_bar("공중볼 경합 성공", stats.aerial_duels_won_per90, medians.get("aerial_duels_won_per90"), 
+            render_unified_bar("공중볼 경합 성공", aerial_won, medians.get("aerial_duels_won_per90"), 
                                get_rank("aerials_won_per90_top_percent"), get_rank("aerials_won_per90_rank"), aerials_eligible, "/90분")
             
-            render_unified_bar("공중볼 경합 실패", stats.aerial_duels_lost_per90, medians.get("aerial_duels_lost_per90"), 
+            render_unified_bar("공중볼 경합 실패", aerial_lost, medians.get("aerial_duels_lost_per90"), 
                                get_rank("aerials_lost_per90_top_percent"), get_rank("aerials_lost_per90_rank"), aerials_eligible, "/90분")
             
-            render_unified_bar("순수 전진 기여도", stats.net_progression_per90, medians.get("net_progression_per90"), 
+            render_unified_bar("순수 전진 기여도", net_progression, medians.get("net_progression_per90"), 
                                get_rank("net_progression_top_percent"), get_rank("net_progression_rank"), net_eligible, "/90분")
 
             st.divider()
