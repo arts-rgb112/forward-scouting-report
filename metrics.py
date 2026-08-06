@@ -173,10 +173,12 @@ _DUELS_WON_PERCENTAGE_TITLES = {
     "duels won percentage", "duel won percentage", "duels won %",
     "ground duels won percentage",
 }
-_AERIAL_DUELS_WON_TITLES = {"aerial duels won", "aerial duel won"}
+_AERIAL_DUELS_WON_TITLES = {
+    "aerial duels won", "aerial duel won", "aerials won",
+}
 _AERIAL_DUELS_WON_PERCENTAGE_TITLES = {
     "aerial duels won percentage", "aerial duel won percentage",
-    "aerial duels won %",
+    "aerial duels won %", "aerials won %", "aerials won percentage",
 }
 
 

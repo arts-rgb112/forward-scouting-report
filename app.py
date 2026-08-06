@@ -145,7 +145,7 @@ def render_percentile_bar(title: str, top_percent: float | None, rank_val: int |
         <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
             <span style="font-size: 15px; font-weight: 600;">{title}</span>
             <span style="font-size: 14px; font-weight: bold; color: {dynamic_color};">
-                {rank_val}위 <span style="font-size: 12px; font-weight: normal; color: #888;">/ {total_players}명 (상위 {top_percent}%)</span>
+                {rank_val}위 <span style="font-size: 12px; font-weight: normal; color: #888;">/ {total_players}명 · 상위 {top_percent}% · 백분위 {percentile:.1f}</span>
             </span>
         </div>
         <div style="position: relative; width: 100%; height: 4px; background-color: #444; border-radius: 2px;">
@@ -170,7 +170,7 @@ def render_per90_metric_bar(
     median_per90: float | None = None,
     description: str = "",
 ) -> None:
-    """90분당 스탯을 UI로 노출하되, 리그 랭킹 데이터가 수집되기 전까지 사용할 커스텀 바입니다."""
+    """Render player and cohort-median values directly on one compact bar."""
     if value_per90 is None:
         html_content = f"""
         <div style="margin-bottom: 25px; padding: 0 10px; opacity: 0.6;">
@@ -184,28 +184,34 @@ def render_per90_metric_bar(
         st.markdown(html_content, unsafe_allow_html=True)
         return
 
-    # 값이 높을수록 긍정적이라는 가정 하에 시각적 포인트(색상) 적용
     color = "rgb(255, 193, 7)" if value_per90 >= 1.0 else "rgb(30, 136, 229)"
     if value_per90 >= 3.0:
         color = "rgb(229, 57, 53)"
     median_label = f"{median_per90:.2f}" if median_per90 is not None else "정보 없음"
+    scale_max = max(value_per90, median_per90 or 0, 0.1) * 1.15
+    player_position = min(value_per90 / scale_max * 100, 100)
+    median_position = min((median_per90 or 0) / scale_max * 100, 100)
+    median_marker = (
+        f'<div style="position:absolute; top:-4px; left:calc({median_position}% - 6px); '
+        'width:12px; height:12px; background:#a9a9a9; transform:rotate(45deg); '
+        'border:1px solid white;"></div>' if median_per90 is not None else ""
+    )
         
     html_content = f"""
     <div style="margin-bottom: 25px; padding: 0 10px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
             <span style="font-size: 15px; font-weight: 600;">{title}</span>
-            <span style="font-size: 14px; font-weight: bold; color: {color};">
-                선수 {value_per90:.2f}<span style="font-size: 12px; font-weight: normal; color: #888;"> /90</span>
-            </span>
+            <span style="font-size: 13px; font-weight: bold; color: {color};">선수 {value_per90:.2f} /90</span>
         </div>
-        <div style="position: relative; width: 100%; height: 4px; background-color: #444; border-radius: 2px;">
-            <div style="position: absolute; top: -7px; left: 50%; 
-                        width: 18px; height: 18px; border-radius: 50%; background-color: {color}; 
-                        border: 2.5px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 10;">
-            </div>
+        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px;">
+            <span style="color:{color};">● 선수</span><span style="color:#a9a9a9;">◆ 중앙값 {median_label} /90</span>
         </div>
-        <div style="text-align: right; margin-top: 8px; font-size: 11px; color: #aaa;">
-            비교군 중앙값: {median_label} /90 {"· " if description else ""}{description}
+        <div style="position:relative; width:100%; height:8px; background:#444; border-radius:5px;">
+            <div style="position:absolute; top:-5px; left:calc({player_position}% - 7px); width:14px; height:14px; border-radius:50%; background:{color}; border:2px solid white; z-index:2;"></div>
+            {median_marker}
+        </div>
+        <div style="text-align:right; margin-top:8px; font-size:11px; color:#aaa;">
+            {description}
         </div>
     </div>
     """
@@ -275,22 +281,29 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
             except Exception:
                 medians = {}
 
-            st.caption("수치 요약 — 선수 / 동일 리그·시즌 비교군 중앙값 (모두 90분당)")
-            summary = pd.DataFrame([
-                ("성공 드리블", stats.dribbles_succeeded_per90, medians.get("dribbles_succeeded_per90")),
-                ("실패 드리블", stats.dribbles_failed_per90, medians.get("dribbles_failed_per90")),
-                ("볼 경합 성공", stats.duels_won_per90, medians.get("duels_won_per90")),
-                ("볼 경합 실패", stats.duels_lost_per90, medians.get("duels_lost_per90")),
-                ("공중볼 경합 성공", stats.aerial_duels_won_per90, medians.get("aerial_duels_won_per90")),
-                ("공중볼 경합 실패", stats.aerial_duels_lost_per90, medians.get("aerial_duels_lost_per90")),
-                ("순수 전진 기여도", stats.net_progression_per90, medians.get("net_progression_per90")),
-            ], columns=["항목", "선수", "비교군 중앙값"])
-            st.dataframe(summary, hide_index=True, use_container_width=True, column_config={
-                "선수": st.column_config.NumberColumn(format="%.2f"),
-                "비교군 중앙값": st.column_config.NumberColumn(format="%.2f"),
-            })
+            # The tactical matrix is the primary scouting view and intentionally
+            # appears before every detail metric.
+            try:
+                matrix = cached_tactical_matrix(stats.league_id, season_name)
+                if str(player.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist():
+                    matrix = pd.concat([matrix, pd.DataFrame([{
+                        "player_id": str(player.player_id), "player_name": player.name,
+                        "team_name": stats.team_name or "", "net_progression_per90": stats.net_progression_per90,
+                        "xgot_minus_xg": stats.shot_quality,
+                    }])], ignore_index=True)
+                st.caption("📊 전술 사분면 매트릭스")
+                render_tactical_matrix(matrix, player.player_id, player.name)
+            except Exception:
+                st.caption("사분면 매트릭스를 구성할 비교 집단 데이터가 없습니다.")
 
+            st.divider()
             st.caption("🏃 순수 전진 기여도 = 성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
+            render_per90_metric_bar("성공 드리블", stats.dribbles_succeeded_per90, medians.get("dribbles_succeeded_per90"))
+            render_per90_metric_bar("실패 드리블", stats.dribbles_failed_per90, medians.get("dribbles_failed_per90"))
+            render_per90_metric_bar("볼 경합 성공", stats.duels_won_per90, medians.get("duels_won_per90"))
+            render_per90_metric_bar("볼 경합 실패", stats.duels_lost_per90, medians.get("duels_lost_per90"))
+            render_per90_metric_bar("공중볼 경합 성공", stats.aerial_duels_won_per90, medians.get("aerial_duels_won_per90"))
+            render_per90_metric_bar("공중볼 경합 실패", stats.aerial_duels_lost_per90, medians.get("aerial_duels_lost_per90"))
             render_per90_metric_bar("순수 전진 기여도", stats.net_progression_per90, medians.get("net_progression_per90"))
 
             try:
@@ -304,17 +317,6 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
             except Exception:
                 st.caption("상대평가 비교군을 불러오지 못했습니다.")
 
-            try:
-                matrix = cached_tactical_matrix(stats.league_id, season_name)
-                if str(player.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist():
-                    matrix = pd.concat([matrix, pd.DataFrame([{
-                        "player_id": str(player.player_id), "player_name": player.name,
-                        "team_name": stats.team_name or "", "net_progression_per90": stats.net_progression_per90,
-                        "xgot_minus_xg": stats.shot_quality,
-                    }])], ignore_index=True)
-                render_tactical_matrix(matrix, player.player_id, player.name)
-            except Exception:
-                st.caption("사분면 매트릭스를 구성할 비교 집단 데이터가 없습니다.")
 
 
 def main() -> None:
