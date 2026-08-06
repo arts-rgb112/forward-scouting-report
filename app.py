@@ -109,113 +109,97 @@ def render_tactical_matrix(
 
 
 def get_gradient_color(percentile: float) -> str:
-    """백분위에 따라 파랑 -> 노랑 -> 빨강으로 자연스럽게 변환되는 RGB 값을 반환합니다."""
+    """백분위에 따라 파랑(Poor) -> 노랑(Avg) -> 빨강(Great)으로 변환"""
     if percentile <= 50:
         ratio = percentile / 50.0
-        r = int(30 + (255 - 30) * ratio)
-        g = int(136 + (193 - 136) * ratio)
-        b = int(229 + (7 - 229) * ratio)
+        r, g, b = int(30 + (255 - 30) * ratio), int(136 + (193 - 136) * ratio), int(229 + (7 - 229) * ratio)
     else:
         ratio = (percentile - 50.0) / 50.0
-        r = int(255 + (229 - 255) * ratio)
-        g = int(193 + (57 - 193) * ratio)
-        b = int(7 + (53 - 7) * ratio)
+        r, g, b = int(255 + (229 - 255) * ratio), int(193 + (57 - 193) * ratio), int(7 + (53 - 7) * ratio)
     return f"rgb({r}, {g}, {b})"
 
 
-def render_percentile_bar(title: str, top_percent: float | None, rank_val: int | None, total_players: int, missing_msg: str = "데이터 부족") -> None:
-    if top_percent is None or rank_val is None:
-        html_content = f"""
-        <div style="margin-bottom: 25px; padding: 0 10px; opacity: 0.6;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                <span style="font-size: 15px; font-weight: 600;">{title}</span>
-                <span style="font-size: 14px; font-weight: bold; color: #888;">{missing_msg}</span>
-            </div>
-            <div style="width: 100%; height: 4px; background-color: #333; border-radius: 2px;"></div>
-        </div>
-        """
-        st.markdown(html_content, unsafe_allow_html=True)
-        return
-
-    percentile = 100.0 - top_percent
-    dynamic_color = get_gradient_color(percentile)
-
-    html_content = f"""
-    <div style="margin-bottom: 25px; padding: 0 10px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-            <span style="font-size: 15px; font-weight: 600;">{title}</span>
-            <span style="font-size: 14px; font-weight: bold; color: {dynamic_color};">
-                {rank_val}위 <span style="font-size: 12px; font-weight: normal; color: #888;">/ {total_players}명 · 상위 {top_percent}% · 백분위 {percentile:.1f}</span>
-            </span>
-        </div>
-        <div style="position: relative; width: 100%; height: 4px; background-color: #444; border-radius: 2px;">
-            <div style="position: absolute; top: -7px; left: calc({percentile}% - 9px); 
-                        width: 18px; height: 18px; border-radius: 50%; background-color: {dynamic_color}; 
-                        border: 2.5px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 10;">
-            </div>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: #aaa;">
-            <span style="color: rgb(30, 136, 229);">Poor</span>
-            <span style="color: rgb(255, 193, 7);">Avg</span>
-            <span style="color: rgb(229, 57, 53);">Great</span>
-        </div>
-    </div>
-    """
-    st.markdown(html_content, unsafe_allow_html=True)
-
-
-def render_per90_metric_bar(
+def render_unified_bar(
     title: str,
-    value_per90: float | None,
-    median_per90: float | None = None,
-    description: str = "",
+    player_value: float | None = None,
+    median_value: float | None = None,
+    top_percent: float | None = None,
+    rank_val: int | None = None,
+    total_players: int | None = None,
+    suffix: str = ""
 ) -> None:
-    """Render player and cohort-median values directly on one compact bar."""
-    if value_per90 is None:
-        html_content = f"""
-        <div style="margin-bottom: 25px; padding: 0 10px; opacity: 0.6;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                <span style="font-size: 15px; font-weight: 600;">{title}</span>
-                <span style="font-size: 14px; font-weight: bold; color: #888;">상세 스탯 없음</span>
+    """랭킹(%)과 중앙값(다이아몬드)을 동시에 렌더링하는 궁극의 통합 UI"""
+    
+    if player_value is None and top_percent is None:
+        st.markdown(f"""
+        <div style="margin-bottom: 28px; padding: 0 4px; opacity: 0.5;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
+                <span style="font-size: 16px; font-weight: 700;">{title}</span>
+                <span style="font-size: 14px; font-weight: 500;">데이터 부족</span>
             </div>
-            <div style="width: 100%; height: 4px; background-color: #333; border-radius: 2px;"></div>
+            <div style="width: 100%; height: 6px; background-color: #333; border-radius: 3px;"></div>
         </div>
-        """
-        st.markdown(html_content, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
         return
 
-    color = "rgb(255, 193, 7)" if value_per90 >= 1.0 else "rgb(30, 136, 229)"
-    if value_per90 >= 3.0:
-        color = "rgb(229, 57, 53)"
-    median_label = f"{median_per90:.2f}" if median_per90 is not None else "정보 없음"
-    scale_max = max(value_per90, median_per90 or 0, 0.1) * 1.15
-    player_position = min(value_per90 / scale_max * 100, 100)
-    median_position = min((median_per90 or 0) / scale_max * 100, 100)
-    median_marker = (
-        f'<div style="position:absolute; top:-4px; left:calc({median_position}% - 6px); '
-        'width:12px; height:12px; background:#a9a9a9; transform:rotate(45deg); '
-        'border:1px solid white;"></div>' if median_per90 is not None else ""
-    )
+    # 마커 위치 및 색상 기준점 계산 (0~100%)
+    if top_percent is not None:
+        player_pos = 100.0 - top_percent
+        median_pos = 50.0  # 백분위 기준 50%가 중앙값
+        color_pos = player_pos
+        median_label_str = f"{median_value:.2f} {suffix}" if median_value is not None else "50%"
+    else:
+        safe_player = player_value if player_value is not None else 0.0
+        safe_median = median_value if median_value is not None else 0.0
+        scale_max = max(safe_player, safe_median, 0.1) * 1.2
+        player_pos = min((safe_player / scale_max) * 100, 100)
+        median_pos = min((safe_median / scale_max) * 100, 100) if median_value is not None else None
         
-    html_content = f"""
-    <div style="margin-bottom: 25px; padding: 0 10px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span style="font-size: 15px; font-weight: 600;">{title}</span>
-            <span style="font-size: 13px; font-weight: bold; color: {color};">선수 {value_per90:.2f} /90</span>
+        # 중앙값 대비 상대적인 위치로 색상 결정
+        if safe_median > 0:
+            color_pos = min(max(50.0 + ((safe_player - safe_median) / safe_median * 25), 0), 100)
+        else:
+            color_pos = player_pos
+        median_label_str = f"{median_value:.2f} {suffix}" if median_value is not None else "없음"
+
+    dynamic_color = get_gradient_color(color_pos)
+
+    # 텍스트 라벨 포맷팅
+    player_label = f"선수 {player_value:.2f} <span style='font-size:11.5px; font-weight:400; color:#888;'>{suffix}</span>" if player_value is not None else "수치 없음"
+    rank_label = f"{rank_val}위 <span style='font-size:12px; font-weight:400; color:#888;'>/ {total_players}명 · 상위 {top_percent}%</span>" if (rank_val is not None and top_percent is not None) else ""
+
+    median_marker_html = ""
+    if median_pos is not None:
+        median_marker_html = f"""
+        <div style="position: absolute; top: -6px; left: calc({median_pos}% - 9px); 
+                    width: 18px; height: 18px; background-color: #aaa; 
+                    transform: rotate(45deg); border: 2px solid #262730; z-index: 5;">
         </div>
-        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px;">
-            <span style="color:{color};">● 선수</span><span style="color:#a9a9a9;">◆ 중앙값 {median_label} /90</span>
+        """
+
+    st.markdown(f"""
+    <div style="margin-bottom: 28px; padding: 0 4px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
+            <div style="display: flex; align-items: baseline; gap: 10px;">
+                <span style="font-size: 16px; font-weight: 700; color: #f8f9fa;">{title}</span>
+                <span style="font-size: 14px; font-weight: 600; color: {dynamic_color};">{player_label}</span>
+            </div>
+            <span style="font-size: 14px; font-weight: 600; color: {dynamic_color}; text-align: right;">{rank_label}</span>
         </div>
-        <div style="position:relative; width:100%; height:8px; background:#444; border-radius:5px;">
-            <div style="position:absolute; top:-5px; left:calc({player_position}% - 7px); width:14px; height:14px; border-radius:50%; background:{color}; border:2px solid white; z-index:2;"></div>
-            {median_marker}
+        <div style="position: relative; width: 100%; height: 6px; background-color: #333; border-radius: 3px;">
+            {median_marker_html}
+            <div style="position: absolute; top: -6px; left: calc({player_pos}% - 9px); 
+                        width: 18px; height: 18px; border-radius: 50%; background-color: {dynamic_color}; 
+                        border: 2.5px solid #262730; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 10;">
+            </div>
         </div>
-        <div style="text-align:right; margin-top:8px; font-size:11px; color:#aaa;">
-            {description}
+        <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; font-weight: 500; color: #888;">
+            <span>Poor</span>
+            <span><span style="color: #aaa;">◆</span> 중앙값 ({median_label_str})</span>
+            <span>Great</span>
         </div>
     </div>
-    """
-    st.markdown(html_content, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 
 def style_dataframe(df: pd.DataFrame):
@@ -276,13 +260,13 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
             if stats.team_name:
                 st.caption(f"소속팀: {stats.team_name}")
             season_name = f"20{season_str[:2]}/20{season_str[3:]}"
+            
             try:
                 medians = cached_league_medians(stats.league_id, season_name)
             except Exception:
                 medians = {}
 
-            # The tactical matrix is the primary scouting view and intentionally
-            # appears before every detail metric.
+            # 전술 사분면 매트릭스를 가장 상단에 고정
             try:
                 matrix = cached_tactical_matrix(stats.league_id, season_name)
                 if str(player.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist():
@@ -297,26 +281,55 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
                 st.caption("사분면 매트릭스를 구성할 비교 집단 데이터가 없습니다.")
 
             st.divider()
-            st.caption("🏃 순수 전진 기여도 = 성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
-            render_per90_metric_bar("성공 드리블", stats.dribbles_succeeded_per90, medians.get("dribbles_succeeded_per90"))
-            render_per90_metric_bar("실패 드리블", stats.dribbles_failed_per90, medians.get("dribbles_failed_per90"))
-            render_per90_metric_bar("볼 경합 성공", stats.duels_won_per90, medians.get("duels_won_per90"))
-            render_per90_metric_bar("볼 경합 실패", stats.duels_lost_per90, medians.get("duels_lost_per90"))
-            render_per90_metric_bar("공중볼 경합 성공", stats.aerial_duels_won_per90, medians.get("aerial_duels_won_per90"))
-            render_per90_metric_bar("공중볼 경합 실패", stats.aerial_duels_lost_per90, medians.get("aerial_duels_lost_per90"))
-            render_per90_metric_bar("순수 전진 기여도", stats.net_progression_per90, medians.get("net_progression_per90"))
 
+            # 랭킹 데이터 Fetch
             try:
                 minimum_xg = 1.5 if stats.league_id == 42 else 5.0
                 rank = cached_percentiles(player.player_id, season_str, stats, min_xg=minimum_xg)
-                if rank.eligible_players:
-                    st.caption(f"결정력 상대평가 (동일 대회, xG {minimum_xg} 이상 {rank.eligible_players}명)")
-                    render_percentile_bar("득점", rank.goals_top_percent, rank.goals_rank, rank.eligible_players)
-                    render_percentile_bar("순수결정력", rank.shot_quality_top_percent, rank.shot_quality_rank, rank.eligible_players)
-                    render_percentile_bar("결정력+선방", rank.overall_finishing_top_percent, rank.overall_finishing_rank, rank.eligible_players)
             except Exception:
-                st.caption("상대평가 비교군을 불러오지 못했습니다.")
+                rank = None
 
+            def get_rank(attr):
+                return getattr(rank, attr, None) if rank else None
+
+            # 1. 90분당 세부 전진 기여도 (통합 UI 적용)
+            st.caption("🏃 순수 전진 기여도 = 성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
+            
+            elite_eligible = get_rank("elite_dribbler_eligible") or 0
+            fail_eligible = get_rank("dribbles_failed_eligible") or 0
+            duels_eligible = get_rank("duels_eligible") or 0
+            aerials_eligible = get_rank("aerials_eligible") or 0
+            net_eligible = get_rank("net_progression_eligible") or 0
+
+            render_unified_bar("성공 드리블", stats.dribbles_succeeded_per90, medians.get("dribbles_succeeded_per90"), 
+                               get_rank("dribbles_succeeded_per90_top_percent"), get_rank("dribbles_succeeded_per90_rank"), elite_eligible, "/90분")
+            render_unified_bar("실패 드리블", stats.dribbles_failed_per90, medians.get("dribbles_failed_per90"), 
+                               get_rank("dribbles_failed_per90_top_percent"), get_rank("dribbles_failed_per90_rank"), fail_eligible, "/90분")
+            render_unified_bar("볼 경합 성공", stats.duels_won_per90, medians.get("duels_won_per90"), 
+                               get_rank("duels_pct_top_percent"), get_rank("duels_pct_rank"), duels_eligible, "/90분")
+            render_unified_bar("볼 경합 실패", stats.duels_lost_per90, medians.get("duels_lost_per90"), 
+                               None, None, duels_eligible, "/90분")
+            render_unified_bar("공중볼 경합 성공", stats.aerial_duels_won_per90, medians.get("aerial_duels_won_per90"), 
+                               get_rank("aerials_pct_top_percent"), get_rank("aerials_pct_rank"), aerials_eligible, "/90분")
+            render_unified_bar("공중볼 경합 실패", stats.aerial_duels_lost_per90, medians.get("aerial_duels_lost_per90"), 
+                               None, None, aerials_eligible, "/90분")
+            render_unified_bar("순수 전진 기여도", stats.net_progression_per90, medians.get("net_progression_per90"), 
+                               get_rank("net_progression_top_percent"), get_rank("net_progression_rank"), net_eligible, "/90분")
+
+            st.divider()
+            
+            # 2. 결정력 상대평가 (통합 UI 적용)
+            if rank and rank.eligible_players:
+                st.caption(f"🎯 결정력 상대평가 (동일 대회, xG {minimum_xg} 이상 {rank.eligible_players}명 기준)")
+                
+                render_unified_bar("득점", stats.goals, None, 
+                                   rank.goals_top_percent, rank.goals_rank, rank.eligible_players, "골")
+                render_unified_bar("순수결정력", stats.shot_quality, None, 
+                                   rank.shot_quality_top_percent, rank.shot_quality_rank, rank.eligible_players, "골")
+                render_unified_bar("결정력+선방", stats.overall_finishing, None, 
+                                   rank.overall_finishing_top_percent, rank.overall_finishing_rank, rank.eligible_players, "골")
+            else:
+                st.caption("결정력 상대평가 비교군을 불러오지 못했습니다.")
 
 
 def main() -> None:
@@ -358,6 +371,7 @@ def main() -> None:
                     st.dataframe(style_dataframe(ranking_tables.get(name, pd.DataFrame())), use_container_width=True, height=735)
     except Exception as exc:
         st.info(f"랭킹 데이터를 불러오지 못했습니다: {exc}")
+
 
 if __name__ == "__main__":
     main()
