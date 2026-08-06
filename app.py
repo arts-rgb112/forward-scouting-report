@@ -11,7 +11,6 @@ from rankings import (
     get_top_leagues_shot_quality,
 )
 
-# 화면 레이아웃을 wide로 변경하여 비교 모드 시 쾌적하게 렌더링되도록 수정 완료
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="wide")
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -55,6 +54,7 @@ def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, select
     highlighted = matrix[matrix["player_id"].astype(str) == str(selected_player_id)]
     background = matrix[matrix["player_id"].astype(str) != str(selected_player_id)]
     is_dark = st.get_option("theme.base") == "dark"
+    
     figure = go.Figure()
     figure.add_trace(go.Scatter(
         x=background["net_progression_per90"], y=background["xgot_minus_xg"], mode="markers",
@@ -116,7 +116,8 @@ def render_unified_bar(
     total_players: int | None = None,
     suffix: str = ""
 ) -> None:
-    # 데이터가 없을 때의 처리
+    
+    # 0.0도 유효한 값으로 처리하기 위해 None 체크만 수행
     if player_value is None and top_percent is None:
         st.markdown(f"""
         <div style="margin-bottom: 28px; padding: 0 4px; opacity: 0.5;">
@@ -129,32 +130,33 @@ def render_unified_bar(
         """, unsafe_allow_html=True)
         return
 
+    # 중앙값을 가운데 억지 배치하지 않고, 실제 수치(절대값)를 기준으로 스케일링
+    safe_player = player_value if player_value is not None else 0.0
+    safe_median = median_value if median_value is not None else 0.0
+    
+    scale_max = max(safe_player, safe_median, 0.1) * 1.25  # 여백 25% 추가
+    
+    # 절대값 기반 실제 물리적 위치 계산 (0 ~ 100%)
+    player_pos = min((safe_player / scale_max) * 100.0, 100.0)
+    median_pos = min((safe_median / scale_max) * 100.0, 100.0)
+    
+    # 색상 적용 기준: 랭킹 퍼센트가 있으면 퍼센트 기준, 없으면 상대 평가 적용
     if top_percent is not None:
-        player_pos = 100.0 - top_percent
-        median_pos = 50.0  
-        color_pos = player_pos
-        median_label_str = f"{median_value:.2f} {suffix}" if median_value is not None else "50%"
+        color_pos = 100.0 - top_percent
     else:
-        safe_player = player_value if player_value is not None else 0.0
-        safe_median = median_value if median_value is not None else 0.0
-        scale_max = max(safe_player, safe_median, 0.1) * 1.2
-        player_pos = min((safe_player / scale_max) * 100, 100)
-        median_pos = min((safe_median / scale_max) * 100, 100) if median_value is not None else None
-        
         if safe_median > 0:
-            color_pos = min(max(50.0 + ((safe_player - safe_median) / safe_median * 25), 0), 100)
+            color_pos = min(max(50.0 + ((safe_player - safe_median) / safe_median * 25.0), 0.0), 100.0)
         else:
-            color_pos = player_pos
-        median_label_str = f"{median_value:.2f} {suffix}" if median_value is not None else "없음"
+            color_pos = 50.0
 
     dynamic_color = get_gradient_color(color_pos)
-    player_label = f"선수 {player_value:.2f} <span style='font-size:11.5px; font-weight:400; color:#888;'>{suffix}</span>" if player_value is not None else "수치 없음"
+    median_label_str = f"{safe_median:.2f} {suffix}" if median_value is not None else "0.00"
+    
+    player_label = f"선수 {safe_player:.2f} <span style='font-size:11.5px; font-weight:400; color:#888;'>{suffix}</span>"
     rank_label = f"{rank_val}위 <span style='font-size:12px; font-weight:400; color:#888;'>/ {total_players}명 · 상위 {top_percent}%</span>" if (rank_val is not None and top_percent is not None) else ""
     
     # HTML 마크다운 오작동 방지를 위해 한 줄로 처리
-    median_marker_html = ""
-    if median_pos is not None:
-        median_marker_html = f'<div style="position: absolute; top: -6px; left: calc({median_pos}% - 9px); width: 18px; height: 18px; background-color: #aaa; transform: rotate(45deg); border: 2px solid #262730; z-index: 5;"></div>'
+    median_marker_html = f'<div style="position: absolute; top: -6px; left: calc({median_pos}% - 9px); width: 18px; height: 18px; background-color: #aaa; transform: rotate(45deg); border: 2px solid #262730; z-index: 5;"></div>'
 
     st.markdown(f"""
     <div style="margin-bottom: 28px; padding: 0 4px;">
@@ -232,6 +234,22 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
                 st.caption(f"소속팀: {stats.team_name}")
             season_name = f"20{season_str[:2]}/20{season_str[3:]}"
             
+            # --- Yamal 등 데이터 누락(None)에 대한 자동 방어 및 0.0 치환 로직 ---
+            stats.aerial_duels_won_per90 = stats.aerial_duels_won_per90 or 0.0
+            stats.aerial_duels_lost_per90 = stats.aerial_duels_lost_per90 or 0.0
+            stats.duels_won_per90 = stats.duels_won_per90 or 0.0
+            stats.duels_lost_per90 = stats.duels_lost_per90 or 0.0
+            stats.dribbles_succeeded_per90 = stats.dribbles_succeeded_per90 or 0.0
+            stats.dribbles_failed_per90 = stats.dribbles_failed_per90 or 0.0
+
+            # 누락 스탯으로 인해 순수 전진 기여도가 계산되지 않았을 경우를 위한 백업 계산
+            if getattr(stats, "net_progression_per90", None) is None:
+                stats.net_progression_per90 = (
+                    stats.dribbles_succeeded_per90 + stats.duels_won_per90 + stats.aerial_duels_won_per90
+                    - stats.duels_lost_per90 - stats.aerial_duels_lost_per90 - stats.dribbles_failed_per90
+                )
+            # -----------------------------------------------------------
+
             try:
                 medians = cached_league_medians(stats.league_id, season_name)
             except Exception:
@@ -263,24 +281,31 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
 
             st.caption("🏃 순수 전진 기여도 = 성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
             
+            # 비교군 랭킹 계산시 볼륨(per90) 랭킹 변수 사용으로 일원화
             elite_eligible = get_rank("elite_dribbler_eligible") or 0
-            fail_eligible = get_rank("dribbles_failed_eligible") or 0
             duels_eligible = get_rank("duels_eligible") or 0
             aerials_eligible = get_rank("aerials_eligible") or 0
             net_eligible = get_rank("net_progression_eligible") or 0
 
             render_unified_bar("성공 드리블", stats.dribbles_succeeded_per90, medians.get("dribbles_succeeded_per90"), 
                                get_rank("dribbles_succeeded_per90_top_percent"), get_rank("dribbles_succeeded_per90_rank"), elite_eligible, "/90분")
+            
             render_unified_bar("실패 드리블", stats.dribbles_failed_per90, medians.get("dribbles_failed_per90"), 
-                               get_rank("dribbles_failed_per90_top_percent"), get_rank("dribbles_failed_per90_rank"), fail_eligible, "/90분")
+                               get_rank("dribbles_failed_per90_top_percent"), get_rank("dribbles_failed_per90_rank"), elite_eligible, "/90분")
+            
+            # 승률(pct) 대신 볼륨(per90) 랭킹을 가져오도록 변수 수정 적용
             render_unified_bar("볼 경합 성공", stats.duels_won_per90, medians.get("duels_won_per90"), 
-                               get_rank("duels_pct_top_percent"), get_rank("duels_pct_rank"), duels_eligible, "/90분")
+                               get_rank("duels_won_per90_top_percent"), get_rank("duels_won_per90_rank"), duels_eligible, "/90분")
+            
             render_unified_bar("볼 경합 실패", stats.duels_lost_per90, medians.get("duels_lost_per90"), 
-                               None, None, duels_eligible, "/90분")
+                               get_rank("duels_lost_per90_top_percent"), get_rank("duels_lost_per90_rank"), duels_eligible, "/90분")
+            
             render_unified_bar("공중볼 경합 성공", stats.aerial_duels_won_per90, medians.get("aerial_duels_won_per90"), 
-                               get_rank("aerials_pct_top_percent"), get_rank("aerials_pct_rank"), aerials_eligible, "/90분")
+                               get_rank("aerials_won_per90_top_percent"), get_rank("aerials_won_per90_rank"), aerials_eligible, "/90분")
+            
             render_unified_bar("공중볼 경합 실패", stats.aerial_duels_lost_per90, medians.get("aerial_duels_lost_per90"), 
-                               None, None, aerials_eligible, "/90분")
+                               get_rank("aerials_lost_per90_top_percent"), get_rank("aerials_lost_per90_rank"), aerials_eligible, "/90분")
+            
             render_unified_bar("순수 전진 기여도", stats.net_progression_per90, medians.get("net_progression_per90"), 
                                get_rank("net_progression_top_percent"), get_rank("net_progression_rank"), net_eligible, "/90분")
 
