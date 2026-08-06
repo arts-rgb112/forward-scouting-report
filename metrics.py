@@ -21,6 +21,10 @@ class DecisionMetrics:
     dispossessed: Optional[float] = None
     fouls_won: Optional[float] = None
     penalties_awarded: Optional[float] = None
+    duels_won: Optional[float] = None
+    duels_won_percentage: Optional[float] = None
+    aerial_duels_won: Optional[float] = None
+    aerial_duels_won_percentage: Optional[float] = None
 
     @property
     def shot_quality(self) -> Optional[float]:
@@ -70,24 +74,62 @@ class DecisionMetrics:
         return _per90(self.penalties_awarded, self.minutes_played)
 
     @property
+    def duels_won_per90(self) -> Optional[float]:
+        return _per90(self.duels_won, self.minutes_played)
+
+    @property
+    def duels_lost_per90(self) -> Optional[float]:
+        return _failed_attempts_per90(
+            self.duels_won_per90, self.duels_won_percentage
+        )
+
+    @property
+    def aerial_duels_won_per90(self) -> Optional[float]:
+        return _per90(self.aerial_duels_won, self.minutes_played)
+
+    @property
+    def aerial_duels_lost_per90(self) -> Optional[float]:
+        return _failed_attempts_per90(
+            self.aerial_duels_won_per90, self.aerial_duels_won_percentage
+        )
+
+    @property
     def net_progression_per90(self) -> Optional[float]:
         values = (
             self.dribbles_succeeded_per90,
             self.fouls_won_per90,
             self.penalties_awarded_per90,
+            self.duels_won_per90,
+            self.aerial_duels_won_per90,
+            self.duels_lost_per90,
+            self.aerial_duels_lost_per90,
             self.dribbles_failed_per90,
             self.dispossessed_per90,
         )
         if any(value is None for value in values):
             return None
-        successful, fouls, penalties, failed, lost = values
-        return successful + fouls + penalties - failed - lost
+        (successful, fouls, penalties, duels_won, aerial_won,
+         duels_lost, aerial_lost, dribble_failed, dispossessed) = values
+        return (successful + fouls + penalties + duels_won + aerial_won
+                - duels_lost - aerial_lost - dribble_failed - dispossessed)
 
 
 def _per90(value: Optional[float], minutes: Optional[float]) -> Optional[float]:
     if value is None or minutes is None or minutes <= 0:
         return None
     return value * 90 / minutes
+
+
+def _failed_attempts_per90(
+    succeeded_per90: Optional[float], success_rate: Optional[float]
+) -> Optional[float]:
+    """Reverse-calculate failed attempts from wins and a percentage."""
+    if succeeded_per90 is None or success_rate is None:
+        return None
+    rate = success_rate / 100
+    if not 0 < rate <= 1:
+        return None
+    return succeeded_per90 * (1 - rate) / rate
 
 
 def _parse_value(val: Any) -> Optional[float]:
@@ -126,6 +168,16 @@ _DRIBBLES_SUCCESS_RATE_TITLES = {"dribbles success rate"}
 _DISPOSSESSED_TITLES = {"dispossessed"}
 _FOULS_WON_TITLES = {"fouls won"}
 _PENALTIES_AWARDED_TITLES = {"penalties awarded"}
+_DUELS_WON_TITLES = {"duels won", "duel won", "ground duels won"}
+_DUELS_WON_PERCENTAGE_TITLES = {
+    "duels won percentage", "duel won percentage", "duels won %",
+    "ground duels won percentage",
+}
+_AERIAL_DUELS_WON_TITLES = {"aerial duels won", "aerial duel won"}
+_AERIAL_DUELS_WON_PERCENTAGE_TITLES = {
+    "aerial duels won percentage", "aerial duel won percentage",
+    "aerial duels won %",
+}
 
 
 def _find_stat_by_title(node: Any, titles: set[str]) -> Optional[float]:
@@ -255,6 +307,14 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
         dribbles_success_rate = _find_stat_by_title(stats_payload, _DRIBBLES_SUCCESS_RATE_TITLES)
         dispossessed = _find_stat_by_title(stats_payload, _DISPOSSESSED_TITLES)
         fouls_won = _find_stat_by_title(stats_payload, _FOULS_WON_TITLES)
+        duels_won = _find_stat_by_title(stats_payload, _DUELS_WON_TITLES)
+        duels_won_percentage = _find_stat_by_title(
+            stats_payload, _DUELS_WON_PERCENTAGE_TITLES
+        )
+        aerial_duels_won = _find_stat_by_title(stats_payload, _AERIAL_DUELS_WON_TITLES)
+        aerial_duels_won_percentage = _find_stat_by_title(
+            stats_payload, _AERIAL_DUELS_WON_PERCENTAGE_TITLES
+        )
         # FotMob omits this row when a player has won no penalties; this is a
         # real zero, not missing data, for the net-progression formula.
         penalties_awarded = _find_stat_by_title(stats_payload, _PENALTIES_AWARDED_TITLES)
@@ -282,6 +342,10 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
             dispossessed=dispossessed,
             fouls_won=fouls_won,
             penalties_awarded=penalties_awarded,
+            duels_won=duels_won,
+            duels_won_percentage=duels_won_percentage,
+            aerial_duels_won=aerial_duels_won,
+            aerial_duels_won_percentage=aerial_duels_won_percentage,
         )
 
         if unique_key in seasons_data:
@@ -295,6 +359,10 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
             if ext.dispossessed is None and new_metric.dispossessed is not None: ext.dispossessed = new_metric.dispossessed
             if ext.fouls_won is None and new_metric.fouls_won is not None: ext.fouls_won = new_metric.fouls_won
             if ext.penalties_awarded is None and new_metric.penalties_awarded is not None: ext.penalties_awarded = new_metric.penalties_awarded
+            if ext.duels_won is None and new_metric.duels_won is not None: ext.duels_won = new_metric.duels_won
+            if ext.duels_won_percentage is None and new_metric.duels_won_percentage is not None: ext.duels_won_percentage = new_metric.duels_won_percentage
+            if ext.aerial_duels_won is None and new_metric.aerial_duels_won is not None: ext.aerial_duels_won = new_metric.aerial_duels_won
+            if ext.aerial_duels_won_percentage is None and new_metric.aerial_duels_won_percentage is not None: ext.aerial_duels_won_percentage = new_metric.aerial_duels_won_percentage
         else:
             seasons_data[unique_key] = new_metric
 

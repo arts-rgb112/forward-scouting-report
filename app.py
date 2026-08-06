@@ -4,7 +4,12 @@ import plotly.graph_objects as go
 
 from fotmob_client import FotMobError, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
-from rankings import calculate_league_percentiles, get_tactical_matrix, get_top_leagues_shot_quality
+from rankings import (
+    calculate_league_percentiles,
+    get_league_metric_medians,
+    get_tactical_matrix,
+    get_top_leagues_shot_quality,
+)
 
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="centered")
 
@@ -27,6 +32,11 @@ def cached_percentiles(player_id: str, season: str, metrics: DecisionMetrics, mi
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_top20():
     return get_top_leagues_shot_quality("25/26")
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_league_medians(league_id: int, season_name: str) -> dict[str, float | None]:
+    return get_league_metric_medians(league_id, season_name)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -154,7 +164,12 @@ def render_percentile_bar(title: str, top_percent: float | None, rank_val: int |
     st.markdown(html_content, unsafe_allow_html=True)
 
 
-def render_per90_metric_bar(title: str, value_per90: float | None, description: str = "") -> None:
+def render_per90_metric_bar(
+    title: str,
+    value_per90: float | None,
+    median_per90: float | None = None,
+    description: str = "",
+) -> None:
     """90분당 스탯을 UI로 노출하되, 리그 랭킹 데이터가 수집되기 전까지 사용할 커스텀 바입니다."""
     if value_per90 is None:
         html_content = f"""
@@ -173,13 +188,14 @@ def render_per90_metric_bar(title: str, value_per90: float | None, description: 
     color = "rgb(255, 193, 7)" if value_per90 >= 1.0 else "rgb(30, 136, 229)"
     if value_per90 >= 3.0:
         color = "rgb(229, 57, 53)"
+    median_label = f"{median_per90:.2f}" if median_per90 is not None else "정보 없음"
         
     html_content = f"""
     <div style="margin-bottom: 25px; padding: 0 10px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
             <span style="font-size: 15px; font-weight: 600;">{title}</span>
             <span style="font-size: 14px; font-weight: bold; color: {color};">
-                {value_per90:.2f}회 <span style="font-size: 12px; font-weight: normal; color: #888;">/ 90분</span>
+                선수 {value_per90:.2f}<span style="font-size: 12px; font-weight: normal; color: #888;"> /90</span>
             </span>
         </div>
         <div style="position: relative; width: 100%; height: 4px; background-color: #444; border-radius: 2px;">
@@ -189,7 +205,7 @@ def render_per90_metric_bar(title: str, value_per90: float | None, description: 
             </div>
         </div>
         <div style="text-align: right; margin-top: 8px; font-size: 11px; color: #aaa;">
-            {description}
+            비교군 중앙값: {median_label} /90 {"· " if description else ""}{description}
         </div>
     </div>
     """
@@ -212,188 +228,134 @@ def style_dataframe(df: pd.DataFrame):
         return df
 
 
-def main() -> None:
-    st.title("🎯 스트라이커 전술 스카우팅 리포트")
-    st.caption("리그 주요 데이터를 기반으로 선수의 득점 생산성과 순수 기여도를 시각화합니다.")
-    
-    season_options = ["25/26", "24/25", "23/24", "22/23", "21/22"]
-    selected_seasons = st.multiselect(
-        "📊 조회할 시즌 선택 (최대 3개 권장)", 
-        options=season_options, 
-        default=["25/26", "24/25"]
-    )
-    
-    query = st.text_input("🔍 선수 이름 검색", placeholder="예: Erling Haaland, Lamine Yamal")
-    
-    if not query:
-        st.divider()
-        st.subheader("🏆 25/26 시즌 슈팅 퀄리티 (xGOT-xG) Top 20")
-        with st.spinner("유럽 주요 대회 데이터를 집계 중입니다..."):
-            try:
-                rankings = cached_top20()
-                if rankings and not rankings.get("통합", pd.DataFrame()).empty:
-                    tab_all, tab_pl, tab_la, tab_bu, tab_sa, tab_ucl = st.tabs([
-                        "🌍 통합 랭킹", "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League", "🇪🇸 LaLiga", "🇩🇪 Bundesliga", "🇮🇹 Serie A", "⭐️ Champions League"
-                    ])
-                    
-                    TABLE_HEIGHT = 735
-                    
-                    with tab_all:
-                        st.dataframe(style_dataframe(rankings["통합"]), use_container_width=True, height=TABLE_HEIGHT)
-                    with tab_pl:
-                        st.dataframe(style_dataframe(rankings.get("Premier League", pd.DataFrame())), use_container_width=True, height=TABLE_HEIGHT)
-                    with tab_la:
-                        st.dataframe(style_dataframe(rankings.get("LaLiga", pd.DataFrame())), use_container_width=True, height=TABLE_HEIGHT)
-                    with tab_bu:
-                        st.dataframe(style_dataframe(rankings.get("Bundesliga", pd.DataFrame())), use_container_width=True, height=TABLE_HEIGHT)
-                    with tab_sa:
-                        st.dataframe(style_dataframe(rankings.get("Serie A", pd.DataFrame())), use_container_width=True, height=TABLE_HEIGHT)
-                    with tab_ucl:
-                        st.dataframe(style_dataframe(rankings.get("Champions League", pd.DataFrame())), use_container_width=True, height=TABLE_HEIGHT)
-                else:
-                    st.info("현재 랭킹 데이터를 불러올 수 없습니다.")
-            except Exception as e:
-                st.error(f"랭킹 렌더링 중 오류가 발생했습니다. (사유: {e})")
-        return
-
+def select_player(query: str, key: str):
+    """Search and select one player, keeping comparison-side widget keys unique."""
+    if not query.strip():
+        return None
     try:
-        candidates = cached_search(query)
+        candidates = cached_search(query.strip())
     except FotMobError as exc:
         st.error(f"선수 검색에 실패했습니다: {exc}")
-        return
-        
+        return None
     if not candidates:
         st.warning("일치하는 선수를 찾지 못했습니다.")
-        return
-
+        return None
     labels = [f"{row.name} · {row.team_name}" if row.team_name else row.name for row in candidates]
-    selected = candidates[st.selectbox("선수 선택", range(len(candidates)), format_func=lambda i: labels[i])]
-    
+    return candidates[st.selectbox("선수 선택", range(len(candidates)), format_func=lambda i: labels[i], key=key)]
+
+
+def render_player_report(player, selected_seasons: list[str], competition_filter: str) -> None:
     try:
-        with st.spinner("선수 전술 스탯을 분석 중입니다..."):
-            raw_data = cached_player_data(selected.player_id)
-            seasons = extract_multi_season_metrics(raw_data)
+        with st.spinner(f"{player.name}의 전술 스탯을 분석 중입니다..."):
+            seasons = extract_multi_season_metrics(cached_player_data(player.player_id))
     except FotMobError as exc:
         st.error(f"데이터를 불러오지 못했습니다: {exc}")
         return
-    
     if not seasons:
         st.warning("스탯 데이터를 찾을 수 없습니다.")
         return
 
-    st.divider()
-    st.header(selected.name)
-    
-    grouped_seasons = {}
+    st.subheader(player.name)
     for season_key, stats in seasons.items():
-        season_str = season_key.split('_')[0] if '_' in season_key else season_key
-        
-        if len(season_str) > 5 and "/" in season_str:
-            parts = season_str.split("/")
-            if len(parts) == 2:
-                p1 = parts[0][-2:] if len(parts[0]) >= 2 else parts[0]
-                p2 = parts[1][-2:] if len(parts[1]) >= 2 else parts[1]
-                season_str = f"{p1}/{p2}"
-                
-        if season_str not in grouped_seasons:
-            grouped_seasons[season_str] = []
-        grouped_seasons[season_str].append((season_key, stats))
-        
-    for season_str, competitions in grouped_seasons.items():
-        if selected_seasons and season_str not in selected_seasons:
+        season_str = season_key.split("_", 1)[0]
+        is_ucl = stats.league_id == 42 or "champions" in (stats.league_name or "").lower()
+        if season_str not in selected_seasons:
             continue
-            
-        st.markdown(f"### 📅 {season_str} 시즌")
-        
-        for season_key, stats in competitions:
-            with st.expander(f"🏆 {stats.league_name or '대회 정보 없음'}", expanded=True):
-                if stats.team_name:
-                    st.markdown(f"**소속팀:** {stats.team_name}")
-                st.divider()
-                
-                # The matrix is intentionally first: it is the primary scouting view.
-                try:
-                    season_name = f"20{season_str[:2]}/20{season_str[3:]}"
-                    matrix = cached_tactical_matrix(stats.league_id, season_name)
-                    if (
-                        str(selected.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist()
-                        and stats.net_progression_per90 is not None
-                        and stats.shot_quality is not None
-                    ):
-                        selected_row = pd.DataFrame([{
-                            "player_id": str(selected.player_id),
-                            "player_name": selected.name,
-                            "team_name": stats.team_name or "",
-                            "net_progression_per90": stats.net_progression_per90,
-                            "xgot_minus_xg": stats.shot_quality,
-                            "dribbles_succeeded_per90": stats.dribbles_succeeded_per90,
-                        }])
-                        matrix = pd.concat([matrix, selected_row], ignore_index=True)
-                    st.caption("📊 **전술 사분면 매트릭스** — 점 위에 마우스를 올리면 상세 수치를 볼 수 있습니다.")
-                    render_tactical_matrix(matrix, selected.player_id, selected.name)
-                except Exception:
-                    st.caption("사분면 매트릭스를 구성할 비교 집단 데이터가 없습니다.")
+        if competition_filter == "리그" and is_ucl:
+            continue
+        if competition_filter == "챔피언스리그" and not is_ucl:
+            continue
 
-                st.divider()
-                net_progression_per90 = stats.net_progression_per90
-                
-                try:
-                    current_min_xg = 1.5 if stats.league_id == 42 else 5.0
-                    rank = cached_percentiles(selected.player_id, season_str, stats, min_xg=current_min_xg)
-                    
-                    if rank.eligible_players > 0:
-                        st.caption(f"🎯 **결정력 및 선방 관련 지표** (동일 대회, xG {current_min_xg} 이상 선수 {rank.eligible_players}명 기준 상대평가)")
-                        render_percentile_bar("득점", rank.goals_top_percent, rank.goals_rank, rank.eligible_players)
-                        render_percentile_bar("순수결정력", rank.shot_quality_top_percent, rank.shot_quality_rank, rank.eligible_players)
-                        render_percentile_bar("결정력+선방", rank.overall_finishing_top_percent, rank.overall_finishing_rank, rank.eligible_players)
-                    else:
-                        st.warning("순위 비교를 위한 표본이 부족합니다.")
-                    st.divider()
-# 💡 안내 문구의 숫자 2를 1로 수정합니다.
-                    st.caption(
-                        f"🏃 **드리블·경합 지표** — 같은 리그·시즌에서 "
-                        f"성공 드리블/90이 1 이상인 선수 {rank.elite_dribbler_eligible}명 기준\n\n"
-                        f"*(💡 순 전진 기여도 = 성공 드리블 + 피파울 + PK 획득 - 실패 드리블 - 볼 뺏김)*"
-                    )
-                    render_percentile_bar(
-                        "드리블 성공 / 90분",
-                        rank.dribbles_succeeded_per90_top_percent,
-                        rank.dribbles_succeeded_per90_rank,
-                        rank.elite_dribbler_eligible,
-                        "엘리트 드리블러 비교군 미포함",
-                    )
-                    render_percentile_bar(
-                        "드리블 실패 / 90분 (낮을수록 우수)",
-                        rank.dribbles_failed_per90_top_percent,
-                        rank.dribbles_failed_per90_rank,
-                        rank.dribbles_failed_eligible,
-                        "계산 가능한 비교 데이터 없음",
-                    )
-                    render_percentile_bar(
-                        "순 전진 기여도 / 90분",
-                        rank.net_progression_top_percent,
-                        rank.net_progression_rank,
-                        rank.net_progression_eligible,
-                        "계산 가능한 비교 데이터 없음",
-                    )
-                except Exception:
-                    st.caption("비교 집단 데이터를 불러오지 못했습니다.")
+        with st.expander(f"🏆 {season_str} · {stats.league_name or '대회 정보 없음'}", expanded=True):
+            if stats.team_name:
+                st.caption(f"소속팀: {stats.team_name}")
+            season_name = f"20{season_str[:2]}/20{season_str[3:]}"
+            try:
+                medians = cached_league_medians(stats.league_id, season_name)
+            except Exception:
+                medians = {}
 
-                st.divider()
-                st.caption("🏃 **순 전진 기여도 (Net Progression)**")
-                render_per90_metric_bar(
-                    "순 전진 기여도 / 90분", 
-                    net_progression_per90, 
-                    "성공 드리블 + 획득 파울 + 획득 PK - 드리블 실패 - 볼 뺏김"
-                )
+            st.caption("수치 요약 — 선수 / 동일 리그·시즌 비교군 중앙값 (모두 90분당)")
+            summary = pd.DataFrame([
+                ("성공 드리블", stats.dribbles_succeeded_per90, medians.get("dribbles_succeeded_per90")),
+                ("실패 드리블", stats.dribbles_failed_per90, medians.get("dribbles_failed_per90")),
+                ("볼 경합 성공", stats.duels_won_per90, medians.get("duels_won_per90")),
+                ("볼 경합 실패", stats.duels_lost_per90, medians.get("duels_lost_per90")),
+                ("공중볼 경합 성공", stats.aerial_duels_won_per90, medians.get("aerial_duels_won_per90")),
+                ("공중볼 경합 실패", stats.aerial_duels_lost_per90, medians.get("aerial_duels_lost_per90")),
+                ("순수 전진 기여도", stats.net_progression_per90, medians.get("net_progression_per90")),
+            ], columns=["항목", "선수", "비교군 중앙값"])
+            st.dataframe(summary, hide_index=True, use_container_width=True, column_config={
+                "선수": st.column_config.NumberColumn(format="%.2f"),
+                "비교군 중앙값": st.column_config.NumberColumn(format="%.2f"),
+            })
 
-                st.divider()
-                st.caption("💥 **경합 기여도** (90분당 지상 경합 승리 횟수)")
-                render_per90_metric_bar(
-                    "지상 경합 승리", 
-                    None, 
-                    "모집단 구축 후 상대평가 랭킹 적용 예정"
-                )
+            st.caption("🏃 순수 전진 기여도 = 성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
+            render_per90_metric_bar("순수 전진 기여도", stats.net_progression_per90, medians.get("net_progression_per90"))
+
+            try:
+                minimum_xg = 1.5 if stats.league_id == 42 else 5.0
+                rank = cached_percentiles(player.player_id, season_str, stats, min_xg=minimum_xg)
+                if rank.eligible_players:
+                    st.caption(f"결정력 상대평가 (동일 대회, xG {minimum_xg} 이상 {rank.eligible_players}명)")
+                    render_percentile_bar("득점", rank.goals_top_percent, rank.goals_rank, rank.eligible_players)
+                    render_percentile_bar("순수결정력", rank.shot_quality_top_percent, rank.shot_quality_rank, rank.eligible_players)
+                    render_percentile_bar("결정력+선방", rank.overall_finishing_top_percent, rank.overall_finishing_rank, rank.eligible_players)
+            except Exception:
+                st.caption("상대평가 비교군을 불러오지 못했습니다.")
+
+            try:
+                matrix = cached_tactical_matrix(stats.league_id, season_name)
+                if str(player.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist():
+                    matrix = pd.concat([matrix, pd.DataFrame([{
+                        "player_id": str(player.player_id), "player_name": player.name,
+                        "team_name": stats.team_name or "", "net_progression_per90": stats.net_progression_per90,
+                        "xgot_minus_xg": stats.shot_quality,
+                    }])], ignore_index=True)
+                render_tactical_matrix(matrix, player.player_id, player.name)
+            except Exception:
+                st.caption("사분면 매트릭스를 구성할 비교 집단 데이터가 없습니다.")
+
+
+def main() -> None:
+    st.title("🎯 스트라이커 전술 스카우팅 리포트")
+    st.caption("2차 스탯 기반 선수 기여도 분석 · 동일 포맷의 1:1 비교 지원")
+    selected_seasons = st.multiselect("📊 조회할 시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], default=["25/26", "24/25"])
+    competition_filter = st.radio("대회", ["전체", "리그", "챔피언스리그"], horizontal=True)
+    compare_mode = st.toggle("선수 비교 모드")
+
+    if compare_mode:
+        left, right = st.columns(2)
+        with left:
+            left_player = select_player(st.text_input("왼쪽 선수 검색", key="left_query", placeholder="예: Francisco Panichelli"), "left_player")
+        with right:
+            right_player = select_player(st.text_input("오른쪽 선수 검색", key="right_query", placeholder="예: Robert Lewandowski"), "right_player")
+        if left_player and right_player:
+            st.divider()
+            left, right = st.columns(2)
+            with left:
+                render_player_report(left_player, selected_seasons, competition_filter)
+            with right:
+                render_player_report(right_player, selected_seasons, competition_filter)
+        return
+
+    player = select_player(st.text_input("🔍 선수 이름 검색", placeholder="예: Erling Haaland, Lamine Yamal"), "single_player")
+    if player:
+        st.divider()
+        render_player_report(player, selected_seasons, competition_filter)
+        return
+
+    st.divider()
+    st.subheader("🏆 25/26 시즌 슈팅 퀄리티 (xGOT-xG) Top 20")
+    try:
+        ranking_tables = cached_top20()
+        if ranking_tables and not ranking_tables.get("통합", pd.DataFrame()).empty:
+            tabs = st.tabs(["통합", "Premier League", "LaLiga", "Bundesliga", "Serie A", "Champions League"])
+            for tab, name in zip(tabs, ["통합", "Premier League", "LaLiga", "Bundesliga", "Serie A", "Champions League"]):
+                with tab:
+                    st.dataframe(style_dataframe(ranking_tables.get(name, pd.DataFrame())), use_container_width=True, height=735)
+    except Exception as exc:
+        st.info(f"랭킹 데이터를 불러오지 못했습니다: {exc}")
 
 if __name__ == "__main__":
     main()

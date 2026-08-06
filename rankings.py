@@ -154,6 +154,32 @@ def _calculate_dribble_percentiles(
 
 
 @functools.lru_cache(maxsize=32)
+def get_league_metric_medians(league_id: int, season_name: str) -> dict[str, float | None]:
+    """Return comparison-cohort medians for the metrics shown in the report.
+
+    The cohort is the same >=1 successful-dribble/90 group used by the tactical
+    matrix and percentile bars, so a displayed median never uses a different
+    population from the adjacent comparison visualisation.
+    """
+    peers, _ = _fetch_elite_dribbler_metrics(league_id, season_name)
+    attributes = {
+        "dribbles_succeeded_per90": "dribbles_succeeded_per90",
+        "dribbles_failed_per90": "dribbles_failed_per90",
+        "duels_won_per90": "duels_won_per90",
+        "duels_lost_per90": "duels_lost_per90",
+        "aerial_duels_won_per90": "aerial_duels_won_per90",
+        "aerial_duels_lost_per90": "aerial_duels_lost_per90",
+        "net_progression_per90": "net_progression_per90",
+    }
+    medians: dict[str, float | None] = {}
+    for output_name, attribute in attributes.items():
+        values = [getattr(metric, attribute) for metric in peers.values()]
+        values = [value for value in values if value is not None]
+        medians[output_name] = float(pd.Series(values).median()) if values else None
+    return medians
+
+
+@functools.lru_cache(maxsize=32)
 def get_tactical_matrix(league_id: int, season_name: str) -> pd.DataFrame:
     """Return the elite-dribbler cohort used in the tactical quadrant chart.
 
