@@ -27,7 +27,8 @@ jobs:
           probe "all-leagues" "$ALL_LEAGUES_KEY" "https://api.sportsapipro.com/v2/football/tournaments?refresh=false"
           probe "tournament-seasons" "$TOURNAMENT_KEY" "https://api.sportsapipro.com/v2/football/tournaments/17/seasons"
           probe "top-players-singular" "$TOURNAMENT_KEY" "https://api.sportsapipro.com/v2/football/tournament/17/season/76986/top-players"
-          probe "top-players-plural" "$TOURNAMENT_KEY" "https://api.sportsapipro.com/v2/football/tournaments/17/season/76986/top-players"
           probe "season-heatmap" "$PLAYER_KEY" "https://api.sportsapipro.com/v2/football/players/934235/tournament/17/season/76986/heatmap?type=overall"
           probe "attribute-overviews" "$PLAYER_KEY" "https://api.sportsapipro.com/v2/football/players/934235/attribute-overviews"
+          curl --silent --show-error --header "x-api-key: $PLAYER_KEY" "https://api.sportsapipro.com/v2/football/players/934235/attribute-overviews" |
+            python3 -c 'import json,sys; data=json.load(sys.stdin); root=data.get("data", data); print("attribute-overviews keys:", sorted(root) if isinstance(root,dict) else type(root).__name__); [print(key, "count=", len(root.get(key, [])), "sample-keys=", sorted(root[key][0]) if isinstance(root.get(key),list) and root[key] and isinstance(root[key][0],dict) else "") for key in ("playerAttributeOverviews", "averageAttributeOverviews")]'
           exit "$failed"
