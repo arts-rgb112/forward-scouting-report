@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import functools
+import json
 import re
 from pathlib import Path
 from typing import Optional
@@ -12,6 +13,7 @@ from typing import Optional
 DATA_DIR = Path(__file__).with_name("data")
 THREE_ZONE_DATA_PATH = DATA_DIR / "tactical_3zone_ratio.csv"
 LEGACY_DATA_PATH = DATA_DIR / "tactical_ratio.csv"
+HEATMAP_POINTS_PATH = DATA_DIR / "tactical_heatmap_points.json"
 
 
 @functools.lru_cache(maxsize=1)
@@ -60,6 +62,20 @@ def get_tactical_ratio_by_name(player_name: str) -> Optional[dict[str, float]]:
     normalized = re.sub(r"[^a-z0-9]", "", player_name.lower())
     matches = [ratio for ratio in load_tactical_ratios().values() if re.sub(r"[^a-z0-9]", "", str(ratio.get("player_name", "")).lower()) == normalized]
     return matches[0] if len(matches) == 1 else None
+
+
+@functools.lru_cache(maxsize=1)
+def load_heatmap_points() -> dict[str, list[list[float]]]:
+    try:
+        raw = json.loads(HEATMAP_POINTS_PATH.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def get_heatmap_points(player_id: str | int) -> list[list[float]]:
+    points = load_heatmap_points().get(str(player_id), [])
+    return points if isinstance(points, list) else []
 
 
 def passes_final_third_filter(player_id: str | int, minimum_ratio: int) -> bool:

@@ -14,7 +14,7 @@ from rankings import (
     get_tactical_matrix,
     get_top_leagues_shot_quality,
 )
-from tactical_ratio import get_tactical_ratio, get_tactical_ratio_by_name
+from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name
 
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="wide")
 
@@ -172,6 +172,23 @@ def render_attribute_overview_radar(player_id: str, player_name: str) -> None:
         figure.add_trace(go.Scatterpolar(r=values + [values[0]], theta=labels + [labels[0]], mode="lines+markers", name=name, fill="toself", fillcolor=fill, line={"color": color, "width": 2}))
     upper = max(100.0, max(player_values + average_values) * 1.1)
     figure.update_layout(title="📊 V2 속성 레이더 · 선수 vs 동일 포지션 평균", height=400, margin={"l": 35, "r": 35, "t": 55, "b": 25}, paper_bgcolor="rgba(0,0,0,0)", polar={"bgcolor": "rgba(0,0,0,0)", "radialaxis": {"range": [0, upper], "visible": True}}, legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"})
+    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+
+def render_season_heatmap(player_id: str, player_name: str) -> None:
+    points = get_heatmap_points(player_id)
+    st.markdown("#### 📍 시즌 활동 히트맵")
+    if not points:
+        st.caption("정적 히트맵 좌표 데이터가 아직 생성되지 않았습니다.")
+        return
+    x = [point[0] for point in points if isinstance(point, list) and len(point) == 2]
+    y = [point[1] for point in points if isinstance(point, list) and len(point) == 2]
+    figure = go.Figure(go.Scatter(x=x, y=y, mode="markers", marker={"size": 8, "color": "rgba(239,68,68,0.42)"}, name=player_name, hovertemplate="X %{x:.1f} · Y %{y:.1f}<extra></extra>"))
+    line = {"color": "rgba(230,230,230,0.72)", "width": 1}
+    for x0, y0, x1, y1 in ((0, 0, 100, 100), (83, 21.1, 100, 78.9), (0, 21.1, 17, 78.9)):
+        figure.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=line, fillcolor="rgba(34,197,94,0.06)" if x0 == 83 else "rgba(0,0,0,0)")
+    figure.add_shape(type="line", x0=50, y0=0, x1=50, y1=100, line=line)
+    figure.update_layout(height=390, margin={"l": 10, "r": 10, "t": 15, "b": 15}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#173b2a", xaxis={"range": [0, 100], "visible": False, "fixedrange": True}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True}, showlegend=False)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
@@ -581,6 +598,7 @@ def render_v32_analysis_center() -> None:
         else:
             st.info("이 선수의 SportsAPI ID 매핑이 없어 V2 레이더를 표시할 수 없습니다.")
     with ratio_col:
+        render_season_heatmap(player.player_id, player.name)
         render_activity_ratio(player.player_id, player.name)
     render_player_report(
         player, filters["seasons"], "전체", "FW (ST/CF)" in filters["positions"], 0, show_activity=False,
