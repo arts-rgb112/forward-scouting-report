@@ -14,6 +14,16 @@ DATA_DIR = Path(__file__).with_name("data")
 THREE_ZONE_DATA_PATH = DATA_DIR / "tactical_3zone_ratio.csv"
 LEGACY_DATA_PATH = DATA_DIR / "tactical_ratio.csv"
 HEATMAP_POINTS_PATH = DATA_DIR / "tactical_heatmap_points.json"
+TOURNAMENT_NAMES = {"17": "Premier League", "8": "LaLiga", "35": "Bundesliga", "23": "Serie A", "34": "Ligue 1"}
+
+
+def _normalise(value: object) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+
+
+def _same_competition(left: object, right: object) -> bool:
+    aliases = {"laliga": "laliga", "laligaea": "laliga", "uefachampionsleague": "championsleague"}
+    return aliases.get(_normalise(left), _normalise(left)) == aliases.get(_normalise(right), _normalise(right))
 
 
 @functools.lru_cache(maxsize=1)
@@ -36,25 +46,33 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
                     out_box = float(row["out_box_final_ratio"])
                     final = in_box + out_box
                     if all(0 <= value <= 100 for value in (mid, in_box, out_box)):
-                        ratios[player_id] = {
+                        ratio_key = f"{player_id}:{row.get('tournament_id', '')}:{row.get('season_id', '')}"
+                        ratios[ratio_key] = {
+                            "fotmob_player_id": player_id,
                             "mid_third_ratio": mid,
                             "in_box_ratio": in_box,
                             "out_box_final_ratio": out_box,
                             "final_third_ratio": final,
                             "sportsapi_player_id": sportsapi_player_id,
                             "player_name": str(row.get("player_name", "")).strip(),
+                            "tournament_id": str(row.get("tournament_id", "")).strip(),
+                            "season_id": str(row.get("season_id", "")).strip(),
+                            "season_name": str(row.get("season_name", "")).strip(),
+                            "competition_name": str(row.get("competition_name", "")).strip(),
+                            "heatmap_key": str(row.get("heatmap_key", "")).strip() or ratio_key,
                         }
                 else:
                     final = float(row["final_third_ratio"])
                     if 0 <= mid <= 100 and 0 <= final <= 100:
-                        ratios[player_id] = {"mid_third_ratio": mid, "final_third_ratio": final, "sportsapi_player_id": sportsapi_player_id, "player_name": str(row.get("player_name", "")).strip()}
+                        ratios[player_id] = {"fotmob_player_id": player_id, "mid_third_ratio": mid, "final_third_ratio": final, "sportsapi_player_id": sportsapi_player_id, "player_name": str(row.get("player_name", "")).strip()}
     except (OSError, KeyError, TypeError, ValueError):
         return {}
     return ratios
 
 
 def get_tactical_ratio(player_id: str | int) -> Optional[dict[str, float]]:
-    return load_tactical_ratios().get(str(player_id))
+    matches = [row for row in load_tactical_ratios().values() if str(row.get("fotmob_player_id")) == str(player_id)]
+    return matches[0] if matches else None
 
 
 def get_tactical_ratio_by_name(player_name: str) -> Optional[dict[str, float]]:
@@ -62,6 +80,17 @@ def get_tactical_ratio_by_name(player_name: str) -> Optional[dict[str, float]]:
     normalized = re.sub(r"[^a-z0-9]", "", player_name.lower())
     matches = [ratio for ratio in load_tactical_ratios().values() if re.sub(r"[^a-z0-9]", "", str(ratio.get("player_name", "")).lower()) == normalized]
     return matches[0] if len(matches) == 1 else None
+
+
+def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, season_label: str) -> Optional[dict[str, float]]:
+    """Return one player's one competition-season row; never blend sessions."""
+    candidates = [
+        row for row in load_tactical_ratios().values()
+        if str(row.get("fotmob_player_id")) == str(player_id)
+        and _same_competition(row.get("competition_name") or TOURNAMENT_NAMES.get(str(row.get("tournament_id")), ""), competition_name)
+        and (not row.get("season_name") or str(row.get("season_name")) == season_label)
+    ]
+    return candidates[0] if len(candidates) == 1 else None
 
 
 @functools.lru_cache(maxsize=1)
@@ -73,8 +102,8 @@ def load_heatmap_points() -> dict[str, list[list[float]]]:
         return {}
 
 
-def get_heatmap_points(player_id: str | int) -> list[list[float]]:
-    points = load_heatmap_points().get(str(player_id), [])
+def get_heatmap_points(player_id: str | int, heatmap_key: str | None = None) -> list[list[float]]:
+    points = load_heatmap_points().get(heatmap_key or str(player_id), [])
     return points if isinstance(points, list) else []
 
 
