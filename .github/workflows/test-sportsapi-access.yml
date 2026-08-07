@@ -56,6 +56,7 @@ jobs:
           print("wing-sample top-player position:", candidate.get("position"))
           profile = fetch(f"https://api.sportsapipro.com/v2/football/players/{candidate['id']}", os.environ["PLAYER_KEY"])
           root = profile.get("data", profile) if isinstance(profile, dict) else {}
+          root = root.get("player", root) if isinstance(root, dict) else root
           print("wing-sample profile keys:", sorted(root) if isinstance(root, dict) else type(root).__name__)
           print("wing-sample profile position fields:", {key: root.get(key) for key in ("position", "positionName", "positionCode", "positions") if isinstance(root, dict) and key in root})
           PY
