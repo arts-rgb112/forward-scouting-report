@@ -187,8 +187,10 @@ def is_target_position(values: Iterable[str]) -> bool:
     if not values:
         return False
     text = " ".join(values).lower()
-    codes = set(re.findall(r"\b[a-z]{2,}\b", text))
-    return any(token in text for token in ATTACKING_POSITION_TOKENS[:-1]) or bool({"st", "cf"} & codes)
+    codes = set(re.findall(r"\b[a-z]{1,}\b", text))
+    # SportsAPI's Top Players route uses the compact `F` code for forwards.
+    # It is the equivalent of the intended Attacker/CF target population.
+    return any(token in text for token in ATTACKING_POSITION_TOKENS[:-1]) or bool({"f", "st", "cf"} & codes)
 
 
 def heat_ratio(payload: Any) -> tuple[int, int, int] | None:
