@@ -107,37 +107,6 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
-ATTRIBUTE_AXES = [
-    ("공격", "attacking"), ("기술", "technical"), ("전술", "tactical"),
-    ("수비", "defending"), ("창의성", "creativity"),
-]
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def cached_attribute_overviews(player_id: str) -> dict[str, dict[str, float]] | None:
-    """Deprecated: the analysis center no longer uses generic V2 traits."""
-    return None
-
-
-def render_attribute_overview_radar(player_id: str, player_name: str) -> None:
-    data = cached_attribute_overviews(str(player_id))
-    if not data:
-        st.info("V2 속성 레이더 데이터를 불러올 수 없습니다.")
-        return
-    labels = [label for label, _ in ATTRIBUTE_AXES]
-    player_values = [data["player"][key] for _, key in ATTRIBUTE_AXES]
-    average_values = [data["average"][key] for _, key in ATTRIBUTE_AXES]
-    figure = go.Figure()
-    for name, values, color, fill in (
-        (player_name, player_values, "#22C55E", "rgba(34,197,94,0.28)"),
-        ("동일 포지션 리그 평균", average_values, "#94A3B8", "rgba(148,163,184,0.16)"),
-    ):
-        figure.add_trace(go.Scatterpolar(r=values + [values[0]], theta=labels + [labels[0]], mode="lines+markers", name=name, fill="toself", fillcolor=fill, line={"color": color, "width": 2}))
-    upper = max(100.0, max(player_values + average_values) * 1.1)
-    figure.update_layout(title="📊 V2 속성 레이더 · 선수 vs 동일 포지션 평균", height=400, margin={"l": 35, "r": 35, "t": 55, "b": 25}, paper_bgcolor="rgba(0,0,0,0)", polar={"bgcolor": "rgba(0,0,0,0)", "radialaxis": {"range": [0, upper], "visible": True}}, legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"})
-    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
-
-
 SPEAR_FACTOR_AXES = [
     ("박스 안 결정력", "in_box_finishing_top_percent"),
     ("전체 슈팅 파괴력", "shot_quality_top_percent"),
