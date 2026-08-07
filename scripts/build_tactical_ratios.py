@@ -25,9 +25,12 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
-# Canonical path-based V2 URL. The legacy subdomain remains compatible, but
-# this avoids mixing endpoint shapes across the ETL and documentation.
-BASE_URL = "https://api.sportsapipro.com/v2/football"
+# Prefer the canonical path-based endpoint. Some accounts are still rolling
+# onto that host, so a 403 safely falls back to the permanent V2 subdomain.
+BASE_URLS = (
+    "https://api.sportsapipro.com/v2/football",
+    "https://v2.football.sportsapipro.com/api",
+)
 TARGET_TOURNAMENTS = {"premier league", "laliga", "la liga", "bundesliga", "serie a", "ligue 1"}
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,22 +45,32 @@ class SportsApiClient:
         self.delay_seconds = delay_seconds
 
     def get(self, path: str) -> Any:
-        url = f"{BASE_URL}/{path.lstrip('/')}"
-        for attempt in range(4):
-            try:
-                request = Request(url, headers={"x-api-key": self.api_key, "Accept": "application/json"})
-                with urlopen(request, timeout=30) as response:
-                    payload = json.loads(response.read().decode("utf-8"))
-                time.sleep(self.delay_seconds)
-                return payload
-            except HTTPError as exc:
-                if exc.code not in (429, 500, 502, 503, 504) or attempt == 3:
-                    raise
-            except URLError:
-                if attempt == 3:
-                    raise
-            time.sleep(max(self.delay_seconds, 1.0) * (2 ** attempt))
-        raise RuntimeError(f"request retries exhausted: {url}")
+        last_error: Exception | None = None
+        for base_url in BASE_URLS:
+            url = f"{base_url}/{path.lstrip('/')}"
+            for attempt in range(4):
+                try:
+                    request = Request(url, headers={"x-api-key": self.api_key, "Accept": "application/json"})
+                    with urlopen(request, timeout=30) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                    time.sleep(self.delay_seconds)
+                    return payload
+                except HTTPError as exc:
+                    last_error = exc
+                    # The canonical host can reject accounts that have not been
+                    # rolled out yet; immediately try the documented legacy URL.
+                    if exc.code == 403:
+                        break
+                    if exc.code not in (429, 500, 502, 503, 504) or attempt == 3:
+                        raise
+                except URLError as exc:
+                    last_error = exc
+                    if attempt == 3:
+                        break
+                time.sleep(max(self.delay_seconds, 1.0) * (2 ** attempt))
+        if last_error:
+            raise last_error
+        raise RuntimeError(f"request retries exhausted: {path}")
 
 
 def walk_dicts(value: Any) -> Iterable[dict[str, Any]]:
