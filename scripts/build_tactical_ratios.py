@@ -51,7 +51,13 @@ class SportsApiClient:
             url = f"{base_url}/{path.lstrip('/')}"
             for attempt in range(4):
                 try:
-                    request = Request(url, headers={"x-api-key": api_key, "Accept": "application/json"})
+                    request = Request(url, headers={
+                        "x-api-key": api_key,
+                        "Accept": "application/json",
+                        # SportsAPI accepts the same key via curl but rejects
+                        # Python's default user agent with 403 on some routes.
+                        "User-Agent": "Mozilla/5.0 (compatible; ForwardScoutingHeatRatio/1.0)",
+                    })
                     with urlopen(request, timeout=30) as response:
                         payload = json.loads(response.read().decode("utf-8"))
                     time.sleep(self.delay_seconds)
