@@ -194,7 +194,7 @@ def render_season_heatmap(player_id: str, player_name: str) -> None:
 
 def render_activity_ratio(player_id: str, player_name: str) -> None:
     """Render the ETL-backed mid/final-third activity split without live API calls."""
-    ratio = get_tactical_ratio(player_id)
+    ratio = get_tactical_ratio(player_id) or get_tactical_ratio_by_name(player_name)
     st.markdown("#### 🏃 주요 활동 반경")
     if ratio is None:
         st.caption("히트맵 비율 데이터가 아직 적재되지 않았습니다.")
@@ -580,18 +580,31 @@ def render_v32_analysis_center() -> None:
     if not player:
         return
     st.divider()
+    tactical_ratio = get_tactical_ratio(player.player_id) or get_tactical_ratio_by_name(player.name)
+    if tactical_ratio:
+        in_box = float(tactical_ratio.get("in_box_ratio", 0.0))
+        out_box = float(tactical_ratio.get("out_box_final_ratio", tactical_ratio.get("final_third_ratio", 0.0)))
+        mid = float(tactical_ratio.get("mid_third_ratio", 0.0))
+        if in_box >= max(out_box, mid):
+            tactical_summary = "박스 안 타격과 마무리에 집중하는 포처형 포워드"
+        elif out_box >= mid:
+            tactical_summary = "박스 밖 타격과 전진에 능한 링커형 포워드"
+        else:
+            tactical_summary = "미드써드 연계와 전진 운반에 능한 연결형 공격수"
+    else:
+        tactical_summary = "활동 반경 데이터 동기화 대기 중"
     title_col, help_col = st.columns([4, 1])
     with title_col:
-        st.subheader(f"👑 {player.name}")
-        st.caption("S.P.E.A.R. Rating은 1,000분 이상 5대 리그 포워드 정적 모집단 동기화 후 표시됩니다.")
+        st.subheader(f"👑 {player.name}  ·  🏷️ S.P.E.A.R. 동기화 대기  (—/100)")
+        st.markdown(f"💡 **전술 요약:** {tactical_summary}")
     with help_col:
         with st.popover("❓ 점수 산출 방식"):
             st.markdown("**S.P.E.A.R.**  \\n슈팅 50% · 수비 부수기 30% · 위치 선정 20%")
             st.caption("1,000분 이상 전문 공격수의 Z-점수를 0~100 점수로 변환합니다.")
             st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
+    render_activity_ratio(player.player_id, player.name)
     radar_col, ratio_col = st.columns(2)
     with radar_col:
-        tactical_ratio = get_tactical_ratio(player.player_id) or get_tactical_ratio_by_name(player.name)
         sportsapi_player_id = tactical_ratio.get("sportsapi_player_id") if tactical_ratio else None
         if sportsapi_player_id:
             render_attribute_overview_radar(sportsapi_player_id, player.name)
@@ -599,7 +612,6 @@ def render_v32_analysis_center() -> None:
             st.info("이 선수의 SportsAPI ID 매핑이 없어 V2 레이더를 표시할 수 없습니다.")
     with ratio_col:
         render_season_heatmap(player.player_id, player.name)
-        render_activity_ratio(player.player_id, player.name)
     render_player_report(
         player, filters["seasons"], "전체", "FW (ST/CF)" in filters["positions"], 0, show_activity=False,
     )
