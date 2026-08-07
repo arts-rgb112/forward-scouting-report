@@ -42,6 +42,8 @@ TARGET_TOURNAMENTS = {
     ("bundesliga", "germany"): "Bundesliga",
     ("serie a", "italy"): "Serie A",
     ("ligue 1", "france"): "Ligue 1",
+    ("uefa champions league", "europe"): "UEFA Champions League",
+    ("champions league", "europe"): "UEFA Champions League",
 }
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ROOT = Path(__file__).resolve().parents[1]
@@ -251,7 +253,7 @@ def resolve_fotmob_id(player_name: str) -> str | None:
         return None
 
 
-OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "tournament_id", "season_id", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "sample_points", "generated_at"]
+OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "sample_points", "generated_at"]
 
 
 def read_checkpoint(path: Path) -> list[dict[str, str]]:
@@ -301,9 +303,10 @@ def main() -> None:
         visual_points = json.loads(point_path.read_text(encoding="utf-8")) if point_path.exists() else {}
     except (OSError, ValueError):
         visual_points = {}
-    if not visual_points:
+    if not visual_points or any(not row.get("heatmap_key") or not row.get("competition_name") for row in output):
         output = []
-    completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output if str(row.get("fotmob_player_id", "")) in visual_points}
+        visual_points = {}
+    completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output if str(row.get("heatmap_key", "")) in visual_points}
     unmatched, auto_mapped = [], []
     for tournament in discover_tournaments(client):
         try:
@@ -350,11 +353,13 @@ def main() -> None:
             if sports_id not in id_map:
                 auto_mapped.append({"sportsapi_player_id": sports_id, "fotmob_player_id": fotmob_id, **player})
             in_box, out_box_final, mid, samples = ratios
-            visual_points[str(fotmob_id)] = heatmap_visual_points(heatmap)
+            heatmap_key = f"{fotmob_id}:{tournament['id']}:{season_id}"
+            visual_points[heatmap_key] = heatmap_visual_points(heatmap)
             output.append({
                 "fotmob_player_id": fotmob_id, "sportsapi_player_id": sports_id,
                 "player_name": player["name"], "team_name": player["team_name"],
-                "tournament_id": tournament["id"], "season_id": season_id,
+                "competition_name": tournament["name"], "season_name": args.season_name,
+                "tournament_id": tournament["id"], "season_id": season_id, "heatmap_key": heatmap_key,
                 "in_box_ratio": in_box, "out_box_final_ratio": out_box_final,
                 "mid_third_ratio": mid, "final_third_ratio": in_box + out_box_final,
                 "sample_points": samples, "generated_at": datetime.now(timezone.utc).isoformat(),

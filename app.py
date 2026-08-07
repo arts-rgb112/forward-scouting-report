@@ -11,7 +11,7 @@ from rankings import (
     get_tactical_matrix,
     get_top_leagues_shot_quality,
 )
-from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name
+from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
 
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="wide")
 
@@ -163,6 +163,13 @@ def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards
     return None
 
 
+def spear_rank_for_session(player, season_label: str, stats: DecisionMetrics, restrict_to_forwards: bool):
+    return cached_percentiles(
+        player.player_id, season_label, stats, min_xg=1.0,
+        restrict_to_forwards=restrict_to_forwards, minimum_final_third_ratio=0,
+    )
+
+
 def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> str:
     """Combine the weakest/strongest S.P.E.A.R. factors with the 3-Zone role."""
     strong_phrases = {
@@ -230,8 +237,8 @@ def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> st
     return f"{weakness} {strength}{role} {player_type}."
 
 
-def render_season_heatmap(player_id: str, player_name: str) -> None:
-    points = get_heatmap_points(player_id)
+def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | None = None) -> None:
+    points = get_heatmap_points(player_id, heatmap_key)
     st.markdown("#### 📍 시즌 활동 히트맵")
     if not points:
         st.caption("정적 히트맵 좌표 데이터가 아직 생성되지 않았습니다.")
@@ -273,9 +280,9 @@ def render_season_heatmap(player_id: str, player_name: str) -> None:
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
-def render_activity_ratio(player_id: str, player_name: str) -> None:
+def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, object] | None = None) -> None:
     """Render the ETL-backed mid/final-third activity split without live API calls."""
-    ratio = get_tactical_ratio(player_id) or get_tactical_ratio_by_name(player_name)
+    ratio = ratio or get_tactical_ratio(player_id) or get_tactical_ratio_by_name(player_name)
     st.markdown("#### 🏃 주요 활동 반경")
     if ratio is None:
         st.caption("히트맵 비율 데이터가 아직 적재되지 않았습니다.")
@@ -503,6 +510,7 @@ def select_player(query: str, key: str):
 def render_player_report(
     player, selected_seasons: list[str], competition_filter: str,
     restrict_to_forwards: bool, minimum_final_third_ratio: int, show_activity: bool = True,
+    selected_league_id: int | None = None,
 ) -> None:
     try:
         with st.spinner(f"{player.name}의 전술 스탯을 분석 중입니다..."):
@@ -525,6 +533,8 @@ def render_player_report(
         if competition_filter == "리그" and is_ucl:
             continue
         if competition_filter == "챔피언스리그" and not is_ucl:
+            continue
+        if selected_league_id is not None and stats.league_id != selected_league_id:
             continue
 
         with st.expander(f"🏆 {season_str} · {stats.league_name or '대회 정보 없음'}", expanded=True):
@@ -640,14 +650,14 @@ def render_v32_analysis_center() -> None:
         with position_col:
             positions = st.multiselect("포지션", ["FW (ST/CF)", "MF", "DF", "GK"], default=["FW (ST/CF)"])
         with season_col:
-            seasons = st.multiselect("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], default=["25/26"])
+            season = st.selectbox("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], index=0)
         with player_col:
             query = st.text_input("선수명 검색", placeholder="예: Erling Haaland")
         with action_col:
             st.write("")
             submitted = st.form_submit_button("🔍 데이터 분석", use_container_width=True, type="primary")
         if submitted:
-            st.session_state.v32_filters = {"positions": positions, "seasons": seasons or ["25/26"], "query": query.strip()}
+            st.session_state.v32_filters = {"positions": positions, "season": season, "query": query.strip()}
 
     filters = st.session_state.v32_filters
     if not filters:
@@ -660,11 +670,27 @@ def render_v32_analysis_center() -> None:
     player = select_player(filters["query"], "v32_selected_player")
     if not player:
         return
-    st.divider()
-    tactical_ratio = get_tactical_ratio(player.player_id) or get_tactical_ratio_by_name(player.name)
-    rank = primary_spear_rank(
-        player, filters["seasons"], "FW (ST/CF)" in filters["positions"], 0,
+    try:
+        all_sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
+    except FotMobError as exc:
+        st.error(f"선수 세션 데이터를 불러오지 못했습니다: {exc}")
+        return
+    session_rows = [
+        (key, stats) for key, stats in all_sessions.items()
+        if key.split("_", 1)[0] == filters["season"]
+    ]
+    if not session_rows:
+        st.warning(f"{filters['season']} 시즌에 조회 가능한 대회 기록이 없습니다.")
+        return
+    selected_index = st.selectbox(
+        "대회", range(len(session_rows)),
+        format_func=lambda index: session_rows[index][1].league_name or "대회 정보 없음",
+        key=f"v32_competition_{player.player_id}_{filters['season']}",
     )
+    session_key, selected_stats = session_rows[selected_index]
+    st.divider()
+    tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", filters["season"])
+    rank = spear_rank_for_session(player, filters["season"], selected_stats, "FW (ST/CF)" in filters["positions"])
     tactical_summary = build_tactical_summary(rank, tactical_ratio)
     title_col, help_col = st.columns([4, 1])
     with title_col:
@@ -675,17 +701,20 @@ def render_v32_analysis_center() -> None:
             st.markdown("**S.P.E.A.R.**  \\n슈팅 50% · 수비 부수기 30% · 위치 선정 20%")
             st.caption("1,000분 이상 전문 공격수의 Z-점수를 0~100 점수로 변환합니다.")
             st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
-    render_activity_ratio(player.player_id, player.name)
+    render_activity_ratio(player.player_id, player.name, tactical_ratio)
     radar_col, ratio_col = st.columns(2)
     with radar_col:
         render_spear_factor_radar(player.name, rank)
         if rank is None:
             st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)으로 표시됩니다.")
     with ratio_col:
-        render_season_heatmap(player.player_id, player.name)
+        render_season_heatmap(player.player_id, player.name, tactical_ratio.get("heatmap_key") if tactical_ratio else None)
     render_player_report(
-        player, filters["seasons"], "전체", "FW (ST/CF)" in filters["positions"], 0, show_activity=False,
+        player, [filters["season"]], "전체", "FW (ST/CF)" in filters["positions"], 0,
+        show_activity=False, selected_league_id=selected_stats.league_id,
     )
+    if (getattr(selected_stats, "minutes_played", 0) or 0) < 1000 or not rank or (rank.eligible_players or 0) < 10:
+        st.caption("해당 대회 표본이 부족하여 잠정 수치가 적용되었습니다.")
 
 
 def main() -> None:
