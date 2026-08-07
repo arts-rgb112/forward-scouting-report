@@ -30,9 +30,11 @@ class DecisionMetrics:
     in_box_goals: Optional[float] = None
     in_box_xg: Optional[float] = None
     in_box_xgot: Optional[float] = None
+    in_box_shots: Optional[float] = None
     out_box_goals: Optional[float] = None
     out_box_xg: Optional[float] = None
     out_box_xgot: Optional[float] = None
+    out_box_shots: Optional[float] = None
 
     @property
     def shot_quality(self) -> Optional[float]:
@@ -74,6 +76,39 @@ class DecisionMetrics:
     @property
     def xg_per90(self) -> Optional[float]:
         return _per90(self.xg, self.minutes_played)
+
+    @property
+    def total_shots(self) -> Optional[float]:
+        if self.in_box_shots is None or self.out_box_shots is None:
+            return None
+        return self.in_box_shots + self.out_box_shots
+
+    @property
+    def dribble_attempts(self) -> Optional[float]:
+        if self.dribbles_succeeded is None or self.dribbles_success_rate is None:
+            return None
+        rate = self.dribbles_success_rate / 100
+        if not 0 < rate <= 1:
+            return None
+        return self.dribbles_succeeded / rate
+
+    @property
+    def ground_duel_attempts(self) -> Optional[float]:
+        if self.duels_won is None or self.duels_won_percentage is None:
+            return None
+        rate = self.duels_won_percentage / 100
+        if not 0 < rate <= 1:
+            return None
+        return self.duels_won / rate
+
+    @property
+    def aerial_duel_attempts(self) -> Optional[float]:
+        if self.aerial_duels_won is None or self.aerial_duels_won_percentage is None:
+            return None
+        rate = self.aerial_duels_won_percentage / 100
+        if not 0 < rate <= 1:
+            return None
+        return self.aerial_duels_won / rate
 
     @property
     def dribbles_failed_per90(self) -> Optional[float]:
@@ -180,7 +215,11 @@ def _shotmap_zone_totals(shotmap: Any) -> dict[str, float]:
     Coordinates are retained only as a compatibility fallback for historical
     responses that predate ``isFromInsideBox``.
     """
-    totals = {f"{zone}_{metric}": 0.0 for zone in ("in_box", "out_box") for metric in ("goals", "xg", "xgot")}
+    totals = {
+        f"{zone}_{metric}": 0.0
+        for zone in ("in_box", "out_box")
+        for metric in ("goals", "xg", "xgot", "shots")
+    }
     if not isinstance(shotmap, list):
         return totals
     for shot in shotmap:
@@ -191,6 +230,7 @@ def _shotmap_zone_totals(shotmap: Any) -> dict[str, float]:
             x, y = _parse_value(shot.get("x")), _parse_value(shot.get("y"))
             inside = bool(x is not None and y is not None and x >= 83.0 and 21.0 <= y <= 79.0)
         prefix = "in_box" if inside else "out_box"
+        totals[f"{prefix}_shots"] += 1.0
         totals[f"{prefix}_xg"] += _parse_value(shot.get("expectedGoals")) or 0.0
         totals[f"{prefix}_xgot"] += _parse_value(shot.get("expectedGoalsOnTarget")) or 0.0
         if str(shot.get("eventType", "")).lower() == "goal" or shot.get("isGoal") is True:
@@ -459,7 +499,10 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
             if ext.aerial_duels_won is None and new_metric.aerial_duels_won is not None: ext.aerial_duels_won = new_metric.aerial_duels_won
             if ext.aerial_duels_won_percentage is None and new_metric.aerial_duels_won_percentage is not None: ext.aerial_duels_won_percentage = new_metric.aerial_duels_won_percentage
             if ext.position is None and new_metric.position is not None: ext.position = new_metric.position
-            for attr in ("in_box_goals", "in_box_xg", "in_box_xgot", "out_box_goals", "out_box_xg", "out_box_xgot"):
+            for attr in (
+                "in_box_goals", "in_box_xg", "in_box_xgot", "in_box_shots",
+                "out_box_goals", "out_box_xg", "out_box_xgot", "out_box_shots",
+            ):
                 if getattr(ext, attr) is None and getattr(new_metric, attr) is not None:
                     setattr(ext, attr, getattr(new_metric, attr))
         else:

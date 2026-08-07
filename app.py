@@ -114,65 +114,102 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
 
 
 SPEAR_FACTOR_AXES = [
-    ("박스 안 결정력", "in_box_finishing_top_percent"),
     ("전체 슈팅 파괴력", "shot_quality_top_percent"),
-    ("득점 기회 포착 (xG/90)", "xg_per90_top_percent"),
-    ("지상 경합 마진", "duel_margin_per90_top_percent"),
-    ("공중볼 장악 마진", "aerial_margin_per90_top_percent"),
-    ("드리블 돌파 마진", "dribble_margin_per90_top_percent"),
+    ("박스 안 결정력", "in_box_finishing_top_percent"),
+    ("자력 전진 및 돌파 능력", "dribble_margin_per90_top_percent"),
+    ("공중볼 장악력", "aerial_margin_per90_top_percent"),
+    ("지상 경합 능력", "duel_margin_per90_top_percent"),
+    ("위치 선정 및 오프더볼", "xg_per90_top_percent"),
 ]
 
+VOLUME_FACTOR_AXES = [
+    ("슈팅 볼륨", "total_shots_volume_top_percent", "total_shots", "total_shots_volume_rank"),
+    ("박스 안 타격 볼륨", "box_shots_volume_top_percent", "in_box_shots", "box_shots_volume_rank"),
+    ("드리블 돌파 시도", "dribble_attempts_volume_top_percent", "dribble_attempts", "dribble_attempts_volume_rank"),
+    ("공중볼 경합 시도", "aerial_duel_attempts_volume_top_percent", "aerial_duel_attempts", "aerial_duel_attempts_volume_rank"),
+    ("지상 경합 시도", "ground_duel_attempts_volume_top_percent", "ground_duel_attempts", "ground_duel_attempts_volume_rank"),
+    ("득점 찬스 관여 볼륨", "xg_volume_top_percent", "xg", "xg_volume_rank"),
+]
 
 SPEAR_FACTOR_DETAILS = {
-    "in_box_finishing_top_percent": ("in_box_finishing", "in_box_finishing_rank", "eligible_players"),
-    "shot_quality_top_percent": ("shot_quality", "shot_quality_rank", "eligible_players"),
-    "xg_per90_top_percent": ("xg_per90", "xg_per90_rank", "progression_eligible"),
-    "duel_margin_per90_top_percent": ("duel_margin_per90", "duel_margin_per90_rank", "progression_eligible"),
-    "aerial_margin_per90_top_percent": ("aerial_margin_per90", "aerial_margin_per90_rank", "progression_eligible"),
+    "shot_quality_top_percent": ("shot_quality", "shot_quality_rank", "progression_eligible"),
+    "in_box_finishing_top_percent": ("in_box_finishing", "in_box_finishing_rank", "progression_eligible"),
     "dribble_margin_per90_top_percent": ("dribble_margin_per90", "dribble_margin_per90_rank", "progression_eligible"),
+    "aerial_margin_per90_top_percent": ("aerial_margin_per90", "aerial_margin_per90_rank", "progression_eligible"),
+    "duel_margin_per90_top_percent": ("duel_margin_per90", "duel_margin_per90_rank", "progression_eligible"),
+    "xg_per90_top_percent": ("xg_per90", "xg_per90_rank", "progression_eligible"),
 }
 
 
-def render_spear_factor_radar(player_name: str, rank, stats: DecisionMetrics | None = None) -> None:
-    """Six attack-only percentile factors used by the S.P.E.A.R. model."""
-    labels = [label for label, _ in SPEAR_FACTOR_AXES]
-    player_values = [_radar_score(getattr(rank, attr, None) if rank else None) for _, attr in SPEAR_FACTOR_AXES]
-    player_details = []
-    for _, percentile_attr in SPEAR_FACTOR_AXES:
-        raw_attr, rank_attr, total_attr = SPEAR_FACTOR_DETAILS[percentile_attr]
-        raw_value = getattr(stats, raw_attr, None) if stats else None
+def _spear_tier(score: float) -> str:
+    if score >= 95:
+        return "S"
+    if score >= 85:
+        return "A"
+    if score >= 65:
+        return "B"
+    if score >= 35:
+        return "C"
+    return "D"
+
+
+def render_spear_radar(player_name: str, rank, stats: DecisionMetrics | None, *, volume: bool) -> None:
+    """Render one of the synchronized volume/ratio S.P.E.A.R. radars."""
+    axes = VOLUME_FACTOR_AXES if volume else SPEAR_FACTOR_AXES
+    details = []
+    labels = []
+    values = []
+    for axis in axes:
+        if volume:
+            label, percentile_attr, raw_attr, rank_attr = axis
+            total_attr = "spear_volume_eligible"
+        else:
+            label, percentile_attr = axis
+            raw_attr, rank_attr, total_attr = SPEAR_FACTOR_DETAILS[percentile_attr]
         top_percent = getattr(rank, percentile_attr, None) if rank else None
+        score = _radar_score(top_percent)
+        tier = _spear_tier(score)
+        labels.append(f"{label} [{tier}]")
+        values.append(score)
+        raw_value = getattr(stats, raw_attr, None) if stats else None
         rank_value = getattr(rank, rank_attr, None) if rank else None
         total = getattr(rank, total_attr, None) if rank else None
-        player_details.append([
+        details.append([
             "—" if raw_value is None else f"{float(raw_value):.2f}",
+            f"{tier} 등급",
             "데이터 부족" if top_percent is None else f"상위 {float(top_percent):.1f}%",
             "순위 데이터 부족" if rank_value is None or not total else f"{rank_value}위 / {total}명",
         ])
-    # Percentile 50 is the median of exactly the same league/position cohort.
-    average_values = [50.0] * len(labels)
+
     figure = go.Figure()
-    for name, values, color, fill in (
-        (player_name, player_values, "#22C55E", "rgba(34,197,94,0.28)"),
-        ("동일 대회 F·M(900분+·xG 1+) 평균", average_values, "#94A3B8", "rgba(148,163,184,0.16)"),
+    for name, trace_values, color, fill in (
+        (player_name, values, "#22C55E", "rgba(34,197,94,0.28)"),
+        ("동일 대회 F·M 평균", [50.0] * len(labels), "#94A3B8", "rgba(148,163,184,0.16)"),
     ):
         is_player = name == player_name
         figure.add_trace(go.Scatterpolar(
-            r=values + [values[0]], theta=labels + [labels[0]],
+            r=trace_values + [trace_values[0]], theta=labels + [labels[0]],
             mode="lines+markers", name=name, fill="toself", fillcolor=fill,
             line={"color": color, "width": 2}, marker={"color": color, "size": 6},
-            customdata=(player_details + [player_details[0]]) if is_player else None,
-            hovertemplate=("<b>%{theta}</b><br>원시값: %{customdata[0]}<br>%{customdata[1]} · %{customdata[2]}<br>레이더 점수: %{r:.1f}<extra></extra>" if is_player else "%{theta}: 비교군 평균 %{r:.0f}<extra></extra>"),
+            customdata=(details + [details[0]]) if is_player else None,
+            hovertemplate=(
+                "<b>%{theta}</b><br>원시값: %{customdata[0]}<br>%{customdata[1]} · %{customdata[2]} · %{customdata[3]}<br>레이더 점수: %{r:.1f}<extra></extra>"
+                if is_player else "%{theta}: 비교군 평균 %{r:.0f}<extra></extra>"
+            ),
         ))
+    heading = "볼륨(Volume)" if volume else "비율(Ratio)"
     figure.update_layout(
-        title="S.P.E.A.R. 6대 공격 팩터 · 선수 vs 동일 대회 F·M(900분+·xG 1+) 평균",
-        height=420, margin={"l": 35, "r": 35, "t": 55, "b": 25},
+        title=f"S.P.E.A.R. {heading} 레이더 · 동일 대회 F·M(900분+·xG 1+) 기준",
+        height=455, margin={"l": 38, "r": 38, "t": 55, "b": 35},
         paper_bgcolor="rgba(0,0,0,0)",
-        polar={"bgcolor": "rgba(0,0,0,0)", "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "visible": True}},
+        polar={
+            "bgcolor": "rgba(0,0,0,0)",
+            "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "visible": True},
+            "angularaxis": {"rotation": 90, "direction": "clockwise"},
+        },
         legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"},
     )
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
-    st.caption("각 축에 마우스를 올리면 원시값, 등수, 상위%와 레이더 점수를 확인할 수 있습니다.")
 
 
 def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards: bool, minimum_final_third_ratio: int):
@@ -784,14 +821,25 @@ def render_v32_analysis_center() -> None:
             st.markdown("**S.P.E.A.R.**  \\n슈팅 50% · 수비 부수기 30% · 위치 선정 20%")
             st.caption("1,000분 이상 전문 공격수의 Z-점수를 0~100 점수로 변환합니다.")
             st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
-    render_activity_ratio(player.player_id, player.name, tactical_ratio)
-    radar_col, ratio_col = st.columns(2)
-    with radar_col:
-        render_spear_factor_radar(player.name, rank, selected_stats)
-        if rank is None:
-            st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)으로 표시됩니다.")
+    volume_col, ratio_col = st.columns(2)
+    with volume_col:
+        render_spear_radar(player.name, rank, selected_stats, volume=True)
     with ratio_col:
-        render_season_heatmap(player.player_id, player.name, tactical_ratio.get("heatmap_key") if tactical_ratio else None)
+        render_spear_radar(player.name, rank, selected_stats, volume=False)
+    if rank is None:
+        st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)과 C 등급으로 표시됩니다.")
+
+    competition_name = selected_stats.league_name or "선택 대회"
+    with st.expander(f"📍 {filters['season']} · {competition_name} 공간·활동량", expanded=True):
+        activity_col, heatmap_col = st.columns([1, 1.45])
+        with activity_col:
+            render_activity_ratio(player.player_id, player.name, tactical_ratio)
+        with heatmap_col:
+            render_season_heatmap(
+                player.player_id,
+                player.name,
+                tactical_ratio.get("heatmap_key") if tactical_ratio else None,
+            )
     render_player_report(
         player, [filters["season"]], "전체", "FW (ST/CF)" in filters["positions"], 0,
         show_activity=False, selected_league_id=selected_stats.league_id,

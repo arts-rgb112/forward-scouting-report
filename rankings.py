@@ -84,6 +84,19 @@ class LeaguePercentiles:
     net_progression_top_percent: Optional[float] = None
     net_progression_rank: Optional[int] = None
     net_progression_eligible: int = 0
+    total_shots_volume_top_percent: Optional[float] = None
+    total_shots_volume_rank: Optional[int] = None
+    box_shots_volume_top_percent: Optional[float] = None
+    box_shots_volume_rank: Optional[int] = None
+    dribble_attempts_volume_top_percent: Optional[float] = None
+    dribble_attempts_volume_rank: Optional[int] = None
+    aerial_duel_attempts_volume_top_percent: Optional[float] = None
+    aerial_duel_attempts_volume_rank: Optional[int] = None
+    ground_duel_attempts_volume_top_percent: Optional[float] = None
+    ground_duel_attempts_volume_rank: Optional[int] = None
+    xg_volume_top_percent: Optional[float] = None
+    xg_volume_rank: Optional[int] = None
+    spear_volume_eligible: int = 0
 
 
 def _value(row: dict) -> Optional[float]:
@@ -464,6 +477,19 @@ def calculate_league_percentiles(
     out_box_population = [peer.out_box_shot_quality for peer in peers.values() if peer.out_box_shot_quality is not None]
     in_box_pct, in_box_rank = _rank_info(metrics.in_box_finishing, in_box_population)
     out_box_pct, out_box_rank = _rank_info(metrics.out_box_shot_quality, out_box_population)
+    # The volume radar deliberately uses season totals, rather than /90 rates.
+    # Every population below is the exact F/M + 900 minutes + xG 1 cohort used
+    # by the ratio radar, so the two views remain directly comparable.
+    def volume_rank(attr: str) -> tuple[Optional[float], Optional[int]]:
+        population = [getattr(peer, attr) for peer in peers.values() if getattr(peer, attr, None) is not None]
+        return _rank_info(getattr(metrics, attr, None), population)
+
+    total_shots_pct, total_shots_rank = volume_rank("total_shots")
+    box_shots_pct, box_shots_rank = volume_rank("in_box_shots")
+    dribble_attempts_pct, dribble_attempts_rank = volume_rank("dribble_attempts")
+    aerial_attempts_pct, aerial_attempts_rank = volume_rank("aerial_duel_attempts")
+    ground_attempts_pct, ground_attempts_rank = volume_rank("ground_duel_attempts")
+    xg_volume_pct, xg_volume_rank = volume_rank("xg")
     progression_eligible = int(progression_percentiles["cohort_count"])
     duels_eligible = progression_eligible
     aerials_eligible = progression_eligible
@@ -525,6 +551,19 @@ def calculate_league_percentiles(
         net_progression_top_percent=progression_percentiles["net_pct"],
         net_progression_rank=progression_percentiles["net_rank"],
         net_progression_eligible=int(progression_percentiles["net_count"]),
+        total_shots_volume_top_percent=total_shots_pct,
+        total_shots_volume_rank=total_shots_rank,
+        box_shots_volume_top_percent=box_shots_pct,
+        box_shots_volume_rank=box_shots_rank,
+        dribble_attempts_volume_top_percent=dribble_attempts_pct,
+        dribble_attempts_volume_rank=dribble_attempts_rank,
+        aerial_duel_attempts_volume_top_percent=aerial_attempts_pct,
+        aerial_duel_attempts_volume_rank=aerial_attempts_rank,
+        ground_duel_attempts_volume_top_percent=ground_attempts_pct,
+        ground_duel_attempts_volume_rank=ground_attempts_rank,
+        xg_volume_top_percent=xg_volume_pct,
+        xg_volume_rank=xg_volume_rank,
+        spear_volume_eligible=len(peers),
     )
 
 
