@@ -56,6 +56,7 @@ class LeaguePercentiles:
     aerials_won_per90_rank: Optional[int] = None
     aerials_lost_per90_top_percent: Optional[float] = None
     aerials_lost_per90_rank: Optional[int] = None
+    progression_eligible: int = 0
     net_progression_top_percent: Optional[float] = None
     net_progression_rank: Optional[int] = None
     net_progression_eligible: int = 0
@@ -78,6 +79,31 @@ def _rank_info(value: Optional[float], population: list[float]) -> tuple[Optiona
     effective_total = max(rank, len(population))
     percentile = round((rank / effective_total) * 100, 1)
     return percentile, rank
+
+
+def _progression_value(metric: DecisionMetrics) -> Optional[float]:
+    """Return the report's net-progression value, including its UI fallback."""
+    value = metric.net_progression_per90
+    if value is not None:
+        return value
+
+    successful = metric.dribbles_succeeded_per90
+    fouls = metric.fouls_won_per90
+    penalties = metric.penalties_awarded_per90
+    duels_won = metric.duels_won_per90
+    aerial_won = metric.aerial_duels_won_per90
+    duels_lost = metric.duels_lost_per90
+    aerial_lost = metric.aerial_duels_lost_per90
+    dribble_failed = metric.dribbles_failed_per90
+    dispossessed = metric.dispossessed_per90
+    values = (successful, fouls, penalties, duels_won, aerial_won,
+              duels_lost, aerial_lost, dribble_failed, dispossessed)
+    if all(component is None for component in values):
+        return None
+    return ((successful or 0.0) + (fouls or 0.0) + (penalties or 0.0)
+            + (duels_won or 0.0) + (aerial_won or 0.0)
+            - (duels_lost or 0.0) - (aerial_lost or 0.0)
+            - (dribble_failed or 0.0) - (dispossessed or 0.0))
 
 
 @functools.lru_cache(maxsize=32)
@@ -119,52 +145,45 @@ def _fetch_elite_dribbler_metrics(league_id: int, season_name: str) -> tuple[dic
     return metrics_by_player, successes
 
 
-def _calculate_dribble_percentiles(
+def _calculate_progression_percentiles(
     player_id: str, league_id: int, season_name: str, player: DecisionMetrics
 ) -> dict[str, Optional[float] | Optional[int] | int]:
     try:
         peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name)
     except FotMobError:
-        return {"elite_count": 0, "success_pct": None, "success_rank": None,
-                "failure_pct": None, "failure_rank": None, "failure_count": 0,
-                "net_pct": None, "net_rank": None, "net_count": 0}
+        peers, successes = {}, {}
 
-    player_key = str(player_id)
-    if player_key not in successes:
-        return {
-            "elite_count": len(successes), "success_pct": None, "success_rank": None,
-            "failure_pct": None, "failure_rank": None, "failure_count": 0,
-            "net_pct": None, "net_rank": None, "net_count": 0,
-        }
-    player_success = player.dribbles_succeeded_per90
-    # The table is the canonical value for eligibility and success ranking.
-    if player_key in successes:
-        player_success = successes[player_key]
+    def rank_attr(attr_name: str, reverse: bool = False) -> tuple[Optional[float], Optional[int], int]:
+        player_value = _progression_value(player) if attr_name == "net_progression_per90" else getattr(player, attr_name)
+        population = [
+            _progression_value(peer) if attr_name == "net_progression_per90" else getattr(peer, attr_name)
+            for peer in peers.values()
+        ]
+        population = [value for value in population if value is not None]
+        if player_value is None or not population:
+            return None, None, len(population)
+        if reverse:
+            percentile, rank = _rank_info(-player_value, [-value for value in population])
+        else:
+            percentile, rank = _rank_info(player_value, population)
+        return percentile, rank, len(population)
 
-    success_population = list(successes.values())
-    success_pct, success_rank = _rank_info(player_success, success_population)
-
-    # Lower failed-dribble values are better; rank the negated values.
-    failures = [metric.dribbles_failed_per90 for metric in peers.values()]
-    failures = [value for value in failures if value is not None]
-    player_failure = player.dribbles_failed_per90
-    failure_pct, failure_rank = _rank_info(
-        -player_failure if player_failure is not None else None, [-value for value in failures]
-    )
-
-    net_values = [metric.net_progression_per90 for metric in peers.values()]
-    net_values = [value for value in net_values if value is not None]
-    net_pct, net_rank = _rank_info(player.net_progression_per90, net_values)
+    success_pct, success_rank, _ = rank_attr("dribbles_succeeded_per90")
+    failure_pct, failure_rank, _ = rank_attr("dribbles_failed_per90", reverse=True)
+    duels_won_pct, duels_won_rank, _ = rank_attr("duels_won_per90")
+    duels_lost_pct, duels_lost_rank, _ = rank_attr("duels_lost_per90", reverse=True)
+    aerials_won_pct, aerials_won_rank, _ = rank_attr("aerial_duels_won_per90")
+    aerials_lost_pct, aerials_lost_rank, _ = rank_attr("aerial_duels_lost_per90", reverse=True)
+    net_pct, net_rank, net_count = rank_attr("net_progression_per90")
     return {
-        "elite_count": len(success_population),
-        "success_pct": success_pct,
-        "success_rank": success_rank,
-        "failure_pct": failure_pct,
-        "failure_rank": failure_rank,
-        "failure_count": len(failures),
-        "net_pct": net_pct,
-        "net_rank": net_rank,
-        "net_count": len(net_values),
+        "cohort_count": len(successes),
+        "success_pct": success_pct, "success_rank": success_rank,
+        "failure_pct": failure_pct, "failure_rank": failure_rank,
+        "duels_won_pct": duels_won_pct, "duels_won_rank": duels_won_rank,
+        "duels_lost_pct": duels_lost_pct, "duels_lost_rank": duels_lost_rank,
+        "aerials_won_pct": aerials_won_pct, "aerials_won_rank": aerials_won_rank,
+        "aerials_lost_pct": aerials_lost_pct, "aerials_lost_rank": aerials_lost_rank,
+        "net_pct": net_pct, "net_rank": net_rank, "net_count": net_count,
     }
 
 
@@ -188,7 +207,10 @@ def get_league_metric_medians(league_id: int, season_name: str) -> dict[str, flo
     }
     medians: dict[str, float | None] = {}
     for output_name, attribute in attributes.items():
-        values = [getattr(metric, attribute) for metric in peers.values()]
+        values = [
+            _progression_value(metric) if attribute == "net_progression_per90" else getattr(metric, attribute)
+            for metric in peers.values()
+        ]
         values = [value for value in values if value is not None]
         medians[output_name] = float(pd.Series(values).median()) if values else None
     return medians
@@ -319,30 +341,12 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
 
     duels_pct, duels_rk = None, None
     aerials_pct, aerials_rk = None, None
-    dribble_percentiles = _calculate_dribble_percentiles(
+    progression_percentiles = _calculate_progression_percentiles(
         player_key, metrics.league_id, season_name, metrics
     )
-
-    def rank_attr(attr_name: str, reverse: bool = False) -> tuple[Optional[float], Optional[int], int]:
-        try:
-            peers, _ = _fetch_elite_dribbler_metrics(metrics.league_id, season_name)
-        except FotMobError:
-            return None, None, 0
-        value = getattr(metrics, attr_name)
-        population = [getattr(peer, attr_name) for peer in peers.values()]
-        population = [candidate for candidate in population if candidate is not None]
-        if value is None or not population:
-            return None, None, len(population)
-        if reverse:
-            percentile, rank = _rank_info(-value, [-candidate for candidate in population])
-        else:
-            percentile, rank = _rank_info(value, population)
-        return percentile, rank, len(population)
-
-    duels_won_pct, duels_won_rank, duels_eligible = rank_attr("duels_won_per90")
-    duels_lost_pct, duels_lost_rank, _ = rank_attr("duels_lost_per90", reverse=True)
-    aerials_won_pct, aerials_won_rank, aerials_eligible = rank_attr("aerial_duels_won_per90")
-    aerials_lost_pct, aerials_lost_rank, _ = rank_attr("aerial_duels_lost_per90", reverse=True)
+    progression_eligible = int(progression_percentiles["cohort_count"])
+    duels_eligible = progression_eligible
+    aerials_eligible = progression_eligible
     
     return LeaguePercentiles(
         goals_top_percent=goals_pct,
@@ -365,23 +369,24 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
         aerials_pct_top_percent=aerials_pct,
         aerials_pct_rank=aerials_rk,
         aerials_eligible=aerials_eligible,
-        elite_dribbler_eligible=int(dribble_percentiles["elite_count"]),
-        dribbles_succeeded_per90_top_percent=dribble_percentiles["success_pct"],
-        dribbles_succeeded_per90_rank=dribble_percentiles["success_rank"],
-        dribbles_failed_per90_top_percent=dribble_percentiles["failure_pct"],
-        dribbles_failed_per90_rank=dribble_percentiles["failure_rank"],
-        dribbles_failed_eligible=int(dribble_percentiles["failure_count"]),
-        duels_won_per90_top_percent=duels_won_pct,
-        duels_won_per90_rank=duels_won_rank,
-        duels_lost_per90_top_percent=duels_lost_pct,
-        duels_lost_per90_rank=duels_lost_rank,
-        aerials_won_per90_top_percent=aerials_won_pct,
-        aerials_won_per90_rank=aerials_won_rank,
-        aerials_lost_per90_top_percent=aerials_lost_pct,
-        aerials_lost_per90_rank=aerials_lost_rank,
-        net_progression_top_percent=dribble_percentiles["net_pct"],
-        net_progression_rank=dribble_percentiles["net_rank"],
-        net_progression_eligible=int(dribble_percentiles["net_count"]),
+        elite_dribbler_eligible=int(progression_percentiles["cohort_count"]),
+        dribbles_succeeded_per90_top_percent=progression_percentiles["success_pct"],
+        dribbles_succeeded_per90_rank=progression_percentiles["success_rank"],
+        dribbles_failed_per90_top_percent=progression_percentiles["failure_pct"],
+        dribbles_failed_per90_rank=progression_percentiles["failure_rank"],
+        dribbles_failed_eligible=int(progression_percentiles["cohort_count"]),
+        duels_won_per90_top_percent=progression_percentiles["duels_won_pct"],
+        duels_won_per90_rank=progression_percentiles["duels_won_rank"],
+        duels_lost_per90_top_percent=progression_percentiles["duels_lost_pct"],
+        duels_lost_per90_rank=progression_percentiles["duels_lost_rank"],
+        aerials_won_per90_top_percent=progression_percentiles["aerials_won_pct"],
+        aerials_won_per90_rank=progression_percentiles["aerials_won_rank"],
+        aerials_lost_per90_top_percent=progression_percentiles["aerials_lost_pct"],
+        aerials_lost_per90_rank=progression_percentiles["aerials_lost_rank"],
+        progression_eligible=progression_eligible,
+        net_progression_top_percent=progression_percentiles["net_pct"],
+        net_progression_rank=progression_percentiles["net_rank"],
+        net_progression_eligible=int(progression_percentiles["net_count"]),
     )
 
 

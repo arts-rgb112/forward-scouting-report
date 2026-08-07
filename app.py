@@ -246,13 +246,16 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
             duels_lost = getattr(stats, "duels_lost_per90", None) or 0.0
             dribbles_succeeded = getattr(stats, "dribbles_succeeded_per90", None) or 0.0
             dribbles_failed = getattr(stats, "dribbles_failed_per90", None) or 0.0
+            fouls_won = getattr(stats, "fouls_won_per90", None) or 0.0
+            penalties_awarded = getattr(stats, "penalties_awarded_per90", None) or 0.0
+            dispossessed = getattr(stats, "dispossessed_per90", None) or 0.0
 
             # 누락 스탯으로 인해 순수 전진 기여도가 계산되지 않았을 경우를 위한 백업 계산
             net_progression = getattr(stats, "net_progression_per90", None)
             if net_progression is None:
                 net_progression = (
-                    dribbles_succeeded + duels_won + aerial_won
-                    - duels_lost - aerial_lost - dribbles_failed
+                    dribbles_succeeded + fouls_won + penalties_awarded + duels_won + aerial_won
+                    - duels_lost - aerial_lost - dribbles_failed - dispossessed
                 )
             # -----------------------------------------------------------
 
@@ -287,33 +290,31 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
                 return getattr(rank, attr, None) if rank else None
 
             st.caption("🏃 순수 전진 기여도 = 성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
+            st.caption(f"📊 순수 전진 기여도 상대평가 (동일 대회, 볼 경합 성공 1회 이상 {get_rank('progression_eligible') or 0}명 기준)")
             
-            elite_eligible = get_rank("elite_dribbler_eligible") or 0
-            duels_eligible = get_rank("duels_eligible") or 0
-            aerials_eligible = get_rank("aerials_eligible") or 0
-            net_eligible = get_rank("net_progression_eligible") or 0
+            progression_eligible = get_rank("progression_eligible") or 0
 
             # 원본 stats 대신 안전하게 치환된 지역 변수(dribbles_succeeded 등) 사용
             render_unified_bar("성공 드리블", dribbles_succeeded, medians.get("dribbles_succeeded_per90"), 
-                               get_rank("dribbles_succeeded_per90_top_percent"), get_rank("dribbles_succeeded_per90_rank"), elite_eligible, "/90분")
+                               get_rank("dribbles_succeeded_per90_top_percent"), get_rank("dribbles_succeeded_per90_rank"), progression_eligible, "/90분")
             
             render_unified_bar("실패 드리블", dribbles_failed, medians.get("dribbles_failed_per90"), 
-                               get_rank("dribbles_failed_per90_top_percent"), get_rank("dribbles_failed_per90_rank"), elite_eligible, "/90분")
+                               get_rank("dribbles_failed_per90_top_percent"), get_rank("dribbles_failed_per90_rank"), progression_eligible, "/90분")
             
             render_unified_bar("볼 경합 성공", duels_won, medians.get("duels_won_per90"), 
-                               get_rank("duels_won_per90_top_percent"), get_rank("duels_won_per90_rank"), duels_eligible, "/90분")
+                               get_rank("duels_won_per90_top_percent"), get_rank("duels_won_per90_rank"), progression_eligible, "/90분")
             
             render_unified_bar("볼 경합 실패", duels_lost, medians.get("duels_lost_per90"), 
-                               get_rank("duels_lost_per90_top_percent"), get_rank("duels_lost_per90_rank"), duels_eligible, "/90분")
+                               get_rank("duels_lost_per90_top_percent"), get_rank("duels_lost_per90_rank"), progression_eligible, "/90분")
             
             render_unified_bar("공중볼 경합 성공", aerial_won, medians.get("aerial_duels_won_per90"), 
-                               get_rank("aerials_won_per90_top_percent"), get_rank("aerials_won_per90_rank"), aerials_eligible, "/90분")
+                               get_rank("aerials_won_per90_top_percent"), get_rank("aerials_won_per90_rank"), progression_eligible, "/90분")
             
             render_unified_bar("공중볼 경합 실패", aerial_lost, medians.get("aerial_duels_lost_per90"), 
-                               get_rank("aerials_lost_per90_top_percent"), get_rank("aerials_lost_per90_rank"), aerials_eligible, "/90분")
+                               get_rank("aerials_lost_per90_top_percent"), get_rank("aerials_lost_per90_rank"), progression_eligible, "/90분")
             
             render_unified_bar("순수 전진 기여도", net_progression, medians.get("net_progression_per90"), 
-                               get_rank("net_progression_top_percent"), get_rank("net_progression_rank"), net_eligible, "/90분")
+                               get_rank("net_progression_top_percent"), get_rank("net_progression_rank"), progression_eligible, "/90분")
 
             st.divider()
             
