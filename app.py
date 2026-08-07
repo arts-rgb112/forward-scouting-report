@@ -116,8 +116,14 @@ def render_activity_ratio(player_id: str, player_name: str) -> None:
         return
     mid, final = ratio["mid_third_ratio"], ratio["final_third_ratio"]
     figure = go.Figure()
-    figure.add_bar(name="미드써드 연계", y=[player_name], x=[mid], orientation="h", marker_color="#3B82F6", text=[f"미드써드 연계 {mid:.0f}%"], textposition="inside")
-    figure.add_bar(name="파이널써드 타격", y=[player_name], x=[final], orientation="h", marker_color="#EF4444", text=[f"파이널써드 타격 {final:.0f}%"], textposition="inside")
+    if "in_box_ratio" in ratio and "out_box_final_ratio" in ratio:
+        in_box, out_box = ratio["in_box_ratio"], ratio["out_box_final_ratio"]
+        figure.add_bar(name="박스 안", y=[player_name], x=[in_box], orientation="h", marker_color="#22C55E", text=[f"박스 안 {in_box:.0f}%"], textposition="inside")
+        figure.add_bar(name="박스 밖 파이널", y=[player_name], x=[out_box], orientation="h", marker_color="#EF4444", text=[f"박스 밖 파이널 {out_box:.0f}%"], textposition="inside")
+        figure.add_bar(name="미드써드", y=[player_name], x=[mid], orientation="h", marker_color="#3B82F6", text=[f"미드써드 {mid:.0f}%"], textposition="inside")
+    else:
+        figure.add_bar(name="미드써드 연계", y=[player_name], x=[mid], orientation="h", marker_color="#3B82F6", text=[f"미드써드 연계 {mid:.0f}%"], textposition="inside")
+        figure.add_bar(name="파이널써드 타격", y=[player_name], x=[final], orientation="h", marker_color="#EF4444", text=[f"파이널써드 타격 {final:.0f}%"], textposition="inside")
     figure.update_layout(
         barmode="stack", height=90, margin={"l": 0, "r": 0, "t": 5, "b": 0},
         showlegend=True, legend={"orientation": "h", "y": -0.45},

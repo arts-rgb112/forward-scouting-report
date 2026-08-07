@@ -193,7 +193,8 @@ def is_target_position(values: Iterable[str]) -> bool:
     return any(token in text for token in ATTACKING_POSITION_TOKENS[:-1]) or bool({"f", "st", "cf"} & codes)
 
 
-def heat_ratio(payload: Any) -> tuple[int, int, int] | None:
+def heat_ratio(payload: Any) -> tuple[int, int, int, int] | None:
+    """Return integer In-Box / Out-Box Final / Mid-Third ratios and samples."""
     points: list[tuple[float, float]] = []
     for item in walk_dicts(payload):
         x, y = as_number(item.get("x")), as_number(item.get("y"))
@@ -201,12 +202,17 @@ def heat_ratio(payload: Any) -> tuple[int, int, int] | None:
             # Points are activity events, so identical coordinates still count
             # as separate observations in the density ratio.
             points.append((x, y))
+    in_box = sum(x >= 83 and 21.1 <= y <= 78.9 for x, y in points)
+    out_box_final = sum(x >= 66 and not (x >= 83 and 21.1 <= y <= 78.9) for x, y in points)
     mid = sum(33 <= x < 66 for x, _ in points)
-    final = sum(66 <= x <= 100 for x, _ in points)
-    total = mid + final
+    total = in_box + out_box_final + mid
     if total == 0:
         return None
-    return round(mid * 100 / total), round(final * 100 / total), total
+    raw = [in_box * 100 / total, out_box_final * 100 / total, mid * 100 / total]
+    rounded = [int(value) for value in raw]
+    for index in sorted(range(3), key=lambda item: raw[item] - rounded[item], reverse=True)[:100 - sum(rounded)]:
+        rounded[index] += 1
+    return rounded[0], rounded[1], rounded[2], total
 
 
 def read_fotmob_map(path: Path) -> dict[str, str]:
@@ -231,7 +237,7 @@ def resolve_fotmob_id(player_name: str) -> str | None:
         return None
 
 
-OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "tournament_id", "season_id", "mid_third_ratio", "final_third_ratio", "sample_points", "generated_at"]
+OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "tournament_id", "season_id", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "sample_points", "generated_at"]
 
 
 def read_checkpoint(path: Path) -> list[dict[str, str]]:
@@ -242,7 +248,7 @@ def read_checkpoint(path: Path) -> list[dict[str, str]]:
 
 
 def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]], auto_mapped: list[dict[str, Any]]) -> None:
-    with (DATA_DIR / "tactical_ratio.csv").open("w", encoding="utf-8", newline="") as target:
+    with (DATA_DIR / "tactical_3zone_ratio.csv").open("w", encoding="utf-8", newline="") as target:
         writer = csv.DictWriter(target, fieldnames=OUTPUT_FIELDS)
         writer.writeheader(); writer.writerows(output)
     with (DATA_DIR / "unmatched_sportsapi_players.csv").open("w", encoding="utf-8", newline="") as target:
@@ -270,7 +276,8 @@ def main() -> None:
     DATA_DIR.mkdir(exist_ok=True)
     client = SportsApiClient(api_keys, args.delay)
     id_map = read_fotmob_map(DATA_DIR / "fotmob_player_map.csv")
-    output = read_checkpoint(DATA_DIR / "tactical_ratio.csv")
+    output_path = DATA_DIR / "tactical_3zone_ratio.csv"
+    output = read_checkpoint(output_path if output_path.exists() else DATA_DIR / "tactical_ratio.csv")
     completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output}
     unmatched, auto_mapped = [], []
     for tournament in discover_tournaments(client):
@@ -317,12 +324,13 @@ def main() -> None:
                 continue
             if sports_id not in id_map:
                 auto_mapped.append({"sportsapi_player_id": sports_id, "fotmob_player_id": fotmob_id, **player})
-            mid, final, samples = ratios
+            in_box, out_box_final, mid, samples = ratios
             output.append({
                 "fotmob_player_id": fotmob_id, "sportsapi_player_id": sports_id,
                 "player_name": player["name"], "team_name": player["team_name"],
                 "tournament_id": tournament["id"], "season_id": season_id,
-                "mid_third_ratio": mid, "final_third_ratio": final,
+                "in_box_ratio": in_box, "out_box_final_ratio": out_box_final,
+                "mid_third_ratio": mid, "final_third_ratio": in_box + out_box_final,
                 "sample_points": samples, "generated_at": datetime.now(timezone.utc).isoformat(),
             })
             counts["mapped"] += 1
