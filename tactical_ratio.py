@@ -26,6 +26,17 @@ def _same_competition(left: object, right: object) -> bool:
     return aliases.get(_normalise(left), _normalise(left)) == aliases.get(_normalise(right), _normalise(right))
 
 
+def _same_season(left: object, right: object) -> bool:
+    """Treat UI short seasons (25/26) and ETL seasons (2025/2026) as equal."""
+    def canonical(value: object) -> str:
+        digits = re.sub(r"\D", "", str(value or ""))
+        if len(digits) == 4:
+            return f"20{digits[:2]}20{digits[2:]}"
+        return digits
+
+    return canonical(left) == canonical(right)
+
+
 @functools.lru_cache(maxsize=1)
 def load_tactical_ratios() -> dict[str, dict[str, float]]:
     """Read 3-Zone ETL output, falling back to the legacy two-zone CSV."""
@@ -88,7 +99,7 @@ def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, 
         row for row in load_tactical_ratios().values()
         if str(row.get("fotmob_player_id")) == str(player_id)
         and _same_competition(row.get("competition_name") or TOURNAMENT_NAMES.get(str(row.get("tournament_id")), ""), competition_name)
-        and (not row.get("season_name") or str(row.get("season_name")) == season_label)
+        and (not row.get("season_name") or _same_season(row.get("season_name"), season_label))
     ]
     return candidates[0] if len(candidates) == 1 else None
 
