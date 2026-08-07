@@ -28,6 +28,7 @@ jobs:
           SPORTSAPIPRO_API_KEY: ${{ secrets.SPORTSAPIPRO_API_KEY }}
         run: python scripts/build_tactical_ratios.py --season-name "${{ inputs.season_name || '2025/2026' }}"
       - name: Commit refreshed static data
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
