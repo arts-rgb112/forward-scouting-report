@@ -46,6 +46,9 @@ TARGET_TOURNAMENTS = {
     ("champions league", "europe"): "UEFA Champions League",
 }
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
+ACTIVITY_GRID_SIZE = 5.0
+MIN_CELL_OVERLAP = 3
+ACTIVITY_FILTER_VERSION = "cluster-v1"
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 if str(ROOT) not in sys.path:
@@ -196,15 +199,23 @@ def is_target_position(values: Iterable[str]) -> bool:
     return any(token in text for token in ATTACKING_POSITION_TOKENS[:-1]) or bool({"f", "m", "st", "cf"} & codes)
 
 
-def heat_ratio(payload: Any) -> tuple[int, int, int, int] | None:
-    """Return integer In-Box / Out-Box Final / Mid-Third ratios and samples."""
+def core_activity_points(payload: Any) -> list[tuple[float, float]]:
+    """Keep only repeated 5x5m activity cells; discard one-off noise points."""
     points: list[tuple[float, float]] = []
     for item in walk_dicts(payload):
         x, y = as_number(item.get("x")), as_number(item.get("y"))
         if x is not None and y is not None and 0 <= x <= 100 and 0 <= y <= 100:
-            # Points are activity events, so identical coordinates still count
-            # as separate observations in the density ratio.
             points.append((x, y))
+    cell_counts = Counter((int(x // ACTIVITY_GRID_SIZE), int(y // ACTIVITY_GRID_SIZE)) for x, y in points)
+    return [
+        (x, y) for x, y in points
+        if cell_counts[(int(x // ACTIVITY_GRID_SIZE), int(y // ACTIVITY_GRID_SIZE))] >= MIN_CELL_OVERLAP
+    ]
+
+
+def heat_ratio(payload: Any) -> tuple[int, int, int, int] | None:
+    """Return 3-Zone ratios from repeated (not one-off) activity cells only."""
+    points = core_activity_points(payload)
     in_box = sum(x >= 83 and 21.1 <= y <= 78.9 for x, y in points)
     out_box_final = sum(x >= 66 and not (x >= 83 and 21.1 <= y <= 78.9) for x, y in points)
     mid = sum(33 <= x < 66 for x, _ in points)
@@ -219,12 +230,8 @@ def heat_ratio(payload: Any) -> tuple[int, int, int, int] | None:
 
 
 def heatmap_visual_points(payload: Any, limit: int = 180) -> list[list[float]]:
-    """Keep a bounded deterministic coordinate sample for static pitch rendering."""
-    points = []
-    for item in walk_dicts(payload):
-        x, y = as_number(item.get("x")), as_number(item.get("y"))
-        if x is not None and y is not None and 0 <= x <= 100 and 0 <= y <= 100:
-            points.append([round(x, 2), round(y, 2)])
+    """Visualise the same repeated-activity population used by 3-Zone ratios."""
+    points = [[round(x, 2), round(y, 2)] for x, y in core_activity_points(payload)]
     if len(points) <= limit:
         return points
     stride = len(points) / limit
@@ -253,7 +260,7 @@ def resolve_fotmob_id(player_name: str) -> str | None:
         return None
 
 
-OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "sample_points", "generated_at"]
+OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "sample_points", "generated_at"]
 
 
 def read_checkpoint(path: Path) -> list[dict[str, str]]:
@@ -303,7 +310,7 @@ def main() -> None:
         visual_points = json.loads(point_path.read_text(encoding="utf-8")) if point_path.exists() else {}
     except (OSError, ValueError):
         visual_points = {}
-    if not visual_points or any(not row.get("heatmap_key") or not row.get("competition_name") for row in output):
+    if not visual_points or any(row.get("activity_filter") != ACTIVITY_FILTER_VERSION for row in output):
         output = []
         visual_points = {}
     completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output if str(row.get("heatmap_key", "")) in visual_points}
@@ -360,6 +367,7 @@ def main() -> None:
                 "player_name": player["name"], "team_name": player["team_name"],
                 "competition_name": tournament["name"], "season_name": args.season_name,
                 "tournament_id": tournament["id"], "season_id": season_id, "heatmap_key": heatmap_key,
+                "activity_filter": ACTIVITY_FILTER_VERSION,
                 "in_box_ratio": in_box, "out_box_final_ratio": out_box_final,
                 "mid_third_ratio": mid, "final_third_ratio": in_box + out_box_final,
                 "sample_points": samples, "generated_at": datetime.now(timezone.utc).isoformat(),
