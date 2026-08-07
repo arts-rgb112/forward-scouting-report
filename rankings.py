@@ -123,11 +123,11 @@ def _progression_value(metric: DecisionMetrics) -> Optional[float]:
 
 
 def _is_attacker_or_cf(metric: DecisionMetrics) -> bool:
-    """Keep comparison groups to specialist forwards, including wingers."""
+    """Keep comparison groups to specialist forwards, wingers, and AMs."""
     position = (metric.position or "").strip().lower()
     return any(token in position for token in (
         "attacker", "striker", "forward", "centre-forward", "center-forward",
-        "winger", "wide", " cf", "st",
+        "winger", "wide", "attacking midfielder", "attacking mid", " cf", "st",
     ))
 
 
@@ -317,7 +317,7 @@ def _fetch_fallback_xgot(season: str, pids: tuple) -> dict:
 
 
 def calculate_league_percentiles(
-    player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 3.0,
+    player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 1.0,
     restrict_to_forwards: bool = True,
 ) -> LeaguePercentiles:
     if metrics.league_id is None:

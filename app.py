@@ -297,7 +297,7 @@ def render_player_report(
             st.divider()
 
             try:
-                minimum_xg = 3.0
+                minimum_xg = 1.0
                 rank = cached_percentiles(
                     player.player_id, season_str, stats, min_xg=minimum_xg,
                     restrict_to_forwards=restrict_to_forwards,
@@ -309,7 +309,7 @@ def render_player_report(
                 return getattr(rank, attr, None) if rank else None
 
             progression_eligible = get_rank("progression_eligible") or 0
-            cohort_label = "전문 공격수·윙어" if restrict_to_forwards else "포지션 전체"
+            cohort_label = "전문 공격수·윙어·공격형 미드필더" if restrict_to_forwards else "포지션 전체"
             with st.expander(
                 f"🏃 순수 전진 기여도 상대평가 · {cohort_label} · 볼 경합 성공 1회 이상 {progression_eligible}명",
                 expanded=True,
@@ -352,9 +352,9 @@ def main() -> None:
     competition_filter = st.radio("대회", ["전체", "리그", "챔피언스리그"], horizontal=True)
     compare_mode = st.toggle("선수 비교 모드")
     restrict_to_forwards = st.toggle(
-        "전문 공격수·윙어 비교군만 사용",
+        "전문 공격수·윙어·공격형 미드필더 비교군만 사용",
         value=True,
-        help="켜면 Striker, Forward, Attacker, CF와 좌·우 윙어만 비교합니다. 끄면 동일 대회에서 볼 경합 성공 1회 이상인 모든 포지션을 비교합니다.",
+        help="켜면 Striker, Forward, Attacker, CF, 좌·우 윙어, 공격형 미드필더만 비교합니다. 끄면 동일 대회에서 볼 경합 성공 1회 이상인 모든 포지션을 비교합니다.",
     )
 
     if compare_mode:
