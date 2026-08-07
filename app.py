@@ -47,6 +47,83 @@ def cached_tactical_matrix(
 ) -> pd.DataFrame:
     return get_tactical_matrix(league_id, season_name, restrict_to_forwards)
 
+
+RADAR_AXES = [
+    ("박스 안 결정력", "in_box_finishing_top_percent"),
+    ("박스 밖 위협도", "out_box_shot_quality_top_percent"),
+    ("공중볼 장악", "aerial_margin_per90_top_percent"),
+    ("지상 버티기", "duel_margin_per90_top_percent"),
+    ("드리블 돌파", "dribble_margin_per90_top_percent"),
+    ("득점 볼륨 (xG/90)", "xg_per90_top_percent"),
+]
+
+
+def _radar_score(top_percent: float | None) -> float:
+    """Map rank notation to a stable 0–100 radar score.
+
+    Rank data labels the best player as the lowest top-percent value, hence the
+    inversion. Missing values intentionally render at the neutral midpoint.
+    """
+    if top_percent is None:
+        return 50.0
+    return max(0.0, min(100.0, 100.0 - float(top_percent)))
+
+
+def make_radar_profile(name: str, rank) -> dict[str, object]:
+    return {
+        "name": name,
+        "labels": [label for label, _ in RADAR_AXES],
+        "scores": [_radar_score(getattr(rank, attr, None) if rank else None) for _, attr in RADAR_AXES],
+    }
+
+
+def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
+    if not profiles:
+        return
+    figure = go.Figure()
+    colors = [("#3B82F6", "rgba(59, 130, 246, 0.28)"), ("#EF4444", "rgba(239, 68, 68, 0.24)")]
+    for index, profile in enumerate(profiles[:2]):
+        labels = list(profile["labels"])
+        scores = list(profile["scores"])
+        color, fill = colors[index]
+        figure.add_trace(go.Scatterpolar(
+            r=scores + [scores[0]], theta=labels + [labels[0]],
+            mode="lines+markers", name=str(profile["name"]), fill="toself",
+            fillcolor=fill, line={"color": color, "width": 3},
+            marker={"color": color, "size": 6},
+            hovertemplate="%{theta}: %{r:.0f}점<extra>%{fullData.name}</extra>",
+        ))
+    is_dark = st.get_option("theme.base") == "dark"
+    figure.update_layout(
+        title=title, height=440, margin={"l": 55, "r": 55, "t": 55, "b": 35},
+        paper_bgcolor="rgba(0,0,0,0)",
+        polar={"bgcolor": "rgba(0,0,0,0)", "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "gridcolor": "#606060", "color": "#BBBBBB"}},
+        font={"color": "#EEEEEE" if is_dark else "#222222"},
+        showlegend=len(profiles) > 1,
+        legend={"orientation": "h", "y": -0.08, "x": 0.5, "xanchor": "center"},
+    )
+    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+
+def build_radar_profile(player, selected_seasons: list[str], competition_filter: str, restrict_to_forwards: bool):
+    """Return the first eligible season's profile for the compare-mode overlay."""
+    try:
+        seasons = extract_multi_season_metrics(cached_player_data(player.player_id))
+        for season_key, stats in seasons.items():
+            season_str = season_key.split("_", 1)[0]
+            is_ucl = stats.league_id == 42 or "champions" in (stats.league_name or "").lower()
+            if season_str not in selected_seasons:
+                continue
+            if competition_filter == "리그" and is_ucl:
+                continue
+            if competition_filter == "챔피언스리그" and not is_ucl:
+                continue
+            rank = cached_percentiles(player.player_id, season_str, stats, 1.0, restrict_to_forwards)
+            return make_radar_profile(f"{player.name} · {season_str}", rank)
+    except Exception:
+        return None
+    return None
+
 def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, selected_name: str) -> None:
     if matrix.empty:
         st.info("사분면을 구성할 수 있는 비교군 데이터가 없습니다.")
@@ -202,11 +279,11 @@ def style_dataframe(df: pd.DataFrame):
         return df
     try:
         return df.style.background_gradient(
-            cmap="RdYlBu_r", subset=["슈팅 퀄리티 (xGOT-xG)"]
+            cmap="RdYlBu_r", subset=["박스 안 순수 결정력 (xGOT-xG)"]
         ).format({
-            "슈팅 퀄리티 (xGOT-xG)": "{:.2f}",
-            "xG": "{:.2f}",
-            "xGOT": "{:.2f}"
+            "박스 안 순수 결정력 (xGOT-xG)": "{:.2f}",
+            "박스 안 xG": "{:.2f}",
+            "박스 안 xGOT": "{:.2f}"
         })
     except Exception:
         return df
@@ -281,6 +358,20 @@ def render_player_report(
                 medians = {}
 
             try:
+                minimum_xg = 1.0
+                rank = cached_percentiles(
+                    player.player_id, season_str, stats, min_xg=minimum_xg,
+                    restrict_to_forwards=restrict_to_forwards,
+                )
+            except Exception:
+                rank = None
+
+            render_radar_chart(
+                [make_radar_profile(f"{player.name} · {season_str}", rank)],
+                "🕸️ 전술 프로필 · 전문 공격수 백분위",
+            )
+
+            try:
                 matrix = cached_tactical_matrix(stats.league_id, season_name, restrict_to_forwards)
                 if str(player.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist():
                     matrix = pd.concat([matrix, pd.DataFrame([{
@@ -295,15 +386,6 @@ def render_player_report(
                 st.caption("사분면 매트릭스를 구성할 비교 집단 데이터가 없습니다.")
 
             st.divider()
-
-            try:
-                minimum_xg = 1.0
-                rank = cached_percentiles(
-                    player.player_id, season_str, stats, min_xg=minimum_xg,
-                    restrict_to_forwards=restrict_to_forwards,
-                )
-            except Exception:
-                rank = None
 
             def get_rank(attr):
                 return getattr(rank, attr, None) if rank else None
@@ -364,6 +446,11 @@ def main() -> None:
         with right:
             right_player = select_player(st.text_input("오른쪽 선수 검색", key="right_query", placeholder="예: Robert Lewandowski"), "right_player")
         if left_player and right_player:
+            profiles = [
+                build_radar_profile(left_player, selected_seasons, competition_filter, restrict_to_forwards),
+                build_radar_profile(right_player, selected_seasons, competition_filter, restrict_to_forwards),
+            ]
+            render_radar_chart([profile for profile in profiles if profile], "🕸️ 전술 프로필 비교 · 전문 공격수 백분위")
             st.divider()
             left, right = st.columns(2)
             with left:
@@ -379,7 +466,7 @@ def main() -> None:
         return
 
     st.divider()
-    st.subheader("🏆 25/26 시즌 슈팅 퀄리티 (xGOT-xG) Top 20")
+    st.subheader("🏆 25/26 시즌 박스 안 순수 결정력 (xGOT-xG) Top 20")
     try:
         ranking_tables = cached_top20()
         if ranking_tables and not ranking_tables.get("통합", pd.DataFrame()).empty:

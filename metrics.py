@@ -71,6 +71,10 @@ class DecisionMetrics:
         return _per90(self.dribbles_succeeded, self.minutes_played)
 
     @property
+    def xg_per90(self) -> Optional[float]:
+        return _per90(self.xg, self.minutes_played)
+
+    @property
     def dribbles_failed_per90(self) -> Optional[float]:
         """Infer unsuccessful dribbles from successful dribbles and success rate."""
         if self.dribbles_succeeded_per90 is None or self.dribbles_success_rate is None:

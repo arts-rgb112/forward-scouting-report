@@ -72,6 +72,8 @@ class LeaguePercentiles:
     aerials_lost_per90_rank: Optional[int] = None
     aerial_margin_per90_top_percent: Optional[float] = None
     aerial_margin_per90_rank: Optional[int] = None
+    xg_per90_top_percent: Optional[float] = None
+    xg_per90_rank: Optional[int] = None
     progression_eligible: int = 0
     net_progression_top_percent: Optional[float] = None
     net_progression_rank: Optional[int] = None
@@ -210,6 +212,7 @@ def _calculate_progression_percentiles(
     dribble_margin_pct, dribble_margin_rank, _ = rank_attr("dribble_margin_per90")
     duel_margin_pct, duel_margin_rank, _ = rank_attr("duel_margin_per90")
     aerial_margin_pct, aerial_margin_rank, _ = rank_attr("aerial_margin_per90")
+    xg_per90_pct, xg_per90_rank, _ = rank_attr("xg_per90")
     net_pct, net_rank, net_count = rank_attr("net_progression_per90")
     return {
         "cohort_count": len(successes),
@@ -222,6 +225,7 @@ def _calculate_progression_percentiles(
         "dribble_margin_pct": dribble_margin_pct, "dribble_margin_rank": dribble_margin_rank,
         "duel_margin_pct": duel_margin_pct, "duel_margin_rank": duel_margin_rank,
         "aerial_margin_pct": aerial_margin_pct, "aerial_margin_rank": aerial_margin_rank,
+        "xg_per90_pct": xg_per90_pct, "xg_per90_rank": xg_per90_rank,
         "net_pct": net_pct, "net_rank": net_rank, "net_count": net_count,
     }
 
@@ -247,6 +251,7 @@ def get_league_metric_medians(
         "dribble_margin_per90": "dribble_margin_per90",
         "duel_margin_per90": "duel_margin_per90",
         "aerial_margin_per90": "aerial_margin_per90",
+        "xg_per90": "xg_per90",
         "net_progression_per90": "net_progression_per90",
     }
     medians: dict[str, float | None] = {}
@@ -458,6 +463,8 @@ def calculate_league_percentiles(
         aerials_lost_per90_rank=progression_percentiles["aerials_lost_rank"],
         aerial_margin_per90_top_percent=progression_percentiles["aerial_margin_pct"],
         aerial_margin_per90_rank=progression_percentiles["aerial_margin_rank"],
+        xg_per90_top_percent=progression_percentiles["xg_per90_pct"],
+        xg_per90_rank=progression_percentiles["xg_per90_rank"],
         progression_eligible=progression_eligible,
         net_progression_top_percent=progression_percentiles["net_pct"],
         net_progression_rank=progression_percentiles["net_rank"],
@@ -465,67 +472,71 @@ def calculate_league_percentiles(
     )
 
 
+def _season_league_metric(player_id: str, season_name: str, league_id: int) -> Optional[DecisionMetrics]:
+    """Fetch one league-season's full Shotmap-derived metrics for a player."""
+    try:
+        short_season = f"{season_name[:4][-2:]}/{season_name[-4:][-2:]}" if len(season_name) == 9 else season_name
+        parsed = extract_multi_season_metrics(fetch_player_multi_season_data(player_id))
+        for season_key, metric in parsed.items():
+            if season_key.startswith(f"{short_season}_") and metric.league_id == league_id:
+                return metric
+    except Exception:
+        return None
+    return None
+
+
 @functools.lru_cache(maxsize=1)
 def get_top_leagues_shot_quality(season: str = "25/26") -> dict[str, pd.DataFrame]:
+    """Return TOP 20 tables sorted by Shotmap-derived in-box finishing."""
     leagues = {"Premier League": 47, "LaLiga": 87, "Bundesliga": 54, "Serie A": 55, "Champions League": 42}
-    all_results = []
-    league_results = {league: [] for league in leagues}
     season_name = f"20{season[:2]}/20{season[3:]}"
-    
-    for league_name, l_id in leagues.items():
+    all_results: list[dict] = []
+    league_results: dict[str, list[dict]] = {league: [] for league in leagues}
+
+    jobs: list[tuple[str, int, str, str]] = []
+    for league_name, league_id in leagues.items():
         try:
-            current_min_xg = 1.5 if l_id == 42 else 5.0
-            xg_rows = fetch_league_stat_table(l_id, season_name, "expected_goals")
-            goals_rows = fetch_league_stat_table(l_id, season_name, "goals")
-            
-            xg_by_player = {str(row.get("id")): _value(row) for row in xg_rows if _value(row) is not None}
-            goals_by_player = {str(row.get("id")): _value(row) for row in goals_rows if _value(row) is not None}
-            id_to_name = {str(row.get("id")): row.get("name", "Unknown") for row in xg_rows}
-            
-            xgot_by_player = {}
-            try:
-                # 수정됨: 올바른 API 키 적용
-                xgot_rows = fetch_league_stat_table(l_id, season_name, "expected_goalsontarget")
-                xgot_by_player = {str(row.get("id")): _value(row) for row in xgot_rows if _value(row) is not None}
-            except Exception:
-                pass
-            
-            if not xgot_by_player:
-                target_pids = tuple(pid for pid, xg in xg_by_player.items() if xg >= current_min_xg)
-                fallback_xgot = _fetch_fallback_xgot(season, target_pids)
-                xgot_by_player.update(fallback_xgot)
-            
-            for pid, xg in xg_by_player.items():
-                if xg >= current_min_xg and pid in xgot_by_player:
-                    xgot = xgot_by_player[pid]
-                    sq = xgot - xg
-                    row_data = {
-                        "선수": id_to_name.get(pid, "Unknown"),
-                        "리그": league_name,
-                        "슈팅 퀄리티 (xGOT-xG)": round(sq, 2),
-                        "Goals": int(goals_by_player.get(pid, 0.0)),
-                        "xG": round(xg, 2),
-                        "xGOT": round(xgot, 2)
-                    }
-                    if league_name != "Champions League":
-                        all_results.append(row_data)
-                    league_results[league_name].append(row_data)
+            xg_rows = fetch_league_stat_table(league_id, season_name, "expected_goals")
+            # Preserve the old volume floor: it protects the board from a single
+            # low-volume shot while the new sorting metric remains strictly in-box.
+            leaderboard_min_xg = 1.5 if league_id == 42 else 5.0
+            jobs.extend(
+                (league_name, league_id, str(row.get("id")), row.get("name", "Unknown"))
+                for row in xg_rows if (_value(row) or 0.0) >= leaderboard_min_xg
+            )
         except Exception:
             continue
-            
-    final_dfs = {}
-    df_all = pd.DataFrame(all_results)
-    if not df_all.empty:
-        df_all = df_all.sort_values("슈팅 퀄리티 (xGOT-xG)", ascending=False).head(20).reset_index(drop=True)
-        df_all.index = df_all.index + 1
-    final_dfs["통합"] = df_all
-    
-    for league_name, rows in league_results.items():
-        df_league = pd.DataFrame(rows)
-        if not df_league.empty:
-            df_league = df_league.drop(columns=["리그"], errors='ignore')
-            df_league = df_league.sort_values("슈팅 퀄리티 (xGOT-xG)", ascending=False).head(20).reset_index(drop=True)
-            df_league.index = df_league.index + 1
-        final_dfs[league_name] = df_league
-        
+
+    def fetch_candidate(job: tuple[str, int, str, str]) -> tuple[str, str, Optional[DecisionMetrics]]:
+        league_name, league_id, player_id, name = job
+        return league_name, name, _season_league_metric(player_id, season_name, league_id)
+
+    # All five leagues are fetched together: serial per-league pools would make
+    # the initial board load several times slower even though each request is I/O-bound.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
+        for league_name, name, metric in executor.map(fetch_candidate, jobs):
+            if metric is None or metric.in_box_finishing is None:
+                continue
+            row_data = {
+                "선수": name,
+                "리그": league_name,
+                "박스 안 순수 결정력 (xGOT-xG)": round(metric.in_box_finishing, 2),
+                "박스 안 득점": int(metric.in_box_goals or 0),
+                "박스 안 xG": round(metric.in_box_xg or 0.0, 2),
+                "박스 안 xGOT": round(metric.in_box_xgot or 0.0, 2),
+            }
+            league_results[league_name].append(row_data)
+            if league_name != "Champions League":
+                all_results.append(row_data)
+
+    sort_column = "박스 안 순수 결정력 (xGOT-xG)"
+    final_dfs: dict[str, pd.DataFrame] = {}
+    for league_name, rows in {"통합": all_results, **league_results}.items():
+        dataframe = pd.DataFrame(rows)
+        if not dataframe.empty:
+            if league_name != "통합":
+                dataframe = dataframe.drop(columns=["리그"], errors="ignore")
+            dataframe = dataframe.sort_values(sort_column, ascending=False).head(20).reset_index(drop=True)
+            dataframe.index = dataframe.index + 1
+        final_dfs[league_name] = dataframe
     return final_dfs
