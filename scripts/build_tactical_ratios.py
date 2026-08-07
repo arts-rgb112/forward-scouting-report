@@ -55,6 +55,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+class SportsApiQuotaExceeded(RuntimeError):
+    """Raised when SportsAPI rejects a request because the quota is exhausted."""
+
+
 class SportsApiClient:
     def __init__(self, api_keys: dict[str, str], delay_seconds: float) -> None:
         self.api_keys = api_keys
@@ -84,6 +88,14 @@ class SportsApiClient:
                     # rolled out yet; immediately try the documented legacy URL.
                     if exc.code == 403:
                         break
+                    if exc.code == 429:
+                        retry_after = (exc.headers or {}).get("Retry-After", "unknown")
+                        raise SportsApiQuotaExceeded(
+                            "SportsAPI request quota or rate limit has been reached while "
+                            f"requesting '{path}' (Retry-After: {retry_after}). "
+                            "Stopping without publishing partial tactical data; run the "
+                            "workflow again after the quota resets."
+                        ) from exc
                     if exc.code not in (429, 500, 502, 503, 504) or attempt == 5:
                         raise
                 except URLError as exc:
