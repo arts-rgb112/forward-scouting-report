@@ -197,7 +197,7 @@ def spear_rank_for_session(player, season_label: str, stats: DecisionMetrics, re
 
 
 def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> str:
-    """Combine the weakest/strongest S.P.E.A.R. factors with the 3-Zone role."""
+    """Build a tier-aware S.P.E.A.R. summary from all six factors."""
     factor_labels = {
         "in_box_finishing_top_percent": "박스 안 결정력",
         "shot_quality_top_percent": "슈팅 파괴력",
@@ -211,25 +211,47 @@ def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> st
         for _, attr in SPEAR_FACTOR_AXES
         if rank is not None and getattr(rank, attr, None) is not None
     ]
+    tier_adjectives = {
+        "S": ["미친 퍼포먼스를 뿜어내는", "생태계 파괴종 급의", "상대에게 재앙을 선사하는", "신계에 도달한"],
+        "A": ["압도적인", "매우 위협적인", "리그 최상위권의"],
+        "B": ["1인분은 거뜬히 해내는", "쏠쏠한", "준수한"],
+        "D": ["눈 썩는 수준", "프로 레벨이 의심되는 수준", "폐급에 가까운 수준", "답이 없는 수준"],
+    }
+
+    def tier(score: float) -> str:
+        if score >= 95.0:
+            return "S"
+        if score >= 85.0:
+            return "A"
+        if score >= 65.0:
+            return "B"
+        if score >= 35.0:
+            return "C"
+        return "D"
+
     def particle(label: str) -> str:
         codepoint = ord(label[-1])
         return "이" if 0xAC00 <= codepoint <= 0xD7A3 and (codepoint - 0xAC00) % 28 else "가"
 
-    weak_labels = [factor_labels[attr] for attr, score in available if score < 40.0]
-    strong_labels = [factor_labels[attr] for attr, score in available if score > 60.0]
-    if weak_labels:
-        joined = ", ".join(weak_labels)
-        weakness = f"{joined}{particle(joined)} 심각하게 떨어져 전반적으로 고전하는 편이다."
+    labelled = [(score, factor_labels[attr], tier(score)) for attr, score in available]
+    weaknesses = sorted((item for item in labelled if item[2] == "D"), key=lambda item: item[0])
+    strengths = sorted((item for item in labelled if item[2] in {"S", "A", "B"}), key=lambda item: item[0], reverse=True)
+    if weaknesses:
+        joined = ", ".join(label for _, label, _ in weaknesses)
+        adjective = tier_adjectives["D"][0]
+        weakness = f"{joined}{particle(joined)} {adjective}이라 팀에 민폐를 끼치는 편이며, "
     else:
-        weakness = "뚜렷한 약점 없이 전반적으로 안정적인 기량을 보여준다."
-    if strong_labels:
-        joined = ", ".join(strong_labels)
-        strength = f"{joined}{particle(joined)} 돋보이는 "
+        weakness = ""
+    if strengths:
+        joined = ", ".join(label for _, label, _ in strengths)
+        top_tier = strengths[0][2]
+        adjective = tier_adjectives[top_tier][0]
+        strength = f"{adjective} {joined}{particle(joined)} 돋보이는 "
     else:
-        strength = "뚜렷하게 압도적인 강점은 없으나 균형을 갖춘 "
+        strength = "뚜렷한 S.P.E.A.R. 강점은 없으나 균형을 찾는 "
 
     if not tactical_ratio:
-        return f"{weakness} {strength}활동 반경 데이터가 갱신되는 중인 공격수."
+        return f"{weakness}{strength}활동 반경 데이터가 갱신되는 중인 공격수."
     in_box = float(tactical_ratio.get("in_box_ratio", 0.0))
     mid = float(tactical_ratio.get("mid_third_ratio", 0.0))
     role = "전술적 움직임 위주의" if mid >= 40.0 else "득점에 집중하는"
@@ -238,7 +260,7 @@ def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> st
         else "하이브리드형 포워드" if in_box >= 20.0
         else "경합 회피형 피니셔"
     )
-    return f"{weakness} {strength}{role} {player_type}."
+    return f"{weakness}{strength}{role} {player_type}."
 
 
 def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | None = None) -> None:
