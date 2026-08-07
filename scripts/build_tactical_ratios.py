@@ -275,7 +275,9 @@ def main() -> None:
         except (HTTPError, URLError) as exc:
             print(f"Skipping {tournament['name']}: top-players unavailable ({exc.code if isinstance(exc, HTTPError) else 'network'}).")
             continue
-        for sports_id, player in discover_players(ranking).items():
+        players = discover_players(ranking)
+        counts = {"top_players": len(players), "eligible_positions": 0, "heatmaps_with_ratio": 0, "mapped": 0, "unmatched": 0}
+        for sports_id, player in players.items():
             checkpoint_key = (sports_id, str(tournament["id"]), str(season_id))
             if checkpoint_key in completed:
                 continue
@@ -283,15 +285,18 @@ def main() -> None:
                 profile = client.get(f"players/{sports_id}", "player")
                 if not is_target_position(profile):
                     continue
+                counts["eligible_positions"] += 1
                 heatmap = client.get(f"players/{sports_id}/tournament/{tournament['id']}/season/{season_id}/heatmap?type=overall", "player")
                 ratios = heat_ratio(heatmap)
             except (HTTPError, URLError, TimeoutError, ValueError):
                 continue
             if ratios is None:
                 continue
+            counts["heatmaps_with_ratio"] += 1
             fotmob_id = id_map.get(sports_id) or resolve_fotmob_id(player["name"])
             if not fotmob_id:
                 unmatched.append({"sportsapi_player_id": sports_id, **player})
+                counts["unmatched"] += 1
                 continue
             if sports_id not in id_map:
                 auto_mapped.append({"sportsapi_player_id": sports_id, "fotmob_player_id": fotmob_id, **player})
@@ -303,8 +308,10 @@ def main() -> None:
                 "mid_third_ratio": mid, "final_third_ratio": final,
                 "sample_points": samples, "generated_at": datetime.now(timezone.utc).isoformat(),
             })
+            counts["mapped"] += 1
         # A successful league survives a later rate-limit/network failure.
         write_outputs(output, unmatched, auto_mapped)
+        print(f"{tournament['name']} pipeline counts: {counts}")
     write_outputs(output, unmatched, auto_mapped)
     print(f"Wrote {len(output)} matched ratios ({len(auto_mapped)} auto-mapped) and {len(unmatched)} unmatched players.")
 
