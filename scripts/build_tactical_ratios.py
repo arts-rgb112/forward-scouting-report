@@ -277,7 +277,9 @@ def main() -> None:
     client = SportsApiClient(api_keys, args.delay)
     id_map = read_fotmob_map(DATA_DIR / "fotmob_player_map.csv")
     output_path = DATA_DIR / "tactical_3zone_ratio.csv"
-    output = read_checkpoint(output_path if output_path.exists() else DATA_DIR / "tactical_ratio.csv")
+    # A legacy two-zone row cannot be a valid checkpoint for the new schema.
+    # The first 3-Zone refresh must re-read each eligible heatmap once.
+    output = read_checkpoint(output_path)
     completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output}
     unmatched, auto_mapped = [], []
     for tournament in discover_tournaments(client):
