@@ -23,6 +23,8 @@ jobs:
           python-version: "3.11"
       - name: Build Heat Ratio CSV
         env:
+          SPORTSAPIPRO_ALL_LEAGUES_API_KEY: ${{ secrets.SPORTSAPIPRO_ALL_LEAGUES_API_KEY }}
+          SPORTSAPIPRO_TOURNAMENT_API_KEY: ${{ secrets.SPORTSAPIPRO_TOURNAMENT_API_KEY }}
           SPORTSAPIPRO_API_KEY: ${{ secrets.SPORTSAPIPRO_API_KEY }}
         run: python scripts/build_tactical_ratios.py --season-name "${{ inputs.season_name || '2025/2026' }}"
       - name: Commit refreshed static data

@@ -40,17 +40,18 @@ if str(ROOT) not in sys.path:
 
 
 class SportsApiClient:
-    def __init__(self, api_key: str, delay_seconds: float) -> None:
-        self.api_key = api_key
+    def __init__(self, api_keys: dict[str, str], delay_seconds: float) -> None:
+        self.api_keys = api_keys
         self.delay_seconds = delay_seconds
 
-    def get(self, path: str) -> Any:
+    def get(self, path: str, key_scope: str) -> Any:
+        api_key = self.api_keys[key_scope]
         last_error: Exception | None = None
         for base_url in BASE_URLS:
             url = f"{base_url}/{path.lstrip('/')}"
             for attempt in range(4):
                 try:
-                    request = Request(url, headers={"x-api-key": self.api_key, "Accept": "application/json"})
+                    request = Request(url, headers={"x-api-key": api_key, "Accept": "application/json"})
                     with urlopen(request, timeout=30) as response:
                         payload = json.loads(response.read().decode("utf-8"))
                     time.sleep(self.delay_seconds)
@@ -91,7 +92,7 @@ def as_number(value: Any) -> float | None:
 
 
 def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
-    payload = client.get("tournaments?refresh=false")
+    payload = client.get("tournaments?refresh=false", "all_leagues")
     matches: dict[str, dict[str, Any]] = {}
     for item in walk_dicts(payload):
         identifier, name = item.get("id"), str(item.get("name", "")).strip()
@@ -102,7 +103,7 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
 
 
 def discover_season(client: SportsApiClient, tournament: dict[str, Any], season_name: str) -> dict[str, Any] | None:
-    payload = client.get(f"tournaments/{tournament['id']}/seasons")
+    payload = client.get(f"tournaments/{tournament['id']}/seasons", "tournament")
     candidates = [item for item in walk_dicts(payload) if item.get("id") is not None]
     normalized = season_name.replace("/", "-").lower()
     for item in candidates:
@@ -180,12 +181,17 @@ def main() -> None:
     parser.add_argument("--season-name", required=True, help='display label, e.g. "2025/2026"')
     parser.add_argument("--delay", type=float, default=0.2, help="seconds between requests")
     args = parser.parse_args()
-    api_key = os.getenv("SPORTSAPIPRO_API_KEY")
-    if not api_key:
-        raise SystemExit("Set SPORTSAPIPRO_API_KEY; do not put it in the repository.")
+    api_keys = {
+        "all_leagues": os.getenv("SPORTSAPIPRO_ALL_LEAGUES_API_KEY", ""),
+        "tournament": os.getenv("SPORTSAPIPRO_TOURNAMENT_API_KEY", ""),
+        "player": os.getenv("SPORTSAPIPRO_API_KEY", ""),
+    }
+    missing_scopes = [scope for scope, value in api_keys.items() if not value]
+    if missing_scopes:
+        raise SystemExit(f"Set the required SportsAPI keys for: {', '.join(missing_scopes)}. Do not put them in the repository.")
 
     DATA_DIR.mkdir(exist_ok=True)
-    client = SportsApiClient(api_key, args.delay)
+    client = SportsApiClient(api_keys, args.delay)
     id_map = read_fotmob_map(DATA_DIR / "fotmob_player_map.csv")
     output, unmatched, auto_mapped = [], [], []
     for tournament in discover_tournaments(client):
@@ -193,13 +199,13 @@ def main() -> None:
         if not season:
             continue
         season_id = season["id"]
-        ranking = client.get(f"tournament/{tournament['id']}/season/{season_id}/top-players")
+        ranking = client.get(f"tournament/{tournament['id']}/season/{season_id}/top-players", "tournament")
         for sports_id, player in discover_players(ranking).items():
             try:
-                profile = client.get(f"players/{sports_id}")
+                profile = client.get(f"players/{sports_id}", "player")
                 if not is_target_position(profile):
                     continue
-                heatmap = client.get(f"players/{sports_id}/tournament/{tournament['id']}/season/{season_id}/heatmap?type=overall")
+                heatmap = client.get(f"players/{sports_id}/tournament/{tournament['id']}/season/{season_id}/heatmap?type=overall", "player")
                 ratios = heat_ratio(heatmap)
             except (HTTPError, URLError, TimeoutError, ValueError):
                 continue
