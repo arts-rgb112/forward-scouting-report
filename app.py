@@ -1,10 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import json
-import os
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from fotmob_client import FotMobError, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
@@ -119,41 +115,8 @@ ATTRIBUTE_AXES = [
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_attribute_overviews(player_id: str) -> dict[str, dict[str, float]] | None:
-    """Load the V2 player and position-average 5-axis records for yearShift 0."""
-    api_key = os.getenv("SPORTSAPIPRO_API_KEY", "")
-    try:
-        api_key = api_key or str(st.secrets.get("SPORTSAPIPRO_API_KEY", ""))
-    except (FileNotFoundError, AttributeError):
-        pass
-    if not api_key:
-        return None
-    request = Request(
-        f"https://api.sportsapipro.com/v2/football/players/{player_id}/attribute-overviews",
-        headers={"x-api-key": api_key, "Accept": "application/json", "User-Agent": "ForwardScouting/3.2"},
-    )
-    try:
-        with urlopen(request, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, ValueError):
-        return None
-    root = payload.get("data", payload) if isinstance(payload, dict) else {}
-    if not isinstance(root, dict):
-        return None
-    def latest(records: object) -> dict[str, float] | None:
-        if not isinstance(records, list):
-            return None
-        record = next((item for item in records if isinstance(item, dict) and item.get("yearShift") == 0), None)
-        if not isinstance(record, dict):
-            return None
-        values = {}
-        for _, key in ATTRIBUTE_AXES:
-            value = record.get(key)
-            if isinstance(value, (int, float)):
-                values[key] = float(value)
-        return values if len(values) == len(ATTRIBUTE_AXES) else None
-    player = latest(root.get("playerAttributeOverviews"))
-    average = latest(root.get("averageAttributeOverviews"))
-    return {"player": player, "average": average} if player and average else None
+    """Deprecated: the analysis center no longer uses generic V2 traits."""
+    return None
 
 
 def render_attribute_overview_radar(player_id: str, player_name: str) -> None:
@@ -173,6 +136,61 @@ def render_attribute_overview_radar(player_id: str, player_name: str) -> None:
     upper = max(100.0, max(player_values + average_values) * 1.1)
     figure.update_layout(title="📊 V2 속성 레이더 · 선수 vs 동일 포지션 평균", height=400, margin={"l": 35, "r": 35, "t": 55, "b": 25}, paper_bgcolor="rgba(0,0,0,0)", polar={"bgcolor": "rgba(0,0,0,0)", "radialaxis": {"range": [0, upper], "visible": True}}, legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"})
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+
+SPEAR_FACTOR_AXES = [
+    ("박스 안 결정력", "in_box_finishing_top_percent"),
+    ("전체 슈팅 파괴력", "shot_quality_top_percent"),
+    ("득점 기회 포착 (xG/90)", "xg_per90_top_percent"),
+    ("지상 경합 마진", "duel_margin_per90_top_percent"),
+    ("공중볼 장악 마진", "aerial_margin_per90_top_percent"),
+    ("드리블 돌파 마진", "dribble_margin_per90_top_percent"),
+]
+
+
+def render_spear_factor_radar(player_name: str, rank) -> None:
+    """Six attack-only percentile factors used by the S.P.E.A.R. model."""
+    labels = [label for label, _ in SPEAR_FACTOR_AXES]
+    player_values = [_radar_score(getattr(rank, attr, None) if rank else None) for _, attr in SPEAR_FACTOR_AXES]
+    # Percentile 50 is the median of exactly the same league/position cohort.
+    average_values = [50.0] * len(labels)
+    figure = go.Figure()
+    for name, values, color, fill in (
+        (player_name, player_values, "#22C55E", "rgba(34,197,94,0.28)"),
+        ("동일 리그·포지션 평균", average_values, "#94A3B8", "rgba(148,163,184,0.16)"),
+    ):
+        figure.add_trace(go.Scatterpolar(
+            r=values + [values[0]], theta=labels + [labels[0]],
+            mode="lines+markers", name=name, fill="toself", fillcolor=fill,
+            line={"color": color, "width": 2}, marker={"color": color, "size": 6},
+        ))
+    figure.update_layout(
+        title="S.P.E.A.R. 6대 공격 팩터 · 선수 vs 동일 리그·포지션 평균",
+        height=420, margin={"l": 35, "r": 35, "t": 55, "b": 25},
+        paper_bgcolor="rgba(0,0,0,0)",
+        polar={"bgcolor": "rgba(0,0,0,0)", "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "visible": True}},
+        legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"},
+    )
+    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+
+def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards: bool, minimum_final_third_ratio: int):
+    """Use the first displayed league-season to drive the analysis-center radar."""
+    try:
+        seasons = extract_multi_season_metrics(cached_player_data(player.player_id))
+        for season_key, stats in seasons.items():
+            season_label = season_key.split("_", 1)[0]
+            if season_label not in selected_seasons:
+                continue
+            season_name = f"20{season_label[:2]}/20{season_label[3:]}"
+            return cached_percentiles(
+                player.player_id, season_label, stats, min_xg=1.0,
+                restrict_to_forwards=restrict_to_forwards,
+                minimum_final_third_ratio=minimum_final_third_ratio,
+            )
+    except (FotMobError, ValueError, IndexError):
+        return None
+    return None
 
 
 def render_season_heatmap(player_id: str, player_name: str) -> None:
@@ -605,11 +623,12 @@ def render_v32_analysis_center() -> None:
     render_activity_ratio(player.player_id, player.name)
     radar_col, ratio_col = st.columns(2)
     with radar_col:
-        sportsapi_player_id = tactical_ratio.get("sportsapi_player_id") if tactical_ratio else None
-        if sportsapi_player_id:
-            render_attribute_overview_radar(sportsapi_player_id, player.name)
-        else:
-            st.info("이 선수의 SportsAPI ID 매핑이 없어 V2 레이더를 표시할 수 없습니다.")
+        rank = primary_spear_rank(
+            player, filters["seasons"], "FW (ST/CF)" in filters["positions"], 0,
+        )
+        render_spear_factor_radar(player.name, rank)
+        if rank is None:
+            st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)으로 표시됩니다.")
     with ratio_col:
         render_season_heatmap(player.player_id, player.name)
     render_player_report(
