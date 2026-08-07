@@ -13,6 +13,7 @@ class DecisionMetrics:
     team_id: Optional[int] = None
     team_name: Optional[str] = None
     position: Optional[str] = None
+    position_group: Optional[str] = None
     goals: Optional[float] = None
     xg: Optional[float] = None
     xgot: Optional[float] = None
@@ -319,6 +320,21 @@ def find_stat_value(raw_data: Any, season: str, titles: set[str]) -> Optional[fl
 
 
 TARGET_LEAGUES = ["premier league", "laliga", "bundesliga", "serie a", "ligue 1", "champions league", "ucl"]
+_FORWARD_POSITION_KEYS = {"f", "forward", "striker", "attacker", "centre-forward", "center-forward", "winger"}
+_MIDFIELDER_POSITION_KEYS = {"m", "midfielder", "central midfielder", "attacking midfielder", "wide midfielder"}
+
+
+def _position_group(position_key: object, position_label: object) -> Optional[str]:
+    """Normalize provider position metadata into the F/M/D/G major groups."""
+    values = {
+        str(value or "").strip().lower().replace("_", "-")
+        for value in (position_key, position_label)
+    }
+    if values & _FORWARD_POSITION_KEYS:
+        return "F"
+    if values & _MIDFIELDER_POSITION_KEYS:
+        return "M"
+    return None
 
 
 def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
@@ -334,8 +350,11 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
 
     base = raw_data.get("base", {}) if isinstance(raw_data, dict) else {}
     primary_position = _find_by_key(base, {"primaryPosition"})
+    primary_position_key = None
     if isinstance(primary_position, dict):
-        primary_position = primary_position.get("label") or primary_position.get("key")
+        primary_position_key = primary_position.get("key")
+        primary_position = primary_position.get("label") or primary_position_key
+    primary_position_group = _position_group(primary_position_key, primary_position)
 
     for record in records:
         if not isinstance(record, dict):
@@ -407,6 +426,7 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
             team_id=int(team_id) if isinstance(team_id, (int, float, str)) and str(team_id).isdigit() else None,
             team_name=str(team_name) if team_name else None,
             position=str(primary_position) if primary_position else None,
+            position_group=primary_position_group,
             goals=goals,
             xg=xg,
             xgot=xgot,

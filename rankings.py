@@ -17,6 +17,9 @@ from metrics import DecisionMetrics, extract_multi_season_metrics
 from tactical_ratio import passes_final_third_filter
 
 
+MINIMUM_SPEAR_MINUTES = 900.0
+
+
 @dataclass(frozen=True)
 class LeaguePercentiles:
     goals_top_percent: Optional[float]
@@ -125,13 +128,9 @@ def _progression_value(metric: DecisionMetrics) -> Optional[float]:
             - (dribble_failed or 0.0) - (dispossessed or 0.0))
 
 
-def _is_attacker_or_cf(metric: DecisionMetrics) -> bool:
-    """Keep comparison groups to specialist forwards, wingers, and AMs."""
-    position = (metric.position or "").strip().lower()
-    return any(token in position for token in (
-        "attacker", "striker", "forward", "centre-forward", "center-forward",
-        "winger", "wide", "attacking midfielder", "attacking mid", " cf", "st",
-    ))
+def _is_forward_or_midfielder(metric: DecisionMetrics) -> bool:
+    """Use provider major position groups, not fragile detailed text tokens."""
+    return metric.position_group in {"F", "M"}
 
 
 @functools.lru_cache(maxsize=64)
@@ -139,14 +138,18 @@ def _fetch_elite_dribbler_metrics(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
     minimum_final_third_ratio: int = 0,
 ) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
-    """Build a >=1 won-contest cohort, optionally limited to attacking roles."""
-    rows = fetch_league_stat_table(league_id, season_name, "won_contest")
+    """Build the competition-season cohort from every 900+ minute player.
+
+    The old won-contest seed omitted players with no recorded contest, then the
+    detailed-position text matcher removed further valid F/M candidates.
+    """
+    rows = fetch_league_stat_table(league_id, season_name, "minutes_played")
     
-    # 💡 여기서 2.0을 1.0으로 수정합니다.
+    # Seed with the complete minutes leaderboard; no contest-stat cutoff.
     successes = {
         str(row.get("id")): value
         for row in rows
-        if (value := _value(row)) is not None and value >= 1.0
+        if (value := _value(row)) is not None and value >= MINIMUM_SPEAR_MINUTES
     }
 
     def fetch_one(player_id: str) -> tuple[str, Optional[DecisionMetrics]]:
@@ -175,7 +178,13 @@ def _fetch_elite_dribbler_metrics(
     if restrict_to_forwards:
         metrics_by_player = {
             player_id: metric for player_id, metric in metrics_by_player.items()
-            if _is_attacker_or_cf(metric)
+            if _is_forward_or_midfielder(metric)
+            and (metric.minutes_played or 0.0) >= MINIMUM_SPEAR_MINUTES
+        }
+    else:
+        metrics_by_player = {
+            player_id: metric for player_id, metric in metrics_by_player.items()
+            if (metric.minutes_played or 0.0) >= MINIMUM_SPEAR_MINUTES
         }
     metrics_by_player = {
         player_id: metric for player_id, metric in metrics_by_player.items()
@@ -243,9 +252,9 @@ def get_league_metric_medians(
 ) -> dict[str, float | None]:
     """Return comparison-cohort medians for the metrics shown in the report.
 
-    The cohort is the same >=1 successful-dribble/90 group used by the tactical
-    matrix and percentile bars, so a displayed median never uses a different
-    population from the adjacent comparison visualisation.
+    The cohort is the same F/M, 900-minute competition-season group used by
+    the tactical matrix and percentile bars, so adjacent visuals use the same
+    population.
     """
     peers, _ = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
     attributes = {
@@ -282,8 +291,8 @@ def get_tactical_matrix(
     Both axes are available only after the player-level fetch: Net Progression
     is composed from five event stats, while finishing is in-box xGOT minus xG.
     """
-    peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
-    leaderboard_rows = fetch_league_stat_table(league_id, season_name, "won_contest")
+    peers, _ = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
+    leaderboard_rows = fetch_league_stat_table(league_id, season_name, "minutes_played")
     names = {str(row.get("id")): row.get("name", "Unknown") for row in leaderboard_rows}
     rows = []
     for player_id, metric in peers.items():
@@ -297,7 +306,7 @@ def get_tactical_matrix(
             "team_name": metric.team_name or "정보 없음",
             "net_progression_per90": net_progression,
             "in_box_xgot_minus_xg": finishing,
-            "dribbles_succeeded_per90": successes[player_id],
+            "dribbles_succeeded_per90": metric.dribbles_succeeded_per90,
         })
     return pd.DataFrame(rows)
 
@@ -415,6 +424,17 @@ def calculate_league_percentiles(
         player_key, metrics.league_id, season_name, metrics, restrict_to_forwards, minimum_final_third_ratio
     )
     peers, _ = _fetch_elite_dribbler_metrics(metrics.league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
+    # Keep the S.P.E.A.R. shooting factor on the exact same F/M + 900-minute
+    # competition cohort as the other five radar axes.
+    spear_shot_quality_population = [
+        peer.xgot - peer.xg for peer in peers.values()
+        if peer.xgot is not None and peer.xg is not None
+    ]
+    spear_shot_quality = metrics.xgot - metrics.xg if metrics.xgot is not None and metrics.xg is not None else None
+    if spear_shot_quality_population:
+        sq_pct, sq_rk = _rank_info(spear_shot_quality, spear_shot_quality_population)
+        shot_quality_population = spear_shot_quality_population
+        shot_quality_median = float(pd.Series(spear_shot_quality_population).median())
     in_box_population = [peer.in_box_finishing for peer in peers.values() if peer.in_box_finishing is not None]
     out_box_population = [peer.out_box_shot_quality for peer in peers.values() if peer.out_box_shot_quality is not None]
     in_box_pct, in_box_rank = _rank_info(metrics.in_box_finishing, in_box_population)
