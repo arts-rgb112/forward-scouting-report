@@ -266,7 +266,7 @@ def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> st
 def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | None = None) -> None:
     points = get_heatmap_points(player_id, heatmap_key)
     st.markdown("#### 📍 시즌 활동 히트맵")
-    st.caption("5×5 활동 구역에서 3회 이상 중첩된 동선만 표시합니다.")
+    st.caption("저장된 시즌 좌표를 기반으로 활동 밀도를 표시합니다. 반복 동선 필터 데이터는 수집 완료 후 자동 반영됩니다.")
     if not points:
         st.caption("정적 히트맵 좌표 데이터가 아직 생성되지 않았습니다.")
         return
