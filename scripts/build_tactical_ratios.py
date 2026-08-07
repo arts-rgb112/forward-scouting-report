@@ -188,9 +188,10 @@ def is_target_position(values: Iterable[str]) -> bool:
         return False
     text = " ".join(values).lower()
     codes = set(re.findall(r"\b[a-z]{1,}\b", text))
-    # SportsAPI's Top Players route uses the compact `F` code for forwards.
-    # It is the equivalent of the intended Attacker/CF target population.
-    return any(token in text for token in ATTACKING_POSITION_TOKENS[:-1]) or bool({"f", "st", "cf"} & codes)
+    # SportsAPI's Top Players route exposes only F/M/D/G.  `M` includes the
+    # requested wingers and attacking midfielders (for example Lamine Yamal),
+    # while the finer FotMob position filter continues to control rankings.
+    return any(token in text for token in ATTACKING_POSITION_TOKENS[:-1]) or bool({"f", "m", "st", "cf"} & codes)
 
 
 def heat_ratio(payload: Any) -> tuple[int, int, int, int] | None:
