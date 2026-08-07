@@ -26,5 +26,7 @@ jobs:
           failed=0
           probe "all-leagues" "$ALL_LEAGUES_KEY" "https://api.sportsapipro.com/v2/football/tournaments?refresh=false"
           probe "tournament-seasons" "$TOURNAMENT_KEY" "https://api.sportsapipro.com/v2/football/tournaments/17/seasons"
+          probe "top-players-singular" "$TOURNAMENT_KEY" "https://api.sportsapipro.com/v2/football/tournament/17/season/76986/top-players"
+          probe "top-players-plural" "$TOURNAMENT_KEY" "https://api.sportsapipro.com/v2/football/tournaments/17/season/76986/top-players"
           probe "season-heatmap" "$PLAYER_KEY" "https://api.sportsapipro.com/v2/football/players/934235/tournament/17/season/76986/heatmap?type=overall"
           exit "$failed"
