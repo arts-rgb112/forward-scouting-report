@@ -461,7 +461,56 @@ def render_player_report(
             else:
                 st.caption("결정력 상대평가 비교군을 불러오지 못했습니다.")
 
+def render_v32_analysis_center() -> None:
+    """Form-gated Ver 3.2 entry panel; expensive report work starts on submit."""
+    st.title("🇪🇺 유럽 5대리그 공격기여도 분석센터")
+    st.caption("3-Zone 활동 비율 · S.P.E.A.R. · 동일 리그 비교 리포트")
+    if "v32_filters" not in st.session_state:
+        st.session_state.v32_filters = None
+
+    with st.form("global_analysis_filters", border=True):
+        position_col, season_col, player_col, action_col = st.columns([1.25, 1.4, 2.2, 1.0])
+        with position_col:
+            positions = st.multiselect("포지션", ["FW (ST/CF)", "MF", "DF", "GK"], default=["FW (ST/CF)"])
+        with season_col:
+            seasons = st.multiselect("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], default=["25/26"])
+        with player_col:
+            query = st.text_input("선수명 검색", placeholder="예: Erling Haaland")
+        with action_col:
+            st.write("")
+            submitted = st.form_submit_button("🔍 데이터 분석", use_container_width=True, type="primary")
+        if submitted:
+            st.session_state.v32_filters = {"positions": positions, "seasons": seasons or ["25/26"], "query": query.strip()}
+
+    filters = st.session_state.v32_filters
+    if not filters:
+        st.info("포지션·시즌·선수명을 설정한 뒤 **데이터 분석**을 눌러주세요.")
+        return
+    if not filters["query"]:
+        st.info("선수명을 입력하면 5대 리그 검색 결과에서 선수를 선택할 수 있습니다.")
+        return
+
+    player = select_player(filters["query"], "v32_selected_player")
+    if not player:
+        return
+    st.divider()
+    title_col, help_col = st.columns([4, 1])
+    with title_col:
+        st.subheader(f"👑 {player.name}")
+        st.caption("S.P.E.A.R. Rating은 1,000분 이상 5대 리그 포워드 정적 모집단 동기화 후 표시됩니다.")
+    with help_col:
+        with st.popover("❓ 점수 산출 방식"):
+            st.markdown("**S.P.E.A.R.**  \\n슈팅 50% · 수비 부수기 30% · 위치 선정 20%")
+            st.caption("1,000분 이상 전문 공격수의 Z-점수를 0~100 점수로 변환합니다.")
+            st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
+    render_player_report(
+        player, filters["seasons"], "전체", "FW (ST/CF)" in filters["positions"], 0,
+    )
+
+
 def main() -> None:
+    render_v32_analysis_center()
+    return
     st.title("🎯 스트라이커 전술 스카우팅 리포트")
     st.caption("2차 스탯 기반 선수 기여도 분석 · 동일 포맷의 1:1 비교 지원")
     selected_seasons = st.multiselect("📊 조회할 시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], default=["25/26", "24/25"])
