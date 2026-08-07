@@ -116,17 +116,8 @@ def render_unified_bar(
     total_players: int | None = None,
     suffix: str = ""
 ) -> None:
-    
     if player_value is None and top_percent is None:
-        st.markdown(f"""
-        <div style="margin-bottom: 28px; padding: 0 4px; opacity: 0.5;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
-                <span style="font-size: 16px; font-weight: 700;">{title}</span>
-                <span style="font-size: 14px; font-weight: 500;">데이터 부족</span>
-            </div>
-            <div style="width: 100%; height: 6px; background-color: #333; border-radius: 3px;"></div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.caption(f"{title} · 데이터 부족")
         return
 
     safe_player = player_value if player_value is not None else 0.0
@@ -153,36 +144,48 @@ def render_unified_bar(
         color_pos = player_pos
 
     dynamic_color = get_gradient_color(color_pos)
-    median_label_str = f"{safe_median:.2f} {suffix}" if median_value is not None else "0.00"
-    
-    player_label = f"선수 {safe_player:.2f} <span style='font-size:11.5px; font-weight:400; color:#888;'>{suffix}</span>"
-    rank_label = f"{rank_val}위 <span style='font-size:12px; font-weight:400; color:#888;'>/ {total_players}명 · 상위 {top_percent}%</span>" if (rank_val is not None and top_percent is not None) else ""
-    
-    median_marker_html = (
-        f'<span aria-hidden="true" style="position: absolute; display: block; top: -6px; left: calc({median_pos}% - 9px); width: 18px; height: 18px; background-color: #aaa; transform: rotate(45deg); border: 2px solid #262730; z-index: 5;"></span>'
-        if median_pos is not None else ""
+    rank_label = (
+        f"{rank_val}위 / {total_players}명 · 상위 {top_percent}%"
+        if rank_val is not None and top_percent is not None else ""
     )
 
-    st.markdown(f"""
-    <div style="margin-bottom: 28px; padding: 0 4px;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
-            <div style="display: flex; align-items: baseline; gap: 10px;">
-                <span style="font-size: 16px; font-weight: 700; color: #f8f9fa;">{title}</span>
-                <span style="font-size: 14px; font-weight: 600; color: {dynamic_color};">{player_label}</span>
-            </div>
-            <span style="font-size: 14px; font-weight: 600; color: {dynamic_color}; text-align: right;">{rank_label}</span>
-        </div>
-        <div style="position: relative; width: 100%; height: 6px; background-color: #333; border-radius: 3px;">
-            {median_marker_html}
-            <span aria-hidden="true" style="position: absolute; display: block; top: -6px; left: calc({player_pos}% - 9px); width: 18px; height: 18px; border-radius: 50%; background-color: {dynamic_color}; border: 2.5px solid #262730; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 10;"></span>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; font-weight: 500; color: #888;">
-            <span>Poor</span>
-            <span><span style="color: #aaa;">◆</span> 중앙값 ({median_label_str})</span>
-            <span>Great</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    label_col, rank_col = st.columns([3, 1])
+    label_col.markdown(f"**{title}** · 선수 {safe_player:.2f}{suffix}")
+    if rank_label:
+        rank_col.caption(rank_label)
+
+    figure = go.Figure()
+    figure.add_trace(go.Scatter(
+        x=[0, 100], y=[0, 0], mode="lines",
+        line={"color": "#454545", "width": 6},
+        hoverinfo="skip", showlegend=False,
+    ))
+    if median_pos is not None:
+        figure.add_trace(go.Scatter(
+            x=[median_pos], y=[0], mode="markers",
+            marker={"symbol": "diamond", "size": 15, "color": "#aaa", "line": {"color": "#262730", "width": 2}},
+            hovertemplate=f"중앙값 {safe_median:.2f}{suffix}<extra></extra>",
+            showlegend=False,
+        ))
+    figure.add_trace(go.Scatter(
+        x=[player_pos], y=[0], mode="markers",
+        marker={"symbol": "circle", "size": 15, "color": dynamic_color, "line": {"color": "#262730", "width": 2}},
+        hovertemplate=f"선수 {safe_player:.2f}{suffix}<extra></extra>",
+        showlegend=False,
+    ))
+    figure.update_layout(
+        height=48, margin={"l": 0, "r": 0, "t": 0, "b": 0},
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+    )
+    figure.update_xaxes(range=[-1, 101], visible=False, fixedrange=True)
+    figure.update_yaxes(range=[-1, 1], visible=False, fixedrange=True)
+    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+    median_label = f"◆ 중앙값 {safe_median:.2f}{suffix}" if median_value is not None else "중앙값 없음"
+    poor_col, median_col, great_col = st.columns([1, 2, 1])
+    poor_col.caption("Poor")
+    median_col.caption(median_label)
+    great_col.caption("Great")
 
 def style_dataframe(df: pd.DataFrame):
     if df.empty:
