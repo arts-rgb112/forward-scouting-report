@@ -574,7 +574,12 @@ def render_v32_analysis_center() -> None:
             st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
     radar_col, ratio_col = st.columns(2)
     with radar_col:
-        render_attribute_overview_radar(player.player_id, player.name)
+        tactical_ratio = get_tactical_ratio(player.player_id)
+        sportsapi_player_id = tactical_ratio.get("sportsapi_player_id") if tactical_ratio else None
+        if sportsapi_player_id:
+            render_attribute_overview_radar(sportsapi_player_id, player.name)
+        else:
+            st.info("이 선수의 SportsAPI ID 매핑이 없어 V2 레이더를 표시할 수 없습니다.")
     with ratio_col:
         render_activity_ratio(player.player_id, player.name)
     render_player_report(

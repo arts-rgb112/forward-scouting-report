@@ -24,6 +24,7 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
         with data_path.open(encoding="utf-8", newline="") as source:
             for row in csv.DictReader(source):
                 player_id = str(row.get("fotmob_player_id", "")).strip()
+                sportsapi_player_id = str(row.get("sportsapi_player_id", "")).strip()
                 if not player_id:
                     continue
                 mid = float(row["mid_third_ratio"])
@@ -37,11 +38,12 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
                             "in_box_ratio": in_box,
                             "out_box_final_ratio": out_box,
                             "final_third_ratio": final,
+                            "sportsapi_player_id": sportsapi_player_id,
                         }
                 else:
                     final = float(row["final_third_ratio"])
                     if 0 <= mid <= 100 and 0 <= final <= 100:
-                        ratios[player_id] = {"mid_third_ratio": mid, "final_third_ratio": final}
+                        ratios[player_id] = {"mid_third_ratio": mid, "final_third_ratio": final, "sportsapi_player_id": sportsapi_player_id}
     except (OSError, KeyError, TypeError, ValueError):
         return {}
     return ratios
