@@ -159,7 +159,7 @@ def render_unified_bar(
     rank_label = f"{rank_val}위 <span style='font-size:12px; font-weight:400; color:#888;'>/ {total_players}명 · 상위 {top_percent}%</span>" if (rank_val is not None and top_percent is not None) else ""
     
     median_marker_html = (
-        f'<div style="position: absolute; top: -6px; left: calc({median_pos}% - 9px); width: 18px; height: 18px; background-color: #aaa; transform: rotate(45deg); border: 2px solid #262730; z-index: 5;"></div>'
+        f'<span aria-hidden="true" style="position: absolute; display: block; top: -6px; left: calc({median_pos}% - 9px); width: 18px; height: 18px; background-color: #aaa; transform: rotate(45deg); border: 2px solid #262730; z-index: 5;"></span>'
         if median_pos is not None else ""
     )
 
@@ -174,7 +174,7 @@ def render_unified_bar(
         </div>
         <div style="position: relative; width: 100%; height: 6px; background-color: #333; border-radius: 3px;">
             {median_marker_html}
-            <div style="position: absolute; top: -6px; left: calc({player_pos}% - 9px); width: 18px; height: 18px; border-radius: 50%; background-color: {dynamic_color}; border: 2.5px solid #262730; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 10;"></div>
+            <span aria-hidden="true" style="position: absolute; display: block; top: -6px; left: calc({player_pos}% - 9px); width: 18px; height: 18px; border-radius: 50%; background-color: {dynamic_color}; border: 2.5px solid #262730; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 10;"></span>
         </div>
         <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; font-weight: 500; color: #888;">
             <span>Poor</span>
@@ -289,43 +289,37 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
             def get_rank(attr):
                 return getattr(rank, attr, None) if rank else None
 
-            st.caption("🏃 순수 전진 기여도 = 성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
-            st.caption(f"📊 순수 전진 기여도 상대평가 (동일 대회, 볼 경합 성공 1회 이상 {get_rank('progression_eligible') or 0}명 기준)")
-            
             progression_eligible = get_rank("progression_eligible") or 0
-
-            # 원본 stats 대신 안전하게 치환된 지역 변수(dribbles_succeeded 등) 사용
-            render_unified_bar("성공 드리블", dribbles_succeeded, medians.get("dribbles_succeeded_per90"), 
-                               get_rank("dribbles_succeeded_per90_top_percent"), get_rank("dribbles_succeeded_per90_rank"), progression_eligible, "/90분")
-            
-            render_unified_bar("실패 드리블", dribbles_failed, medians.get("dribbles_failed_per90"), 
-                               get_rank("dribbles_failed_per90_top_percent"), get_rank("dribbles_failed_per90_rank"), progression_eligible, "/90분")
-            
-            render_unified_bar("볼 경합 성공", duels_won, medians.get("duels_won_per90"), 
-                               get_rank("duels_won_per90_top_percent"), get_rank("duels_won_per90_rank"), progression_eligible, "/90분")
-            
-            render_unified_bar("볼 경합 실패", duels_lost, medians.get("duels_lost_per90"), 
-                               get_rank("duels_lost_per90_top_percent"), get_rank("duels_lost_per90_rank"), progression_eligible, "/90분")
-            
-            render_unified_bar("공중볼 경합 성공", aerial_won, medians.get("aerial_duels_won_per90"), 
-                               get_rank("aerials_won_per90_top_percent"), get_rank("aerials_won_per90_rank"), progression_eligible, "/90분")
-            
-            render_unified_bar("공중볼 경합 실패", aerial_lost, medians.get("aerial_duels_lost_per90"), 
-                               get_rank("aerials_lost_per90_top_percent"), get_rank("aerials_lost_per90_rank"), progression_eligible, "/90분")
-            
-            render_unified_bar("순수 전진 기여도", net_progression, medians.get("net_progression_per90"), 
-                               get_rank("net_progression_top_percent"), get_rank("net_progression_rank"), progression_eligible, "/90분")
+            with st.expander(
+                f"🏃 순수 전진 기여도 상대평가 · 동일 대회 볼 경합 성공 1회 이상 {progression_eligible}명",
+                expanded=True,
+            ):
+                st.caption("성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
+                render_unified_bar("성공 드리블", dribbles_succeeded, medians.get("dribbles_succeeded_per90"),
+                                   get_rank("dribbles_succeeded_per90_top_percent"), get_rank("dribbles_succeeded_per90_rank"), progression_eligible, "/90분")
+                render_unified_bar("실패 드리블", dribbles_failed, medians.get("dribbles_failed_per90"),
+                                   get_rank("dribbles_failed_per90_top_percent"), get_rank("dribbles_failed_per90_rank"), progression_eligible, "/90분")
+                render_unified_bar("볼 경합 성공", duels_won, medians.get("duels_won_per90"),
+                                   get_rank("duels_won_per90_top_percent"), get_rank("duels_won_per90_rank"), progression_eligible, "/90분")
+                render_unified_bar("볼 경합 실패", duels_lost, medians.get("duels_lost_per90"),
+                                   get_rank("duels_lost_per90_top_percent"), get_rank("duels_lost_per90_rank"), progression_eligible, "/90분")
+                render_unified_bar("공중볼 경합 성공", aerial_won, medians.get("aerial_duels_won_per90"),
+                                   get_rank("aerials_won_per90_top_percent"), get_rank("aerials_won_per90_rank"), progression_eligible, "/90분")
+                render_unified_bar("공중볼 경합 실패", aerial_lost, medians.get("aerial_duels_lost_per90"),
+                                   get_rank("aerials_lost_per90_top_percent"), get_rank("aerials_lost_per90_rank"), progression_eligible, "/90분")
+                render_unified_bar("순수 전진 기여도", net_progression, medians.get("net_progression_per90"),
+                                   get_rank("net_progression_top_percent"), get_rank("net_progression_rank"), progression_eligible, "/90분")
 
             st.divider()
             
             if rank and rank.eligible_players:
-                st.caption(f"🎯 결정력 상대평가 (동일 대회, xG {minimum_xg} 이상 {rank.eligible_players}명 기준)")
-                render_unified_bar("득점", stats.goals, None, 
-                                   rank.goals_top_percent, rank.goals_rank, rank.eligible_players, "골")
-                render_unified_bar("순수결정력", stats.shot_quality, None, 
-                                   rank.shot_quality_top_percent, rank.shot_quality_rank, rank.eligible_players, "골")
-                render_unified_bar("결정력+선방", stats.overall_finishing, None, 
-                                   rank.overall_finishing_top_percent, rank.overall_finishing_rank, rank.eligible_players, "골")
+                with st.expander(f"🎯 결정력 상대평가 · 동일 대회 xG {minimum_xg} 이상 {rank.eligible_players}명", expanded=True):
+                    render_unified_bar("득점", stats.goals, None,
+                                       rank.goals_top_percent, rank.goals_rank, rank.eligible_players, "골")
+                    render_unified_bar("순수결정력", stats.shot_quality, None,
+                                       rank.shot_quality_top_percent, rank.shot_quality_rank, rank.eligible_players, "골")
+                    render_unified_bar("결정력+선방", stats.overall_finishing, None,
+                                       rank.overall_finishing_top_percent, rank.overall_finishing_rank, rank.eligible_players, "골")
             else:
                 st.caption("결정력 상대평가 비교군을 불러오지 못했습니다.")
 
