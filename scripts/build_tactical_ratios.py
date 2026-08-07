@@ -161,19 +161,30 @@ def discover_players(payload: Any) -> dict[str, dict[str, Any]]:
         identifier = candidate.get("id") if candidate else None
         name = candidate.get("name") if candidate else None
         if identifier is not None and name:
-            players[str(identifier)] = {"id": identifier, "name": str(name), "team_name": str(candidate.get("teamName") or "")}
+            position_values = []
+            # Reuse position metadata already present in the top-player
+            # response.  Do not issue an additional /players/{id} request for
+            # every candidate: that was the source of runaway ticket usage.
+            for source in (candidate, item):
+                for key in ("position", "positionName", "positionCode", "positions"):
+                    value = source.get(key)
+                    if isinstance(value, list):
+                        position_values.extend(str(part) for part in value)
+                    elif value is not None:
+                        position_values.append(str(value))
+            players[str(identifier)] = {
+                "id": identifier,
+                "name": str(name),
+                "team_name": str(candidate.get("teamName") or item.get("teamName") or ""),
+                "positions": position_values,
+            }
     return players
 
 
-def is_target_position(profile: Any) -> bool:
-    values = []
-    for item in walk_dicts(profile):
-        for key in ("position", "positionName", "positionCode", "positions"):
-            value = item.get(key)
-            if isinstance(value, list):
-                values.extend(str(part) for part in value)
-            elif value is not None:
-                values.append(str(value))
+def is_target_position(values: Iterable[str]) -> bool:
+    values = list(values)
+    if not values:
+        return False
     text = " ".join(values).lower()
     codes = set(re.findall(r"\b[a-z]{2,}\b", text))
     return any(token in text for token in ATTACKING_POSITION_TOKENS[:-1]) or bool({"st", "cf"} & codes)
@@ -276,15 +287,16 @@ def main() -> None:
             print(f"Skipping {tournament['name']}: top-players unavailable ({exc.code if isinstance(exc, HTTPError) else 'network'}).")
             continue
         players = discover_players(ranking)
-        counts = {"top_players": len(players), "eligible_positions": 0, "heatmaps_with_ratio": 0, "mapped": 0, "unmatched": 0}
+        counts = {"top_players": len(players), "with_embedded_position": 0, "eligible_positions": 0, "heatmaps_with_ratio": 0, "mapped": 0, "unmatched": 0}
         for sports_id, player in players.items():
             checkpoint_key = (sports_id, str(tournament["id"]), str(season_id))
             if checkpoint_key in completed:
                 continue
+            if player["positions"]:
+                counts["with_embedded_position"] += 1
+            if not is_target_position(player["positions"]):
+                continue
             try:
-                profile = client.get(f"players/{sports_id}", "player")
-                if not is_target_position(profile):
-                    continue
                 counts["eligible_positions"] += 1
                 heatmap = client.get(f"players/{sports_id}/tournament/{tournament['id']}/season/{season_id}/heatmap?type=overall", "player")
                 ratios = heat_ratio(heatmap)
