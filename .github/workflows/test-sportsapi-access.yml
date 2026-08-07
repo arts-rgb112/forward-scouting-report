@@ -19,8 +19,12 @@ jobs:
             url="$3"
             status=$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" --header "x-api-key: $key" "$url")
             echo "$name: HTTP $status"
-            test "$status" -ge 200 -a "$status" -lt 300
+            if test "$status" -lt 200 -o "$status" -ge 300; then
+              failed=1
+            fi
           }
+          failed=0
           probe "all-leagues" "$ALL_LEAGUES_KEY" "https://api.sportsapipro.com/v2/football/tournaments?refresh=false"
-          probe "tournament-seasons" "$TOURNAMENT_KEY" "https://api.sportsapipro.com/v2/football/tournament/17/seasons"
+          probe "tournament-seasons" "$TOURNAMENT_KEY" "https://api.sportsapipro.com/v2/football/tournaments/17/seasons"
           probe "season-heatmap" "$PLAYER_KEY" "https://api.sportsapipro.com/v2/football/players/934235/tournament/17/season/76986/heatmap?type=overall"
+          exit "$failed"

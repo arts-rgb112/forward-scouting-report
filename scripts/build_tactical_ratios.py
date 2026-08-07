@@ -102,7 +102,7 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
 
 
 def discover_season(client: SportsApiClient, tournament: dict[str, Any], season_name: str) -> dict[str, Any] | None:
-    payload = client.get(f"tournament/{tournament['id']}/seasons")
+    payload = client.get(f"tournaments/{tournament['id']}/seasons")
     candidates = [item for item in walk_dicts(payload) if item.get("id") is not None]
     normalized = season_name.replace("/", "-").lower()
     for item in candidates:
