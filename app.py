@@ -162,6 +162,36 @@ def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards
     return None
 
 
+def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> str:
+    """Combine the strongest S.P.E.A.R. factor with the player's 3-Zone role."""
+    strength_phrases = {
+        "in_box_finishing_top_percent": "박스 안 마감 능력이 뛰어나며,",
+        "shot_quality_top_percent": "다양한 구역에서 슈팅 위협을 만들며,",
+        "xg_per90_top_percent": "탁월한 위치 선정으로 득점 기회를 창출하며,",
+        "duel_margin_per90_top_percent": "지상 경합에서 버티고 전진하는 힘이 좋으며,",
+        "aerial_margin_per90_top_percent": "공중볼 장악과 포스트플레이에 능하며,",
+        "dribble_margin_per90_top_percent": "압도적인 전진 운반과 수비 균열에 능하며,",
+    }
+    available = [
+        (attr, _radar_score(getattr(rank, attr, None)))
+        for _, attr in SPEAR_FACTOR_AXES
+        if rank is not None and getattr(rank, attr, None) is not None
+    ]
+    strength = strength_phrases[max(available, key=lambda item: item[1])[0]] if available else "핵심 공격 지표가 동기화되는 중이며,"
+
+    if not tactical_ratio:
+        return f"{strength} 활동 반경 데이터가 갱신되는 중인 공격수"
+    in_box = float(tactical_ratio.get("in_box_ratio", 0.0))
+    mid = float(tactical_ratio.get("mid_third_ratio", 0.0))
+    role = "전술적 움직임 위주의" if mid >= 40.0 else "득점 기여에 집중하는"
+    player_type = (
+        "정통 경합형 포워드" if in_box >= 25.0
+        else "하이브리드형 포워드" if in_box >= 20.0
+        else "경합 회피형 피니셔"
+    )
+    return f"{strength} {role} {player_type}"
+
+
 def render_season_heatmap(player_id: str, player_name: str) -> None:
     points = get_heatmap_points(player_id)
     st.markdown("#### 📍 시즌 활동 히트맵")
@@ -568,18 +598,10 @@ def render_v32_analysis_center() -> None:
         return
     st.divider()
     tactical_ratio = get_tactical_ratio(player.player_id) or get_tactical_ratio_by_name(player.name)
-    if tactical_ratio:
-        in_box = float(tactical_ratio.get("in_box_ratio", 0.0))
-        out_box = float(tactical_ratio.get("out_box_final_ratio", tactical_ratio.get("final_third_ratio", 0.0)))
-        mid = float(tactical_ratio.get("mid_third_ratio", 0.0))
-        if in_box >= max(out_box, mid):
-            tactical_summary = "박스 안 타격과 마무리에 집중하는 포처형 포워드"
-        elif out_box >= mid:
-            tactical_summary = "박스 밖 타격과 전진에 능한 링커형 포워드"
-        else:
-            tactical_summary = "미드써드 연계와 전진 운반에 능한 연결형 공격수"
-    else:
-        tactical_summary = "활동 반경 데이터 동기화 대기 중"
+    rank = primary_spear_rank(
+        player, filters["seasons"], "FW (ST/CF)" in filters["positions"], 0,
+    )
+    tactical_summary = build_tactical_summary(rank, tactical_ratio)
     title_col, help_col = st.columns([4, 1])
     with title_col:
         st.subheader(f"👑 {player.name}  ·  🏷️ S.P.E.A.R. 동기화 대기  (—/100)")
@@ -592,9 +614,6 @@ def render_v32_analysis_center() -> None:
     render_activity_ratio(player.player_id, player.name)
     radar_col, ratio_col = st.columns(2)
     with radar_col:
-        rank = primary_spear_rank(
-            player, filters["seasons"], "FW (ST/CF)" in filters["positions"], 0,
-        )
         render_spear_factor_radar(player.name, rank)
         if rank is None:
             st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)으로 표시됩니다.")
