@@ -31,4 +31,32 @@ jobs:
           probe "attribute-overviews" "$PLAYER_KEY" "https://api.sportsapipro.com/v2/football/players/934235/attribute-overviews"
           curl --silent --show-error --header "x-api-key: $PLAYER_KEY" "https://api.sportsapipro.com/v2/football/players/934235/attribute-overviews" |
             python3 -c 'import json,sys; data=json.load(sys.stdin); root=data.get("data", data); print("attribute-overviews keys:", sorted(root) if isinstance(root,dict) else type(root).__name__); [print(key, "count=", len(root.get(key, [])), "sample-keys=", sorted(root[key][0]) if isinstance(root.get(key),list) and root[key] and isinstance(root[key][0],dict) else "") for key in ("playerAttributeOverviews", "averageAttributeOverviews")]'
+      - name: Inspect wing and attacking-mid position detail safely
+        env:
+          TOURNAMENT_KEY: ${{ secrets.SPORTSAPIPRO_TOURNAMENT_API_KEY }}
+          PLAYER_KEY: ${{ secrets.SPORTSAPIPRO_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          def fetch(url, key):
+              request = urllib.request.Request(url, headers={"x-api-key": key, "Accept": "application/json"})
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  return json.load(response)
+          ranking = fetch("https://api.sportsapipro.com/v2/football/tournament/8/season/77559/top-players", os.environ["TOURNAMENT_KEY"])
+          def walk(value):
+              if isinstance(value, dict):
+                  yield value
+                  for child in value.values(): yield from walk(child)
+              elif isinstance(value, list):
+                  for child in value: yield from walk(child)
+          candidate = next((item.get("player") for item in walk(ranking) if isinstance(item.get("player"), dict) and "lamine yamal" in str(item["player"].get("name", "")).lower()), None)
+          if not candidate:
+              raise SystemExit("Lamine Yamal not found in LaLiga top-player response")
+          print("wing-sample top-player keys:", sorted(candidate))
+          print("wing-sample top-player position:", candidate.get("position"))
+          profile = fetch(f"https://api.sportsapipro.com/v2/football/players/{candidate['id']}", os.environ["PLAYER_KEY"])
+          root = profile.get("data", profile) if isinstance(profile, dict) else {}
+          print("wing-sample profile keys:", sorted(root) if isinstance(root, dict) else type(root).__name__)
+          print("wing-sample profile position fields:", {key: root.get(key) for key in ("position", "positionName", "positionCode", "positions") if isinstance(root, dict) and key in root})
+          PY
           exit "$failed"
