@@ -150,7 +150,7 @@ def render_spear_factor_radar(player_name: str, rank, stats: DecisionMetrics | N
     figure = go.Figure()
     for name, values, color, fill in (
         (player_name, player_values, "#22C55E", "rgba(34,197,94,0.28)"),
-        ("동일 대회 F·M(900분+) 평균", average_values, "#94A3B8", "rgba(148,163,184,0.16)"),
+        ("동일 대회 F·M(900분+·xG 1+) 평균", average_values, "#94A3B8", "rgba(148,163,184,0.16)"),
     ):
         is_player = name == player_name
         figure.add_trace(go.Scatterpolar(
@@ -161,7 +161,7 @@ def render_spear_factor_radar(player_name: str, rank, stats: DecisionMetrics | N
             hovertemplate=("<b>%{theta}</b><br>원시값: %{customdata[0]}<br>%{customdata[1]} · %{customdata[2]}<br>레이더 점수: %{r:.1f}<extra></extra>" if is_player else "%{theta}: 비교군 평균 %{r:.0f}<extra></extra>"),
         ))
     figure.update_layout(
-        title="S.P.E.A.R. 6대 공격 팩터 · 선수 vs 동일 대회 F·M(900분+) 평균",
+        title="S.P.E.A.R. 6대 공격 팩터 · 선수 vs 동일 대회 F·M(900분+·xG 1+) 평균",
         height=420, margin={"l": 35, "r": 35, "t": 55, "b": 25},
         paper_bgcolor="rgba(0,0,0,0)",
         polar={"bgcolor": "rgba(0,0,0,0)", "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "visible": True}},
@@ -676,7 +676,7 @@ def render_player_report(
                 return getattr(rank, attr, None) if rank else None
 
             progression_eligible = get_rank("progression_eligible") or 0
-            cohort_label = "F·M 통합 모집단 · 900분 이상" if restrict_to_forwards else "포지션 전체 · 900분 이상"
+            cohort_label = "F·M 통합 모집단 · 900분 이상 · xG 1 이상" if restrict_to_forwards else "포지션 전체 · 900분 이상 · xG 1 이상"
             with st.expander(
                 f"🏃 순수 전진 기여도 상대평가 · {cohort_label} · 비교군 {progression_eligible}명",
                 expanded=True,
