@@ -1,0 +1,34 @@
+name: Refresh tactical ratios
+
+on:
+  workflow_dispatch:
+    inputs:
+      season_name:
+        description: Season label used by SportsAPI discovery (for example 2025/2026)
+        required: true
+        default: "2025/2026"
+  schedule:
+    - cron: "15 3 * * 1"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build Heat Ratio CSV
+        env:
+          SPORTSAPIPRO_API_KEY: ${{ secrets.SPORTSAPIPRO_API_KEY }}
+        run: python scripts/build_tactical_ratios.py --season-name "${{ inputs.season_name || '2025/2026' }}"
+      - name: Commit refreshed static data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/tactical_ratio.csv data/unmatched_sportsapi_players.csv data/auto_matched_fotmob_players.csv
+          git diff --cached --quiet || git commit -m "Refresh tactical Heat Ratios"
+          git push
