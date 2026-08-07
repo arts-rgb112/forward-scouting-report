@@ -4,8 +4,9 @@ Usage (PowerShell):
   $env:SPORTSAPIPRO_API_KEY = "..."
   python scripts/build_tactical_ratios.py --season-name "2025/2026"
 
-The script discovers tournament and season IDs at runtime, throttles every
-request, and never writes an unverified SportsAPI-to-FotMob player mapping.
+The script discovers tournament and season IDs at runtime, checkpoints partial
+results, throttles every request, and never writes an unverified
+SportsAPI-to-FotMob player mapping.
 """
 
 from __future__ import annotations
@@ -31,7 +32,16 @@ BASE_URLS = (
     "https://api.sportsapipro.com/v2/football",
     "https://v2.football.sportsapipro.com/api",
 )
-TARGET_TOURNAMENTS = {"premier league", "laliga", "la liga", "bundesliga", "serie a", "ligue 1"}
+# Key aliases are normalised API display names; values are the one label shown
+# in logs and retained in checkpoints.  Each target is processed at most once.
+TARGET_TOURNAMENTS = {
+    "premier league": "Premier League",
+    "laliga": "LaLiga",
+    "la liga": "LaLiga",
+    "bundesliga": "Bundesliga",
+    "serie a": "Serie A",
+    "ligue 1": "Ligue 1",
+}
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
@@ -49,7 +59,7 @@ class SportsApiClient:
         last_error: Exception | None = None
         for base_url in BASE_URLS:
             url = f"{base_url}/{path.lstrip('/')}"
-            for attempt in range(4):
+            for attempt in range(6):
                 try:
                     request = Request(url, headers={
                         "x-api-key": api_key,
@@ -68,13 +78,16 @@ class SportsApiClient:
                     # rolled out yet; immediately try the documented legacy URL.
                     if exc.code == 403:
                         break
-                    if exc.code not in (429, 500, 502, 503, 504) or attempt == 3:
+                    if exc.code not in (429, 500, 502, 503, 504) or attempt == 5:
                         raise
                 except URLError as exc:
                     last_error = exc
-                    if attempt == 3:
+                    if attempt == 5:
                         break
-                time.sleep(max(self.delay_seconds, 1.0) * (2 ** attempt))
+                retry_after = 0.0
+                if isinstance(last_error, HTTPError):
+                    retry_after = as_number(last_error.headers.get("Retry-After")) or 0.0
+                time.sleep(max(retry_after, max(self.delay_seconds, 1.0) * (2 ** attempt)))
         if last_error:
             raise last_error
         raise RuntimeError(f"request retries exhausted: {path}")
@@ -101,22 +114,37 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
     payload = client.get("tournaments?refresh=false", "all_leagues")
     matches: dict[str, dict[str, Any]] = {}
     for item in walk_dicts(payload):
-        identifier, name = item.get("id"), str(item.get("name", "")).strip()
-        if identifier is None or name.lower() not in TARGET_TOURNAMENTS:
+        # The all-leagues response can contain teams, categories and seasons.
+        # Only `uniqueTournament` is the canonical tournament entity; generic
+        # recursive `{id, name}` discovery previously selected wrong IDs.
+        candidate = item.get("uniqueTournament")
+        if not isinstance(candidate, dict):
             continue
-        matches[str(identifier)] = {"id": identifier, "name": name}
-    return list(matches.values())
+        identifier = candidate.get("id")
+        label = str(candidate.get("name", "")).strip()
+        canonical_name = TARGET_TOURNAMENTS.get(label.lower())
+        if identifier is None or not canonical_name:
+            continue
+        matches.setdefault(canonical_name, {"id": identifier, "name": canonical_name})
+    return [matches[name] for name in sorted(matches)]
 
 
 def discover_season(client: SportsApiClient, tournament: dict[str, Any], season_name: str) -> dict[str, Any] | None:
     payload = client.get(f"tournaments/{tournament['id']}/seasons", "tournament")
-    candidates = [item for item in walk_dicts(payload) if item.get("id") is not None]
-    normalized = season_name.replace("/", "-").lower()
+    candidates: list[dict[str, Any]] = []
+    for item in walk_dicts(payload):
+        seasons = item.get("seasons")
+        if isinstance(seasons, list):
+            candidates.extend(season for season in seasons if isinstance(season, dict) and season.get("id") is not None)
+    year_parts = re.findall(r"\d+", season_name)
+    expected = {season_name.lower(), season_name.replace("/", "-").lower()}
+    if len(year_parts) == 2:
+        expected.update({f"{year_parts[0][-2:]}/{year_parts[1][-2:]}", f"{year_parts[0][-2:]}-{year_parts[1][-2:]}"})
     for item in candidates:
         label = " ".join(str(item.get(key, "")) for key in ("name", "year", "displayName")).lower()
-        if normalized in label or season_name.lower() in label:
+        if any(token in label for token in expected):
             return item
-    return candidates[0] if candidates else None
+    return None
 
 
 def discover_players(payload: Any) -> dict[str, dict[str, Any]]:
@@ -147,11 +175,13 @@ def is_target_position(profile: Any) -> bool:
 
 
 def heat_ratio(payload: Any) -> tuple[int, int, int] | None:
-    points: set[tuple[float, float]] = set()
+    points: list[tuple[float, float]] = []
     for item in walk_dicts(payload):
         x, y = as_number(item.get("x")), as_number(item.get("y"))
         if x is not None and y is not None and 0 <= x <= 100 and 0 <= y <= 100:
-            points.add((x, y))
+            # Points are activity events, so identical coordinates still count
+            # as separate observations in the density ratio.
+            points.append((x, y))
     mid = sum(33 <= x < 66 for x, _ in points)
     final = sum(66 <= x <= 100 for x, _ in points)
     total = mid + final
@@ -182,10 +212,32 @@ def resolve_fotmob_id(player_name: str) -> str | None:
         return None
 
 
+OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "tournament_id", "season_id", "mid_third_ratio", "final_third_ratio", "sample_points", "generated_at"]
+
+
+def read_checkpoint(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open(encoding="utf-8", newline="") as source:
+        return [row for row in csv.DictReader(source) if row.get("sportsapi_player_id") and row.get("tournament_id") and row.get("season_id")]
+
+
+def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]], auto_mapped: list[dict[str, Any]]) -> None:
+    with (DATA_DIR / "tactical_ratio.csv").open("w", encoding="utf-8", newline="") as target:
+        writer = csv.DictWriter(target, fieldnames=OUTPUT_FIELDS)
+        writer.writeheader(); writer.writerows(output)
+    with (DATA_DIR / "unmatched_sportsapi_players.csv").open("w", encoding="utf-8", newline="") as target:
+        writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "name", "team_name"])
+        writer.writeheader(); writer.writerows(unmatched)
+    with (DATA_DIR / "auto_matched_fotmob_players.csv").open("w", encoding="utf-8", newline="") as target:
+        writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "fotmob_player_id", "name", "team_name"])
+        writer.writeheader(); writer.writerows(auto_mapped)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--season-name", required=True, help='display label, e.g. "2025/2026"')
-    parser.add_argument("--delay", type=float, default=0.2, help="seconds between requests")
+    parser.add_argument("--delay", type=float, default=0.5, help="seconds between requests")
     args = parser.parse_args()
     api_keys = {
         "all_leagues": os.getenv("SPORTSAPIPRO_ALL_LEAGUES_API_KEY", ""),
@@ -199,10 +251,17 @@ def main() -> None:
     DATA_DIR.mkdir(exist_ok=True)
     client = SportsApiClient(api_keys, args.delay)
     id_map = read_fotmob_map(DATA_DIR / "fotmob_player_map.csv")
-    output, unmatched, auto_mapped = [], [], []
+    output = read_checkpoint(DATA_DIR / "tactical_ratio.csv")
+    completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output}
+    unmatched, auto_mapped = [], []
     for tournament in discover_tournaments(client):
-        season = discover_season(client, tournament, args.season_name)
+        try:
+            season = discover_season(client, tournament, args.season_name)
+        except (HTTPError, URLError, TimeoutError) as exc:
+            print(f"Skipping {tournament['name']}: seasons unavailable ({exc.code if isinstance(exc, HTTPError) else 'network'}).")
+            continue
         if not season:
+            print(f"Skipping {tournament['name']}: no exact {args.season_name} season found.")
             continue
         season_id = season["id"]
         print(f"Processing {tournament['name']}: tournament={tournament['id']}, season={season_id}")
@@ -212,6 +271,9 @@ def main() -> None:
             print(f"Skipping {tournament['name']}: top-players unavailable ({exc.code if isinstance(exc, HTTPError) else 'network'}).")
             continue
         for sports_id, player in discover_players(ranking).items():
+            checkpoint_key = (sports_id, str(tournament["id"]), str(season_id))
+            if checkpoint_key in completed:
+                continue
             try:
                 profile = client.get(f"players/{sports_id}", "player")
                 if not is_target_position(profile):
@@ -236,17 +298,9 @@ def main() -> None:
                 "mid_third_ratio": mid, "final_third_ratio": final,
                 "sample_points": samples, "generated_at": datetime.now(timezone.utc).isoformat(),
             })
-
-    fields = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "tournament_id", "season_id", "mid_third_ratio", "final_third_ratio", "sample_points", "generated_at"]
-    with (DATA_DIR / "tactical_ratio.csv").open("w", encoding="utf-8", newline="") as target:
-        writer = csv.DictWriter(target, fieldnames=fields)
-        writer.writeheader(); writer.writerows(output)
-    with (DATA_DIR / "unmatched_sportsapi_players.csv").open("w", encoding="utf-8", newline="") as target:
-        writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "name", "team_name"])
-        writer.writeheader(); writer.writerows(unmatched)
-    with (DATA_DIR / "auto_matched_fotmob_players.csv").open("w", encoding="utf-8", newline="") as target:
-        writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "fotmob_player_id", "name", "team_name"])
-        writer.writeheader(); writer.writerows(auto_mapped)
+        # A successful league survives a later rate-limit/network failure.
+        write_outputs(output, unmatched, auto_mapped)
+    write_outputs(output, unmatched, auto_mapped)
     print(f"Wrote {len(output)} matched ratios ({len(auto_mapped)} auto-mapped) and {len(unmatched)} unmatched players.")
 
 
