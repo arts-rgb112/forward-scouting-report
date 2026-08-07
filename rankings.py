@@ -32,6 +32,13 @@ class LeaguePercentiles:
     goals_median: Optional[float] = None
     shot_quality_median: Optional[float] = None
     overall_finishing_median: Optional[float] = None
+    gk_impact_median: Optional[float] = None
+    in_box_finishing_top_percent: Optional[float] = None
+    in_box_finishing_rank: Optional[int] = None
+    in_box_finishing_median: Optional[float] = None
+    out_box_shot_quality_top_percent: Optional[float] = None
+    out_box_shot_quality_rank: Optional[int] = None
+    out_box_shot_quality_median: Optional[float] = None
     
     duels_pct_top_percent: Optional[float] = None
     duels_pct_rank: Optional[int] = None
@@ -51,14 +58,20 @@ class LeaguePercentiles:
     dribbles_failed_per90_top_percent: Optional[float] = None
     dribbles_failed_per90_rank: Optional[int] = None
     dribbles_failed_eligible: int = 0
+    dribble_margin_per90_top_percent: Optional[float] = None
+    dribble_margin_per90_rank: Optional[int] = None
     duels_won_per90_top_percent: Optional[float] = None
     duels_won_per90_rank: Optional[int] = None
     duels_lost_per90_top_percent: Optional[float] = None
     duels_lost_per90_rank: Optional[int] = None
+    duel_margin_per90_top_percent: Optional[float] = None
+    duel_margin_per90_rank: Optional[int] = None
     aerials_won_per90_top_percent: Optional[float] = None
     aerials_won_per90_rank: Optional[int] = None
     aerials_lost_per90_top_percent: Optional[float] = None
     aerials_lost_per90_rank: Optional[int] = None
+    aerial_margin_per90_top_percent: Optional[float] = None
+    aerial_margin_per90_rank: Optional[int] = None
     progression_eligible: int = 0
     net_progression_top_percent: Optional[float] = None
     net_progression_rank: Optional[int] = None
@@ -109,10 +122,15 @@ def _progression_value(metric: DecisionMetrics) -> Optional[float]:
             - (dribble_failed or 0.0) - (dispossessed or 0.0))
 
 
+def _is_attacker_or_cf(metric: DecisionMetrics) -> bool:
+    """Keep comparison groups to specialist attacking/central-forward roles."""
+    position = (metric.position or "").strip().lower()
+    return any(token in position for token in ("attacker", "striker", "forward", "centre-forward", "center-forward", " cf", "st"))
+
+
 @functools.lru_cache(maxsize=32)
 def _fetch_elite_dribbler_metrics(league_id: int, season_name: str) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
-    """Build the >=1 successful-dribbles-per-90 cohort for one league-season.
-    """
+    """Build the >=1 won-contest attacker/CF cohort for one league-season."""
     rows = fetch_league_stat_table(league_id, season_name, "won_contest")
     
     # 💡 여기서 2.0을 1.0으로 수정합니다.
@@ -145,6 +163,11 @@ def _fetch_elite_dribbler_metrics(league_id: int, season_name: str) -> tuple[dic
         for player_id, metric in executor.map(fetch_one, successes):
             if metric is not None:
                 metrics_by_player[player_id] = metric
+    metrics_by_player = {
+        player_id: metric for player_id, metric in metrics_by_player.items()
+        if _is_attacker_or_cf(metric)
+    }
+    successes = {player_id: value for player_id, value in successes.items() if player_id in metrics_by_player}
     return metrics_by_player, successes
 
 
@@ -177,6 +200,9 @@ def _calculate_progression_percentiles(
     duels_lost_pct, duels_lost_rank, _ = rank_attr("duels_lost_per90", reverse=True)
     aerials_won_pct, aerials_won_rank, _ = rank_attr("aerial_duels_won_per90")
     aerials_lost_pct, aerials_lost_rank, _ = rank_attr("aerial_duels_lost_per90", reverse=True)
+    dribble_margin_pct, dribble_margin_rank, _ = rank_attr("dribble_margin_per90")
+    duel_margin_pct, duel_margin_rank, _ = rank_attr("duel_margin_per90")
+    aerial_margin_pct, aerial_margin_rank, _ = rank_attr("aerial_margin_per90")
     net_pct, net_rank, net_count = rank_attr("net_progression_per90")
     return {
         "cohort_count": len(successes),
@@ -186,6 +212,9 @@ def _calculate_progression_percentiles(
         "duels_lost_pct": duels_lost_pct, "duels_lost_rank": duels_lost_rank,
         "aerials_won_pct": aerials_won_pct, "aerials_won_rank": aerials_won_rank,
         "aerials_lost_pct": aerials_lost_pct, "aerials_lost_rank": aerials_lost_rank,
+        "dribble_margin_pct": dribble_margin_pct, "dribble_margin_rank": dribble_margin_rank,
+        "duel_margin_pct": duel_margin_pct, "duel_margin_rank": duel_margin_rank,
+        "aerial_margin_pct": aerial_margin_pct, "aerial_margin_rank": aerial_margin_rank,
         "net_pct": net_pct, "net_rank": net_rank, "net_count": net_count,
     }
 
@@ -206,6 +235,9 @@ def get_league_metric_medians(league_id: int, season_name: str) -> dict[str, flo
         "duels_lost_per90": "duels_lost_per90",
         "aerial_duels_won_per90": "aerial_duels_won_per90",
         "aerial_duels_lost_per90": "aerial_duels_lost_per90",
+        "dribble_margin_per90": "dribble_margin_per90",
+        "duel_margin_per90": "duel_margin_per90",
+        "aerial_margin_per90": "aerial_margin_per90",
         "net_progression_per90": "net_progression_per90",
     }
     medians: dict[str, float | None] = {}
@@ -224,7 +256,7 @@ def get_tactical_matrix(league_id: int, season_name: str) -> pd.DataFrame:
     """Return the elite-dribbler cohort used in the tactical quadrant chart.
 
     Both axes are available only after the player-level fetch: Net Progression
-    is composed from five event stats, while finishing is xGOT minus xG.
+    is composed from five event stats, while finishing is in-box xGOT minus xG.
     """
     peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name)
     leaderboard_rows = fetch_league_stat_table(league_id, season_name, "won_contest")
@@ -232,7 +264,7 @@ def get_tactical_matrix(league_id: int, season_name: str) -> pd.DataFrame:
     rows = []
     for player_id, metric in peers.items():
         net_progression = metric.net_progression_per90
-        finishing = metric.shot_quality
+        finishing = metric.in_box_finishing
         if net_progression is None or finishing is None:
             continue
         rows.append({
@@ -240,7 +272,7 @@ def get_tactical_matrix(league_id: int, season_name: str) -> pd.DataFrame:
             "player_name": names.get(player_id, "Unknown"),
             "team_name": metric.team_name or "정보 없음",
             "net_progression_per90": net_progression,
-            "xgot_minus_xg": finishing,
+            "in_box_xgot_minus_xg": finishing,
             "dribbles_succeeded_per90": successes[player_id],
         })
     return pd.DataFrame(rows)
@@ -322,6 +354,7 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
     goals_median = float(pd.Series(goal_population).median()) if goal_population else None
     shot_quality_median = float(pd.Series(shot_quality_population).median()) if shot_quality_population else None
     overall_finishing_median = float(pd.Series(overall_finishing_population).median()) if overall_finishing_population else None
+    gk_impact_median = float(pd.Series(gk_impact_population).median()) if gk_impact_population else None
         
     goals_pct, goals_rk = _rank_info(player_goals, goal_population)
     xg_pct, xg_rk = _rank_info(player_xg, xg_population)
@@ -351,6 +384,11 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
     progression_percentiles = _calculate_progression_percentiles(
         player_key, metrics.league_id, season_name, metrics
     )
+    peers, _ = _fetch_elite_dribbler_metrics(metrics.league_id, season_name)
+    in_box_population = [peer.in_box_finishing for peer in peers.values() if peer.in_box_finishing is not None]
+    out_box_population = [peer.out_box_shot_quality for peer in peers.values() if peer.out_box_shot_quality is not None]
+    in_box_pct, in_box_rank = _rank_info(metrics.in_box_finishing, in_box_population)
+    out_box_pct, out_box_rank = _rank_info(metrics.out_box_shot_quality, out_box_population)
     progression_eligible = int(progression_percentiles["cohort_count"])
     duels_eligible = progression_eligible
     aerials_eligible = progression_eligible
@@ -370,6 +408,13 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
         goals_median=goals_median,
         shot_quality_median=shot_quality_median,
         overall_finishing_median=overall_finishing_median,
+        gk_impact_median=gk_impact_median,
+        in_box_finishing_top_percent=in_box_pct,
+        in_box_finishing_rank=in_box_rank,
+        in_box_finishing_median=float(pd.Series(in_box_population).median()) if in_box_population else None,
+        out_box_shot_quality_top_percent=out_box_pct,
+        out_box_shot_quality_rank=out_box_rank,
+        out_box_shot_quality_median=float(pd.Series(out_box_population).median()) if out_box_population else None,
         duels_pct_top_percent=duels_pct,
         duels_pct_rank=duels_rk,
         duels_eligible=duels_eligible,
@@ -385,14 +430,20 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
         dribbles_failed_per90_top_percent=progression_percentiles["failure_pct"],
         dribbles_failed_per90_rank=progression_percentiles["failure_rank"],
         dribbles_failed_eligible=int(progression_percentiles["cohort_count"]),
+        dribble_margin_per90_top_percent=progression_percentiles["dribble_margin_pct"],
+        dribble_margin_per90_rank=progression_percentiles["dribble_margin_rank"],
         duels_won_per90_top_percent=progression_percentiles["duels_won_pct"],
         duels_won_per90_rank=progression_percentiles["duels_won_rank"],
         duels_lost_per90_top_percent=progression_percentiles["duels_lost_pct"],
         duels_lost_per90_rank=progression_percentiles["duels_lost_rank"],
+        duel_margin_per90_top_percent=progression_percentiles["duel_margin_pct"],
+        duel_margin_per90_rank=progression_percentiles["duel_margin_rank"],
         aerials_won_per90_top_percent=progression_percentiles["aerials_won_pct"],
         aerials_won_per90_rank=progression_percentiles["aerials_won_rank"],
         aerials_lost_per90_top_percent=progression_percentiles["aerials_lost_pct"],
         aerials_lost_per90_rank=progression_percentiles["aerials_lost_rank"],
+        aerial_margin_per90_top_percent=progression_percentiles["aerial_margin_pct"],
+        aerial_margin_per90_rank=progression_percentiles["aerial_margin_rank"],
         progression_eligible=progression_eligible,
         net_progression_top_percent=progression_percentiles["net_pct"],
         net_progression_rank=progression_percentiles["net_rank"],
