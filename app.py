@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
+import math
 
 from fotmob_client import FotMobError, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
@@ -444,6 +445,14 @@ def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, select
     st.plotly_chart(figure, use_container_width=True, config={"displaylogo": False})
 
 def get_gradient_color(percentile: float) -> str:
+    """Return a Plotly-safe RGB colour for any rank-derived marker value."""
+    try:
+        percentile = float(percentile)
+    except (TypeError, ValueError):
+        percentile = 50.0
+    if not math.isfinite(percentile):
+        percentile = 50.0
+    percentile = max(0.0, min(100.0, percentile))
     if percentile <= 50:
         ratio = percentile / 50.0
         r, g, b = int(30 + (255 - 30) * ratio), int(136 + (193 - 136) * ratio), int(229 + (7 - 229) * ratio)
@@ -465,15 +474,27 @@ def render_unified_bar(
         st.caption(f"{title} · 데이터 부족")
         return
 
-    safe_player = player_value if player_value is not None else 0.0
-    safe_median = median_value if median_value is not None else 0.0
+    def finite_number(value: float | None, default: float = 0.0) -> float:
+        try:
+            numeric = float(value) if value is not None else default
+        except (TypeError, ValueError):
+            return default
+        return numeric if math.isfinite(numeric) else default
 
-    if top_percent is not None:
+    safe_player = finite_number(player_value)
+    raw_median = finite_number(median_value, default=float("nan"))
+    has_median = median_value is not None and math.isfinite(raw_median)
+    safe_median = raw_median if has_median else 0.0
+    safe_top_percent = finite_number(top_percent, default=float("nan"))
+    if not math.isfinite(safe_top_percent):
+        safe_top_percent = None
+
+    if safe_top_percent is not None:
         # Rank data is authoritative when it exists: use the same percentile
         # scale for the marker and its colour.
-        player_pos = 100.0 - top_percent
+        player_pos = max(0.0, min(100.0, 100.0 - safe_top_percent))
         color_pos = player_pos
-        median_pos = 50.0 if median_value is not None else None
+        median_pos = 50.0 if has_median else None
     else:
         # Anchor the absolute-value scale to the cohort median. Deriving the
         # scale from the player value pins whichever value is larger to 80%.
@@ -484,14 +505,14 @@ def render_unified_bar(
         player_pos = min((safe_player / scale_max) * 100.0, 100.0)
         median_pos = (
             min((safe_median / scale_max) * 100.0, 100.0)
-            if median_value is not None else None
+            if has_median else None
         )
         color_pos = player_pos
 
     dynamic_color = get_gradient_color(color_pos)
     rank_label = (
-        f"{rank_val}위 / {total_players}명 · 상위 {top_percent}%"
-        if rank_val is not None and top_percent is not None else ""
+        f"{rank_val}위 / {total_players}명 · 상위 {safe_top_percent}%"
+        if rank_val is not None and safe_top_percent is not None else ""
     )
 
     label_col, rank_col = st.columns([3, 1])
@@ -526,7 +547,7 @@ def render_unified_bar(
     figure.update_yaxes(range=[-1, 1], visible=False, fixedrange=True)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
-    median_label = f"◆ 중앙값 {safe_median:.2f}{suffix}" if median_value is not None else "중앙값 없음"
+    median_label = f"◆ 중앙값 {safe_median:.2f}{suffix}" if has_median else "중앙값 없음"
     poor_col, median_col, great_col = st.columns([1, 2, 1])
     poor_col.caption("Poor")
     median_col.caption(median_label)
