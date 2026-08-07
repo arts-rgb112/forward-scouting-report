@@ -113,7 +113,15 @@ def as_number(value: Any) -> float | None:
 def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
     payload = client.get("tournaments?refresh=false", "all_leagues")
     matches: dict[str, dict[str, Any]] = {}
+    target_objects: list[str] = []
     for item in walk_dicts(payload):
+        raw_label = str(item.get("name", "")).strip().lower()
+        if raw_label in TARGET_TOURNAMENTS:
+            # Safe diagnostics only: these reveal the response shape, never
+            # secret values or the full API response.
+            target_objects.append(
+                f"{item.get('name')!s} keys={','.join(sorted(item.keys()))}"
+            )
         # The all-leagues response can contain teams, categories and seasons.
         # Only `uniqueTournament` is the canonical tournament entity; generic
         # recursive `{id, name}` discovery previously selected wrong IDs.
@@ -129,6 +137,11 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
             if identifier is None or not canonical_name:
                 continue
             matches.setdefault(canonical_name, {"id": identifier, "name": canonical_name})
+    if not matches:
+        root_keys = ",".join(sorted(payload.keys())) if isinstance(payload, dict) else type(payload).__name__
+        print(f"No canonical tournaments found. Root keys: {root_keys}")
+        for description in target_objects[:10]:
+            print(f"Target-label response shape: {description}")
     return [matches[name] for name in sorted(matches)]
 
 
