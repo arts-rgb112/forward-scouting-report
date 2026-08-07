@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import numpy as np
 import math
 import itertools
+import html
 
 from fotmob_client import FotMobError, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
@@ -456,16 +457,76 @@ def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
 
 
 def render_twin_radar_sector_summaries(rank) -> None:
-    """Display the 5×5 cross-matrix outcome without mixing competitions."""
+    """Display all six cross-matrix outcomes as an ordered 3×2 card grid."""
     summaries = twin_radar_sector_summaries(rank)
     st.markdown("#### 💡 볼륨 × 비율 교차 프로필")
     if not summaries:
         st.caption("두 레이더의 상대평가 데이터가 확보되면 6개 섹터의 5×5 교차 설명이 표시됩니다.")
         return
-    left, right = st.columns(2)
+
+    st.markdown(
+        """
+        <style>
+        .spear-sector-card {
+            min-height: 148px;
+            padding: 0.9rem 1rem;
+            margin: 0 0 0.8rem 0;
+            border: 1px solid rgba(148, 163, 184, 0.32);
+            border-radius: 0.7rem;
+            background: rgba(30, 41, 59, 0.32);
+        }
+        .spear-sector-card__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-bottom: 0.65rem;
+            font-weight: 700;
+        }
+        .spear-tier-badge {
+            padding: 0.13rem 0.48rem;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+        .spear-tier--elite { color: #052e16; background: #4ade80; }
+        .spear-tier--strong { color: #431407; background: #fb923c; }
+        .spear-tier--neutral { color: #172554; background: #93c5fd; }
+        .spear-tier--warning { color: #451a03; background: #facc15; }
+        .spear-tier--danger { color: #fef2f2; background: #dc2626; }
+        .spear-sector-card__body { color: inherit; line-height: 1.55; font-size: 0.91rem; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    columns = st.columns(3)
     for index, (title, text) in enumerate(summaries):
-        with (left if index % 2 == 0 else right):
-            st.markdown(f"**{title}**  \n{text}")
+        badge, body = text.split("] ", 1)
+        tiers = badge.removeprefix("[").split("×")
+        # A single D makes the cross-profile critical; otherwise favor the
+        # best displayed tier so exceptional combinations scan immediately.
+        if "D" in tiers:
+            tone = "danger"
+        elif "S" in tiers:
+            tone = "elite"
+        elif "A" in tiers:
+            tone = "strong"
+        elif "B" in tiers:
+            tone = "neutral"
+        else:
+            tone = "warning"
+        card = (
+            '<div class="spear-sector-card">'
+            '<div class="spear-sector-card__header">'
+            f'<span>{html.escape(title)}</span>'
+            f'<span class="spear-tier-badge spear-tier--{tone}">{html.escape(badge + "]")}</span>'
+            '</div>'
+            f'<div class="spear-sector-card__body">{html.escape(body)}</div>'
+            '</div>'
+        )
+        with columns[index % 3]:
+            st.markdown(card, unsafe_allow_html=True)
 
 
 def render_spear_radar(player_name: str, rank, stats: DecisionMetrics | None, *, volume: bool) -> None:
