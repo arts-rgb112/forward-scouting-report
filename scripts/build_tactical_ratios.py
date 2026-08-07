@@ -35,12 +35,12 @@ BASE_URLS = (
 # Key aliases are normalised API display names; values are the one label shown
 # in logs and retained in checkpoints.  Each target is processed at most once.
 TARGET_TOURNAMENTS = {
-    "premier league": "Premier League",
-    "laliga": "LaLiga",
-    "la liga": "LaLiga",
-    "bundesliga": "Bundesliga",
-    "serie a": "Serie A",
-    "ligue 1": "Ligue 1",
+    ("premier league", "england"): "Premier League",
+    ("laliga", "spain"): "LaLiga",
+    ("la liga", "spain"): "LaLiga",
+    ("bundesliga", "germany"): "Bundesliga",
+    ("serie a", "italy"): "Serie A",
+    ("ligue 1", "france"): "Ligue 1",
 }
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ROOT = Path(__file__).resolve().parents[1]
@@ -113,35 +113,24 @@ def as_number(value: Any) -> float | None:
 def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
     payload = client.get("tournaments?refresh=false", "all_leagues")
     matches: dict[str, dict[str, Any]] = {}
-    target_objects: list[str] = []
-    for item in walk_dicts(payload):
-        raw_label = str(item.get("name", "")).strip().lower()
-        if raw_label in TARGET_TOURNAMENTS:
-            # Safe diagnostics only: these reveal the response shape, never
-            # secret values or the full API response.
-            target_objects.append(
-                f"{item.get('name')!s} keys={','.join(sorted(item.keys()))}"
-            )
-        # The all-leagues response can contain teams, categories and seasons.
-        # Only `uniqueTournament` is the canonical tournament entity; generic
-        # recursive `{id, name}` discovery previously selected wrong IDs.
-        candidates = []
-        if isinstance(item.get("uniqueTournament"), dict):
-            candidates.append(item["uniqueTournament"])
-        if isinstance(item.get("uniqueTournaments"), list):
-            candidates.extend(candidate for candidate in item["uniqueTournaments"] if isinstance(candidate, dict))
-        for candidate in candidates:
-            identifier = candidate.get("id")
-            label = str(candidate.get("name", "")).strip()
-            canonical_name = TARGET_TOURNAMENTS.get(label.lower())
-            if identifier is None or not canonical_name:
-                continue
+    # The scoped all-leagues endpoint returns direct league records.  The
+    # country qualifier prevents unrelated competitions also called e.g.
+    # "Premier League" from entering the five-major-league population.
+    leagues = payload.get("leagues") if isinstance(payload, dict) else None
+    for candidate in leagues if isinstance(leagues, list) else []:
+        if not isinstance(candidate, dict):
+            continue
+        identifier = candidate.get("id")
+        key = (
+            str(candidate.get("name", "")).strip().lower(),
+            str(candidate.get("countryName", "")).strip().lower(),
+        )
+        canonical_name = TARGET_TOURNAMENTS.get(key)
+        if identifier is not None and canonical_name:
             matches.setdefault(canonical_name, {"id": identifier, "name": canonical_name})
     if not matches:
         root_keys = ",".join(sorted(payload.keys())) if isinstance(payload, dict) else type(payload).__name__
-        print(f"No canonical tournaments found. Root keys: {root_keys}")
-        for description in target_objects[:10]:
-            print(f"Target-label response shape: {description}")
+        print(f"No target leagues found. Root keys: {root_keys}")
     return [matches[name] for name in sorted(matches)]
 
 
