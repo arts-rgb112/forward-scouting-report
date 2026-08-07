@@ -246,10 +246,10 @@ def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]],
         writer = csv.DictWriter(target, fieldnames=OUTPUT_FIELDS)
         writer.writeheader(); writer.writerows(output)
     with (DATA_DIR / "unmatched_sportsapi_players.csv").open("w", encoding="utf-8", newline="") as target:
-        writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "name", "team_name"])
+        writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "name", "team_name"], extrasaction="ignore")
         writer.writeheader(); writer.writerows(unmatched)
     with (DATA_DIR / "auto_matched_fotmob_players.csv").open("w", encoding="utf-8", newline="") as target:
-        writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "fotmob_player_id", "name", "team_name"])
+        writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "fotmob_player_id", "name", "team_name"], extrasaction="ignore")
         writer.writeheader(); writer.writerows(auto_mapped)
 
 
