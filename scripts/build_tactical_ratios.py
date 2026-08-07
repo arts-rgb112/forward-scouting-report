@@ -205,7 +205,8 @@ def main() -> None:
         if not season:
             continue
         season_id = season["id"]
-        ranking = client.get(f"tournaments/{tournament['id']}/season/{season_id}/top-players", "tournament")
+        print(f"Processing {tournament['name']}: tournament={tournament['id']}, season={season_id}")
+        ranking = client.get(f"tournament/{tournament['id']}/season/{season_id}/top-players", "tournament")
         for sports_id, player in discover_players(ranking).items():
             try:
                 profile = client.get(f"players/{sports_id}", "player")
