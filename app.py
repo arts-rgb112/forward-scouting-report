@@ -43,9 +43,9 @@ def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, select
         return
 
     x_median = matrix["net_progression_per90"].median()
-    y_median = matrix["xgot_minus_xg"].median()
+    y_median = matrix["in_box_xgot_minus_xg"].median()
     x_min, x_max = matrix["net_progression_per90"].min(), matrix["net_progression_per90"].max()
-    y_min, y_max = matrix["xgot_minus_xg"].min(), matrix["xgot_minus_xg"].max()
+    y_min, y_max = matrix["in_box_xgot_minus_xg"].min(), matrix["in_box_xgot_minus_xg"].max()
     x_pad = max((x_max - x_min) * 0.12, 0.15)
     y_pad = max((y_max - y_min) * 0.12, 0.10)
     x_range = [x_min - x_pad, x_max + x_pad]
@@ -57,23 +57,23 @@ def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, select
     
     figure = go.Figure()
     figure.add_trace(go.Scatter(
-        x=background["net_progression_per90"], y=background["xgot_minus_xg"], mode="markers",
-        customdata=background[["player_name", "team_name", "net_progression_per90", "xgot_minus_xg"]],
+        x=background["net_progression_per90"], y=background["in_box_xgot_minus_xg"], mode="markers",
+        customdata=background[["player_name", "team_name", "net_progression_per90", "in_box_xgot_minus_xg"]],
         marker={"size": 10, "color": "rgba(140, 140, 140, 0.45)"},
         hovertemplate=("<b>%{customdata[0]}</b><br>%{customdata[1]}<br>"
                        "Net Progression /90: %{customdata[2]:.2f}<br>"
-                       "xGOT - xG: %{customdata[3]:.2f}<extra></extra>"),
+                       "In-Box xGOT - xG: %{customdata[3]:.2f}<extra></extra>"),
         name="비교군",
     ))
     if not highlighted.empty:
         figure.add_trace(go.Scatter(
-            x=highlighted["net_progression_per90"], y=highlighted["xgot_minus_xg"], mode="markers+text",
+            x=highlighted["net_progression_per90"], y=highlighted["in_box_xgot_minus_xg"], mode="markers+text",
             text=[selected_name], textposition="top center",
-            customdata=highlighted[["player_name", "team_name", "net_progression_per90", "xgot_minus_xg"]],
+            customdata=highlighted[["player_name", "team_name", "net_progression_per90", "in_box_xgot_minus_xg"]],
             marker={"size": 17, "color": "#F4C542", "line": {"color": "#E63946", "width": 2}},
             hovertemplate=("<b>%{customdata[0]}</b><br>%{customdata[1]}<br>"
                            "Net Progression /90: %{customdata[2]:.2f}<br>"
-                           "xGOT - xG: %{customdata[3]:.2f}<extra></extra>"),
+                           "In-Box xGOT - xG: %{customdata[3]:.2f}<extra></extra>"),
             name="선택 선수",
         ))
 
@@ -94,7 +94,7 @@ def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, select
         margin={"l": 25, "r": 25, "t": 45, "b": 25}, showlegend=False,
         title="전술 사분면 매트릭스",
         xaxis={"title": "Net Progression / 90분", "range": x_range, "zeroline": True},
-        yaxis={"title": "xGOT - xG", "range": y_range, "zeroline": True},
+        yaxis={"title": "In-Box xGOT - xG", "range": y_range, "zeroline": True},
     )
     st.plotly_chart(figure, use_container_width=True, config={"displaylogo": False})
 
@@ -274,7 +274,7 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
                         "player_id": str(player.player_id), "player_name": player.name,
                         "team_name": stats.team_name or "", 
                         "net_progression_per90": net_progression,  # 수정한 지역 변수 사용
-                        "xgot_minus_xg": stats.shot_quality,
+                        "in_box_xgot_minus_xg": stats.in_box_finishing,
                     }])], ignore_index=True)
                 st.caption("📊 전술 사분면 매트릭스")
                 render_tactical_matrix(matrix, player.player_id, player.name)
@@ -298,31 +298,33 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
                 expanded=True,
             ):
                 st.caption("성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
-                render_unified_bar("성공 드리블", dribbles_succeeded, medians.get("dribbles_succeeded_per90"),
-                                   get_rank("dribbles_succeeded_per90_top_percent"), get_rank("dribbles_succeeded_per90_rank"), progression_eligible, "/90분")
-                render_unified_bar("실패 드리블", dribbles_failed, medians.get("dribbles_failed_per90"),
-                                   get_rank("dribbles_failed_per90_top_percent"), get_rank("dribbles_failed_per90_rank"), progression_eligible, "/90분")
-                render_unified_bar("볼 경합 성공", duels_won, medians.get("duels_won_per90"),
-                                   get_rank("duels_won_per90_top_percent"), get_rank("duels_won_per90_rank"), progression_eligible, "/90분")
-                render_unified_bar("볼 경합 실패", duels_lost, medians.get("duels_lost_per90"),
-                                   get_rank("duels_lost_per90_top_percent"), get_rank("duels_lost_per90_rank"), progression_eligible, "/90분")
-                render_unified_bar("공중볼 경합 성공", aerial_won, medians.get("aerial_duels_won_per90"),
-                                   get_rank("aerials_won_per90_top_percent"), get_rank("aerials_won_per90_rank"), progression_eligible, "/90분")
-                render_unified_bar("공중볼 경합 실패", aerial_lost, medians.get("aerial_duels_lost_per90"),
-                                   get_rank("aerials_lost_per90_top_percent"), get_rank("aerials_lost_per90_rank"), progression_eligible, "/90분")
-                render_unified_bar("순수 전진 기여도", net_progression, medians.get("net_progression_per90"),
-                                   get_rank("net_progression_top_percent"), get_rank("net_progression_rank"), progression_eligible, "/90분")
+                tab_dribble, tab_duel, tab_aerial, tab_total = st.tabs(["🤹 드리블", "⚔️ 지상 경합", "✈️ 공중볼", "🚀 종합 기여도"])
+                with tab_dribble:
+                    render_unified_bar("성공 드리블", dribbles_succeeded, medians.get("dribbles_succeeded_per90"), get_rank("dribbles_succeeded_per90_top_percent"), get_rank("dribbles_succeeded_per90_rank"), progression_eligible, "/90분")
+                    render_unified_bar("실패 드리블", dribbles_failed, medians.get("dribbles_failed_per90"), get_rank("dribbles_failed_per90_top_percent"), get_rank("dribbles_failed_per90_rank"), progression_eligible, "/90분")
+                    render_unified_bar("드리블 마진", stats.dribble_margin_per90, medians.get("dribble_margin_per90"), get_rank("dribble_margin_per90_top_percent"), get_rank("dribble_margin_per90_rank"), progression_eligible, "/90분")
+                with tab_duel:
+                    render_unified_bar("볼 경합 성공", duels_won, medians.get("duels_won_per90"), get_rank("duels_won_per90_top_percent"), get_rank("duels_won_per90_rank"), progression_eligible, "/90분")
+                    render_unified_bar("볼 경합 실패", duels_lost, medians.get("duels_lost_per90"), get_rank("duels_lost_per90_top_percent"), get_rank("duels_lost_per90_rank"), progression_eligible, "/90분")
+                    render_unified_bar("볼 경합 마진", stats.duel_margin_per90, medians.get("duel_margin_per90"), get_rank("duel_margin_per90_top_percent"), get_rank("duel_margin_per90_rank"), progression_eligible, "/90분")
+                with tab_aerial:
+                    render_unified_bar("공중볼 경합 성공", aerial_won, medians.get("aerial_duels_won_per90"), get_rank("aerials_won_per90_top_percent"), get_rank("aerials_won_per90_rank"), progression_eligible, "/90분")
+                    render_unified_bar("공중볼 경합 실패", aerial_lost, medians.get("aerial_duels_lost_per90"), get_rank("aerials_lost_per90_top_percent"), get_rank("aerials_lost_per90_rank"), progression_eligible, "/90분")
+                    render_unified_bar("공중볼 마진", stats.aerial_margin_per90, medians.get("aerial_margin_per90"), get_rank("aerial_margin_per90_top_percent"), get_rank("aerial_margin_per90_rank"), progression_eligible, "/90분")
+                with tab_total:
+                    render_unified_bar("순수 전진 기여도", net_progression, medians.get("net_progression_per90"), get_rank("net_progression_top_percent"), get_rank("net_progression_rank"), progression_eligible, "/90분")
 
             st.divider()
             
             if rank and rank.eligible_players:
                 with st.expander(f"🎯 결정력 상대평가 · 동일 대회 xG {minimum_xg} 이상 {rank.eligible_players}명", expanded=True):
-                    render_unified_bar("득점", stats.goals, rank.goals_median,
-                                       rank.goals_top_percent, rank.goals_rank, rank.eligible_players, "골")
-                    render_unified_bar("순수결정력", stats.shot_quality, rank.shot_quality_median,
-                                       rank.shot_quality_top_percent, rank.shot_quality_rank, rank.eligible_players, "골")
-                    render_unified_bar("결정력+선방", stats.overall_finishing, rank.overall_finishing_median,
-                                       rank.overall_finishing_top_percent, rank.overall_finishing_rank, rank.eligible_players, "골")
+                    st.caption("⭐ 메인 지표 · 박스 안 마무리 / 보조 지표 · 중거리 성향 및 슛 이후 변수")
+                    render_unified_bar("박스 안 순수 결정력", stats.in_box_finishing, rank.in_box_finishing_median,
+                                       rank.in_box_finishing_top_percent, rank.in_box_finishing_rank, progression_eligible, "골")
+                    render_unified_bar("박스 밖 슈팅 퀄리티", stats.out_box_shot_quality, rank.out_box_shot_quality_median,
+                                       rank.out_box_shot_quality_top_percent, rank.out_box_shot_quality_rank, progression_eligible, "골")
+                    render_unified_bar("득점 운 · 상대 선방", stats.luck_or_gk_impact, rank.gk_impact_median,
+                                       rank.gk_impact_top_percent, rank.gk_impact_rank, rank.eligible_players, "골")
             else:
                 st.caption("결정력 상대평가 비교군을 불러오지 못했습니다.")
 

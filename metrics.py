@@ -12,6 +12,7 @@ class DecisionMetrics:
     league_name: Optional[str] = None
     team_id: Optional[int] = None
     team_name: Optional[str] = None
+    position: Optional[str] = None
     goals: Optional[float] = None
     xg: Optional[float] = None
     xgot: Optional[float] = None
@@ -25,6 +26,12 @@ class DecisionMetrics:
     duels_won_percentage: Optional[float] = None
     aerial_duels_won: Optional[float] = None
     aerial_duels_won_percentage: Optional[float] = None
+    in_box_goals: Optional[float] = None
+    in_box_xg: Optional[float] = None
+    in_box_xgot: Optional[float] = None
+    out_box_goals: Optional[float] = None
+    out_box_xg: Optional[float] = None
+    out_box_xgot: Optional[float] = None
 
     @property
     def shot_quality(self) -> Optional[float]:
@@ -42,6 +49,18 @@ class DecisionMetrics:
     def luck_or_gk_impact(self) -> Optional[float]:
         if self.goals is not None and self.xgot is not None:
             return self.goals - self.xgot
+        return None
+
+    @property
+    def in_box_finishing(self) -> Optional[float]:
+        if self.in_box_xgot is not None and self.in_box_xg is not None:
+            return self.in_box_xgot - self.in_box_xg
+        return None
+
+    @property
+    def out_box_shot_quality(self) -> Optional[float]:
+        if self.out_box_xgot is not None and self.out_box_xg is not None:
+            return self.out_box_xgot - self.out_box_xg
         return None
 
     def is_complete(self) -> bool:
@@ -94,6 +113,18 @@ class DecisionMetrics:
         )
 
     @property
+    def dribble_margin_per90(self) -> Optional[float]:
+        return _margin(self.dribbles_succeeded_per90, self.dribbles_failed_per90)
+
+    @property
+    def duel_margin_per90(self) -> Optional[float]:
+        return _margin(self.duels_won_per90, self.duels_lost_per90)
+
+    @property
+    def aerial_margin_per90(self) -> Optional[float]:
+        return _margin(self.aerial_duels_won_per90, self.aerial_duels_lost_per90)
+
+    @property
     def net_progression_per90(self) -> Optional[float]:
         values = (
             self.dribbles_succeeded_per90,
@@ -130,6 +161,36 @@ def _failed_attempts_per90(
     if not 0 < rate <= 1:
         return None
     return succeeded_per90 * (1 - rate) / rate
+
+
+def _margin(successes: Optional[float], failures: Optional[float]) -> Optional[float]:
+    if successes is None or failures is None:
+        return None
+    return successes - failures
+
+
+def _shotmap_zone_totals(shotmap: Any) -> dict[str, float]:
+    """Aggregate FotMob shots using its explicit inside-box flag.
+
+    Coordinates are retained only as a compatibility fallback for historical
+    responses that predate ``isFromInsideBox``.
+    """
+    totals = {f"{zone}_{metric}": 0.0 for zone in ("in_box", "out_box") for metric in ("goals", "xg", "xgot")}
+    if not isinstance(shotmap, list):
+        return totals
+    for shot in shotmap:
+        if not isinstance(shot, dict) or shot.get("isOwnGoal"):
+            continue
+        inside = shot.get("isFromInsideBox")
+        if not isinstance(inside, bool):
+            x, y = _parse_value(shot.get("x")), _parse_value(shot.get("y"))
+            inside = bool(x is not None and y is not None and x >= 83.0 and 21.0 <= y <= 79.0)
+        prefix = "in_box" if inside else "out_box"
+        totals[f"{prefix}_xg"] += _parse_value(shot.get("expectedGoals")) or 0.0
+        totals[f"{prefix}_xgot"] += _parse_value(shot.get("expectedGoalsOnTarget")) or 0.0
+        if str(shot.get("eventType", "")).lower() == "goal" or shot.get("isGoal") is True:
+            totals[f"{prefix}_goals"] += 1.0
+    return totals
 
 
 def _parse_value(val: Any) -> Optional[float]:
@@ -267,6 +328,11 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
     if not isinstance(records, list):
         return seasons_data
 
+    base = raw_data.get("base", {}) if isinstance(raw_data, dict) else {}
+    primary_position = _find_by_key(base, {"primaryPosition"})
+    if isinstance(primary_position, dict):
+        primary_position = primary_position.get("label") or primary_position.get("key")
+
     for record in records:
         if not isinstance(record, dict):
             continue
@@ -300,6 +366,7 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
         elif "champions" in lname_lower: league_id = 42
 
         stats_payload = record.get("stats")
+        zone_totals = _shotmap_zone_totals(stats_payload.get("shotmap") if isinstance(stats_payload, dict) else None)
 
         goals = _find_stat_by_title(stats_payload, _GOALS_TITLES)
         xg = _find_stat_by_title(stats_payload, _XG_TITLES)
@@ -335,6 +402,7 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
             league_name=str(l_name),
             team_id=int(team_id) if isinstance(team_id, (int, float, str)) and str(team_id).isdigit() else None,
             team_name=str(team_name) if team_name else None,
+            position=str(primary_position) if primary_position else None,
             goals=goals,
             xg=xg,
             xgot=xgot,
@@ -348,6 +416,7 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
             duels_won_percentage=duels_won_percentage,
             aerial_duels_won=aerial_duels_won,
             aerial_duels_won_percentage=aerial_duels_won_percentage,
+            **zone_totals,
         )
 
         if unique_key in seasons_data:
@@ -365,6 +434,10 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
             if ext.duels_won_percentage is None and new_metric.duels_won_percentage is not None: ext.duels_won_percentage = new_metric.duels_won_percentage
             if ext.aerial_duels_won is None and new_metric.aerial_duels_won is not None: ext.aerial_duels_won = new_metric.aerial_duels_won
             if ext.aerial_duels_won_percentage is None and new_metric.aerial_duels_won_percentage is not None: ext.aerial_duels_won_percentage = new_metric.aerial_duels_won_percentage
+            if ext.position is None and new_metric.position is not None: ext.position = new_metric.position
+            for attr in ("in_box_goals", "in_box_xg", "in_box_xgot", "out_box_goals", "out_box_xg", "out_box_xgot"):
+                if getattr(ext, attr) is None and getattr(new_metric, attr) is not None:
+                    setattr(ext, attr, getattr(new_metric, attr))
         else:
             seasons_data[unique_key] = new_metric
 
