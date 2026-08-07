@@ -29,6 +29,9 @@ class LeaguePercentiles:
     gk_impact_top_percent: Optional[float]
     gk_impact_rank: Optional[int]
     eligible_players: int
+    goals_median: Optional[float] = None
+    shot_quality_median: Optional[float] = None
+    overall_finishing_median: Optional[float] = None
     
     duels_pct_top_percent: Optional[float] = None
     duels_pct_rank: Optional[int] = None
@@ -270,7 +273,7 @@ def _fetch_fallback_xgot(season: str, pids: tuple) -> dict:
     return mapping
 
 
-def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 5.0) -> LeaguePercentiles:
+def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 3.0) -> LeaguePercentiles:
     if metrics.league_id is None:
         return LeaguePercentiles(None, None, None, None, None, None, None, None, None, None, 0)
     
@@ -315,6 +318,10 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
     shot_quality_population = [xgot_by_player.get(key, 0.0) - xg for key, xg in xg_by_player.items() if key in valid_pids and key in xgot_by_player]
     overall_finishing_population = [goals_by_player.get(key, 0.0) - xg for key, xg in xg_by_player.items() if key in valid_pids]
     gk_impact_population = [goals_by_player.get(key, 0.0) - xgot_by_player.get(key, 0.0) for key, xg in xg_by_player.items() if key in valid_pids and key in xgot_by_player]
+
+    goals_median = float(pd.Series(goal_population).median()) if goal_population else None
+    shot_quality_median = float(pd.Series(shot_quality_population).median()) if shot_quality_population else None
+    overall_finishing_median = float(pd.Series(overall_finishing_population).median()) if overall_finishing_population else None
         
     goals_pct, goals_rk = _rank_info(player_goals, goal_population)
     xg_pct, xg_rk = _rank_info(player_xg, xg_population)
@@ -360,6 +367,9 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
         gk_impact_top_percent=gk_pct,
         gk_impact_rank=gk_rk,
         eligible_players=eligible_players_count,
+        goals_median=goals_median,
+        shot_quality_median=shot_quality_median,
+        overall_finishing_median=overall_finishing_median,
         duels_pct_top_percent=duels_pct,
         duels_pct_rank=duels_rk,
         duels_eligible=duels_eligible,
