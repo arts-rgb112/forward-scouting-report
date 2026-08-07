@@ -10,6 +10,7 @@ from rankings import (
     get_tactical_matrix,
     get_top_leagues_shot_quality,
 )
+from tactical_ratio import get_tactical_ratio
 
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="wide")
 
@@ -24,28 +25,29 @@ def cached_player_data(player_id: str):
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_percentiles(
     player_id: str, season: str, metrics: DecisionMetrics, min_xg: float,
-    restrict_to_forwards: bool,
+    restrict_to_forwards: bool, minimum_final_third_ratio: int,
 ):
     return calculate_league_percentiles(
         player_id, season, metrics, minimum_xg=min_xg,
         restrict_to_forwards=restrict_to_forwards,
+        minimum_final_third_ratio=minimum_final_third_ratio,
     )
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def cached_top20():
-    return get_top_leagues_shot_quality("25/26")
+def cached_top20(minimum_final_third_ratio: int):
+    return get_top_leagues_shot_quality("25/26", minimum_final_third_ratio)
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_league_medians(
-    league_id: int, season_name: str, restrict_to_forwards: bool,
+    league_id: int, season_name: str, restrict_to_forwards: bool, minimum_final_third_ratio: int,
 ) -> dict[str, float | None]:
-    return get_league_metric_medians(league_id, season_name, restrict_to_forwards)
+    return get_league_metric_medians(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_tactical_matrix(
-    league_id: int, season_name: str, restrict_to_forwards: bool,
+    league_id: int, season_name: str, restrict_to_forwards: bool, minimum_final_third_ratio: int,
 ) -> pd.DataFrame:
-    return get_tactical_matrix(league_id, season_name, restrict_to_forwards)
+    return get_tactical_matrix(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
 
 
 RADAR_AXES = [
@@ -105,7 +107,31 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
-def build_radar_profile(player, selected_seasons: list[str], competition_filter: str, restrict_to_forwards: bool):
+def render_activity_ratio(player_id: str, player_name: str) -> None:
+    """Render the ETL-backed mid/final-third activity split without live API calls."""
+    ratio = get_tactical_ratio(player_id)
+    st.markdown("#### 🏃 주요 활동 반경")
+    if ratio is None:
+        st.caption("히트맵 비율 데이터가 아직 적재되지 않았습니다.")
+        return
+    mid, final = ratio["mid_third_ratio"], ratio["final_third_ratio"]
+    figure = go.Figure()
+    figure.add_bar(name="미드써드 연계", y=[player_name], x=[mid], orientation="h", marker_color="#3B82F6", text=[f"미드써드 연계 {mid:.0f}%"], textposition="inside")
+    figure.add_bar(name="파이널써드 타격", y=[player_name], x=[final], orientation="h", marker_color="#EF4444", text=[f"파이널써드 타격 {final:.0f}%"], textposition="inside")
+    figure.update_layout(
+        barmode="stack", height=90, margin={"l": 0, "r": 0, "t": 5, "b": 0},
+        showlegend=True, legend={"orientation": "h", "y": -0.45},
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        xaxis={"range": [0, 100], "visible": False, "fixedrange": True},
+        yaxis={"visible": False, "fixedrange": True},
+    )
+    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+
+def build_radar_profile(
+    player, selected_seasons: list[str], competition_filter: str,
+    restrict_to_forwards: bool, minimum_final_third_ratio: int,
+):
     """Return the first eligible season's profile for the compare-mode overlay."""
     try:
         seasons = extract_multi_season_metrics(cached_player_data(player.player_id))
@@ -118,7 +144,7 @@ def build_radar_profile(player, selected_seasons: list[str], competition_filter:
                 continue
             if competition_filter == "챔피언스리그" and not is_ucl:
                 continue
-            rank = cached_percentiles(player.player_id, season_str, stats, 1.0, restrict_to_forwards)
+            rank = cached_percentiles(player.player_id, season_str, stats, 1.0, restrict_to_forwards, minimum_final_third_ratio)
             return make_radar_profile(f"{player.name} · {season_str}", rank)
     except Exception:
         return None
@@ -304,7 +330,7 @@ def select_player(query: str, key: str):
 
 def render_player_report(
     player, selected_seasons: list[str], competition_filter: str,
-    restrict_to_forwards: bool,
+    restrict_to_forwards: bool, minimum_final_third_ratio: int,
 ) -> None:
     try:
         with st.spinner(f"{player.name}의 전술 스탯을 분석 중입니다..."):
@@ -317,6 +343,7 @@ def render_player_report(
         return
 
     st.subheader(player.name)
+    render_activity_ratio(player.player_id, player.name)
     for season_key, stats in seasons.items():
         season_str = season_key.split("_", 1)[0]
         is_ucl = stats.league_id == 42 or "champions" in (stats.league_name or "").lower()
@@ -353,7 +380,7 @@ def render_player_report(
             # -----------------------------------------------------------
 
             try:
-                medians = cached_league_medians(stats.league_id, season_name, restrict_to_forwards)
+                medians = cached_league_medians(stats.league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
             except Exception:
                 medians = {}
 
@@ -362,6 +389,7 @@ def render_player_report(
                 rank = cached_percentiles(
                     player.player_id, season_str, stats, min_xg=minimum_xg,
                     restrict_to_forwards=restrict_to_forwards,
+                    minimum_final_third_ratio=minimum_final_third_ratio,
                 )
             except Exception:
                 rank = None
@@ -372,7 +400,7 @@ def render_player_report(
             )
 
             try:
-                matrix = cached_tactical_matrix(stats.league_id, season_name, restrict_to_forwards)
+                matrix = cached_tactical_matrix(stats.league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
                 if str(player.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist():
                     matrix = pd.concat([matrix, pd.DataFrame([{
                         "player_id": str(player.player_id), "player_name": player.name,
@@ -438,6 +466,11 @@ def main() -> None:
         value=True,
         help="켜면 Striker, Forward, Attacker, CF, 좌·우 윙어, 공격형 미드필더만 비교합니다. 끄면 동일 대회에서 볼 경합 성공 1회 이상인 모든 포지션을 비교합니다.",
     )
+    minimum_final_third_ratio = st.slider(
+        "파이널써드 활동 비중 최소 조건 (%)",
+        min_value=0, max_value=100, value=0,
+        help="선택한 비율 이상인 선수만 모든 상대평가의 비교군에 포함합니다.",
+    )
 
     if compare_mode:
         left, right = st.columns(2)
@@ -447,28 +480,28 @@ def main() -> None:
             right_player = select_player(st.text_input("오른쪽 선수 검색", key="right_query", placeholder="예: Robert Lewandowski"), "right_player")
         if left_player and right_player:
             profiles = [
-                build_radar_profile(left_player, selected_seasons, competition_filter, restrict_to_forwards),
-                build_radar_profile(right_player, selected_seasons, competition_filter, restrict_to_forwards),
+                build_radar_profile(left_player, selected_seasons, competition_filter, restrict_to_forwards, minimum_final_third_ratio),
+                build_radar_profile(right_player, selected_seasons, competition_filter, restrict_to_forwards, minimum_final_third_ratio),
             ]
             render_radar_chart([profile for profile in profiles if profile], "🕸️ 전술 프로필 비교 · 전문 공격수 백분위")
             st.divider()
             left, right = st.columns(2)
             with left:
-                render_player_report(left_player, selected_seasons, competition_filter, restrict_to_forwards)
+                render_player_report(left_player, selected_seasons, competition_filter, restrict_to_forwards, minimum_final_third_ratio)
             with right:
-                render_player_report(right_player, selected_seasons, competition_filter, restrict_to_forwards)
+                render_player_report(right_player, selected_seasons, competition_filter, restrict_to_forwards, minimum_final_third_ratio)
         return
 
     player = select_player(st.text_input("🔍 선수 이름 검색", placeholder="예: Erling Haaland, Lamine Yamal"), "single_player")
     if player:
         st.divider()
-        render_player_report(player, selected_seasons, competition_filter, restrict_to_forwards)
+        render_player_report(player, selected_seasons, competition_filter, restrict_to_forwards, minimum_final_third_ratio)
         return
 
     st.divider()
     st.subheader("🏆 25/26 시즌 박스 안 순수 결정력 (xGOT-xG) Top 20")
     try:
-        ranking_tables = cached_top20()
+        ranking_tables = cached_top20(minimum_final_third_ratio)
         if ranking_tables and not ranking_tables.get("통합", pd.DataFrame()).empty:
             tabs = st.tabs(["통합", "Premier League", "LaLiga", "Bundesliga", "Serie A", "Champions League"])
             for tab, name in zip(tabs, ["통합", "Premier League", "LaLiga", "Bundesliga", "Serie A", "Champions League"]):
