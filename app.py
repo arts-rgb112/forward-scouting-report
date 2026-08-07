@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import json
+import os
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from fotmob_client import FotMobError, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
@@ -104,6 +108,70 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
         showlegend=len(profiles) > 1,
         legend={"orientation": "h", "y": -0.08, "x": 0.5, "xanchor": "center"},
     )
+    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+
+ATTRIBUTE_AXES = [
+    ("공격", "attacking"), ("기술", "technical"), ("전술", "tactical"),
+    ("수비", "defending"), ("창의성", "creativity"),
+]
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_attribute_overviews(player_id: str) -> dict[str, dict[str, float]] | None:
+    """Load the V2 player and position-average 5-axis records for yearShift 0."""
+    api_key = os.getenv("SPORTSAPIPRO_API_KEY", "")
+    try:
+        api_key = api_key or str(st.secrets.get("SPORTSAPIPRO_API_KEY", ""))
+    except (FileNotFoundError, AttributeError):
+        pass
+    if not api_key:
+        return None
+    request = Request(
+        f"https://api.sportsapipro.com/v2/football/players/{player_id}/attribute-overviews",
+        headers={"x-api-key": api_key, "Accept": "application/json", "User-Agent": "ForwardScouting/3.2"},
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, ValueError):
+        return None
+    root = payload.get("data", payload) if isinstance(payload, dict) else {}
+    if not isinstance(root, dict):
+        return None
+    def latest(records: object) -> dict[str, float] | None:
+        if not isinstance(records, list):
+            return None
+        record = next((item for item in records if isinstance(item, dict) and item.get("yearShift") == 0), None)
+        if not isinstance(record, dict):
+            return None
+        values = {}
+        for _, key in ATTRIBUTE_AXES:
+            value = record.get(key)
+            if isinstance(value, (int, float)):
+                values[key] = float(value)
+        return values if len(values) == len(ATTRIBUTE_AXES) else None
+    player = latest(root.get("playerAttributeOverviews"))
+    average = latest(root.get("averageAttributeOverviews"))
+    return {"player": player, "average": average} if player and average else None
+
+
+def render_attribute_overview_radar(player_id: str, player_name: str) -> None:
+    data = cached_attribute_overviews(str(player_id))
+    if not data:
+        st.info("V2 속성 레이더 데이터를 불러올 수 없습니다.")
+        return
+    labels = [label for label, _ in ATTRIBUTE_AXES]
+    player_values = [data["player"][key] for _, key in ATTRIBUTE_AXES]
+    average_values = [data["average"][key] for _, key in ATTRIBUTE_AXES]
+    figure = go.Figure()
+    for name, values, color, fill in (
+        (player_name, player_values, "#22C55E", "rgba(34,197,94,0.28)"),
+        ("동일 포지션 리그 평균", average_values, "#94A3B8", "rgba(148,163,184,0.16)"),
+    ):
+        figure.add_trace(go.Scatterpolar(r=values + [values[0]], theta=labels + [labels[0]], mode="lines+markers", name=name, fill="toself", fillcolor=fill, line={"color": color, "width": 2}))
+    upper = max(100.0, max(player_values + average_values) * 1.1)
+    figure.update_layout(title="📊 V2 속성 레이더 · 선수 vs 동일 포지션 평균", height=400, margin={"l": 35, "r": 35, "t": 55, "b": 25}, paper_bgcolor="rgba(0,0,0,0)", polar={"bgcolor": "rgba(0,0,0,0)", "radialaxis": {"range": [0, upper], "visible": True}}, legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"})
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
@@ -336,7 +404,7 @@ def select_player(query: str, key: str):
 
 def render_player_report(
     player, selected_seasons: list[str], competition_filter: str,
-    restrict_to_forwards: bool, minimum_final_third_ratio: int,
+    restrict_to_forwards: bool, minimum_final_third_ratio: int, show_activity: bool = True,
 ) -> None:
     try:
         with st.spinner(f"{player.name}의 전술 스탯을 분석 중입니다..."):
@@ -349,7 +417,8 @@ def render_player_report(
         return
 
     st.subheader(player.name)
-    render_activity_ratio(player.player_id, player.name)
+    if show_activity:
+        render_activity_ratio(player.player_id, player.name)
     for season_key, stats in seasons.items():
         season_str = season_key.split("_", 1)[0]
         is_ucl = stats.league_id == 42 or "champions" in (stats.league_name or "").lower()
@@ -503,8 +572,13 @@ def render_v32_analysis_center() -> None:
             st.markdown("**S.P.E.A.R.**  \\n슈팅 50% · 수비 부수기 30% · 위치 선정 20%")
             st.caption("1,000분 이상 전문 공격수의 Z-점수를 0~100 점수로 변환합니다.")
             st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
+    radar_col, ratio_col = st.columns(2)
+    with radar_col:
+        render_attribute_overview_radar(player.player_id, player.name)
+    with ratio_col:
+        render_activity_ratio(player.player_id, player.name)
     render_player_report(
-        player, filters["seasons"], "전체", "FW (ST/CF)" in filters["positions"], 0,
+        player, filters["seasons"], "전체", "FW (ST/CF)" in filters["positions"], 0, show_activity=False,
     )
 
 
