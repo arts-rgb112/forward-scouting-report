@@ -123,14 +123,19 @@ def _progression_value(metric: DecisionMetrics) -> Optional[float]:
 
 
 def _is_attacker_or_cf(metric: DecisionMetrics) -> bool:
-    """Keep comparison groups to specialist attacking/central-forward roles."""
+    """Keep comparison groups to specialist forwards, including wingers."""
     position = (metric.position or "").strip().lower()
-    return any(token in position for token in ("attacker", "striker", "forward", "centre-forward", "center-forward", " cf", "st"))
+    return any(token in position for token in (
+        "attacker", "striker", "forward", "centre-forward", "center-forward",
+        "winger", "wide", " cf", "st",
+    ))
 
 
-@functools.lru_cache(maxsize=32)
-def _fetch_elite_dribbler_metrics(league_id: int, season_name: str) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
-    """Build the >=1 won-contest attacker/CF cohort for one league-season."""
+@functools.lru_cache(maxsize=64)
+def _fetch_elite_dribbler_metrics(
+    league_id: int, season_name: str, restrict_to_forwards: bool = True,
+) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
+    """Build a >=1 won-contest cohort, optionally limited to attacking roles."""
     rows = fetch_league_stat_table(league_id, season_name, "won_contest")
     
     # 💡 여기서 2.0을 1.0으로 수정합니다.
@@ -163,19 +168,21 @@ def _fetch_elite_dribbler_metrics(league_id: int, season_name: str) -> tuple[dic
         for player_id, metric in executor.map(fetch_one, successes):
             if metric is not None:
                 metrics_by_player[player_id] = metric
-    metrics_by_player = {
-        player_id: metric for player_id, metric in metrics_by_player.items()
-        if _is_attacker_or_cf(metric)
-    }
+    if restrict_to_forwards:
+        metrics_by_player = {
+            player_id: metric for player_id, metric in metrics_by_player.items()
+            if _is_attacker_or_cf(metric)
+        }
     successes = {player_id: value for player_id, value in successes.items() if player_id in metrics_by_player}
     return metrics_by_player, successes
 
 
 def _calculate_progression_percentiles(
-    player_id: str, league_id: int, season_name: str, player: DecisionMetrics
+    player_id: str, league_id: int, season_name: str, player: DecisionMetrics,
+    restrict_to_forwards: bool = True,
 ) -> dict[str, Optional[float] | Optional[int] | int]:
     try:
-        peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name)
+        peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards)
     except FotMobError:
         peers, successes = {}, {}
 
@@ -219,15 +226,17 @@ def _calculate_progression_percentiles(
     }
 
 
-@functools.lru_cache(maxsize=32)
-def get_league_metric_medians(league_id: int, season_name: str) -> dict[str, float | None]:
+@functools.lru_cache(maxsize=64)
+def get_league_metric_medians(
+    league_id: int, season_name: str, restrict_to_forwards: bool = True,
+) -> dict[str, float | None]:
     """Return comparison-cohort medians for the metrics shown in the report.
 
     The cohort is the same >=1 successful-dribble/90 group used by the tactical
     matrix and percentile bars, so a displayed median never uses a different
     population from the adjacent comparison visualisation.
     """
-    peers, _ = _fetch_elite_dribbler_metrics(league_id, season_name)
+    peers, _ = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards)
     attributes = {
         "dribbles_succeeded_per90": "dribbles_succeeded_per90",
         "dribbles_failed_per90": "dribbles_failed_per90",
@@ -251,14 +260,16 @@ def get_league_metric_medians(league_id: int, season_name: str) -> dict[str, flo
     return medians
 
 
-@functools.lru_cache(maxsize=32)
-def get_tactical_matrix(league_id: int, season_name: str) -> pd.DataFrame:
+@functools.lru_cache(maxsize=64)
+def get_tactical_matrix(
+    league_id: int, season_name: str, restrict_to_forwards: bool = True,
+) -> pd.DataFrame:
     """Return the elite-dribbler cohort used in the tactical quadrant chart.
 
     Both axes are available only after the player-level fetch: Net Progression
     is composed from five event stats, while finishing is in-box xGOT minus xG.
     """
-    peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name)
+    peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards)
     leaderboard_rows = fetch_league_stat_table(league_id, season_name, "won_contest")
     names = {str(row.get("id")): row.get("name", "Unknown") for row in leaderboard_rows}
     rows = []
@@ -305,7 +316,10 @@ def _fetch_fallback_xgot(season: str, pids: tuple) -> dict:
     return mapping
 
 
-def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 3.0) -> LeaguePercentiles:
+def calculate_league_percentiles(
+    player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 3.0,
+    restrict_to_forwards: bool = True,
+) -> LeaguePercentiles:
     if metrics.league_id is None:
         return LeaguePercentiles(None, None, None, None, None, None, None, None, None, None, 0)
     
@@ -382,9 +396,9 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
     duels_pct, duels_rk = None, None
     aerials_pct, aerials_rk = None, None
     progression_percentiles = _calculate_progression_percentiles(
-        player_key, metrics.league_id, season_name, metrics
+        player_key, metrics.league_id, season_name, metrics, restrict_to_forwards
     )
-    peers, _ = _fetch_elite_dribbler_metrics(metrics.league_id, season_name)
+    peers, _ = _fetch_elite_dribbler_metrics(metrics.league_id, season_name, restrict_to_forwards)
     in_box_population = [peer.in_box_finishing for peer in peers.values() if peer.in_box_finishing is not None]
     out_box_population = [peer.out_box_shot_quality for peer in peers.values() if peer.out_box_shot_quality is not None]
     in_box_pct, in_box_rank = _rank_info(metrics.in_box_finishing, in_box_population)

@@ -22,20 +22,30 @@ def cached_player_data(player_id: str):
     return fetch_player_multi_season_data(player_id)
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def cached_percentiles(player_id: str, season: str, metrics: DecisionMetrics, min_xg: float):
-    return calculate_league_percentiles(player_id, season, metrics, minimum_xg=min_xg)
+def cached_percentiles(
+    player_id: str, season: str, metrics: DecisionMetrics, min_xg: float,
+    restrict_to_forwards: bool,
+):
+    return calculate_league_percentiles(
+        player_id, season, metrics, minimum_xg=min_xg,
+        restrict_to_forwards=restrict_to_forwards,
+    )
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_top20():
     return get_top_leagues_shot_quality("25/26")
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def cached_league_medians(league_id: int, season_name: str) -> dict[str, float | None]:
-    return get_league_metric_medians(league_id, season_name)
+def cached_league_medians(
+    league_id: int, season_name: str, restrict_to_forwards: bool,
+) -> dict[str, float | None]:
+    return get_league_metric_medians(league_id, season_name, restrict_to_forwards)
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def cached_tactical_matrix(league_id: int, season_name: str) -> pd.DataFrame:
-    return get_tactical_matrix(league_id, season_name)
+def cached_tactical_matrix(
+    league_id: int, season_name: str, restrict_to_forwards: bool,
+) -> pd.DataFrame:
+    return get_tactical_matrix(league_id, season_name, restrict_to_forwards)
 
 def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, selected_name: str) -> None:
     if matrix.empty:
@@ -215,7 +225,10 @@ def select_player(query: str, key: str):
     labels = [f"{row.name} · {row.team_name}" if row.team_name else row.name for row in candidates]
     return candidates[st.selectbox("선수 선택", range(len(candidates)), format_func=lambda i: labels[i], key=key)]
 
-def render_player_report(player, selected_seasons: list[str], competition_filter: str) -> None:
+def render_player_report(
+    player, selected_seasons: list[str], competition_filter: str,
+    restrict_to_forwards: bool,
+) -> None:
     try:
         with st.spinner(f"{player.name}의 전술 스탯을 분석 중입니다..."):
             seasons = extract_multi_season_metrics(cached_player_data(player.player_id))
@@ -263,12 +276,12 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
             # -----------------------------------------------------------
 
             try:
-                medians = cached_league_medians(stats.league_id, season_name)
+                medians = cached_league_medians(stats.league_id, season_name, restrict_to_forwards)
             except Exception:
                 medians = {}
 
             try:
-                matrix = cached_tactical_matrix(stats.league_id, season_name)
+                matrix = cached_tactical_matrix(stats.league_id, season_name, restrict_to_forwards)
                 if str(player.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist():
                     matrix = pd.concat([matrix, pd.DataFrame([{
                         "player_id": str(player.player_id), "player_name": player.name,
@@ -285,7 +298,10 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
 
             try:
                 minimum_xg = 3.0
-                rank = cached_percentiles(player.player_id, season_str, stats, min_xg=minimum_xg)
+                rank = cached_percentiles(
+                    player.player_id, season_str, stats, min_xg=minimum_xg,
+                    restrict_to_forwards=restrict_to_forwards,
+                )
             except Exception:
                 rank = None
 
@@ -293,8 +309,9 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
                 return getattr(rank, attr, None) if rank else None
 
             progression_eligible = get_rank("progression_eligible") or 0
+            cohort_label = "전문 공격수·윙어" if restrict_to_forwards else "포지션 전체"
             with st.expander(
-                f"🏃 순수 전진 기여도 상대평가 · 동일 대회 볼 경합 성공 1회 이상 {progression_eligible}명",
+                f"🏃 순수 전진 기여도 상대평가 · {cohort_label} · 볼 경합 성공 1회 이상 {progression_eligible}명",
                 expanded=True,
             ):
                 st.caption("성공 드리블 + 획득 파울 + 획득 PK + 볼 경합 성공 + 공중볼 경합 성공 − 볼 경합 실패 − 공중볼 경합 실패 − 실패 드리블 − 볼 뺏김")
@@ -334,6 +351,11 @@ def main() -> None:
     selected_seasons = st.multiselect("📊 조회할 시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], default=["25/26", "24/25"])
     competition_filter = st.radio("대회", ["전체", "리그", "챔피언스리그"], horizontal=True)
     compare_mode = st.toggle("선수 비교 모드")
+    restrict_to_forwards = st.toggle(
+        "전문 공격수·윙어 비교군만 사용",
+        value=True,
+        help="켜면 Striker, Forward, Attacker, CF와 좌·우 윙어만 비교합니다. 끄면 동일 대회에서 볼 경합 성공 1회 이상인 모든 포지션을 비교합니다.",
+    )
 
     if compare_mode:
         left, right = st.columns(2)
@@ -345,15 +367,15 @@ def main() -> None:
             st.divider()
             left, right = st.columns(2)
             with left:
-                render_player_report(left_player, selected_seasons, competition_filter)
+                render_player_report(left_player, selected_seasons, competition_filter, restrict_to_forwards)
             with right:
-                render_player_report(right_player, selected_seasons, competition_filter)
+                render_player_report(right_player, selected_seasons, competition_filter, restrict_to_forwards)
         return
 
     player = select_player(st.text_input("🔍 선수 이름 검색", placeholder="예: Erling Haaland, Lamine Yamal"), "single_player")
     if player:
         st.divider()
-        render_player_report(player, selected_seasons, competition_filter)
+        render_player_report(player, selected_seasons, competition_filter, restrict_to_forwards)
         return
 
     st.divider()
