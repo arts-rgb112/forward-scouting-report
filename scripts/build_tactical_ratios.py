@@ -216,6 +216,19 @@ def heat_ratio(payload: Any) -> tuple[int, int, int, int] | None:
     return rounded[0], rounded[1], rounded[2], total
 
 
+def heatmap_visual_points(payload: Any, limit: int = 180) -> list[list[float]]:
+    """Keep a bounded deterministic coordinate sample for static pitch rendering."""
+    points = []
+    for item in walk_dicts(payload):
+        x, y = as_number(item.get("x")), as_number(item.get("y"))
+        if x is not None and y is not None and 0 <= x <= 100 and 0 <= y <= 100:
+            points.append([round(x, 2), round(y, 2)])
+    if len(points) <= limit:
+        return points
+    stride = len(points) / limit
+    return [points[int(index * stride)] for index in range(limit)]
+
+
 def read_fotmob_map(path: Path) -> dict[str, str]:
     if not path.exists():
         return {}
@@ -248,7 +261,7 @@ def read_checkpoint(path: Path) -> list[dict[str, str]]:
         return [row for row in csv.DictReader(source) if row.get("sportsapi_player_id") and row.get("tournament_id") and row.get("season_id")]
 
 
-def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]], auto_mapped: list[dict[str, Any]]) -> None:
+def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]], auto_mapped: list[dict[str, Any]], visual_points: dict[str, list[list[float]]]) -> None:
     with (DATA_DIR / "tactical_3zone_ratio.csv").open("w", encoding="utf-8", newline="") as target:
         writer = csv.DictWriter(target, fieldnames=OUTPUT_FIELDS)
         writer.writeheader(); writer.writerows(output)
@@ -258,6 +271,8 @@ def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]],
     with (DATA_DIR / "auto_matched_fotmob_players.csv").open("w", encoding="utf-8", newline="") as target:
         writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "fotmob_player_id", "name", "team_name"], extrasaction="ignore")
         writer.writeheader(); writer.writerows(auto_mapped)
+    with (DATA_DIR / "tactical_heatmap_points.json").open("w", encoding="utf-8") as target:
+        json.dump(visual_points, target, ensure_ascii=False, separators=(",", ":"))
 
 
 def main() -> None:
@@ -281,7 +296,14 @@ def main() -> None:
     # A legacy two-zone row cannot be a valid checkpoint for the new schema.
     # The first 3-Zone refresh must re-read each eligible heatmap once.
     output = read_checkpoint(output_path)
-    completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output}
+    point_path = DATA_DIR / "tactical_heatmap_points.json"
+    try:
+        visual_points = json.loads(point_path.read_text(encoding="utf-8")) if point_path.exists() else {}
+    except (OSError, ValueError):
+        visual_points = {}
+    if not visual_points:
+        output = []
+    completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output if str(row.get("fotmob_player_id", "")) in visual_points}
     unmatched, auto_mapped = [], []
     for tournament in discover_tournaments(client):
         try:
@@ -328,6 +350,7 @@ def main() -> None:
             if sports_id not in id_map:
                 auto_mapped.append({"sportsapi_player_id": sports_id, "fotmob_player_id": fotmob_id, **player})
             in_box, out_box_final, mid, samples = ratios
+            visual_points[str(fotmob_id)] = heatmap_visual_points(heatmap)
             output.append({
                 "fotmob_player_id": fotmob_id, "sportsapi_player_id": sports_id,
                 "player_name": player["name"], "team_name": player["team_name"],
@@ -338,11 +361,11 @@ def main() -> None:
             })
             counts["mapped"] += 1
         # A successful league survives a later rate-limit/network failure.
-        write_outputs(output, unmatched, auto_mapped)
+        write_outputs(output, unmatched, auto_mapped, visual_points)
         print(f"{tournament['name']} pipeline counts: {counts}")
         # Bounded, non-identifying diagnostics for API position-code mapping.
         print(f"{tournament['name']} position labels: {position_labels.most_common(12)}")
-    write_outputs(output, unmatched, auto_mapped)
+    write_outputs(output, unmatched, auto_mapped, visual_points)
     print(f"Wrote {len(output)} matched ratios ({len(auto_mapped)} auto-mapped) and {len(unmatched)} unmatched players.")
 
 
