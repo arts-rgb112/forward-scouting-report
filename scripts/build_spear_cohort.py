@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from fotmob_client import FotMobError, fetch_league_stat_table
-from rankings import _fetch_live_spear_cohort
+from rankings import _fetch_live_spear_cohort, spear_minimum_minutes
 from spear_cohort import CSV_FIELDS, DATA_PATH
 
 
@@ -47,7 +47,8 @@ def build(season_name: str) -> list[dict[str, object]]:
                 "season_name": season_name,
                 **asdict(metric),
             })
-        print(f"{competition_name}: cached {len(metrics_by_player)} F/M 900+ xG1+ players")
+        minimum_minutes = int(spear_minimum_minutes(league_id))
+        print(f"{competition_name}: cached {len(metrics_by_player)} F/M {minimum_minutes}+ xG1+ players")
     return output
 
 

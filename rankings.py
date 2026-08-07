@@ -19,7 +19,17 @@ from tactical_ratio import passes_final_third_filter
 
 
 MINIMUM_SPEAR_MINUTES = 900.0
+MINIMUM_CHAMPIONS_LEAGUE_SPEAR_MINUTES = 270.0
 MINIMUM_SPEAR_XG = 1.0
+
+
+def spear_minimum_minutes(league_id: int | None) -> float:
+    """Use a lower reliability floor for the smaller Champions League sample."""
+    return (
+        MINIMUM_CHAMPIONS_LEAGUE_SPEAR_MINUTES
+        if league_id == 42
+        else MINIMUM_SPEAR_MINUTES
+    )
 
 
 @dataclass(frozen=True)
@@ -153,7 +163,7 @@ def _fetch_live_spear_cohort(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
     minimum_final_third_ratio: int = 0,
 ) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
-    """Build the competition-season cohort from every 900+ minute, xG>=1 player.
+    """Build the competition-season cohort from F/M players meeting its time floor.
 
     FotMob's minutes leaderboard currently returns an empty list, while its
     won-contest endpoint returns the complete player directory.  The latter is
@@ -192,17 +202,18 @@ def _fetch_live_spear_cohort(
         for player_id, metric in executor.map(fetch_one, successes):
             if metric is not None:
                 metrics_by_player[player_id] = metric
+    minimum_minutes = spear_minimum_minutes(league_id)
     if restrict_to_forwards:
         metrics_by_player = {
             player_id: metric for player_id, metric in metrics_by_player.items()
             if _is_forward_or_midfielder(metric)
-            and (metric.minutes_played or 0.0) >= MINIMUM_SPEAR_MINUTES
+            and (metric.minutes_played or 0.0) >= minimum_minutes
             and (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
         }
     else:
         metrics_by_player = {
             player_id: metric for player_id, metric in metrics_by_player.items()
-            if (metric.minutes_played or 0.0) >= MINIMUM_SPEAR_MINUTES
+            if (metric.minutes_played or 0.0) >= minimum_minutes
             and (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
         }
     metrics_by_player = {
@@ -224,7 +235,10 @@ def _fetch_elite_dribbler_metrics(
         if static_metrics:
             static_metrics = {
                 player_id: metric for player_id, metric in static_metrics.items()
-                if passes_final_third_filter(player_id, minimum_final_third_ratio)
+                if (not restrict_to_forwards or _is_forward_or_midfielder(metric))
+                and (metric.minutes_played or 0.0) >= spear_minimum_minutes(league_id)
+                and (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
+                and passes_final_third_filter(player_id, minimum_final_third_ratio)
             }
             return static_metrics, {player_id: 0.0 for player_id in static_metrics}
     return _fetch_live_spear_cohort(
@@ -290,7 +304,7 @@ def get_league_metric_medians(
 ) -> dict[str, float | None]:
     """Return comparison-cohort medians for the metrics shown in the report.
 
-    The cohort is the same F/M, 900-minute competition-season group used by
+    The cohort is the same competition-specific F/M minutes group used by
     the tactical matrix and percentile bars, so adjacent visuals use the same
     population.
     """
@@ -462,7 +476,7 @@ def calculate_league_percentiles(
         player_key, metrics.league_id, season_name, metrics, restrict_to_forwards, minimum_final_third_ratio
     )
     peers, _ = _fetch_elite_dribbler_metrics(metrics.league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
-    # Keep the S.P.E.A.R. shooting factor on the exact same F/M + 900-minute
+    # Keep the S.P.E.A.R. shooting factor on the exact same F/M time-floor
     # competition cohort as the other five radar axes.
     spear_shot_quality_population = [
         peer.xgot - peer.xg for peer in peers.values()
@@ -478,7 +492,7 @@ def calculate_league_percentiles(
     in_box_pct, in_box_rank = _rank_info(metrics.in_box_finishing, in_box_population)
     out_box_pct, out_box_rank = _rank_info(metrics.out_box_shot_quality, out_box_population)
     # The volume radar deliberately uses season totals, rather than /90 rates.
-    # Every population below is the exact F/M + 900 minutes + xG 1 cohort used
+    # Every population below is the exact F/M, competition-specific time floor
     # by the ratio radar, so the two views remain directly comparable.
     def volume_rank(attr: str) -> tuple[Optional[float], Optional[int]]:
         population = [getattr(peer, attr) for peer in peers.values() if getattr(peer, attr, None) is not None]
