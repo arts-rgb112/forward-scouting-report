@@ -14,6 +14,7 @@ from fotmob_client import (
     fetch_player_multi_season_data,
 )
 from metrics import DecisionMetrics, extract_multi_season_metrics
+from spear_cohort import get_static_spear_cohort
 from tactical_ratio import passes_final_third_filter
 
 
@@ -135,7 +136,7 @@ def _is_forward_or_midfielder(metric: DecisionMetrics) -> bool:
 
 
 @functools.lru_cache(maxsize=64)
-def _fetch_elite_dribbler_metrics(
+def _fetch_live_spear_cohort(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
     minimum_final_third_ratio: int = 0,
 ) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
@@ -197,6 +198,25 @@ def _fetch_elite_dribbler_metrics(
     }
     successes = {player_id: value for player_id, value in successes.items() if player_id in metrics_by_player}
     return metrics_by_player, successes
+
+
+@functools.lru_cache(maxsize=64)
+def _fetch_elite_dribbler_metrics(
+    league_id: int, season_name: str, restrict_to_forwards: bool = True,
+    minimum_final_third_ratio: int = 0,
+) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
+    """Prefer the static cohort; retain live FotMob as a safe bootstrap fallback."""
+    if restrict_to_forwards:
+        static_metrics, _ = get_static_spear_cohort(league_id, season_name)
+        if static_metrics:
+            static_metrics = {
+                player_id: metric for player_id, metric in static_metrics.items()
+                if passes_final_third_filter(player_id, minimum_final_third_ratio)
+            }
+            return static_metrics, {player_id: 0.0 for player_id in static_metrics}
+    return _fetch_live_spear_cohort(
+        league_id, season_name, restrict_to_forwards, minimum_final_third_ratio,
+    )
 
 
 def _calculate_progression_percentiles(
