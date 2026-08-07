@@ -18,6 +18,7 @@ from tactical_ratio import passes_final_third_filter
 
 
 MINIMUM_SPEAR_MINUTES = 900.0
+MINIMUM_SPEAR_XG = 1.0
 
 
 @dataclass(frozen=True)
@@ -138,7 +139,7 @@ def _fetch_elite_dribbler_metrics(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
     minimum_final_third_ratio: int = 0,
 ) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
-    """Build the competition-season cohort from every 900+ minute player.
+    """Build the competition-season cohort from every 900+ minute, xG>=1 player.
 
     The old won-contest seed omitted players with no recorded contest, then the
     detailed-position text matcher removed further valid F/M candidates.
@@ -180,11 +181,13 @@ def _fetch_elite_dribbler_metrics(
             player_id: metric for player_id, metric in metrics_by_player.items()
             if _is_forward_or_midfielder(metric)
             and (metric.minutes_played or 0.0) >= MINIMUM_SPEAR_MINUTES
+            and (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
         }
     else:
         metrics_by_player = {
             player_id: metric for player_id, metric in metrics_by_player.items()
             if (metric.minutes_played or 0.0) >= MINIMUM_SPEAR_MINUTES
+            and (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
         }
     metrics_by_player = {
         player_id: metric for player_id, metric in metrics_by_player.items()
