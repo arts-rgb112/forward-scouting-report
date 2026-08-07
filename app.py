@@ -114,65 +114,195 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
 
 
 SPEAR_FACTOR_AXES = [
-    ("박스 안 결정력", "in_box_finishing_top_percent"),
     ("전체 슈팅 파괴력", "shot_quality_top_percent"),
-    ("득점 기회 포착 (xG/90)", "xg_per90_top_percent"),
-    ("지상 경합 마진", "duel_margin_per90_top_percent"),
-    ("공중볼 장악 마진", "aerial_margin_per90_top_percent"),
-    ("드리블 돌파 마진", "dribble_margin_per90_top_percent"),
+    ("박스 안 결정력", "in_box_finishing_top_percent"),
+    ("자력 전진 및 돌파 능력", "dribble_margin_per90_top_percent"),
+    ("공중볼 장악력", "aerial_margin_per90_top_percent"),
+    ("지상 경합 능력", "duel_margin_per90_top_percent"),
+    ("위치 선정 및 오프더볼", "xg_per90_top_percent"),
 ]
 
+VOLUME_FACTOR_AXES = [
+    ("슈팅 볼륨", "total_shots_volume_top_percent", "total_shots", "total_shots_volume_rank"),
+    ("박스 안 타격 볼륨", "box_shots_volume_top_percent", "in_box_shots", "box_shots_volume_rank"),
+    ("드리블 돌파 시도", "dribble_attempts_volume_top_percent", "dribble_attempts", "dribble_attempts_volume_rank"),
+    ("공중볼 경합 시도", "aerial_duel_attempts_volume_top_percent", "aerial_duel_attempts", "aerial_duel_attempts_volume_rank"),
+    ("지상 경합 시도", "ground_duel_attempts_volume_top_percent", "ground_duel_attempts", "ground_duel_attempts_volume_rank"),
+    ("득점 찬스 관여 볼륨", "xg_volume_top_percent", "xg", "xg_volume_rank"),
+]
 
-SPEAR_FACTOR_DETAILS = {
-    "in_box_finishing_top_percent": ("in_box_finishing", "in_box_finishing_rank", "eligible_players"),
-    "shot_quality_top_percent": ("shot_quality", "shot_quality_rank", "eligible_players"),
-    "xg_per90_top_percent": ("xg_per90", "xg_per90_rank", "progression_eligible"),
-    "duel_margin_per90_top_percent": ("duel_margin_per90", "duel_margin_per90_rank", "progression_eligible"),
-    "aerial_margin_per90_top_percent": ("aerial_margin_per90", "aerial_margin_per90_rank", "progression_eligible"),
-    "dribble_margin_per90_top_percent": ("dribble_margin_per90", "dribble_margin_per90_rank", "progression_eligible"),
+# Every sector deliberately keeps a full 5×5 lookup: volume describes how
+# often a player enters the situation, while ratio describes its efficiency.
+# The wording is rendered only from the two synchronized radar tier results.
+TWIN_SECTOR_MATRIX = {
+    "shooting": {
+        "title": "🎯 슈팅",
+        "volume": "total_shots_volume_top_percent",
+        "ratio": "shot_quality_top_percent",
+        "rows": {
+            "S": {"S": "숨만 쉬어도 득점 찬스를 창출하고 닥치는 대로 꽂아 넣는 전천후 폭격기", "A": "압도적인 타격 볼륨으로 수비진을 끊임없이 두드리며 기어코 득점을 만들어내는 무자비한 머신", "B": "슈팅을 다소 난사하는 경향이 있으나 적극성으로 유효타를 챙기는 볼륨형 피니셔", "C": "찬스는 기가 막히게 많이 잡지만 결정적인 한 방이 부족한 주사위형 포워드", "D": "팀의 공격 기회를 독식하고도 영점이 흔들리는 탐욕형 난사꾼"},
+            "A": {"S": "적극적으로 슈팅을 가져가며 정확도까지 끌어올린 고효율 스나이퍼", "A": "찾아온 찬스를 확실히 슈팅으로 연결하는 순도 높은 해결사", "B": "왕성한 의욕으로 슈팅을 시도하며 준수한 파괴력을 유지하는 실속형 포워드", "C": "시도 자체는 훌륭하나 결정력이 아쉬워 득점으로 잘 이어지지 않는 자원", "D": "기회는 자주 잡지만 영점 조절이 안 되어 흐름을 끊는 유형"},
+            "B": {"S": "많은 슈팅을 때리지 않아도 찾아온 기회를 완벽하게 승화시키는 암살자", "A": "적절한 빈도로 슈팅을 시도하며 쏠쏠하게 골문을 위협하는 알짜배기 자원", "B": "주어진 기회만큼은 정직하게 살려내는 무난한 공격수", "C": "볼륨과 파괴력 모두 이도 저도 아닌 무색무취의 포워드", "D": "어쩌다 찾아오는 밥상마저 엎어버리는 고문관"},
+            "C": {"S": "슈팅 기회는 적지만 한 번 때리면 치명타를 만드는 극단적 순도형", "A": "시도는 적지만 간결한 타격으로 유효슈팅을 건져내는 실속파", "B": "슈팅 관여는 적지만 가끔 한 방을 보여주는 스타일", "C": "찬스에서도 주저하다 기회를 날려먹는 소극적 성향", "D": "슈팅 시도도 파괴력도 낮아 수비수가 경계하지 않는 자원"},
+            "D": {"S": "슈팅을 아끼지만 완벽한 찬스에는 기가 막히게 마무리하는 은둔형 고수", "A": "슈팅을 자제하고 패스 연계에 집중하는 도우미 성향", "B": "과감한 슈팅 시도가 전무해 공격수로서의 파괴력이 떨어지는 자원", "C": "슈팅 타이밍을 놓치고 뒤로 돌리기 바쁜 답답이", "D": "90분 내내 슈팅 한 번 제대로 못 때리는 그라운드의 VIP 관전자"},
+        },
+    },
+    "box": {
+        "title": "🥊 박스 안",
+        "volume": "box_shots_volume_top_percent",
+        "ratio": "in_box_finishing_top_percent",
+        "rows": {
+            "S": {"S": "박스 안을 지옥으로 만들며 닿는 족족 골망을 찢어버리는 생태계 파괴종", "A": "박스 안에 상주하며 위협과 득점을 생산하는 박스 안의 지배자", "B": "박스 안에서 쉴 새 없이 비비며 득점에 기여하는 끈질긴 알박기 포워드", "C": "박스 안에서 공은 많이 만지지만 골대 앞에서 얼타는 새가슴", "D": "박스 안에서 턴오버만 양산하는 공격의 블랙홀"},
+            "A": {"S": "적극적인 박스 침투를 바탕으로 날카로운 한 방을 꽂는 침투형 골잡이", "A": "필요한 순간 박스 안으로 진입해 확실한 마침표를 찍는 해결사", "B": "박스 진입 빈도가 높아 동료에게 공간과 기회를 열어주는 자원", "C": "열심히 파고들지만 마무리에서 집중력이 흐트러지는 유형", "D": "박스 진입은 잦지만 실질적 영양가가 없는 공갈포"},
+            "B": {"S": "틈이 보이면 여지없이 치명타를 꽂는 냄새 맡는 여우", "A": "적절한 타이밍에 박스를 타격하는 밸런스형", "B": "주어진 롤에 맞춰 박스 안에서 비벼주는 국밥형 공격수", "C": "박스 진입 타이밍과 결정력이 모두 애매한 반쪽짜리 피니셔", "D": "어쩌다 박스 안에 들어와도 기회를 날려먹는 허수아비"},
+            "C": {"S": "기습 침투 한 번으로 완벽한 골을 훔쳐내는 하이재킹 장인", "A": "진입 빈도는 낮지만 찬스가 오면 침착하게 밀어 넣는 실속파", "B": "박스 안 싸움을 꺼려 외곽에 머무는 성향", "C": "박스 안으로 들어가는 움직임이 부족해 고립되기 쉬운 자원", "D": "몸싸움이 두려워 외곽만 도는 회피형 피니셔"},
+            "D": {"S": "박스엔 거의 안 들어가지만 외곽 한 방으로 경기를 끝내는 이단아", "A": "2선에서 플레이메이킹과 슈팅을 노리는 변칙형 포워드", "B": "박스 안 타격이 전무해 텐사이드 전술에 도움이 적은 선수", "C": "박스 안으로 안 들어가면서 득점만 바라는 논리주의자", "D": "페널티 박스 근처 공포증처럼 외곽으로만 도는 투명인간"},
+        },
+    },
+}
+
+# The remaining four sectors share the same full 5×5 grammar.  It remains
+# explicit in data (rather than min/max shortcuts), while avoiding fabricated
+# numeric claims when an axis has no percentile yet.
+_SECTOR_COPY = {
+    "dribble": ("⚡ 돌파", "dribble_attempts_volume_top_percent", "dribble_margin_per90_top_percent", "저돌적인 크랙", "효율적인 전진", "무리한 개인기"),
+    "aerial": ("🦅 공중볼", "aerial_duel_attempts_volume_top_percent", "aerial_margin_per90_top_percent", "제공권 타겟", "정확한 타점", "공중볼 회피"),
+    "ground": ("🪨 지상 경합", "ground_duel_attempts_volume_top_percent", "duel_margin_per90_top_percent", "진흙탕 싸움 주도", "영리한 소유권 확보", "몸싸움 기피"),
+    "chance": ("🧠 기회 포착", "xg_volume_top_percent", "xg_per90_top_percent", "왕성한 오프더볼", "공간을 읽는 움직임", "정체된 오프더볼"),
 }
 
 
-def render_spear_factor_radar(player_name: str, rank, stats: DecisionMetrics | None = None) -> None:
-    """Six attack-only percentile factors used by the S.P.E.A.R. model."""
-    labels = [label for label, _ in SPEAR_FACTOR_AXES]
-    player_values = [_radar_score(getattr(rank, attr, None) if rank else None) for _, attr in SPEAR_FACTOR_AXES]
-    player_details = []
-    for _, percentile_attr in SPEAR_FACTOR_AXES:
-        raw_attr, rank_attr, total_attr = SPEAR_FACTOR_DETAILS[percentile_attr]
-        raw_value = getattr(stats, raw_attr, None) if stats else None
+def _make_sector_matrix(high_volume: str, high_ratio: str, low_ratio: str) -> dict[str, dict[str, str]]:
+    volume_copy = {
+        "S": "압도적인 빈도로", "A": "활발한 빈도로", "B": "평균적인 빈도로", "C": "제한된 빈도로", "D": "거의 관여하지 않으면서",
+    }
+    ratio_copy = {
+        "S": f"{high_ratio}을 극대화하는 최상위권 자원",
+        "A": f"{high_ratio}을 안정적으로 보여주는 해결사",
+        "B": f"기본적인 {high_ratio}을 갖춘 밸런스형",
+        "C": f"{high_ratio}의 임팩트가 부족한 평이한 유형",
+        "D": f"{low_ratio}로 팀의 흐름을 해칠 위험이 있는 유형",
+    }
+    return {tier: {ratio: f"{prefix} {high_volume}에 관여하며, {text}" for ratio, text in ratio_copy.items()} for tier, prefix in volume_copy.items()}
+
+
+for _key, (_title, _volume, _ratio, _high_volume, _high_ratio, _low_ratio) in _SECTOR_COPY.items():
+    TWIN_SECTOR_MATRIX[_key] = {
+        "title": _title,
+        "volume": _volume,
+        "ratio": _ratio,
+        "rows": _make_sector_matrix(_high_volume, _high_ratio, _low_ratio),
+    }
+
+SPEAR_FACTOR_DETAILS = {
+    "shot_quality_top_percent": ("shot_quality", "shot_quality_rank", "progression_eligible"),
+    "in_box_finishing_top_percent": ("in_box_finishing", "in_box_finishing_rank", "progression_eligible"),
+    "dribble_margin_per90_top_percent": ("dribble_margin_per90", "dribble_margin_per90_rank", "progression_eligible"),
+    "aerial_margin_per90_top_percent": ("aerial_margin_per90", "aerial_margin_per90_rank", "progression_eligible"),
+    "duel_margin_per90_top_percent": ("duel_margin_per90", "duel_margin_per90_rank", "progression_eligible"),
+    "xg_per90_top_percent": ("xg_per90", "xg_per90_rank", "progression_eligible"),
+}
+
+
+def _spear_tier(score: float) -> str:
+    if score >= 95:
+        return "S"
+    if score >= 85:
+        return "A"
+    if score >= 65:
+        return "B"
+    if score >= 35:
+        return "C"
+    return "D"
+
+
+def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
+    """Resolve all six Volume × Ratio 5×5 descriptions for the player."""
+    if rank is None:
+        return []
+    summaries = []
+    for sector in TWIN_SECTOR_MATRIX.values():
+        volume_percent = getattr(rank, sector["volume"], None)
+        ratio_percent = getattr(rank, sector["ratio"], None)
+        if volume_percent is None or ratio_percent is None:
+            continue
+        volume_tier = _spear_tier(_radar_score(volume_percent))
+        ratio_tier = _spear_tier(_radar_score(ratio_percent))
+        text = sector["rows"][volume_tier][ratio_tier]
+        summaries.append((sector["title"], f"[{volume_tier}×{ratio_tier}] {text}"))
+    return summaries
+
+
+def render_twin_radar_sector_summaries(rank) -> None:
+    """Display the 5×5 cross-matrix outcome without mixing competitions."""
+    summaries = twin_radar_sector_summaries(rank)
+    st.markdown("#### 💡 볼륨 × 비율 교차 프로필")
+    if not summaries:
+        st.caption("두 레이더의 상대평가 데이터가 확보되면 6개 섹터의 5×5 교차 설명이 표시됩니다.")
+        return
+    left, right = st.columns(2)
+    for index, (title, text) in enumerate(summaries):
+        with (left if index % 2 == 0 else right):
+            st.markdown(f"**{title}**  \n{text}")
+
+
+def render_spear_radar(player_name: str, rank, stats: DecisionMetrics | None, *, volume: bool) -> None:
+    """Render one of the synchronized volume/ratio S.P.E.A.R. radars."""
+    axes = VOLUME_FACTOR_AXES if volume else SPEAR_FACTOR_AXES
+    details = []
+    labels = []
+    values = []
+    for axis in axes:
+        if volume:
+            label, percentile_attr, raw_attr, rank_attr = axis
+            total_attr = "spear_volume_eligible"
+        else:
+            label, percentile_attr = axis
+            raw_attr, rank_attr, total_attr = SPEAR_FACTOR_DETAILS[percentile_attr]
         top_percent = getattr(rank, percentile_attr, None) if rank else None
+        score = _radar_score(top_percent)
+        tier = _spear_tier(score)
+        labels.append(f"{label} [{tier}]")
+        values.append(score)
+        raw_value = getattr(stats, raw_attr, None) if stats else None
         rank_value = getattr(rank, rank_attr, None) if rank else None
         total = getattr(rank, total_attr, None) if rank else None
-        player_details.append([
+        details.append([
             "—" if raw_value is None else f"{float(raw_value):.2f}",
+            f"{tier} 등급",
             "데이터 부족" if top_percent is None else f"상위 {float(top_percent):.1f}%",
             "순위 데이터 부족" if rank_value is None or not total else f"{rank_value}위 / {total}명",
         ])
-    # Percentile 50 is the median of exactly the same league/position cohort.
-    average_values = [50.0] * len(labels)
+
     figure = go.Figure()
-    for name, values, color, fill in (
-        (player_name, player_values, "#22C55E", "rgba(34,197,94,0.28)"),
-        ("동일 대회 F·M(900분+·xG 1+) 평균", average_values, "#94A3B8", "rgba(148,163,184,0.16)"),
+    for name, trace_values, color, fill in (
+        (player_name, values, "#22C55E", "rgba(34,197,94,0.28)"),
+        ("동일 대회 F·M 평균", [50.0] * len(labels), "#94A3B8", "rgba(148,163,184,0.16)"),
     ):
         is_player = name == player_name
         figure.add_trace(go.Scatterpolar(
-            r=values + [values[0]], theta=labels + [labels[0]],
+            r=trace_values + [trace_values[0]], theta=labels + [labels[0]],
             mode="lines+markers", name=name, fill="toself", fillcolor=fill,
             line={"color": color, "width": 2}, marker={"color": color, "size": 6},
-            customdata=(player_details + [player_details[0]]) if is_player else None,
-            hovertemplate=("<b>%{theta}</b><br>원시값: %{customdata[0]}<br>%{customdata[1]} · %{customdata[2]}<br>레이더 점수: %{r:.1f}<extra></extra>" if is_player else "%{theta}: 비교군 평균 %{r:.0f}<extra></extra>"),
+            customdata=(details + [details[0]]) if is_player else None,
+            hovertemplate=(
+                "<b>%{theta}</b><br>원시값: %{customdata[0]}<br>%{customdata[1]} · %{customdata[2]} · %{customdata[3]}<br>레이더 점수: %{r:.1f}<extra></extra>"
+                if is_player else "%{theta}: 비교군 평균 %{r:.0f}<extra></extra>"
+            ),
         ))
+    heading = "볼륨(Volume)" if volume else "비율(Ratio)"
     figure.update_layout(
-        title="S.P.E.A.R. 6대 공격 팩터 · 선수 vs 동일 대회 F·M(900분+·xG 1+) 평균",
-        height=420, margin={"l": 35, "r": 35, "t": 55, "b": 25},
+        title=f"S.P.E.A.R. {heading} 레이더 · 동일 대회 F·M(900분+·xG 1+) 기준",
+        height=455, margin={"l": 38, "r": 38, "t": 55, "b": 35},
         paper_bgcolor="rgba(0,0,0,0)",
-        polar={"bgcolor": "rgba(0,0,0,0)", "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "visible": True}},
+        polar={
+            "bgcolor": "rgba(0,0,0,0)",
+            "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "visible": True},
+            "angularaxis": {"rotation": 90, "direction": "clockwise"},
+        },
         legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"},
     )
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
-    st.caption("각 축에 마우스를 올리면 원시값, 등수, 상위%와 레이더 점수를 확인할 수 있습니다.")
 
 
 def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards: bool, minimum_final_third_ratio: int):
@@ -784,14 +914,26 @@ def render_v32_analysis_center() -> None:
             st.markdown("**S.P.E.A.R.**  \\n슈팅 50% · 수비 부수기 30% · 위치 선정 20%")
             st.caption("1,000분 이상 전문 공격수의 Z-점수를 0~100 점수로 변환합니다.")
             st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
-    render_activity_ratio(player.player_id, player.name, tactical_ratio)
-    radar_col, ratio_col = st.columns(2)
-    with radar_col:
-        render_spear_factor_radar(player.name, rank, selected_stats)
-        if rank is None:
-            st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)으로 표시됩니다.")
+    volume_col, ratio_col = st.columns(2)
+    with volume_col:
+        render_spear_radar(player.name, rank, selected_stats, volume=True)
     with ratio_col:
-        render_season_heatmap(player.player_id, player.name, tactical_ratio.get("heatmap_key") if tactical_ratio else None)
+        render_spear_radar(player.name, rank, selected_stats, volume=False)
+    if rank is None:
+        st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)과 C 등급으로 표시됩니다.")
+    render_twin_radar_sector_summaries(rank)
+
+    competition_name = selected_stats.league_name or "선택 대회"
+    with st.expander(f"📍 {filters['season']} · {competition_name} 공간·활동량", expanded=True):
+        activity_col, heatmap_col = st.columns([1, 1.45])
+        with activity_col:
+            render_activity_ratio(player.player_id, player.name, tactical_ratio)
+        with heatmap_col:
+            render_season_heatmap(
+                player.player_id,
+                player.name,
+                tactical_ratio.get("heatmap_key") if tactical_ratio else None,
+            )
     render_player_report(
         player, [filters["season"]], "전체", "FW (ST/CF)" in filters["positions"], 0,
         show_activity=False, selected_league_id=selected_stats.league_id,
