@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 import math
+import itertools
 
 from fotmob_client import FotMobError, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
@@ -13,6 +14,9 @@ from rankings import (
     get_top_leagues_shot_quality,
 )
 from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
+
+
+_UNIFIED_BAR_COUNTER = itertools.count()
 
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="wide")
 
@@ -545,7 +549,12 @@ def render_unified_bar(
     )
     figure.update_xaxes(range=[-1, 101], visible=False, fixedrange=True)
     figure.update_yaxes(range=[-1, 1], visible=False, fixedrange=True)
-    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(
+        figure,
+        use_container_width=True,
+        config={"displayModeBar": False},
+        key=f"unified-bar-{next(_UNIFIED_BAR_COUNTER)}",
+    )
 
     median_label = f"◆ 중앙값 {safe_median:.2f}{suffix}" if has_median else "중앙값 없음"
     poor_col, median_col, great_col = st.columns([1, 2, 1])

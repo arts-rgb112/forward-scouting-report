@@ -141,16 +141,18 @@ def _fetch_elite_dribbler_metrics(
 ) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
     """Build the competition-season cohort from every 900+ minute, xG>=1 player.
 
-    The old won-contest seed omitted players with no recorded contest, then the
-    detailed-position text matcher removed further valid F/M candidates.
+    FotMob's minutes leaderboard currently returns an empty list, while its
+    won-contest endpoint returns the complete player directory.  The latter is
+    therefore used only to discover player IDs: contest values do not filter
+    the cohort. Exact player metrics then enforce minutes, xG, and F/M.
     """
-    rows = fetch_league_stat_table(league_id, season_name, "minutes_played")
+    rows = fetch_league_stat_table(league_id, season_name, "won_contest")
     
-    # Seed with the complete minutes leaderboard; no contest-stat cutoff.
+    # Seed with every listed player; no contest-stat cutoff.
     successes = {
-        str(row.get("id")): value
+        str(row.get("id")): 0.0
         for row in rows
-        if (value := _value(row)) is not None and value >= MINIMUM_SPEAR_MINUTES
+        if row.get("id") is not None
     }
 
     def fetch_one(player_id: str) -> tuple[str, Optional[DecisionMetrics]]:
