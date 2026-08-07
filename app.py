@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import numpy as np
 
 from fotmob_client import FotMobError, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
@@ -237,12 +238,38 @@ def render_season_heatmap(player_id: str, player_name: str) -> None:
         return
     x = [point[0] for point in points if isinstance(point, list) and len(point) == 2]
     y = [point[1] for point in points if isinstance(point, list) and len(point) == 2]
-    figure = go.Figure(go.Scatter(x=x, y=y, mode="markers", marker={"size": 8, "color": "rgba(239,68,68,0.42)"}, name=player_name, hovertemplate="X %{x:.1f} · Y %{y:.1f}<extra></extra>"))
-    line = {"color": "rgba(230,230,230,0.72)", "width": 1}
+    # Smooth a fixed grid so repeatedly visited zones visibly intensify instead
+    # of rendering as indistinguishable overlapping dots.
+    density, y_edges, x_edges = np.histogram2d(y, x, bins=(22, 32), range=((0, 100), (0, 100)))
+    kernel = np.array([1, 4, 6, 4, 1], dtype=float) / 16.0
+    for axis in (0, 1):
+        density = np.apply_along_axis(
+            lambda row: np.convolve(np.pad(row, 2, mode="edge"), kernel, mode="valid"),
+            axis, density,
+        )
+    peak = float(density.max())
+    normalized = density / peak if peak else density
+    figure = go.Figure(go.Heatmap(
+        z=normalized,
+        x=((x_edges[:-1] + x_edges[1:]) / 2).tolist(),
+        y=((y_edges[:-1] + y_edges[1:]) / 2).tolist(),
+        zmin=0, zmax=1, showscale=False, zsmooth="best", opacity=0.94,
+        colorscale=[
+            [0.00, "rgba(0,0,0,0)"],
+            [0.08, "rgba(124,151,71,0.18)"],
+            [0.24, "rgba(188,185,65,0.56)"],
+            [0.48, "rgba(244,209,60,0.78)"],
+            [0.72, "rgba(247,135,39,0.90)"],
+            [1.00, "rgba(222,63,31,0.98)"],
+        ],
+        hovertemplate="활동 밀도 %{z:.0%}<extra></extra>",
+    ))
+    line = {"color": "rgba(12,34,28,0.92)", "width": 1.3}
     for x0, y0, x1, y1 in ((0, 0, 100, 100), (83, 21.1, 100, 78.9), (0, 21.1, 17, 78.9)):
         figure.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=line, fillcolor="rgba(34,197,94,0.06)" if x0 == 83 else "rgba(0,0,0,0)")
     figure.add_shape(type="line", x0=50, y0=0, x1=50, y1=100, line=line)
-    figure.update_layout(height=390, margin={"l": 10, "r": 10, "t": 15, "b": 15}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#173b2a", xaxis={"range": [0, 100], "visible": False, "fixedrange": True}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True}, showlegend=False)
+    figure.add_shape(type="circle", x0=43, y0=43, x1=57, y1=57, line=line)
+    figure.update_layout(height=390, margin={"l": 10, "r": 10, "t": 15, "b": 15}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#4d704c", xaxis={"range": [0, 100], "visible": False, "fixedrange": True}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True}, showlegend=False)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
