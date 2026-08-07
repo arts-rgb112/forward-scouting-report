@@ -11,7 +11,6 @@ import pandas as pd
 from fotmob_client import (
     FotMobError,
     fetch_league_stat_table,
-    fetch_player_competition_stats,
     fetch_player_multi_season_data,
 )
 from metrics import DecisionMetrics, extract_multi_season_metrics
@@ -49,6 +48,14 @@ class LeaguePercentiles:
     dribbles_failed_per90_top_percent: Optional[float] = None
     dribbles_failed_per90_rank: Optional[int] = None
     dribbles_failed_eligible: int = 0
+    duels_won_per90_top_percent: Optional[float] = None
+    duels_won_per90_rank: Optional[int] = None
+    duels_lost_per90_top_percent: Optional[float] = None
+    duels_lost_per90_rank: Optional[int] = None
+    aerials_won_per90_top_percent: Optional[float] = None
+    aerials_won_per90_rank: Optional[int] = None
+    aerials_lost_per90_top_percent: Optional[float] = None
+    aerials_lost_per90_rank: Optional[int] = None
     net_progression_top_percent: Optional[float] = None
     net_progression_rank: Optional[int] = None
     net_progression_eligible: int = 0
@@ -88,16 +95,24 @@ def _fetch_elite_dribbler_metrics(league_id: int, season_name: str) -> tuple[dic
 
     def fetch_one(player_id: str) -> tuple[str, Optional[DecisionMetrics]]:
         try:
-            record = fetch_player_competition_stats(player_id, league_id, season_name)
-            parsed = extract_multi_season_metrics({"season_records": [record]})
-            return player_id, next(iter(parsed.values()), None)
+            if len(season_name) == 9 and "/" in season_name:
+                start_year, end_year = season_name.split("/", 1)
+                short_season = f"{start_year[-2:]}/{end_year[-2:]}"
+            else:
+                short_season = season_name
+
+            parsed = extract_multi_season_metrics(fetch_player_multi_season_data(player_id))
+            for season_key, stat_obj in parsed.items():
+                if season_key.startswith(f"{short_season}_") and stat_obj.league_id == league_id:
+                    return player_id, stat_obj
         except (FotMobError, StopIteration, ValueError):
-            return player_id, None
+            pass
+        return player_id, None
 
     metrics_by_player: dict[str, DecisionMetrics] = {}
-    # A small pool keeps the first uncached request tolerable without sending a
-    # burst of requests to FotMob. Results remain cached for an hour in the UI.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    # Multi-season requests fetch several records per player. This matches the
+    # concurrency already used by the xGOT fallback and keeps large leagues responsive.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
         for player_id, metric in executor.map(fetch_one, successes):
             if metric is not None:
                 metrics_by_player[player_id] = metric
@@ -302,12 +317,32 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
     except Exception:
         pass
 
-    # 💡 3. 경합 및 공중볼 승리율 - 임시 비활성화 (API 미지원)
-    duels_pct, duels_rk, duels_eligible = None, None, 0
-    aerials_pct, aerials_rk, aerials_eligible = None, None, 0
+    duels_pct, duels_rk = None, None
+    aerials_pct, aerials_rk = None, None
     dribble_percentiles = _calculate_dribble_percentiles(
         player_key, metrics.league_id, season_name, metrics
     )
+
+    def rank_attr(attr_name: str, reverse: bool = False) -> tuple[Optional[float], Optional[int], int]:
+        try:
+            peers, _ = _fetch_elite_dribbler_metrics(metrics.league_id, season_name)
+        except FotMobError:
+            return None, None, 0
+        value = getattr(metrics, attr_name)
+        population = [getattr(peer, attr_name) for peer in peers.values()]
+        population = [candidate for candidate in population if candidate is not None]
+        if value is None or not population:
+            return None, None, len(population)
+        if reverse:
+            percentile, rank = _rank_info(-value, [-candidate for candidate in population])
+        else:
+            percentile, rank = _rank_info(value, population)
+        return percentile, rank, len(population)
+
+    duels_won_pct, duels_won_rank, duels_eligible = rank_attr("duels_won_per90")
+    duels_lost_pct, duels_lost_rank, _ = rank_attr("duels_lost_per90", reverse=True)
+    aerials_won_pct, aerials_won_rank, aerials_eligible = rank_attr("aerial_duels_won_per90")
+    aerials_lost_pct, aerials_lost_rank, _ = rank_attr("aerial_duels_lost_per90", reverse=True)
     
     return LeaguePercentiles(
         goals_top_percent=goals_pct,
@@ -336,6 +371,14 @@ def calculate_league_percentiles(player_id: str, season: str, metrics: DecisionM
         dribbles_failed_per90_top_percent=dribble_percentiles["failure_pct"],
         dribbles_failed_per90_rank=dribble_percentiles["failure_rank"],
         dribbles_failed_eligible=int(dribble_percentiles["failure_count"]),
+        duels_won_per90_top_percent=duels_won_pct,
+        duels_won_per90_rank=duels_won_rank,
+        duels_lost_per90_top_percent=duels_lost_pct,
+        duels_lost_per90_rank=duels_lost_rank,
+        aerials_won_per90_top_percent=aerials_won_pct,
+        aerials_won_per90_rank=aerials_won_rank,
+        aerials_lost_per90_top_percent=aerials_lost_pct,
+        aerials_lost_per90_rank=aerials_lost_rank,
         net_progression_top_percent=dribble_percentiles["net_pct"],
         net_progression_rank=dribble_percentiles["net_rank"],
         net_progression_eligible=int(dribble_percentiles["net_count"]),

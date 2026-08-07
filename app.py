@@ -131,19 +131,26 @@ def render_unified_bar(
 
     safe_player = player_value if player_value is not None else 0.0
     safe_median = median_value if median_value is not None else 0.0
-    
-    scale_max = max(safe_player, safe_median, 0.1) * 1.25
-    
-    player_pos = min((safe_player / scale_max) * 100.0, 100.0)
-    median_pos = min((safe_median / scale_max) * 100.0, 100.0)
-    
+
     if top_percent is not None:
-        color_pos = 100.0 - top_percent
+        # Rank data is authoritative when it exists: use the same percentile
+        # scale for the marker and its colour.
+        player_pos = 100.0 - top_percent
+        color_pos = player_pos
+        median_pos = 50.0 if median_value is not None else None
     else:
+        # Anchor the absolute-value scale to the cohort median. Deriving the
+        # scale from the player value pins whichever value is larger to 80%.
         if safe_median > 0:
-            color_pos = min(max(50.0 + ((safe_player - safe_median) / safe_median * 25.0), 0.0), 100.0)
+            scale_max = safe_median * 2.2
         else:
-            color_pos = 50.0
+            scale_max = max(safe_player, 0.1) * 1.6
+        player_pos = min((safe_player / scale_max) * 100.0, 100.0)
+        median_pos = (
+            min((safe_median / scale_max) * 100.0, 100.0)
+            if median_value is not None else None
+        )
+        color_pos = player_pos
 
     dynamic_color = get_gradient_color(color_pos)
     median_label_str = f"{safe_median:.2f} {suffix}" if median_value is not None else "0.00"
@@ -151,7 +158,10 @@ def render_unified_bar(
     player_label = f"선수 {safe_player:.2f} <span style='font-size:11.5px; font-weight:400; color:#888;'>{suffix}</span>"
     rank_label = f"{rank_val}위 <span style='font-size:12px; font-weight:400; color:#888;'>/ {total_players}명 · 상위 {top_percent}%</span>" if (rank_val is not None and top_percent is not None) else ""
     
-    median_marker_html = f'<div style="position: absolute; top: -6px; left: calc({median_pos}% - 9px); width: 18px; height: 18px; background-color: #aaa; transform: rotate(45deg); border: 2px solid #262730; z-index: 5;"></div>'
+    median_marker_html = (
+        f'<div style="position: absolute; top: -6px; left: calc({median_pos}% - 9px); width: 18px; height: 18px; background-color: #aaa; transform: rotate(45deg); border: 2px solid #262730; z-index: 5;"></div>'
+        if median_pos is not None else ""
+    )
 
     st.markdown(f"""
     <div style="margin-bottom: 28px; padding: 0 4px;">
