@@ -164,21 +164,37 @@ def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards
 
 def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> str:
     """Combine the weakest/strongest S.P.E.A.R. factors with the 3-Zone role."""
-    strength_phrases = {
-        "in_box_finishing_top_percent": "정교한 박스 안 마감 능력을 보여주며,",
-        "shot_quality_top_percent": "완성도 높은 슈팅으로 골문을 위협하며,",
-        "xg_per90_top_percent": "탁월한 위치 선정으로 득점 기회를 창출하며,",
-        "duel_margin_per90_top_percent": "지상 경합에서 버티고 전진하는 힘이 좋으며,",
-        "aerial_margin_per90_top_percent": "공중볼 장악과 포스트플레이에 능하며,",
-        "dribble_margin_per90_top_percent": "압도적인 전진 운반과 수비 균열에 능하며,",
+    strong_phrases = {
+        "in_box_finishing_top_percent": "정교한 박스 안 마감 능력을 보여주는 ",
+        "shot_quality_top_percent": "폭발적인 슈팅 파괴력으로 득점을 노리는 ",
+        "xg_per90_top_percent": "탁월한 위치 선정으로 득점 기회를 창출하는 ",
+        "duel_margin_per90_top_percent": "강력한 지상 경합과 소유권 확보 능력을 지닌 ",
+        "aerial_margin_per90_top_percent": "뛰어난 공중볼 장악과 포스트플레이 능력을 바탕으로 한 ",
+        "dribble_margin_per90_top_percent": "압도적인 전진 운반과 수비 균열에 능한 ",
     }
-    weakness_phrases = {
-        "dribble_margin_per90_top_percent": "자력 전진 능력이 사실상 전무하여 단독 돌파를 기대하기 어렵지만,",
-        "in_box_finishing_top_percent": "박스 안 결정력이 심각하게 떨어져 쉬운 찬스도 자주 허비하나,",
-        "aerial_margin_per90_top_percent": "공중볼 경합 능력이 끔찍한 수준이라 포스트플레이는 불가능에 가깝지만,",
-        "duel_margin_per90_top_percent": "지상 경합에서 번번이 밀리며 몸싸움과 소유권 방어에 매우 취약하나,",
-        "xg_per90_top_percent": "오프더볼 움직임이 둔탁하여 스스로 득점 찬스를 창출하는 능력이 현저히 떨어지지만,",
-        "shot_quality_top_percent": "슈팅의 영점이 심각하게 흔들리며 유효타를 만들어내는 파괴력이 빈약하나,",
+    modest_strength_phrases = {
+        "in_box_finishing_top_percent": "필요할 때 무난한 마무리 능력을 보여주는 ",
+        "shot_quality_top_percent": "준수한 슈팅 감각을 지니고 있는 ",
+        "xg_per90_top_percent": "비교적 준수한 위치 선정으로 기회를 엿보는 ",
+        "duel_margin_per90_top_percent": "성실한 지상 경합 능력을 바탕으로 한 ",
+        "aerial_margin_per90_top_percent": "기본적인 공중볼 경합에 기여하는 ",
+        "dribble_margin_per90_top_percent": "준수한 볼 운반 능력을 갖추고 있는 ",
+    }
+    severe_weakness_phrases = {
+        "dribble_margin_per90_top_percent": "자력 전진 능력이 사실상 전무하여 단독 돌파를 기대하기 어렵다.",
+        "in_box_finishing_top_percent": "박스 안 결정력이 심각하게 떨어져 쉬운 찬스도 자주 허비하는 편이다.",
+        "aerial_margin_per90_top_percent": "공중볼 경합 능력이 끔찍한 수준이라 포스트플레이는 불가능에 가깝다.",
+        "duel_margin_per90_top_percent": "지상 경합에서 번번이 밀리며 몸싸움과 소유권 방어에 매우 취약하다.",
+        "xg_per90_top_percent": "오프더볼 움직임이 둔탁하여 스스로 득점 찬스를 창출하는 능력이 현저히 떨어진다.",
+        "shot_quality_top_percent": "슈팅의 영점이 심각하게 흔들리며 유효타를 만들어내는 파괴력이 빈약하다.",
+    }
+    mild_weakness_phrases = {
+        "dribble_margin_per90_top_percent": "직접적인 돌파 비중은 다소 아쉽다.",
+        "in_box_finishing_top_percent": "박스 안에서의 세밀한 마무리에 약간의 기복이 있다.",
+        "aerial_margin_per90_top_percent": "공중볼 경합에서는 다소 열세를 보인다.",
+        "duel_margin_per90_top_percent": "거친 지상 경합 상황에서는 다소 고전하는 편이다.",
+        "xg_per90_top_percent": "스스로 득점 찬스를 만드는 빈도는 조금 낮다.",
+        "shot_quality_top_percent": "슈팅의 파괴력은 다소 평범한 편이다.",
     }
     available = [
         (attr, _radar_score(getattr(rank, attr, None)))
@@ -186,23 +202,31 @@ def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> st
         if rank is not None and getattr(rank, attr, None) is not None
     ]
     if not available:
-        strength = "핵심 공격 지표가 동기화되는 중이며,"
-        weakness = "세부 약점 데이터도 동기화되는 중이지만,"
+        weakness = "세부 약점 데이터가 동기화되는 중이다."
+        strength = "핵심 공격 지표를 확인 중인 "
     else:
-        strength = strength_phrases[max(available, key=lambda item: item[1])[0]]
-        weakness = weakness_phrases[min(available, key=lambda item: item[1])[0]] if len(available) > 1 else "세부 약점 데이터가 제한적이지만,"
+        strongest_attr, strongest_score = max(available, key=lambda item: item[1])
+        weakest_attr, weakest_score = min(available, key=lambda item: item[1])
+        strength = (
+            strong_phrases[strongest_attr] if strongest_score > 60.0
+            else "뚜렷하게 압도적인 강점이라 할 부분은 없으나, " + modest_strength_phrases[strongest_attr]
+        )
+        weakness = (
+            severe_weakness_phrases[weakest_attr] if weakest_score < 40.0
+            else "뚜렷한 약점 없이 전반적으로 안정적인 기량을 보여주지만, " + mild_weakness_phrases[weakest_attr]
+        )
 
     if not tactical_ratio:
-        return f"{weakness} {strength} 활동 반경 데이터가 갱신되는 중인 공격수"
+        return f"{weakness} {strength}활동 반경 데이터가 갱신되는 중인 공격수."
     in_box = float(tactical_ratio.get("in_box_ratio", 0.0))
     mid = float(tactical_ratio.get("mid_third_ratio", 0.0))
     role = "전술적 움직임 위주의" if mid >= 40.0 else "득점에 집중하는"
     player_type = (
         "정통 경합형 포워드" if in_box >= 25.0
-        else "정통 포워드 롤도 가능한" if in_box >= 20.0
+        else "하이브리드형 포워드" if in_box >= 20.0
         else "경합 회피형 피니셔"
     )
-    return f"{weakness} {strength} {role} {player_type}"
+    return f"{weakness} {strength}{role} {player_type}."
 
 
 def render_season_heatmap(player_id: str, player_name: str) -> None:
