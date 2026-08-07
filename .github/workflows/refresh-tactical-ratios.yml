@@ -32,6 +32,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/tactical_ratio.csv data/unmatched_sportsapi_players.csv data/auto_matched_fotmob_players.csv
+          git add data/tactical_3zone_ratio.csv data/unmatched_sportsapi_players.csv data/auto_matched_fotmob_players.csv
           git diff --cached --quiet || git commit -m "Refresh tactical Heat Ratios"
           git push
