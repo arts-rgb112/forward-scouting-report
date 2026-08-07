@@ -197,7 +197,7 @@ def spear_rank_for_session(player, season_label: str, stats: DecisionMetrics, re
 
 
 def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> str:
-    """Build a tier-aware S.P.E.A.R. summary from all six factors."""
+    """Summarize every S.P.E.A.R. factor and the 3-Zone/duel-role matrix."""
     factor_labels = {
         "in_box_finishing_top_percent": "박스 안 결정력",
         "shot_quality_top_percent": "슈팅 파괴력",
@@ -212,10 +212,9 @@ def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> st
         if rank is not None and getattr(rank, attr, None) is not None
     ]
     tier_adjectives = {
-        "S": ["미친 퍼포먼스를 뿜어내는", "생태계 파괴종 급의", "상대에게 재앙을 선사하는", "신계에 도달한"],
-        "A": ["압도적인", "매우 위협적인", "리그 최상위권의"],
-        "B": ["1인분은 거뜬히 해내는", "쏠쏠한", "준수한"],
-        "D": ["눈 썩는 수준", "프로 레벨이 의심되는 수준", "폐급에 가까운 수준", "답이 없는 수준"],
+        "S": "생태계 파괴종 급의",
+        "A": "압도적인",
+        "B": "1인분은 거뜬히 해내는",
     }
 
     def tier(score: float) -> str:
@@ -233,34 +232,60 @@ def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> st
         codepoint = ord(label[-1])
         return "이" if 0xAC00 <= codepoint <= 0xD7A3 and (codepoint - 0xAC00) % 28 else "가"
 
-    labelled = [(score, factor_labels[attr], tier(score)) for attr, score in available]
-    weaknesses = sorted((item for item in labelled if item[2] == "D"), key=lambda item: item[0])
-    strengths = sorted((item for item in labelled if item[2] in {"S", "A", "B"}), key=lambda item: item[0], reverse=True)
+    labelled = [(attr, score, factor_labels[attr], tier(score)) for attr, score in available]
+    weaknesses = sorted((item for item in labelled if item[3] == "D"), key=lambda item: item[1])
+    strengths = sorted((item for item in labelled if item[3] in {"S", "A", "B"}), key=lambda item: item[1], reverse=True)
     if weaknesses:
-        joined = ", ".join(label for _, label, _ in weaknesses)
-        adjective = tier_adjectives["D"][0]
-        weakness = f"{joined}{particle(joined)} {adjective}이라 팀에 민폐를 끼치는 편이며, "
+        joined = ", ".join(label for _, _, label, _ in weaknesses)
+        weakness = f"{joined}{particle(joined)} 눈 썩는 수준이라 팀에 민폐를 끼치는 편이며,"
     else:
         weakness = ""
     if strengths:
-        joined = ", ".join(label for _, label, _ in strengths)
-        top_tier = strengths[0][2]
-        adjective = tier_adjectives[top_tier][0]
-        strength = f"{adjective} {joined}{particle(joined)} 돋보이는 "
+        joined = ", ".join(label for _, _, label, _ in strengths)
+        top_tier = strengths[0][3]
+        strength = f"{tier_adjectives[top_tier]} {joined}{particle(joined)} 돋보인다."
     else:
-        strength = "뚜렷한 S.P.E.A.R. 강점은 없으나 균형을 찾는 "
+        strength = "뚜렷한 S.P.E.A.R. 강점은 없으나 균형을 찾는 편이다."
 
     if not tactical_ratio:
-        return f"{weakness}{strength}활동 반경 데이터가 갱신되는 중인 공격수."
+        return " ".join(part for part in (weakness, strength, "활동 반경 데이터가 갱신되는 중인 공격수.") if part)
     in_box = float(tactical_ratio.get("in_box_ratio", 0.0))
     mid = float(tactical_ratio.get("mid_third_ratio", 0.0))
-    role = "전술적 움직임 위주의" if mid >= 40.0 else "득점에 집중하는"
-    player_type = (
-        "정통 경합형 포워드" if in_box >= 25.0
-        else "하이브리드형 포워드" if in_box >= 20.0
-        else "경합 회피형 피니셔"
+    role = (
+        "본업인 득점보다 전술적인 움직임을 우선시하는,"
+        if mid >= 40.0 else "90분 내내 전방에서 전술적인 움직임보다 득점에 치중하는,"
     )
-    return f"{weakness}{strength}{role} {player_type}."
+
+    combat_scores = [
+        score for attr, score, _, _ in labelled
+        if attr in {"duel_margin_per90_top_percent", "aerial_margin_per90_top_percent"}
+    ]
+    combat_tier = tier(sum(combat_scores) / len(combat_scores)) if combat_scores else "C"
+    matrix = {
+        "box": {
+            "S": "박스 안에서 생태계 파괴종 급의 피지컬로 상대 수비진을 무참히 짓밟는 파괴적 타겟맨.",
+            "A": "박스 안에서 압도적인 몸싸움으로 수비진을 붕괴시키며 공간을 창출하는 정통 타겟맨.",
+            "B": "박스 안에서 거친 경합을 버텨주며 묵묵히 제 몫을 다하는 국밥형 포워드.",
+            "C": "박스 안에서 호시탐탐 득점 기회를 노리는 정통 알박기 포워드.",
+            "D": "박스 안에 짱박혀 있으나, 물리적 마찰 시 종잇장처럼 구겨지며 완전히 지워지는 고립형 전봇대.",
+        },
+        "hybrid": {
+            "S": "박스 안팎을 짐승처럼 휘젓고 다니며 상대 수비진의 멘탈을 부숴버리는 괴수형 포워드.",
+            "A": "박스 안팎을 가리지 않고 전방위적인 몸싸움을 도맡아 2선에 공간을 열어주는 전투형 포워드.",
+            "B": "박스 안팎을 오가며 필요한 순간 적절히 몸을 부딪혀주는 성실한 밸런스형 공격수.",
+            "C": "상황에 따라 유연하게 박스 안팎을 오가며 공격 작업에 관여하는 뷔페형 포워드.",
+            "D": "활동 반경은 넓으나, 거친 경합 상황마다 빤스런을 치며 공격 템포를 죽이는 반쪽짜리 포워드.",
+        },
+        "outer": {
+            "S": "수비 밀집 지역을 박살 내고 거친 경합을 모조리 씹어먹는 최상위권 연계형 피니셔.",
+            "A": "박스 진입 빈도는 낮으나, 외곽에서 거친 경합을 이겨내며 볼 소유권을 확실히 지켜주는 컴플리트 포워드.",
+            "B": "박스 외곽에서 무난하게 볼을 지켜내며 2선 자원과 연계하는 조력자형 피니셔.",
+            "C": "수비와의 직접적인 마찰을 피해 2선 외곽에서 슈팅 찬스를 엿보는 회피형 피니셔.",
+            "D": "수비수와의 물리적 마찰을 극도로 기피해 외곽으로 밀려나는, 실질적 타격감이 전무한 온실 속 화초형 피니셔.",
+        },
+    }
+    zone = "box" if in_box >= 25.0 else "hybrid" if in_box >= 20.0 else "outer"
+    return " ".join(part for part in (weakness, strength, role, matrix[zone][combat_tier]) if part)
 
 
 def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | None = None) -> None:
