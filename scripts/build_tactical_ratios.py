@@ -102,7 +102,7 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
     matches: dict[str, dict[str, Any]] = {}
     for item in walk_dicts(payload):
         identifier, name = item.get("id"), str(item.get("name", "")).strip()
-        if identifier is None or not any(target in name.lower() for target in TARGET_TOURNAMENTS):
+        if identifier is None or name.lower() not in TARGET_TOURNAMENTS:
             continue
         matches[str(identifier)] = {"id": identifier, "name": name}
     return list(matches.values())
@@ -206,7 +206,11 @@ def main() -> None:
             continue
         season_id = season["id"]
         print(f"Processing {tournament['name']}: tournament={tournament['id']}, season={season_id}")
-        ranking = client.get(f"tournament/{tournament['id']}/season/{season_id}/top-players", "tournament")
+        try:
+            ranking = client.get(f"tournament/{tournament['id']}/season/{season_id}/top-players", "tournament")
+        except (HTTPError, URLError) as exc:
+            print(f"Skipping {tournament['name']}: top-players unavailable ({exc.code if isinstance(exc, HTTPError) else 'network'}).")
+            continue
         for sports_id, player in discover_players(ranking).items():
             try:
                 profile = client.get(f"players/{sports_id}", "player")
