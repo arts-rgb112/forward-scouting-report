@@ -244,6 +244,7 @@ def build_tactical_summary(rank, tactical_ratio: dict[str, object] | None) -> st
 def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | None = None) -> None:
     points = get_heatmap_points(player_id, heatmap_key)
     st.markdown("#### 📍 시즌 활동 히트맵")
+    st.caption("5×5 활동 구역에서 3회 이상 중첩된 동선만 표시합니다.")
     if not points:
         st.caption("정적 히트맵 좌표 데이터가 아직 생성되지 않았습니다.")
         return
@@ -288,6 +289,7 @@ def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, obj
     """Render the ETL-backed mid/final-third activity split without live API calls."""
     ratio = ratio or get_tactical_ratio(player_id) or get_tactical_ratio_by_name(player_name)
     st.markdown("#### 🏃 주요 활동 반경")
+    st.caption("일회성 좌표를 제외한 반복 활동 구역 기준")
     if ratio is None:
         st.caption("히트맵 비율 데이터가 아직 적재되지 않았습니다.")
         return
