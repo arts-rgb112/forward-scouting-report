@@ -14,6 +14,7 @@ from fotmob_client import (
     fetch_player_multi_season_data,
 )
 from metrics import DecisionMetrics, extract_multi_season_metrics
+from tactical_ratio import passes_final_third_filter
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,7 @@ def _is_attacker_or_cf(metric: DecisionMetrics) -> bool:
 @functools.lru_cache(maxsize=64)
 def _fetch_elite_dribbler_metrics(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
+    minimum_final_third_ratio: int = 0,
 ) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
     """Build a >=1 won-contest cohort, optionally limited to attacking roles."""
     rows = fetch_league_stat_table(league_id, season_name, "won_contest")
@@ -175,16 +177,20 @@ def _fetch_elite_dribbler_metrics(
             player_id: metric for player_id, metric in metrics_by_player.items()
             if _is_attacker_or_cf(metric)
         }
+    metrics_by_player = {
+        player_id: metric for player_id, metric in metrics_by_player.items()
+        if passes_final_third_filter(player_id, minimum_final_third_ratio)
+    }
     successes = {player_id: value for player_id, value in successes.items() if player_id in metrics_by_player}
     return metrics_by_player, successes
 
 
 def _calculate_progression_percentiles(
     player_id: str, league_id: int, season_name: str, player: DecisionMetrics,
-    restrict_to_forwards: bool = True,
+    restrict_to_forwards: bool = True, minimum_final_third_ratio: int = 0,
 ) -> dict[str, Optional[float] | Optional[int] | int]:
     try:
-        peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards)
+        peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
     except FotMobError:
         peers, successes = {}, {}
 
@@ -233,6 +239,7 @@ def _calculate_progression_percentiles(
 @functools.lru_cache(maxsize=64)
 def get_league_metric_medians(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
+    minimum_final_third_ratio: int = 0,
 ) -> dict[str, float | None]:
     """Return comparison-cohort medians for the metrics shown in the report.
 
@@ -240,7 +247,7 @@ def get_league_metric_medians(
     matrix and percentile bars, so a displayed median never uses a different
     population from the adjacent comparison visualisation.
     """
-    peers, _ = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards)
+    peers, _ = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
     attributes = {
         "dribbles_succeeded_per90": "dribbles_succeeded_per90",
         "dribbles_failed_per90": "dribbles_failed_per90",
@@ -268,13 +275,14 @@ def get_league_metric_medians(
 @functools.lru_cache(maxsize=64)
 def get_tactical_matrix(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
+    minimum_final_third_ratio: int = 0,
 ) -> pd.DataFrame:
     """Return the elite-dribbler cohort used in the tactical quadrant chart.
 
     Both axes are available only after the player-level fetch: Net Progression
     is composed from five event stats, while finishing is in-box xGOT minus xG.
     """
-    peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards)
+    peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
     leaderboard_rows = fetch_league_stat_table(league_id, season_name, "won_contest")
     names = {str(row.get("id")): row.get("name", "Unknown") for row in leaderboard_rows}
     rows = []
@@ -323,7 +331,7 @@ def _fetch_fallback_xgot(season: str, pids: tuple) -> dict:
 
 def calculate_league_percentiles(
     player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 1.0,
-    restrict_to_forwards: bool = True,
+    restrict_to_forwards: bool = True, minimum_final_third_ratio: int = 0,
 ) -> LeaguePercentiles:
     if metrics.league_id is None:
         return LeaguePercentiles(None, None, None, None, None, None, None, None, None, None, 0)
@@ -362,7 +370,10 @@ def calculate_league_percentiles(
     player_of = player_goals - player_xg if player_xg is not None else None
     player_gk = player_goals - player_xgot if player_xgot is not None else None
 
-    valid_pids = {pid for pid, xg in xg_by_player.items() if xg >= minimum_xg}
+    valid_pids = {
+        pid for pid, xg in xg_by_player.items()
+        if xg >= minimum_xg and passes_final_third_filter(pid, minimum_final_third_ratio)
+    }
     
     goal_population = [goals_by_player.get(pid, 0.0) for pid in valid_pids]
     xg_population = [xg_by_player[pid] for pid in valid_pids]
@@ -401,9 +412,9 @@ def calculate_league_percentiles(
     duels_pct, duels_rk = None, None
     aerials_pct, aerials_rk = None, None
     progression_percentiles = _calculate_progression_percentiles(
-        player_key, metrics.league_id, season_name, metrics, restrict_to_forwards
+        player_key, metrics.league_id, season_name, metrics, restrict_to_forwards, minimum_final_third_ratio
     )
-    peers, _ = _fetch_elite_dribbler_metrics(metrics.league_id, season_name, restrict_to_forwards)
+    peers, _ = _fetch_elite_dribbler_metrics(metrics.league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
     in_box_population = [peer.in_box_finishing for peer in peers.values() if peer.in_box_finishing is not None]
     out_box_population = [peer.out_box_shot_quality for peer in peers.values() if peer.out_box_shot_quality is not None]
     in_box_pct, in_box_rank = _rank_info(metrics.in_box_finishing, in_box_population)
@@ -485,8 +496,10 @@ def _season_league_metric(player_id: str, season_name: str, league_id: int) -> O
     return None
 
 
-@functools.lru_cache(maxsize=1)
-def get_top_leagues_shot_quality(season: str = "25/26") -> dict[str, pd.DataFrame]:
+@functools.lru_cache(maxsize=16)
+def get_top_leagues_shot_quality(
+    season: str = "25/26", minimum_final_third_ratio: int = 0,
+) -> dict[str, pd.DataFrame]:
     """Return TOP 20 tables sorted by Shotmap-derived in-box finishing."""
     leagues = {"Premier League": 47, "LaLiga": 87, "Bundesliga": 54, "Serie A": 55, "Champions League": 42}
     season_name = f"20{season[:2]}/20{season[3:]}"
@@ -514,7 +527,9 @@ def get_top_leagues_shot_quality(season: str = "25/26") -> dict[str, pd.DataFram
     # All five leagues are fetched together: serial per-league pools would make
     # the initial board load several times slower even though each request is I/O-bound.
     with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
-        for league_name, name, metric in executor.map(fetch_candidate, jobs):
+        for (league_name, league_id, player_id, _), (result_league, name, metric) in zip(jobs, executor.map(fetch_candidate, jobs)):
+            if league_name != result_league or not passes_final_third_filter(player_id, minimum_final_third_ratio):
+                continue
             if metric is None or metric.in_box_finishing is None:
                 continue
             row_data = {
