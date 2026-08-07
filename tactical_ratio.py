@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import functools
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -39,11 +40,12 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
                             "out_box_final_ratio": out_box,
                             "final_third_ratio": final,
                             "sportsapi_player_id": sportsapi_player_id,
+                            "player_name": str(row.get("player_name", "")).strip(),
                         }
                 else:
                     final = float(row["final_third_ratio"])
                     if 0 <= mid <= 100 and 0 <= final <= 100:
-                        ratios[player_id] = {"mid_third_ratio": mid, "final_third_ratio": final, "sportsapi_player_id": sportsapi_player_id}
+                        ratios[player_id] = {"mid_third_ratio": mid, "final_third_ratio": final, "sportsapi_player_id": sportsapi_player_id, "player_name": str(row.get("player_name", "")).strip()}
     except (OSError, KeyError, TypeError, ValueError):
         return {}
     return ratios
@@ -51,6 +53,13 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
 
 def get_tactical_ratio(player_id: str | int) -> Optional[dict[str, float]]:
     return load_tactical_ratios().get(str(player_id))
+
+
+def get_tactical_ratio_by_name(player_name: str) -> Optional[dict[str, float]]:
+    """Use only an unambiguous normalized-name fallback for duplicate search IDs."""
+    normalized = re.sub(r"[^a-z0-9]", "", player_name.lower())
+    matches = [ratio for ratio in load_tactical_ratios().values() if re.sub(r"[^a-z0-9]", "", str(ratio.get("player_name", "")).lower()) == normalized]
+    return matches[0] if len(matches) == 1 else None
 
 
 def passes_final_third_filter(player_id: str | int, minimum_ratio: int) -> bool:
