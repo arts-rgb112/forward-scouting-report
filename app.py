@@ -14,7 +14,7 @@ from rankings import (
     get_tactical_matrix,
     get_top_leagues_shot_quality,
 )
-from tactical_ratio import get_tactical_ratio
+from tactical_ratio import get_tactical_ratio, get_tactical_ratio_by_name
 
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="wide")
 
@@ -574,7 +574,7 @@ def render_v32_analysis_center() -> None:
             st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
     radar_col, ratio_col = st.columns(2)
     with radar_col:
-        tactical_ratio = get_tactical_ratio(player.player_id)
+        tactical_ratio = get_tactical_ratio(player.player_id) or get_tactical_ratio_by_name(player.name)
         sportsapi_player_id = tactical_ratio.get("sportsapi_player_id") if tactical_ratio else None
         if sportsapi_player_id:
             render_attribute_overview_radar(sportsapi_player_id, player.name)
