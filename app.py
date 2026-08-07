@@ -284,7 +284,7 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
             st.divider()
 
             try:
-                minimum_xg = 1.5 if stats.league_id == 42 else 5.0
+                minimum_xg = 3.0
                 rank = cached_percentiles(player.player_id, season_str, stats, min_xg=minimum_xg)
             except Exception:
                 rank = None
@@ -317,11 +317,11 @@ def render_player_report(player, selected_seasons: list[str], competition_filter
             
             if rank and rank.eligible_players:
                 with st.expander(f"🎯 결정력 상대평가 · 동일 대회 xG {minimum_xg} 이상 {rank.eligible_players}명", expanded=True):
-                    render_unified_bar("득점", stats.goals, None,
+                    render_unified_bar("득점", stats.goals, rank.goals_median,
                                        rank.goals_top_percent, rank.goals_rank, rank.eligible_players, "골")
-                    render_unified_bar("순수결정력", stats.shot_quality, None,
+                    render_unified_bar("순수결정력", stats.shot_quality, rank.shot_quality_median,
                                        rank.shot_quality_top_percent, rank.shot_quality_rank, rank.eligible_players, "골")
-                    render_unified_bar("결정력+선방", stats.overall_finishing, None,
+                    render_unified_bar("결정력+선방", stats.overall_finishing, rank.overall_finishing_median,
                                        rank.overall_finishing_top_percent, rank.overall_finishing_rank, rank.eligible_players, "골")
             else:
                 st.caption("결정력 상대평가 비교군을 불러오지 못했습니다.")
