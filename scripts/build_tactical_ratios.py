@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -288,12 +289,14 @@ def main() -> None:
             continue
         players = discover_players(ranking)
         counts = {"top_players": len(players), "with_embedded_position": 0, "eligible_positions": 0, "heatmaps_with_ratio": 0, "mapped": 0, "unmatched": 0}
+        position_labels: Counter[str] = Counter()
         for sports_id, player in players.items():
             checkpoint_key = (sports_id, str(tournament["id"]), str(season_id))
             if checkpoint_key in completed:
                 continue
             if player["positions"]:
                 counts["with_embedded_position"] += 1
+                position_labels.update(player["positions"])
             if not is_target_position(player["positions"]):
                 continue
             try:
@@ -324,6 +327,8 @@ def main() -> None:
         # A successful league survives a later rate-limit/network failure.
         write_outputs(output, unmatched, auto_mapped)
         print(f"{tournament['name']} pipeline counts: {counts}")
+        # Bounded, non-identifying diagnostics for API position-code mapping.
+        print(f"{tournament['name']} position labels: {position_labels.most_common(12)}")
     write_outputs(output, unmatched, auto_mapped)
     print(f"Wrote {len(output)} matched ratios ({len(auto_mapped)} auto-mapped) and {len(unmatched)} unmatched players.")
 
