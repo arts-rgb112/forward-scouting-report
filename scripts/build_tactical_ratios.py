@@ -117,15 +117,18 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
         # The all-leagues response can contain teams, categories and seasons.
         # Only `uniqueTournament` is the canonical tournament entity; generic
         # recursive `{id, name}` discovery previously selected wrong IDs.
-        candidate = item.get("uniqueTournament")
-        if not isinstance(candidate, dict):
-            continue
-        identifier = candidate.get("id")
-        label = str(candidate.get("name", "")).strip()
-        canonical_name = TARGET_TOURNAMENTS.get(label.lower())
-        if identifier is None or not canonical_name:
-            continue
-        matches.setdefault(canonical_name, {"id": identifier, "name": canonical_name})
+        candidates = []
+        if isinstance(item.get("uniqueTournament"), dict):
+            candidates.append(item["uniqueTournament"])
+        if isinstance(item.get("uniqueTournaments"), list):
+            candidates.extend(candidate for candidate in item["uniqueTournaments"] if isinstance(candidate, dict))
+        for candidate in candidates:
+            identifier = candidate.get("id")
+            label = str(candidate.get("name", "")).strip()
+            canonical_name = TARGET_TOURNAMENTS.get(label.lower())
+            if identifier is None or not canonical_name:
+                continue
+            matches.setdefault(canonical_name, {"id": identifier, "name": canonical_name})
     return [matches[name] for name in sorted(matches)]
 
 
