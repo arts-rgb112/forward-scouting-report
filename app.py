@@ -118,10 +118,32 @@ SPEAR_FACTOR_AXES = [
 ]
 
 
-def render_spear_factor_radar(player_name: str, rank) -> None:
+SPEAR_FACTOR_DETAILS = {
+    "in_box_finishing_top_percent": ("in_box_finishing", "in_box_finishing_rank", "eligible_players"),
+    "shot_quality_top_percent": ("shot_quality", "shot_quality_rank", "eligible_players"),
+    "xg_per90_top_percent": ("xg_per90", "xg_per90_rank", "progression_eligible"),
+    "duel_margin_per90_top_percent": ("duel_margin_per90", "duel_margin_per90_rank", "progression_eligible"),
+    "aerial_margin_per90_top_percent": ("aerial_margin_per90", "aerial_margin_per90_rank", "progression_eligible"),
+    "dribble_margin_per90_top_percent": ("dribble_margin_per90", "dribble_margin_per90_rank", "progression_eligible"),
+}
+
+
+def render_spear_factor_radar(player_name: str, rank, stats: DecisionMetrics | None = None) -> None:
     """Six attack-only percentile factors used by the S.P.E.A.R. model."""
     labels = [label for label, _ in SPEAR_FACTOR_AXES]
     player_values = [_radar_score(getattr(rank, attr, None) if rank else None) for _, attr in SPEAR_FACTOR_AXES]
+    player_details = []
+    for _, percentile_attr in SPEAR_FACTOR_AXES:
+        raw_attr, rank_attr, total_attr = SPEAR_FACTOR_DETAILS[percentile_attr]
+        raw_value = getattr(stats, raw_attr, None) if stats else None
+        top_percent = getattr(rank, percentile_attr, None) if rank else None
+        rank_value = getattr(rank, rank_attr, None) if rank else None
+        total = getattr(rank, total_attr, None) if rank else None
+        player_details.append([
+            "—" if raw_value is None else f"{float(raw_value):.2f}",
+            "데이터 부족" if top_percent is None else f"상위 {float(top_percent):.1f}%",
+            "순위 데이터 부족" if rank_value is None or not total else f"{rank_value}위 / {total}명",
+        ])
     # Percentile 50 is the median of exactly the same league/position cohort.
     average_values = [50.0] * len(labels)
     figure = go.Figure()
@@ -129,10 +151,13 @@ def render_spear_factor_radar(player_name: str, rank) -> None:
         (player_name, player_values, "#22C55E", "rgba(34,197,94,0.28)"),
         ("동일 리그·포지션 평균", average_values, "#94A3B8", "rgba(148,163,184,0.16)"),
     ):
+        is_player = name == player_name
         figure.add_trace(go.Scatterpolar(
             r=values + [values[0]], theta=labels + [labels[0]],
             mode="lines+markers", name=name, fill="toself", fillcolor=fill,
             line={"color": color, "width": 2}, marker={"color": color, "size": 6},
+            customdata=(player_details + [player_details[0]]) if is_player else None,
+            hovertemplate=("<b>%{theta}</b><br>원시값: %{customdata[0]}<br>%{customdata[1]} · %{customdata[2]}<br>레이더 점수: %{r:.1f}<extra></extra>" if is_player else "%{theta}: 비교군 평균 %{r:.0f}<extra></extra>"),
         ))
     figure.update_layout(
         title="S.P.E.A.R. 6대 공격 팩터 · 선수 vs 동일 리그·포지션 평균",
@@ -142,6 +167,7 @@ def render_spear_factor_radar(player_name: str, rank) -> None:
         legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"},
     )
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+    st.caption("각 축에 마우스를 올리면 원시값, 등수, 상위%와 레이더 점수를 확인할 수 있습니다.")
 
 
 def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards: bool, minimum_final_third_ratio: int):
@@ -682,7 +708,7 @@ def render_v32_analysis_center() -> None:
     render_activity_ratio(player.player_id, player.name, tactical_ratio)
     radar_col, ratio_col = st.columns(2)
     with radar_col:
-        render_spear_factor_radar(player.name, rank)
+        render_spear_factor_radar(player.name, rank, selected_stats)
         if rank is None:
             st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)으로 표시됩니다.")
     with ratio_col:
