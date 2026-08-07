@@ -15,6 +15,7 @@ import csv
 import json
 import os
 import re
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,11 +25,15 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
-BASE_URL = "https://v2.football.sportsapipro.com/api"
+# Canonical path-based V2 URL. The legacy subdomain remains compatible, but
+# this avoids mixing endpoint shapes across the ETL and documentation.
+BASE_URL = "https://api.sportsapipro.com/v2/football"
 TARGET_TOURNAMENTS = {"premier league", "laliga", "la liga", "bundesliga", "serie a", "ligue 1"}
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 class SportsApiClient:
@@ -142,6 +147,21 @@ def read_fotmob_map(path: Path) -> dict[str, str]:
         return {row["sportsapi_player_id"].strip(): row["fotmob_player_id"].strip() for row in csv.DictReader(source) if row.get("sportsapi_player_id") and row.get("fotmob_player_id")}
 
 
+def _normalise_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def resolve_fotmob_id(player_name: str) -> str | None:
+    """Auto-map only an unambiguous exact-name match; never guess otherwise."""
+    try:
+        from fotmob_client import FotMobError, search_players
+        target = _normalise_name(player_name)
+        matches = [candidate for candidate in search_players(player_name) if _normalise_name(candidate.name) == target]
+        return matches[0].player_id if len(matches) == 1 else None
+    except (ImportError, FotMobError):
+        return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--season-name", required=True, help='display label, e.g. "2025/2026"')
@@ -154,7 +174,7 @@ def main() -> None:
     DATA_DIR.mkdir(exist_ok=True)
     client = SportsApiClient(api_key, args.delay)
     id_map = read_fotmob_map(DATA_DIR / "fotmob_player_map.csv")
-    output, unmatched = [], []
+    output, unmatched, auto_mapped = [], [], []
     for tournament in discover_tournaments(client):
         season = discover_season(client, tournament, args.season_name)
         if not season:
@@ -172,10 +192,12 @@ def main() -> None:
                 continue
             if ratios is None:
                 continue
-            fotmob_id = id_map.get(sports_id)
+            fotmob_id = id_map.get(sports_id) or resolve_fotmob_id(player["name"])
             if not fotmob_id:
                 unmatched.append({"sportsapi_player_id": sports_id, **player})
                 continue
+            if sports_id not in id_map:
+                auto_mapped.append({"sportsapi_player_id": sports_id, "fotmob_player_id": fotmob_id, **player})
             mid, final, samples = ratios
             output.append({
                 "fotmob_player_id": fotmob_id, "sportsapi_player_id": sports_id,
@@ -192,7 +214,10 @@ def main() -> None:
     with (DATA_DIR / "unmatched_sportsapi_players.csv").open("w", encoding="utf-8", newline="") as target:
         writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "name", "team_name"])
         writer.writeheader(); writer.writerows(unmatched)
-    print(f"Wrote {len(output)} matched ratios and {len(unmatched)} unmatched players.")
+    with (DATA_DIR / "auto_matched_fotmob_players.csv").open("w", encoding="utf-8", newline="") as target:
+        writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "fotmob_player_id", "name", "team_name"])
+        writer.writeheader(); writer.writerows(auto_mapped)
+    print(f"Wrote {len(output)} matched ratios ({len(auto_mapped)} auto-mapped) and {len(unmatched)} unmatched players.")
 
 
 if __name__ == "__main__":
