@@ -19,7 +19,7 @@ SPATIAL_FIELDS = (
     "cca_area_pct",
     "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio",
     "danger_zone_density",
-    "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio",
+    "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score",
 )
 
 

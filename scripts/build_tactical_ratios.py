@@ -57,6 +57,9 @@ MIN_CELL_OVERLAP = 3
 ACTIVITY_FILTER_VERSION = "cluster-v1"
 CORE_COVERAGE_SHARE = 0.70
 PITCH_AREA = 100.0 * 100.0
+GOLD_ZONE_WEIGHT = 1.00
+SILVER_ZONE_WEIGHT = 0.65
+BRONZE_ZONE_WEIGHT = 0.30
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 if str(ROOT) not in sys.path:
@@ -283,7 +286,7 @@ def spatial_metrics(points: list[tuple[float, float]]) -> dict[str, float]:
         "lane_4_ratio": 0.0, "lane_5_ratio": 0.0,
         "danger_zone_density": 0.0,
         "box_six_yard_ratio": 0.0, "box_penalty_spot_ratio": 0.0,
-        "box_wide_ratio": 0.0,
+        "box_wide_ratio": 0.0, "deep_box_zone_score": 0.0,
     }
     if not points:
         return empty
@@ -329,6 +332,15 @@ def spatial_metrics(points: list[tuple[float, float]]) -> dict[str, float]:
         empty["box_six_yard_ratio"] = round(six_yard / box_total * 100.0, 2)
         empty["box_penalty_spot_ratio"] = round(penalty_spot / box_total * 100.0, 2)
         empty["box_wide_ratio"] = round((box_total - six_yard - penalty_spot) / box_total * 100.0, 2)
+        # Gold (six-yard), Silver (penalty spot), Bronze (wide box).  This
+        # activity-location score remains distinct from shot quality and is
+        # combined with FotMob's in-box finishing only at ranking time.
+        empty["deep_box_zone_score"] = round(
+            (empty["box_six_yard_ratio"] * GOLD_ZONE_WEIGHT)
+            + (empty["box_penalty_spot_ratio"] * SILVER_ZONE_WEIGHT)
+            + (empty["box_wide_ratio"] * BRONZE_ZONE_WEIGHT),
+            2,
+        )
     return empty
 
 
@@ -400,7 +412,7 @@ def resolve_fotmob_id(player_name: str) -> str | None:
         return None
 
 
-OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "cca_area_pct", "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio", "danger_zone_density", "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "sample_points", "generated_at"]
+OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "cca_area_pct", "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio", "danger_zone_density", "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score", "sample_points", "generated_at"]
 
 
 def read_checkpoint(path: Path) -> list[dict[str, str]]:

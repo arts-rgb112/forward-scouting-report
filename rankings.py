@@ -555,11 +555,10 @@ def calculate_league_percentiles(
         for peer_id, peer in peers.items() if peer.dribble_margin_per90 is not None
     })
     micro_values = {
-        peer_id: (values["box_six_yard_ratio"] * 0.65) + (values["box_penalty_spot_ratio"] * 0.35)
+        peer_id: float(values["deep_box_zone_score"])
         for peer_id, values in spatial_rows.items()
         if values is not None
-        and values.get("box_six_yard_ratio") is not None
-        and values.get("box_penalty_spot_ratio") is not None
+        and values.get("deep_box_zone_score") is not None
     }
     danger_values = spatial_values("danger_zone_density")
     cca_values = spatial_values("cca_area_pct")
@@ -568,12 +567,6 @@ def calculate_league_percentiles(
     cca_scores = _scores_from_population(cca_values)
     deep_box_scores = _combined_scores(in_box_scores, micro_scores, 0.70)
     danger_progression_scores = _combined_scores(dribble_scores, danger_scores, 0.70)
-    player_micro = None
-    if player_spatial is not None:
-        six_yard = player_spatial.get("box_six_yard_ratio")
-        penalty_spot = player_spatial.get("box_penalty_spot_ratio")
-        if six_yard is not None and penalty_spot is not None:
-            player_micro = (float(six_yard) * 0.65) + (float(penalty_spot) * 0.35)
     micro_pct, micro_rank = _rank_score(player_key, micro_scores)
     deep_box_pct, deep_box_rank = _rank_score(player_key, deep_box_scores)
     danger_pct, danger_rank = _rank_score(player_key, danger_progression_scores)
