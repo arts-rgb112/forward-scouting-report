@@ -116,7 +116,7 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
 
 
 SPEAR_FACTOR_AXES = [
-    ("전체 슈팅 파괴력", "shot_quality_top_percent"),
+    ("전체 슈팅 파괴력", "spear_shot_quality_top_percent"),
     ("심층 타격 효율", "micro_zoning_finishing_top_percent"),
     ("위험 구역 파괴력", "danger_zone_progression_top_percent"),
     ("공중볼 장악력", "aerial_margin_per90_top_percent"),
@@ -419,7 +419,7 @@ TWIN_SECTOR_MATRIX = {
 }
 
 SPEAR_FACTOR_DETAILS = {
-    "shot_quality_top_percent": ("shot_quality", "shot_quality_rank", "progression_eligible"),
+    "spear_shot_quality_top_percent": ("shot_quality_per90", "spear_shot_quality_rank", "progression_eligible"),
     "micro_zoning_finishing_top_percent": ("tactical:box_six_yard_ratio", "micro_zoning_finishing_rank", "progression_eligible"),
     "danger_zone_progression_top_percent": ("tactical:danger_zone_density", "danger_zone_progression_rank", "progression_eligible"),
     "aerial_margin_per90_top_percent": ("aerial_margin_per90", "aerial_margin_per90_rank", "progression_eligible"),
@@ -455,6 +455,24 @@ def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
         text = sector["rows"][volume_tier][ratio_tier]
         summaries.append((sector["title"], f"[{volume_tier}×{ratio_tier}] {text}"))
     return summaries
+
+
+def twin_matrix_coordinates(rank) -> tuple[tuple[str, str] | None, ...]:
+    """Return the six 5×5 coordinates used by the displayed card dictionary."""
+    if rank is None:
+        return tuple()
+    coordinates = []
+    for sector in TWIN_SECTOR_MATRIX.values():
+        volume_percent = getattr(rank, sector["volume"], None)
+        ratio_percent = getattr(rank, sector["ratio"], None)
+        if volume_percent is None or ratio_percent is None:
+            coordinates.append(None)
+        else:
+            coordinates.append((
+                _spear_tier(_radar_score(volume_percent)),
+                _spear_tier(_radar_score(ratio_percent)),
+            ))
+    return tuple(coordinates)
 
 
 def render_twin_radar_sector_summaries(rank) -> None:
@@ -1237,7 +1255,7 @@ def render_v32_analysis_center() -> None:
         )
         left_total = sum(_radar_score(getattr(rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES) if rank else 0.0
         right_total = sum(_radar_score(getattr(opponent_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES) if opponent_rank else 0.0
-        if abs(left_total - right_total) < 0.01:
+        if twin_matrix_coordinates(rank) and twin_matrix_coordinates(rank) == twin_matrix_coordinates(opponent_rank):
             result = "🤝 동일한 전술 프로필"
         elif left_total > right_total:
             result = f"🏆 {player.name} 우세"

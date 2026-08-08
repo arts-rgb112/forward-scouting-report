@@ -113,6 +113,8 @@ class LeaguePercentiles:
     cca_area_rank: Optional[int] = None
     danger_zone_density_top_percent: Optional[float] = None
     danger_zone_density_rank: Optional[int] = None
+    spear_shot_quality_top_percent: Optional[float] = None
+    spear_shot_quality_rank: Optional[int] = None
 
 
 def _value(row: dict) -> Optional[float]:
@@ -513,14 +515,14 @@ def calculate_league_percentiles(
     # Keep the S.P.E.A.R. shooting factor on the exact same xG>=1 cohort
     # competition cohort as the other five radar axes.
     spear_shot_quality_population = [
-        peer.xgot - peer.xg for peer in peers.values()
-        if peer.xgot is not None and peer.xg is not None
+        peer.shot_quality_per90 for peer in peers.values()
+        if peer.shot_quality_per90 is not None
     ]
-    spear_shot_quality = metrics.xgot - metrics.xg if metrics.xgot is not None and metrics.xg is not None else None
+    spear_shot_quality = metrics.shot_quality_per90
     if spear_shot_quality_population:
-        sq_pct, sq_rk = _rank_info(spear_shot_quality, spear_shot_quality_population)
-        shot_quality_population = spear_shot_quality_population
-        shot_quality_median = float(pd.Series(spear_shot_quality_population).median())
+        spear_sq_pct, spear_sq_rk = _rank_info(spear_shot_quality, spear_shot_quality_population)
+    else:
+        spear_sq_pct, spear_sq_rk = None, None
     in_box_population = [peer.in_box_finishing for peer in peers.values() if peer.in_box_finishing is not None]
     out_box_population = [peer.out_box_shot_quality for peer in peers.values() if peer.out_box_shot_quality is not None]
     in_box_pct, in_box_rank = _rank_info(metrics.in_box_finishing, in_box_population)
@@ -562,8 +564,8 @@ def calculate_league_percentiles(
         }
 
     in_box_scores = _scores_from_population({
-        peer_id: peer.in_box_finishing
-        for peer_id, peer in peers.items() if peer.in_box_finishing is not None
+        peer_id: peer.in_box_finishing_per90
+        for peer_id, peer in peers.items() if peer.in_box_finishing_per90 is not None
     })
     dribble_scores = _scores_from_population({
         peer_id: peer.dribble_margin_per90
@@ -671,6 +673,8 @@ def calculate_league_percentiles(
         cca_area_rank=cca_rank,
         danger_zone_density_top_percent=danger_density_pct,
         danger_zone_density_rank=danger_density_rank,
+        spear_shot_quality_top_percent=spear_sq_pct,
+        spear_shot_quality_rank=spear_sq_rk,
     )
 
 
