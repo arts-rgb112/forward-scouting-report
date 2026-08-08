@@ -116,7 +116,7 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
 
 
 SPEAR_FACTOR_AXES = [
-    ("전체 슈팅 파괴력", "spear_shot_quality_top_percent"),
+    ("박스 밖 킥 순도", "spear_shot_quality_top_percent"),
     ("심층 타격 효율", "micro_zoning_finishing_top_percent"),
     ("위험 구역 파괴력", "danger_zone_progression_top_percent"),
     ("공중볼 장악력", "aerial_margin_per90_top_percent"),
@@ -438,6 +438,26 @@ def _spear_tier(score: float) -> str:
     if score >= 35:
         return "C"
     return "D"
+
+
+def _spear_total(rank) -> tuple[float | None, str | None, int]:
+    """Return the visible S.P.E.A.R. total from the actually bound radar axes.
+
+    Missing axes are not silently converted to 50 here: a score is only shown
+    when at least one real percentile is available, and the coverage count is
+    retained for an honest UI caption.
+    """
+    if rank is None:
+        return None, None, 0
+    values = [
+        _radar_score(getattr(rank, attr))
+        for _, attr in SPEAR_FACTOR_AXES
+        if getattr(rank, attr, None) is not None
+    ]
+    if not values:
+        return None, None, 0
+    score = round(sum(values) / len(values), 1)
+    return score, _spear_tier(score), len(values)
 
 
 def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
@@ -787,7 +807,15 @@ def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, obj
         ("🥈 실버 존 · 페널티 스팟", "box_penalty_spot_ratio", "#CBD5E1"),
         ("🥉 브론즈 존 · 와이드 박스", "box_wide_ratio", "#CD7F32"),
     )
-    if all(ratio.get(field) is not None for _, field, _ in zone_fields):
+    micro_values = [ratio.get(field) for _, field, _ in zone_fields]
+    # Historical rows built from a down-sampled visual heatmap can retain a
+    # valid pitch image while losing every box coordinate.  Treat that as
+    # unavailable rather than presenting three misleading 0.0% values.
+    micro_available = (
+        all(value is not None for value in micro_values)
+        and sum(float(value) for value in micro_values) > 0.0
+    )
+    if micro_available:
         gold = float(ratio["box_six_yard_ratio"])
         silver = float(ratio["box_penalty_spot_ratio"])
         bronze = float(ratio["box_wide_ratio"])
@@ -806,6 +834,8 @@ def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, obj
                     f"<b>{label}</b><br><span style='font-size:1.25rem'>{float(ratio[field]):.1f}%</span></div>",
                     unsafe_allow_html=True,
                 )
+    else:
+        st.caption("박스 내 반복 좌표 표본이 부족해 골드·실버·브론즈 비율을 아직 산출할 수 없습니다. 0%를 의미하지 않습니다.")
 
 
 def build_radar_profile(
@@ -1218,6 +1248,11 @@ def render_v32_analysis_center() -> None:
         key=f"v32_competition_{player.player_id}_{filters['season']}",
     )
     session_key, selected_stats = session_rows[selected_index]
+    session_team = selected_stats.team_name or "팀 정보 미제공"
+    st.caption(
+        f"분석 세션: {filters['season']} · {selected_stats.league_name or '대회 정보 미제공'} · {session_team} "
+        "(검색 결과의 소속 표기는 현재 소속일 수 있습니다.)"
+    )
     st.divider()
     tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", filters["season"])
     rank = cached_percentiles(
@@ -1277,9 +1312,15 @@ def render_v32_analysis_center() -> None:
                 render_activity_ratio(opponent.player_id, opponent.name, opponent_ratio)
                 render_season_heatmap(opponent.player_id, opponent.name, opponent_ratio.get("heatmap_key") if opponent_ratio else None)
         return
+    spear_score, spear_tier, spear_coverage = _spear_total(rank)
     title_col, help_col = st.columns([4, 1])
     with title_col:
-        st.subheader(f"👑 {player.name}  ·  🏷️ S.P.E.A.R. 동기화 대기  (—/100)")
+        if spear_score is None:
+            st.subheader(f"👑 {player.name}  ·  🏷️ S.P.E.A.R. 데이터 부족")
+        else:
+            st.subheader(f"👑 {player.name}  ·  [{spear_tier}-Tier]  S.P.E.A.R. {spear_score:.1f}/100")
+            if spear_coverage < len(SPEAR_FACTOR_AXES):
+                st.caption(f"현재 산출 가능한 팩터 {spear_coverage}/{len(SPEAR_FACTOR_AXES)}개 기준의 잠정 점수입니다.")
     with help_col:
         with st.popover("❓ 점수 산출 방식"):
             st.markdown("**S.P.E.A.R.**  \\n슈팅 50% · 수비 부수기 30% · 위치 선정 20%")
