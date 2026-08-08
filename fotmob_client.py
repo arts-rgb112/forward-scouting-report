@@ -163,7 +163,7 @@ _CUP_HINTS = ("cup", "copa", "super")
 
 
 def _league_selections(
-    data: dict[str, Any], max_seasons: int = 3, competitions_per_season: int = 2
+    data: dict[str, Any], max_seasons: int = 3, competitions_per_season: int = 4
 ) -> list[dict[str, Any]]:
     """Choose the domestic-league tournament, and (if present) the Champions
     League/Europa League tournament, from the latest club seasons.

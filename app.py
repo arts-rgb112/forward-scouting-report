@@ -32,12 +32,13 @@ def cached_player_data(player_id: str):
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_percentiles(
     player_id: str, season: str, metrics: DecisionMetrics, min_xg: float,
-    restrict_to_forwards: bool, minimum_final_third_ratio: int,
+    restrict_to_forwards: bool, minimum_final_third_ratio: int, comparison_scope: int = 0,
 ):
     return calculate_league_percentiles(
         player_id, season, metrics, minimum_xg=min_xg,
         restrict_to_forwards=restrict_to_forwards,
         minimum_final_third_ratio=minimum_final_third_ratio,
+        comparison_scope=comparison_scope,
     )
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -115,21 +116,21 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
 
 
 SPEAR_FACTOR_AXES = [
-    ("전체 슈팅 파괴력", "shot_quality_top_percent"),
-    ("박스 안 결정력", "in_box_finishing_top_percent"),
-    ("자력 전진 및 돌파 능력", "dribble_margin_per90_top_percent"),
+    ("전체 슈팅 파괴력", "spear_shot_quality_top_percent"),
+    ("심층 타격 효율", "micro_zoning_finishing_top_percent"),
+    ("위험 구역 파괴력", "danger_zone_progression_top_percent"),
     ("공중볼 장악력", "aerial_margin_per90_top_percent"),
     ("지상 경합 능력", "duel_margin_per90_top_percent"),
-    ("위치 선정 및 오프더볼", "xg_per90_top_percent"),
+    ("공간 장악력", "cca_area_top_percent"),
 ]
 
 VOLUME_FACTOR_AXES = [
-    ("슈팅 볼륨", "total_shots_volume_top_percent", "total_shots", "total_shots_volume_rank"),
-    ("박스 안 타격 볼륨", "box_shots_volume_top_percent", "in_box_shots", "box_shots_volume_rank"),
+    ("박스 밖 슈팅 시도", "outside_box_shots_attempts_top_percent", "out_box_shots", "outside_box_shots_attempts_rank"),
+    ("박스 안 타격", "box_shots_volume_top_percent", "in_box_shots", "box_shots_volume_rank"),
     ("드리블 돌파 시도", "dribble_attempts_volume_top_percent", "dribble_attempts", "dribble_attempts_volume_rank"),
     ("공중볼 경합 시도", "aerial_duel_attempts_volume_top_percent", "aerial_duel_attempts", "aerial_duel_attempts_volume_rank"),
     ("지상 경합 시도", "ground_duel_attempts_volume_top_percent", "ground_duel_attempts", "ground_duel_attempts_volume_rank"),
-    ("득점 찬스 관여 볼륨", "xg_volume_top_percent", "xg", "xg_volume_rank"),
+    ("핵심 활동 반경", "cca_area_top_percent", "tactical:cca_area_pct", "cca_area_rank"),
 ]
 
 # Every sector deliberately keeps a full 5×5 lookup: volume describes how
@@ -163,10 +164,10 @@ _LEGACY_TWIN_SECTOR_MATRIX = {
 }
 
 TWIN_SECTOR_MATRIX = {
-    "shooting": {
-        "title": "\U0001f3af \uc288\ud305",
-        "volume": "total_shots_volume_top_percent",
-        "ratio": "shot_quality_top_percent",
+    "outside_box_shooting": {
+        "title": "\U0001f680 \ubc15\uc2a4 \ubc16 \uc288\ud305\ub825",
+        "volume": "outside_box_shots_attempts_top_percent",
+        "ratio": "out_box_shot_quality_top_percent",
         "rows": {
             "S": {
                 "S": "\uc228\ub9cc \uc26c\uc5b4\ub3c4 \ub4dd\uc810 \ucc2c\uc2a4\ub97c \ucc3d\ucd9c\ud558\uace0 \ub2e5\uce58\ub294 \ub300\ub85c \uaf42\uc544 \ub123\ub294 \uc804\ucc9c\ud6c4 \ud3ed\uaca9\uae30",
@@ -205,10 +206,10 @@ TWIN_SECTOR_MATRIX = {
             }
         },
     },
-    "box": {
-        "title": "\U0001f94a \ubc15\uc2a4 \uc548",
+    "deep_box_lethality": {
+        "title": "\U0001f94a \uc2ec\uce35 \ud0c0\uaca9 \ud6a8\uc728",
         "volume": "box_shots_volume_top_percent",
-        "ratio": "in_box_finishing_top_percent",
+        "ratio": "micro_zoning_finishing_top_percent",
         "rows": {
             "S": {
                 "S": "\ubc15\uc2a4 \uc548\uc744 \uc9c0\uc625\uc73c\ub85c \ub9cc\ub4e4\uba70 \ub2ff\ub294 \uc871\uc871 \uace8\ub9dd\uc744 \ucc22\uc5b4\ubc84\ub9ac\ub294 \uc0dd\ud0dc\uacc4 \ud30c\uad34\uc885",
@@ -247,10 +248,10 @@ TWIN_SECTOR_MATRIX = {
             }
         },
     },
-    "dribble": {
-        "title": "\u26a1 \ub3cc\ud30c",
+    "danger_zone_progression": {
+        "title": "\u26a1 \uc704\ud5d8 \uad6c\uc5ed \ud30c\uad34\ub825",
         "volume": "dribble_attempts_volume_top_percent",
-        "ratio": "dribble_margin_per90_top_percent",
+        "ratio": "danger_zone_progression_top_percent",
         "rows": {
             "S": {
                 "S": "\uacf5\uc744 \uc7a1\uc73c\uba74 \uc0c1\ub300 \uc218\ube44\uc9c4\uc744 \ucc22\uc5b4\ubc1c\uae30\uba70 \ubb34\uc5d0\uc11c \uc720\ub97c \ucc3d\uc870\ud558\ub294 \uc5b8\ud130\ucc98\ube14 \ud06c\ub799",
@@ -373,10 +374,10 @@ TWIN_SECTOR_MATRIX = {
             }
         },
     },
-    "chance": {
-        "title": "\U0001f9e0 \uae30\ud68c \ud3ec\ucc29",
-        "volume": "xg_volume_top_percent",
-        "ratio": "xg_per90_top_percent",
+    "space_control": {
+        "title": "\U0001f9e0 \uacf5\uac04 \uc7a5\uc545\ub825",
+        "volume": "cca_area_top_percent",
+        "ratio": "danger_zone_density_top_percent",
         "rows": {
             "S": {
                 "S": "\ubbf8\uce5c \uc624\ud504\ub354\ubcfc\ub85c \ubaa8\ub4e0 \ub4dd\uc810 \uae30\ud68c\uc758 \uc911\uc2ec\uc5d0 \uc11c\uba70 \ud300 \uc804\uc220\uc744 \uc644\uc131\ud558\ub294 \ucf54\uc5b4",
@@ -418,12 +419,12 @@ TWIN_SECTOR_MATRIX = {
 }
 
 SPEAR_FACTOR_DETAILS = {
-    "shot_quality_top_percent": ("shot_quality", "shot_quality_rank", "progression_eligible"),
-    "in_box_finishing_top_percent": ("in_box_finishing", "in_box_finishing_rank", "progression_eligible"),
-    "dribble_margin_per90_top_percent": ("dribble_margin_per90", "dribble_margin_per90_rank", "progression_eligible"),
+    "spear_shot_quality_top_percent": ("shot_quality_per90", "spear_shot_quality_rank", "progression_eligible"),
+    "micro_zoning_finishing_top_percent": ("tactical:box_six_yard_ratio", "micro_zoning_finishing_rank", "progression_eligible"),
+    "danger_zone_progression_top_percent": ("tactical:danger_zone_density", "danger_zone_progression_rank", "progression_eligible"),
     "aerial_margin_per90_top_percent": ("aerial_margin_per90", "aerial_margin_per90_rank", "progression_eligible"),
     "duel_margin_per90_top_percent": ("duel_margin_per90", "duel_margin_per90_rank", "progression_eligible"),
-    "xg_per90_top_percent": ("xg_per90", "xg_per90_rank", "progression_eligible"),
+    "cca_area_top_percent": ("tactical:cca_area_pct", "cca_area_rank", "progression_eligible"),
 }
 
 
@@ -454,6 +455,24 @@ def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
         text = sector["rows"][volume_tier][ratio_tier]
         summaries.append((sector["title"], f"[{volume_tier}×{ratio_tier}] {text}"))
     return summaries
+
+
+def twin_matrix_coordinates(rank) -> tuple[tuple[str, str] | None, ...]:
+    """Return the six 5×5 coordinates used by the displayed card dictionary."""
+    if rank is None:
+        return tuple()
+    coordinates = []
+    for sector in TWIN_SECTOR_MATRIX.values():
+        volume_percent = getattr(rank, sector["volume"], None)
+        ratio_percent = getattr(rank, sector["ratio"], None)
+        if volume_percent is None or ratio_percent is None:
+            coordinates.append(None)
+        else:
+            coordinates.append((
+                _spear_tier(_radar_score(volume_percent)),
+                _spear_tier(_radar_score(ratio_percent)),
+            ))
+    return tuple(coordinates)
 
 
 def render_twin_radar_sector_summaries(rank) -> None:
@@ -529,7 +548,10 @@ def render_twin_radar_sector_summaries(rank) -> None:
             st.markdown(card, unsafe_allow_html=True)
 
 
-def render_spear_radar(player_name: str, rank, stats: DecisionMetrics | None, *, volume: bool) -> None:
+def render_spear_radar(
+    player_name: str, rank, stats: DecisionMetrics | None, *, volume: bool,
+    tactical_ratio: dict[str, object] | None = None,
+) -> None:
     """Render one of the synchronized volume/ratio S.P.E.A.R. radars."""
     axes = VOLUME_FACTOR_AXES if volume else SPEAR_FACTOR_AXES
     details = []
@@ -547,7 +569,11 @@ def render_spear_radar(player_name: str, rank, stats: DecisionMetrics | None, *,
         tier = _spear_tier(score)
         labels.append(f"{label} [{tier}]")
         values.append(score)
-        raw_value = getattr(stats, raw_attr, None) if stats else None
+        raw_value = (
+            tactical_ratio.get(raw_attr.removeprefix("tactical:"))
+            if raw_attr.startswith("tactical:") and tactical_ratio
+            else getattr(stats, raw_attr, None) if stats else None
+        )
         rank_value = getattr(rank, rank_attr, None) if rank else None
         total = getattr(rank, total_attr, None) if rank else None
         details.append([
@@ -586,6 +612,104 @@ def render_spear_radar(player_name: str, rank, stats: DecisionMetrics | None, *,
         legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"},
     )
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+    zone_fields = (
+        ("🥇 골드 존 · 6야드", "box_six_yard_ratio", "#F6C945"),
+        ("🥈 실버 존 · 페널티 스팟", "box_penalty_spot_ratio", "#CBD5E1"),
+        ("🥉 브론즈 존 · 와이드 박스", "box_wide_ratio", "#CD7F32"),
+    )
+    if all(ratio.get(field) is not None for _, field, _ in zone_fields):
+        gold = float(ratio["box_six_yard_ratio"])
+        silver = float(ratio["box_penalty_spot_ratio"])
+        bronze = float(ratio["box_wide_ratio"])
+        weighted = float(ratio.get("deep_box_zone_score", 0.0))
+        if gold >= max(silver, bronze):
+            tendency = "골 에어리어 심층 침투형"
+        elif silver >= bronze:
+            tendency = "페널티 스팟 컷백 타격형"
+        else:
+            tendency = "와이드 박스 앵글 제한형"
+        st.caption(f"🥊 박스 내 마이크로 조닝 · 가중 심층 점유 {weighted:.1f}/100 · {tendency}")
+        zone_cols = st.columns(3)
+        for column, (label, field, color) in zip(zone_cols, zone_fields):
+            with column:
+                st.markdown(
+                    f"<div style='border-left:4px solid {color}; padding-left:0.55rem;'>"
+                    f"<b>{label}</b><br><span style='font-size:1.25rem'>{float(ratio[field]):.1f}%</span>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+
+
+def render_spear_head_to_head(left_name: str, left_rank, right_name: str, right_rank) -> None:
+    """Overlay the two independent S.P.E.A.R. 2.0 ratio profiles."""
+    labels = [label for label, _ in SPEAR_FACTOR_AXES]
+    left_scores = [_radar_score(getattr(left_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES]
+    right_scores = [_radar_score(getattr(right_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES]
+    figure = go.Figure()
+    for name, scores, color, fill in (
+        (left_name, left_scores, "#38BDF8", "rgba(56,189,248,0.25)"),
+        (right_name, right_scores, "#FB7185", "rgba(251,113,133,0.24)"),
+    ):
+        tiers = [_spear_tier(score) for score in scores]
+        figure.add_trace(go.Scatterpolar(
+            r=scores + [scores[0]], theta=[f"{label} [{tier}]" for label, tier in zip(labels, tiers)] + [f"{labels[0]} [{tiers[0]}]"],
+            mode="lines+markers", name=name, fill="toself", fillcolor=fill,
+            line={"color": color, "width": 2.5}, marker={"color": color, "size": 6},
+            hovertemplate="<b>%{theta}</b><br>%{fullData.name}: %{r:.1f}/100<extra></extra>",
+        ))
+    figure.update_layout(
+        title="S.P.E.A.R. 2.0 Head-to-Head · 비율 프로필",
+        height=500, margin={"l": 44, "r": 44, "t": 55, "b": 38},
+        paper_bgcolor="rgba(0,0,0,0)",
+        polar={
+            "bgcolor": "rgba(0,0,0,0)",
+            "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100]},
+            "angularaxis": {"rotation": 90, "direction": "clockwise"},
+        },
+        legend={"orientation": "h", "y": -0.1, "x": 0.5, "xanchor": "center"},
+    )
+    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+
+def render_head_to_head_cards(
+    left_name: str, left_rank, left_stats, left_ratio,
+    right_name: str, right_rank, right_stats, right_ratio,
+) -> None:
+    """Show each player's matrix evidence independently; never concatenate copy."""
+    left_cards = dict(twin_radar_sector_summaries(left_rank))
+    right_cards = dict(twin_radar_sector_summaries(right_rank))
+    raw_fields = {
+        "🚀 박스 밖 슈팅력": ("out_box_shots", "out_box_shot_quality", "박스 밖 슛", "xGOT-xG"),
+        "🥊 심층 타격 효율": ("in_box_shots", "in_box_finishing", "박스 안 슛", "박스 안 xGOT-xG"),
+        "⚡ 위험 구역 파괴력": ("dribble_attempts", "dribble_margin_per90", "돌파 시도", "드리블 마진/90"),
+        "🦅 공중볼 장악력": ("aerial_duel_attempts", "aerial_margin_per90", "공중볼 시도", "공중볼 마진/90"),
+        "🪨 지상 경합 능력": ("ground_duel_attempts", "duel_margin_per90", "지상 경합 시도", "지상 마진/90"),
+        "🧠 공간 장악력": ("tactical:cca_area_pct", "tactical:danger_zone_density", "CCA", "위험구역 밀도"),
+    }
+
+    def raw_fact(title, stats, ratio):
+        first, second, first_label, second_label = raw_fields[title]
+        def value(field):
+            if field.startswith("tactical:"):
+                return (ratio or {}).get(field.removeprefix("tactical:"))
+            return getattr(stats, field, None)
+        one, two = value(first), value(second)
+        fmt = lambda item: "—" if item is None else f"{float(item):.2f}"
+        return f"원시값 · {first_label} {fmt(one)} / {second_label} {fmt(two)}"
+    for title in TWIN_SECTOR_MATRIX.values():
+        sector_title = title["title"]
+        left_text = left_cards.get(sector_title, "비교군 또는 공간 데이터 부족")
+        right_text = right_cards.get(sector_title, "비교군 또는 공간 데이터 부족")
+        with st.expander(sector_title, expanded=False):
+            left_col, right_col = st.columns(2)
+            with left_col:
+                st.markdown(f"**{left_name}**")
+                st.write(left_text)
+                st.caption(raw_fact(sector_title, left_stats, left_ratio))
+            with right_col:
+                st.markdown(f"**{right_name}**")
+                st.write(right_text)
+                st.caption(raw_fact(sector_title, right_stats, right_ratio))
 
 
 def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards: bool, minimum_final_third_ratio: int):
@@ -1050,18 +1174,22 @@ def render_v32_analysis_center() -> None:
         st.session_state.v32_filters = None
 
     with st.form("global_analysis_filters", border=True):
-        position_col, season_col, player_col, action_col = st.columns([1.25, 1.4, 2.2, 1.0])
-        with position_col:
-            positions = st.multiselect("포지션", ["FW (ST/CF)", "MF", "DF", "GK"], default=["FW (ST/CF)"])
+        season_col, scope_col, player_col, action_col = st.columns([1.2, 1.3, 2.1, 1.0])
         with season_col:
             season = st.selectbox("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], index=0)
+        with scope_col:
+            comparison_scope = st.selectbox(
+                "비교 모집단", [3, 5, 7], index=1,
+                format_func=lambda value: f"{value}대 리그",
+                help="3대: LaLiga·Premier League·Serie A / 5대: 여기에 Bundesliga·Ligue 1 / 7대: 여기에 Eredivisie·Primeira Liga",
+            )
         with player_col:
             query = st.text_input("선수명 검색", placeholder="예: Erling Haaland")
         with action_col:
             st.write("")
             submitted = st.form_submit_button("🔍 데이터 분석", use_container_width=True, type="primary")
         if submitted:
-            st.session_state.v32_filters = {"positions": positions, "season": season, "query": query.strip()}
+            st.session_state.v32_filters = {"season": season, "comparison_scope": comparison_scope, "query": query.strip()}
 
     filters = st.session_state.v32_filters
     if not filters:
@@ -1094,7 +1222,63 @@ def render_v32_analysis_center() -> None:
     session_key, selected_stats = session_rows[selected_index]
     st.divider()
     tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", filters["season"])
-    rank = spear_rank_for_session(player, filters["season"], selected_stats, "FW (ST/CF)" in filters["positions"])
+    rank = cached_percentiles(
+        player.player_id, filters["season"], selected_stats, 1.0, True, 0,
+        filters["comparison_scope"],
+    )
+    if filters["comparison_scope"] == 7:
+        st.caption("7대 리그 모드: Eredivisie·Primeira Liga 코호트는 다음 정적 코호트 수집 후 자동으로 포함됩니다. 현재는 적재된 5대 리그 기준입니다.")
+    view_mode = st.radio("분석 보기", ["단일 분석", "Head-to-Head"], horizontal=True, key="v32_view_mode")
+    if view_mode == "Head-to-Head":
+        st.caption("두 선수는 같은 시즌·같은 대회 세션에서 각각 독립적으로 상대평가됩니다.")
+        opponent = select_player(
+            st.text_input("비교 선수 검색", key="v32_opponent_query", placeholder="예: Robert Lewandowski"),
+            "v32_opponent_player",
+        )
+        if not opponent:
+            return
+        try:
+            opponent_sessions = extract_multi_season_metrics(cached_player_data(opponent.player_id))
+        except FotMobError as exc:
+            st.error(f"비교 선수 세션 데이터를 불러오지 못했습니다: {exc}")
+            return
+        opponent_stats = next((
+            stats for key, stats in opponent_sessions.items()
+            if key.split("_", 1)[0] == filters["season"] and stats.league_id == selected_stats.league_id
+        ), None)
+        if opponent_stats is None:
+            st.warning(f"{opponent.name}은(는) {filters['season']} {selected_stats.league_name}에 독립된 세션이 없습니다.")
+            return
+        opponent_rank = cached_percentiles(
+            opponent.player_id, filters["season"], opponent_stats, 1.0, True, 0,
+            filters["comparison_scope"],
+        )
+        left_total = sum(_radar_score(getattr(rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES) if rank else 0.0
+        right_total = sum(_radar_score(getattr(opponent_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES) if opponent_rank else 0.0
+        if twin_matrix_coordinates(rank) and twin_matrix_coordinates(rank) == twin_matrix_coordinates(opponent_rank):
+            result = "🤝 동일한 전술 프로필"
+        elif left_total > right_total:
+            result = f"🏆 {player.name} 우세"
+        else:
+            result = f"🏆 {opponent.name} 우세"
+        opponent_ratio = get_tactical_ratio_for_session(
+            opponent.player_id, opponent_stats.league_name or "", filters["season"],
+        )
+        st.subheader(f"{result} · {selected_stats.league_name}")
+        render_spear_head_to_head(player.name, rank, opponent.name, opponent_rank)
+        render_head_to_head_cards(
+            player.name, rank, selected_stats, tactical_ratio,
+            opponent.name, opponent_rank, opponent_stats, opponent_ratio,
+        )
+        with st.expander("공간·활동량 세부 차트", expanded=False):
+            left_col, right_col = st.columns(2)
+            with left_col:
+                render_activity_ratio(player.player_id, player.name, tactical_ratio)
+                render_season_heatmap(player.player_id, player.name, tactical_ratio.get("heatmap_key") if tactical_ratio else None)
+            with right_col:
+                render_activity_ratio(opponent.player_id, opponent.name, opponent_ratio)
+                render_season_heatmap(opponent.player_id, opponent.name, opponent_ratio.get("heatmap_key") if opponent_ratio else None)
+        return
     title_col, help_col = st.columns([4, 1])
     with title_col:
         st.subheader(f"👑 {player.name}  ·  🏷️ S.P.E.A.R. 동기화 대기  (—/100)")
@@ -1105,9 +1289,9 @@ def render_v32_analysis_center() -> None:
             st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
     volume_col, ratio_col = st.columns(2)
     with volume_col:
-        render_spear_radar(player.name, rank, selected_stats, volume=True)
+        render_spear_radar(player.name, rank, selected_stats, volume=True, tactical_ratio=tactical_ratio)
     with ratio_col:
-        render_spear_radar(player.name, rank, selected_stats, volume=False)
+        render_spear_radar(player.name, rank, selected_stats, volume=False, tactical_ratio=tactical_ratio)
     if rank is None:
         st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)과 C 등급으로 표시됩니다.")
     render_twin_radar_sector_summaries(rank)
@@ -1124,7 +1308,7 @@ def render_v32_analysis_center() -> None:
                 tactical_ratio.get("heatmap_key") if tactical_ratio else None,
             )
     render_player_report(
-        player, [filters["season"]], "전체", "FW (ST/CF)" in filters["positions"], 0,
+        player, [filters["season"]], "전체", True, 0,
         show_activity=False, selected_league_id=selected_stats.league_id,
     )
     if not rank or (rank.eligible_players or 0) < 10:

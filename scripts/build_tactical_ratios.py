@@ -43,13 +43,26 @@ TARGET_TOURNAMENTS = {
     ("bundesliga", "germany"): "Bundesliga",
     ("serie a", "italy"): "Serie A",
     ("ligue 1", "france"): "Ligue 1",
+    ("eredivisie", "netherlands"): "Eredivisie",
+    ("primeira liga", "portugal"): "Primeira Liga",
+    ("liga portugal", "portugal"): "Primeira Liga",
     ("uefa champions league", "europe"): "UEFA Champions League",
     ("champions league", "europe"): "UEFA Champions League",
+    ("uefa europa league", "europe"): "UEFA Europa League",
+    ("europa league", "europe"): "UEFA Europa League",
+    ("uefa europa conference league", "europe"): "UEFA Europa Conference League",
+    ("uefa conference league", "europe"): "UEFA Europa Conference League",
+    ("europa conference league", "europe"): "UEFA Europa Conference League",
 }
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ACTIVITY_GRID_SIZE = 5.0
 MIN_CELL_OVERLAP = 3
 ACTIVITY_FILTER_VERSION = "cluster-v1"
+CORE_COVERAGE_SHARE = 0.70
+PITCH_AREA = 100.0 * 100.0
+GOLD_ZONE_WEIGHT = 1.00
+SILVER_ZONE_WEIGHT = 0.65
+BRONZE_ZONE_WEIGHT = 0.30
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 if str(ROOT) not in sys.path:
@@ -215,6 +228,15 @@ def is_target_position(values: Iterable[str]) -> bool:
 def core_activity_points(payload: Any) -> list[tuple[float, float]]:
     """Keep only repeated 5x5m activity cells; discard one-off noise points."""
     points: list[tuple[float, float]] = []
+    # The API payload is nested dictionaries, while the static visual cache is
+    # a compact ``[[x, y], ...]`` list.  Supporting both lets the no-API
+    # backfill reproduce the same activity rules from already saved sessions.
+    if isinstance(payload, list):
+        for item in payload:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                x, y = as_number(item[0]), as_number(item[1])
+                if x is not None and y is not None and 0 <= x <= 100 and 0 <= y <= 100:
+                    points.append((x, y))
     for item in walk_dicts(payload):
         x, y = as_number(item.get("x")), as_number(item.get("y"))
         if x is not None and y is not None and 0 <= x <= 100 and 0 <= y <= 100:
@@ -224,6 +246,105 @@ def core_activity_points(payload: Any) -> list[tuple[float, float]]:
         (x, y) for x, y in points
         if cell_counts[(int(x // ACTIVITY_GRID_SIZE), int(y // ACTIVITY_GRID_SIZE))] >= MIN_CELL_OVERLAP
     ]
+
+
+def _convex_hull_area(points: list[tuple[float, float]]) -> float:
+    """Return the area covered by a point cloud's convex hull in pitch units."""
+    unique = sorted(set(points))
+    if len(unique) < 3:
+        return 0.0
+
+    def cross(origin: tuple[float, float], left: tuple[float, float], right: tuple[float, float]) -> float:
+        return (left[0] - origin[0]) * (right[1] - origin[1]) - (left[1] - origin[1]) * (right[0] - origin[0])
+
+    lower: list[tuple[float, float]] = []
+    for point in unique:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
+            lower.pop()
+        lower.append(point)
+    upper: list[tuple[float, float]] = []
+    for point in reversed(unique):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
+            upper.pop()
+        upper.append(point)
+    hull = lower[:-1] + upper[:-1]
+    return abs(sum(
+        hull[index][0] * hull[(index + 1) % len(hull)][1]
+        - hull[index][1] * hull[(index + 1) % len(hull)][0]
+        for index in range(len(hull))
+    )) / 2.0
+
+
+def spatial_metrics(points: list[tuple[float, float]]) -> dict[str, float]:
+    """Derive S.P.E.A.R. 2.0 spatial features from repeated activity points.
+
+    Heatmap coordinates represent activity, not shots.  The micro-zone values
+    therefore measure *where a player operates inside the box* and are later
+    combined with FotMob's shot-derived finishing metric; they do not pretend
+    to be shot-location percentages on their own.
+    """
+    empty = {
+        "cca_area_pct": 0.0,
+        "lane_1_ratio": 0.0, "lane_2_ratio": 0.0, "lane_3_ratio": 0.0,
+        "lane_4_ratio": 0.0, "lane_5_ratio": 0.0,
+        "danger_zone_density": 0.0,
+        "box_six_yard_ratio": 0.0, "box_penalty_spot_ratio": 0.0,
+        "box_wide_ratio": 0.0, "deep_box_zone_score": 0.0,
+    }
+    if not points:
+        return empty
+
+    # CCA: retain the densest cells until they contain the core 70% of the
+    # repeated activity population, then calculate their convex-hull area.
+    cell_counts = Counter((int(x // ACTIVITY_GRID_SIZE), int(y // ACTIVITY_GRID_SIZE)) for x, y in points)
+    core_target = len(points) * CORE_COVERAGE_SHARE
+    selected_cells: set[tuple[int, int]] = set()
+    selected_count = 0
+    for cell, count in sorted(cell_counts.items(), key=lambda item: (-item[1], item[0])):
+        selected_cells.add(cell)
+        selected_count += count
+        if selected_count >= core_target:
+            break
+    core_points = [
+        point for point in points
+        if (int(point[0] // ACTIVITY_GRID_SIZE), int(point[1] // ACTIVITY_GRID_SIZE)) in selected_cells
+    ]
+    empty["cca_area_pct"] = round(min(100.0, _convex_hull_area(core_points) / PITCH_AREA * 100.0), 2)
+
+    total = float(len(points))
+    lane_counts = [0, 0, 0, 0, 0]
+    for _, y in points:
+        lane_counts[min(4, int(y // 20.0))] += 1
+    for index, count in enumerate(lane_counts, start=1):
+        empty[f"lane_{index}_ratio"] = round(count / total * 100.0, 2)
+
+    # Zone 14 and the two advanced half-spaces are the dangerous central
+    # channels.  This remains an activity-density signal, not a progression
+    # event count.
+    danger_points = [
+        (x, y) for x, y in points
+        if x >= 66.0 and 20.0 <= y <= 80.0
+    ]
+    empty["danger_zone_density"] = round(len(danger_points) / total * 100.0, 2)
+
+    box_points = [(x, y) for x, y in points if x >= 83.0 and 21.1 <= y <= 78.9]
+    if box_points:
+        box_total = float(len(box_points))
+        six_yard = sum(x >= 94.0 and 36.8 <= y <= 63.2 for x, y in box_points)
+        penalty_spot = sum(88.0 <= x < 94.0 and 36.8 <= y <= 63.2 for x, y in box_points)
+        empty["box_six_yard_ratio"] = round(six_yard / box_total * 100.0, 2)
+        empty["box_penalty_spot_ratio"] = round(penalty_spot / box_total * 100.0, 2)
+        empty["box_wide_ratio"] = round((box_total - six_yard - penalty_spot) / box_total * 100.0, 2)
+        # Gold (six-yard), Silver (penalty spot), Bronze (wide box).  This
+        # activity-location score remains distinct from shot quality and is
+        # combined with FotMob's in-box finishing only at ranking time.
+        empty["deep_box_zone_score"] = round(
+            (empty["box_six_yard_ratio"] * GOLD_ZONE_WEIGHT)
+            + (empty["box_penalty_spot_ratio"] * SILVER_ZONE_WEIGHT)
+            + (empty["box_wide_ratio"] * BRONZE_ZONE_WEIGHT),
+            2,
+        )
+    return empty
 
 
 def heat_ratio(payload: Any) -> tuple[int, int, int, int] | None:
@@ -294,7 +415,7 @@ def resolve_fotmob_id(player_name: str) -> str | None:
         return None
 
 
-OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "sample_points", "generated_at"]
+OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "cca_area_pct", "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio", "danger_zone_density", "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score", "sample_points", "generated_at"]
 
 
 def read_checkpoint(path: Path) -> list[dict[str, str]]:
@@ -302,6 +423,29 @@ def read_checkpoint(path: Path) -> list[dict[str, str]]:
         return []
     with path.open(encoding="utf-8", newline="") as source:
         return [row for row in csv.DictReader(source) if row.get("sportsapi_player_id") and row.get("tournament_id") and row.get("season_id")]
+
+
+def enrich_checkpoint_spatial_metrics(
+    rows: list[dict[str, Any]], visual_points: dict[str, list[list[float]]],
+) -> None:
+    """Backfill S.P.E.A.R. 2.0 columns from the stored visual point sample.
+
+    Existing season rows are checkpointed so an ETL refresh must not re-request
+    every historical heatmap merely to add derived columns.  New rows use the
+    full response above; legacy rows use their evenly sampled persisted points,
+    which preserves the same spatial distribution without consuming tickets.
+    """
+    for row in rows:
+        if row.get("cca_area_pct") not in (None, ""):
+            continue
+        raw_points = visual_points.get(str(row.get("heatmap_key", "")), [])
+        points = [
+            (float(point[0]), float(point[1]))
+            for point in raw_points
+            if isinstance(point, list) and len(point) == 2
+            and as_number(point[0]) is not None and as_number(point[1]) is not None
+        ]
+        row.update(spatial_metrics(points))
 
 
 def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]], auto_mapped: list[dict[str, Any]], visual_points: dict[str, list[list[float]]]) -> None:
@@ -347,6 +491,7 @@ def main() -> None:
     if not visual_points or any(row.get("activity_filter") != ACTIVITY_FILTER_VERSION for row in output):
         output = []
         visual_points = {}
+    enrich_checkpoint_spatial_metrics(output, visual_points)
     completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output if str(row.get("heatmap_key", "")) in visual_points}
     unmatched, auto_mapped = [], []
     for tournament in discover_tournaments(client):
@@ -394,6 +539,7 @@ def main() -> None:
             if sports_id not in id_map:
                 auto_mapped.append({"sportsapi_player_id": sports_id, "fotmob_player_id": fotmob_id, **player})
             in_box, out_box_final, mid, samples = ratios
+            space = spatial_metrics(core_activity_points(heatmap))
             heatmap_key = f"{fotmob_id}:{tournament['id']}:{season_id}"
             visual_points[heatmap_key] = heatmap_visual_points(heatmap)
             output.append({
@@ -404,6 +550,7 @@ def main() -> None:
                 "activity_filter": ACTIVITY_FILTER_VERSION,
                 "in_box_ratio": in_box, "out_box_final_ratio": out_box_final,
                 "mid_third_ratio": mid, "final_third_ratio": in_box + out_box_final,
+                **space,
                 "sample_points": samples, "generated_at": datetime.now(timezone.utc).isoformat(),
             })
             counts["mapped"] += 1

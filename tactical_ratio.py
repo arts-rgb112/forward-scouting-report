@@ -15,6 +15,12 @@ THREE_ZONE_DATA_PATH = DATA_DIR / "tactical_3zone_ratio.csv"
 LEGACY_DATA_PATH = DATA_DIR / "tactical_ratio.csv"
 HEATMAP_POINTS_PATH = DATA_DIR / "tactical_heatmap_points.json"
 TOURNAMENT_NAMES = {"17": "Premier League", "8": "LaLiga", "35": "Bundesliga", "23": "Serie A", "34": "Ligue 1"}
+SPATIAL_FIELDS = (
+    "cca_area_pct",
+    "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio",
+    "danger_zone_density",
+    "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score",
+)
 
 
 def _normalise(value: object) -> str:
@@ -22,7 +28,13 @@ def _normalise(value: object) -> str:
 
 
 def _same_competition(left: object, right: object) -> bool:
-    aliases = {"laliga": "laliga", "laligaea": "laliga", "uefachampionsleague": "championsleague"}
+    aliases = {
+        "laliga": "laliga", "laligaea": "laliga",
+        "uefachampionsleague": "championsleague",
+        "uefaeuropaleague": "europaleague",
+        "uefaeuropaconferenceleague": "europaconferenceleague",
+        "uefaconferenceleague": "europaconferenceleague",
+    }
     return aliases.get(_normalise(left), _normalise(left)) == aliases.get(_normalise(right), _normalise(right))
 
 
@@ -58,7 +70,7 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
                     final = in_box + out_box
                     if all(0 <= value <= 100 for value in (mid, in_box, out_box)):
                         ratio_key = f"{player_id}:{row.get('tournament_id', '')}:{row.get('season_id', '')}"
-                        ratios[ratio_key] = {
+                        ratio = {
                             "fotmob_player_id": player_id,
                             "mid_third_ratio": mid,
                             "in_box_ratio": in_box,
@@ -72,6 +84,14 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
                             "competition_name": str(row.get("competition_name", "")).strip(),
                             "heatmap_key": str(row.get("heatmap_key", "")).strip() or ratio_key,
                         }
+                        for field in SPATIAL_FIELDS:
+                            try:
+                                value = row.get(field)
+                                if value not in (None, ""):
+                                    ratio[field] = float(value)
+                            except (TypeError, ValueError):
+                                continue
+                        ratios[ratio_key] = ratio
                 else:
                     final = float(row["final_third_ratio"])
                     if 0 <= mid <= 100 and 0 <= final <= 100:

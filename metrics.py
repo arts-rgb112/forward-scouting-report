@@ -55,10 +55,18 @@ class DecisionMetrics:
         return None
 
     @property
+    def shot_quality_per90(self) -> Optional[float]:
+        return _per90(self.shot_quality, self.minutes_played)
+
+    @property
     def in_box_finishing(self) -> Optional[float]:
         if self.in_box_xgot is not None and self.in_box_xg is not None:
             return self.in_box_xgot - self.in_box_xg
         return None
+
+    @property
+    def in_box_finishing_per90(self) -> Optional[float]:
+        return _per90(self.in_box_finishing, self.minutes_played)
 
     @property
     def out_box_shot_quality(self) -> Optional[float]:
