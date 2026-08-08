@@ -612,32 +612,6 @@ def render_spear_radar(
         legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"},
     )
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
-    zone_fields = (
-        ("🥇 골드 존 · 6야드", "box_six_yard_ratio", "#F6C945"),
-        ("🥈 실버 존 · 페널티 스팟", "box_penalty_spot_ratio", "#CBD5E1"),
-        ("🥉 브론즈 존 · 와이드 박스", "box_wide_ratio", "#CD7F32"),
-    )
-    if all(ratio.get(field) is not None for _, field, _ in zone_fields):
-        gold = float(ratio["box_six_yard_ratio"])
-        silver = float(ratio["box_penalty_spot_ratio"])
-        bronze = float(ratio["box_wide_ratio"])
-        weighted = float(ratio.get("deep_box_zone_score", 0.0))
-        if gold >= max(silver, bronze):
-            tendency = "골 에어리어 심층 침투형"
-        elif silver >= bronze:
-            tendency = "페널티 스팟 컷백 타격형"
-        else:
-            tendency = "와이드 박스 앵글 제한형"
-        st.caption(f"🥊 박스 내 마이크로 조닝 · 가중 심층 점유 {weighted:.1f}/100 · {tendency}")
-        zone_cols = st.columns(3)
-        for column, (label, field, color) in zip(zone_cols, zone_fields):
-            with column:
-                st.markdown(
-                    f"<div style='border-left:4px solid {color}; padding-left:0.55rem;'>"
-                    f"<b>{label}</b><br><span style='font-size:1.25rem'>{float(ratio[field]):.1f}%</span>"
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
 
 
 def render_spear_head_to_head(left_name: str, left_rank, right_name: str, right_rank) -> None:
@@ -808,6 +782,30 @@ def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, obj
         yaxis={"visible": False, "fixedrange": True},
     )
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+    zone_fields = (
+        ("🥇 골드 존 · 6야드", "box_six_yard_ratio", "#F6C945"),
+        ("🥈 실버 존 · 페널티 스팟", "box_penalty_spot_ratio", "#CBD5E1"),
+        ("🥉 브론즈 존 · 와이드 박스", "box_wide_ratio", "#CD7F32"),
+    )
+    if all(ratio.get(field) is not None for _, field, _ in zone_fields):
+        gold = float(ratio["box_six_yard_ratio"])
+        silver = float(ratio["box_penalty_spot_ratio"])
+        bronze = float(ratio["box_wide_ratio"])
+        weighted = float(ratio.get("deep_box_zone_score", 0.0))
+        tendency = (
+            "골 에어리어 심층 침투형" if gold >= max(silver, bronze)
+            else "페널티 스팟 컷백 타격형" if silver >= bronze
+            else "와이드 박스 앵글 제한형"
+        )
+        st.caption(f"🥊 박스 내 마이크로 조닝 · 가중 심층 점유 {weighted:.1f}/100 · {tendency}")
+        zone_cols = st.columns(3)
+        for column, (label, field, color) in zip(zone_cols, zone_fields):
+            with column:
+                st.markdown(
+                    f"<div style='border-left:4px solid {color}; padding-left:0.55rem;'>"
+                    f"<b>{label}</b><br><span style='font-size:1.25rem'>{float(ratio[field]):.1f}%</span></div>",
+                    unsafe_allow_html=True,
+                )
 
 
 def build_radar_profile(
