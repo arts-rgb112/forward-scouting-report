@@ -284,18 +284,113 @@ def _fetch_elite_dribbler_metrics(
         static_metrics = {}
         for target_league_id in target_leagues:
             cohort_metrics, _ = get_static_spear_cohort(target_league_id, season_name)
-            static_metrics.update(cohort_metrics)
-        if static_metrics:
-            static_metrics = {
-                player_id: metric for player_id, metric in static_metrics.items()
+            static_metrics.update({
+                player_id: metric for player_id, metric in cohort_metrics.items()
                 if (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
-                and (metric.minutes_played or 0.0) >= _minimum_minutes_for_competition(target_league_id)
+                and (metric.minutes_played or 0.0) >= _minimum_minutes_for_competition(
+                    metric.league_id or target_league_id
+                )
                 and passes_final_third_filter(player_id, minimum_final_third_ratio)
-            }
+            })
+        if static_metrics:
             return static_metrics, {player_id: 0.0 for player_id in static_metrics}
     return _fetch_live_spear_cohort(
         league_id, season_name, restrict_to_forwards, minimum_final_third_ratio,
     )
+
+
+def _spear_tier(score: float) -> str:
+    if score >= 95.0:
+        return "S"
+    if score >= 85.0:
+        return "A"
+    if score >= 65.0:
+        return "B"
+    if score >= 35.0:
+        return "C"
+    return "D"
+
+
+@functools.lru_cache(maxsize=32)
+def get_spear_leaderboard(
+    league_id: int, season_name: str, comparison_scope: int = 0,
+) -> pd.DataFrame:
+    """Build an API-free S.P.E.A.R. list from the static cohort snapshot.
+
+    The list intentionally never falls back to the live player fan-out.  A
+    missing historical snapshot should show a clear unavailable state, rather
+    than spending requests while a user scrolls the scouting board.
+    """
+    target_leagues = (
+        frozenset({league_id}) if league_id in CUP_COMPETITION_IDS
+        else COMPARISON_SCOPES.get(comparison_scope, frozenset({league_id}))
+    )
+    peers: dict[str, DecisionMetrics] = {}
+    names: dict[str, str] = {}
+    for target_id in target_leagues:
+        metrics, cohort_names = get_static_spear_cohort(target_id, season_name)
+        for player_id, metric in metrics.items():
+            if ((metric.xg or 0.0) >= MINIMUM_SPEAR_XG
+                    and (metric.minutes_played or 0.0) >= _minimum_minutes_for_competition(metric.league_id or target_id)):
+                peers[player_id] = metric
+                names[player_id] = cohort_names.get(player_id, "Unknown")
+    if not peers:
+        return pd.DataFrame(columns=["rank", "player_id", "player_name", "team_name", "score", "tier"])
+
+    spatial = {
+        player_id: get_tactical_ratio_for_session(
+            player_id, metric.league_name or "", season_name,
+        )
+        for player_id, metric in peers.items()
+    }
+    micro_fields = ("box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio")
+    def spatial_values(field: str) -> dict[str, float]:
+        return {
+            player_id: float(row[field]) for player_id, row in spatial.items()
+            if row is not None and row.get(field) is not None
+        }
+    def scores(values: dict[str, float]) -> dict[str, float]:
+        return _scores_from_population(values)
+    shot_scores = scores({pid: metric.shot_quality_per90 for pid, metric in peers.items() if metric.shot_quality_per90 is not None})
+    in_box_scores = scores({pid: metric.in_box_finishing_per90 for pid, metric in peers.items() if metric.in_box_finishing_per90 is not None})
+    dribble_scores = scores({pid: metric.dribble_margin_per90 for pid, metric in peers.items() if metric.dribble_margin_per90 is not None})
+    aerial_scores = scores({pid: metric.aerial_margin_per90 for pid, metric in peers.items() if metric.aerial_margin_per90 is not None})
+    duel_scores = scores({pid: metric.duel_margin_per90 for pid, metric in peers.items() if metric.duel_margin_per90 is not None})
+    micro_raw = {
+        pid: float(row["deep_box_zone_score"]) for pid, row in spatial.items()
+        if row is not None and row.get("deep_box_zone_score") is not None
+        and sum(float(row.get(field) or 0.0) for field in micro_fields) > 0.0
+    }
+    deep_scores = _combined_scores(in_box_scores, scores(micro_raw), 0.70)
+    danger_scores = scores(spatial_values("danger_zone_density"))
+    cca_scores = scores(spatial_values("cca_area_pct"))
+    progression_scores = _combined_scores(dribble_scores, danger_scores, 0.70)
+
+    records: list[dict[str, object]] = []
+    for player_id, metric in peers.items():
+        row = spatial.get(player_id)
+        box_ratio = float(row.get("in_box_ratio") or 0.0) if row else 0.0
+        micro_total = sum(float(row.get(field) or 0.0) for field in micro_fields) if row else 0.0
+        is_type_b = box_ratio < 15.0 or micro_total <= 0.0
+        weights = (
+            ((progression_scores, 0.30), (cca_scores, 0.30), (shot_scores, 0.25), (duel_scores, 0.10), (aerial_scores, 0.05))
+            if is_type_b else
+            ((deep_scores, 0.30), (shot_scores, 0.20), (progression_scores, 0.15), (cca_scores, 0.15), (aerial_scores, 0.10), (duel_scores, 0.10))
+        )
+        if not all(player_id in source for source, _ in weights):
+            continue
+        score = round(sum(source[player_id] * weight for source, weight in weights), 2)
+        records.append({
+            "player_id": player_id, "player_name": names.get(player_id, "Unknown"),
+            "team_name": metric.team_name or "-", "score": score,
+            "tier": _spear_tier(score), "role": "Type B" if is_type_b else "Type A",
+        })
+    table = pd.DataFrame(records)
+    if table.empty:
+        return pd.DataFrame(columns=["rank", "player_id", "player_name", "team_name", "score", "tier", "role"])
+    table = table.sort_values(["score", "player_name"], ascending=[False, True], kind="stable").reset_index(drop=True)
+    table.insert(0, "rank", table.index + 1)
+    return table
 
 
 def _calculate_progression_percentiles(

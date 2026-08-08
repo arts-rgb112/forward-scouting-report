@@ -6,11 +6,12 @@ import math
 import itertools
 import html
 
-from fotmob_client import FotMobError, fetch_player_multi_season_data, search_players
+from fotmob_client import FotMobError, PlayerCandidate, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
 from rankings import (
     calculate_league_percentiles,
     get_league_metric_medians,
+    get_spear_leaderboard,
     get_tactical_matrix,
     get_top_leagues_shot_quality,
 )
@@ -42,6 +43,12 @@ def cached_percentiles(
         comparison_scope=comparison_scope,
         role_override=role_override,
     )
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_spear_leaderboard(league_id: int, season: str, comparison_scope: int) -> pd.DataFrame:
+    season_name = f"20{season[:2]}/20{season[3:]}" if len(season) == 5 and "/" in season else season
+    return get_spear_leaderboard(league_id, season_name, comparison_scope)
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_top20(minimum_final_third_ratio: int):
@@ -449,6 +456,15 @@ def comparison_population_label(league_id: int | None, scope: int) -> str:
     return f"{scope}대 리그 기준" if scope in (3, 5, 7) else "동일 대회 기준"
 
 
+def comparison_population_criteria(league_id: int | None, season: str, scope: int) -> str:
+    """Make the ranking cohort explicit beside every S.P.E.A.R. rank."""
+    minimum_minutes = 180 if league_id in {42, 73, 102} else 450
+    return (
+        f"기준: {season} 시즌 · {comparison_population_label(league_id, scope)} · "
+        f"최소 {minimum_minutes}분 · xG 1.0 이상"
+    )
+
+
 def _spear_total(rank) -> tuple[float | None, str | None, int]:
     """Return the visible S.P.E.A.R. total from the actually bound radar axes.
 
@@ -763,7 +779,10 @@ def spear_rank_for_session(player, season_label: str, stats: DecisionMetrics, re
     )
 
 
-def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | None = None) -> None:
+def render_season_heatmap(
+    player_id: str, player_name: str, heatmap_key: str | None = None,
+    tactical_ratio: dict[str, object] | None = None,
+) -> None:
     points = get_heatmap_points(player_id, heatmap_key)
     st.markdown("#### 📍 시즌 활동 히트맵")
     st.caption("저장된 시즌 좌표를 기반으로 활동 밀도를 표시합니다. 반복 동선 필터 데이터는 수집 완료 후 자동 반영됩니다.")
@@ -781,6 +800,24 @@ def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | N
             lambda row: np.convolve(np.pad(row, 2, mode="edge"), kernel, mode="valid"),
             axis, density,
         )
+    # The compact visual cache is intentionally sampled, while the lane ratios
+    # are calculated from every repeated activity point.  Reweight each visual
+    # lane to the full ETL distribution so the heatmap and 5-Lane card retain
+    # the same left/right balance even when a response was coordinate-sorted.
+    lane_fields = ("lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio")
+    if tactical_ratio and all(tactical_ratio.get(field) is not None for field in lane_fields):
+        target = np.array([max(0.0, float(tactical_ratio[field])) for field in lane_fields])
+        sample = np.array([
+            sum(1 for value in y if lower <= value < upper)
+            for lower, upper in ((0, 20), (20, 40), (40, 60), (60, 80), (80, 100.001))
+        ], dtype=float)
+        if target.sum() > 0 and sample.sum() > 0:
+            target = target / target.sum()
+            sample = sample / sample.sum()
+            y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+            for lane_index, (lower, upper) in enumerate(((0, 20), (20, 40), (40, 60), (60, 80), (80, 100.001))):
+                if sample[lane_index] > 0:
+                    density[(y_centers >= lower) & (y_centers < upper), :] *= target[lane_index] / sample[lane_index]
     peak = float(density.max())
     normalized = density / peak if peak else density
     figure = go.Figure(go.Heatmap(
@@ -806,6 +843,47 @@ def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | N
     figure.add_shape(type="circle", x0=43, y0=43, x1=57, y1=57, line=line)
     figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [0, 100], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True, "constrain": "domain"}, showlegend=False)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+
+def lane_summary(ratio: dict[str, object] | None) -> tuple[str, str] | None:
+    """Return one direction-aware lateral identity from the shared lane bins.
+
+    SportsAPI's Y coordinate is the pitch width.  Lane 1/2 is always shown as
+    the left side and Lane 4/5 as the right side here and in the heatmap, so
+    the profile header can no longer invert the 5-Lane panel's interpretation.
+    """
+    if not ratio:
+        return None
+    fields = ("lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio")
+    if not all(ratio.get(field) is not None for field in fields):
+        return None
+    lanes = [max(0.0, float(ratio[field])) for field in fields]
+    total = sum(lanes)
+    if total <= 0.0:
+        return None
+    lanes = [value / total * 100.0 for value in lanes]
+    left, right = lanes[0] + lanes[1], lanes[3] + lanes[4]
+    halfspace, center, wing = lanes[1] + lanes[3], lanes[2], lanes[0] + lanes[4]
+    direction = "좌측" if left - right > 15.0 else "우측" if right - left > 15.0 else "양측"
+    if halfspace > 40.0:
+        return (
+            f"🎯 {direction} 하프스페이스 타격형",
+            "수비진의 치명적 균열을 유발하는 안쪽 채널 침투에 능한 현대적 포워드",
+        )
+    if center > 50.0:
+        return (
+            f"⚓ {direction} 중앙 밀집형",
+            "측면으로 빠지기보다 피치 중앙에 머무르며 센터백과 직접 경합하는 정적인 타겟",
+        )
+    if wing > 30.0:
+        return (
+            f"🏃 {direction} 와이드 타겟",
+            "밀집 수비를 피해 측면으로 넓게 빠져서 볼을 받아주는 측면 지향적 움직임",
+        )
+    return (
+        "🌪️ 전방위 스위칭",
+        "특정 레인에 국한되지 않고 횡적으로 피치를 폭넓게 오가며 공간을 창출하는 프리롤",
+    )
 
 
 def spatial_identity_badges(
@@ -837,35 +915,13 @@ def spatial_identity_badges(
     else:
         badges.append((false_nine_badge, false_nine_text))
 
-    lane_fields = ("lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio")
-    if all(ratio.get(field) is not None for field in lane_fields):
-        lanes = [max(0.0, float(ratio[field])) for field in lane_fields]
-        total = sum(lanes)
-        if total > 0:
-            lanes = [value / total * 100.0 for value in lanes]
-            wing_ratio, halfspace_ratio, center_ratio = lanes[0] + lanes[4], lanes[1] + lanes[3], lanes[2]
-            if halfspace_ratio > 40.0:
-                badges.append(("🎯 하프스페이스 타격형", "수비진의 치명적 균열을 유발하는 안쪽 채널 침투에 능한 현대적 포워드"))
-            elif center_ratio > 50.0:
-                badges.append(("⚓ 중앙 밀집형", "측면으로 빠지기보다 피치 중앙에 머무르며 상대 센터백과 직접 경합하는 정적인 타겟"))
-            elif wing_ratio > 30.0:
-                badges.append(("🏃 와이드 타겟", "밀집 수비를 피해 측면(터치라인)으로 넓게 빠져서 볼을 받아주는 측면 지향적 움직임"))
-            else:
-                badges.append(("🌪️ 전방위 스위칭", "특정 레인에 국한되지 않고 횡적으로 피치를 폭넓게 오가며 공간을 창출하는 프리롤"))
-            # SportsAPI's horizontal coordinate is mirrored against the
-            # viewer's broadcast orientation, hence the intentionally swapped
-            # labels below.
-            left_ratio, right_ratio = lanes[0] + lanes[1], lanes[3] + lanes[4]
-            if left_ratio - right_ratio > 15.0:
-                badges.append(("➡️ 우측면 지향", "주로 우측면에 머무르며(Right-biased), 좌측면 활용도는 상대적으로 떨어짐"))
-            elif right_ratio - left_ratio > 15.0:
-                badges.append(("⬅️ 좌측면 지향", "주로 좌측면에 머무르며(Left-biased), 우측면 활용도는 상대적으로 떨어짐"))
-            else:
-                badges.append(("⚖️ 좌우 밸런스형", "좌우를 가리지 않고 양쪽 공간을 고르게 활용하는 밸런스 잡힌 동선"))
+    profile = lane_summary(ratio)
+    if profile:
+        badges.append(profile)
     return badges
 
 
-def render_lane_analysis(player_name: str, ratio: dict[str, object]) -> None:
+def render_lane_analysis(player_name: str, ratio: dict[str, object], rank=None) -> None:
     """Render the ETL-backed 5-Lane occupation and directional summary."""
     lane_fields = (
         ("Lane 1 · 좌측 윙", "lane_1_ratio", "#2563EB"),
@@ -932,15 +988,30 @@ def render_lane_analysis(player_name: str, ratio: dict[str, object]) -> None:
         yaxis={"visible": False, "fixedrange": True},
     )
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
-    # Keep the panel and profile header on the exact same interpretation of
-    # the mirrored SportsAPI horizontal coordinate.
-    for badge, text in spatial_identity_badges(ratio)[-2:]:
+    # One line combines direction and primary activity space; it is built by
+    # the same helper used in the profile header, preventing a left/right
+    # label drift between the two surfaces.
+    profile = lane_summary(ratio)
+    if profile:
+        badge, text = profile
         st.markdown(f"**[{badge}]** : {text}")
+    cca_top_percent = getattr(rank, "cca_area_top_percent", None) if rank else None
+    if cca_top_percent is not None:
+        coverage_score = max(0.0, min(100.0, 100.0 - float(cca_top_percent)))
+        if coverage_score >= 65.0:
+            coverage_badge, coverage_text = "🏃 활동 반경 넓은 전방위형", "반복 활동 셀의 코어 커버리지가 비교군 평균보다 넓습니다"
+        elif coverage_score <= 35.0:
+            coverage_badge, coverage_text = "🏃 활동 반경 좁은 고립형", "특정 구역에 머무르는 정적인 반복 동선이 확인됩니다"
+        else:
+            coverage_badge, coverage_text = "🏃 활동 반경 균형형", "반복 활동 구역의 코어 커버리지가 비교군 중간권입니다"
+        st.markdown(
+            f"**[{coverage_badge} · 백분위 {coverage_score:.0f}]** : {coverage_text}"
+        )
 
 
 def render_activity_ratio(
     player_id: str, player_name: str, ratio: dict[str, object] | None = None,
-    force_type_b: bool = False,
+    force_type_b: bool = False, rank=None,
 ) -> None:
     """Render the ETL-backed mid/final-third activity split without live API calls."""
     ratio = ratio or get_tactical_ratio(player_id) or get_tactical_ratio_by_name(player_name)
@@ -967,7 +1038,7 @@ def render_activity_ratio(
         yaxis={"visible": False, "fixedrange": True},
     )
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
-    render_lane_analysis(player_name, ratio)
+    render_lane_analysis(player_name, ratio, rank=rank)
     zone_fields = (
         ("🥇 골드 존 · 6야드", "box_six_yard_ratio", "#F6C945"),
         ("🥈 실버 존 · 페널티 스팟", "box_penalty_spot_ratio", "#CBD5E1"),
@@ -1246,6 +1317,49 @@ def select_player(query: str, key: str):
     labels = [f"{row.name} · {row.team_name}" if row.team_name else row.name for row in candidates]
     return candidates[st.selectbox("선수 선택", range(len(candidates)), format_func=lambda i: labels[i], key=key)]
 
+
+def render_spear_leaderboard(season: str, comparison_scope: int) -> PlayerCandidate | None:
+    """Show a local, sortable scouting list and return the selected player."""
+    table = cached_spear_leaderboard(47, season, comparison_scope)
+    st.subheader("🏆 S.P.E.A.R. 스카우팅 리스트")
+    st.caption(comparison_population_criteria(47, season, comparison_scope))
+    if table.empty:
+        st.info(
+            f"{season} 시즌의 정적 S.P.E.A.R. 코호트가 아직 준비되지 않았습니다. "
+            "상세 검색은 가능하며, 리더보드는 시즌 스냅샷이 적재되면 자동 활성화됩니다."
+        )
+        return None
+    display = table.rename(columns={
+        "rank": "순위", "player_name": "선수", "team_name": "팀",
+        "score": "S.P.E.A.R.", "tier": "티어", "role": "기본 롤",
+    })[["순위", "선수", "팀", "S.P.E.A.R.", "티어", "기본 롤"]].copy()
+    display.insert(
+        1, "프로필",
+        "https://images.fotmob.com/image_resources/playerimages/" + table["player_id"].astype(str) + ".png",
+    )
+    display["S.P.E.A.R."] = display["S.P.E.A.R."].map(lambda value: f"{value:.1f}")
+    event = st.dataframe(
+        display, use_container_width=True, hide_index=True, height=430,
+        on_select="rerun", selection_mode="single-row",
+        column_config={"프로필": st.column_config.ImageColumn("프로필", width="small")},
+        key=f"v32_leaderboard_{season}_{comparison_scope}",
+    )
+    selected_rows = getattr(getattr(event, "selection", None), "rows", [])
+    if not selected_rows:
+        st.caption("행을 선택하면 아래에 해당 선수의 상세 분석 대시보드를 엽니다.")
+        return None
+    selected = table.iloc[selected_rows[0]]
+    # Keep the list-to-detail transition shareable without adding a second
+    # Streamlit process or duplicating the dashboard's state.
+    try:
+        st.query_params["player"] = str(selected["player_id"])
+        st.query_params["season"] = season
+    except Exception:
+        pass
+    return PlayerCandidate(
+        str(selected["player_id"]), str(selected["player_name"]), str(selected["team_name"]),
+    )
+
 def render_player_report(
     player, selected_seasons: list[str], competition_filter: str,
     restrict_to_forwards: bool, minimum_final_third_ratio: int, show_activity: bool = True,
@@ -1408,12 +1522,15 @@ def render_v32_analysis_center() -> None:
     if not filters:
         st.info("포지션·시즌·선수명을 설정한 뒤 **데이터 분석**을 눌러주세요.")
         return
-    if not filters["query"]:
-        st.info("선수명을 입력하면 5대 리그 검색 결과에서 선수를 선택할 수 있습니다.")
-        return
-
-    player = select_player(filters["query"], "v32_selected_player")
+    leaderboard_player = render_spear_leaderboard(filters["season"], filters["comparison_scope"])
+    st.divider()
+    player = (
+        select_player(filters["query"], "v32_selected_player")
+        if filters["query"] else leaderboard_player
+    )
     if not player:
+        if not filters["query"]:
+            st.info("선수명을 검색하거나, 위 스카우팅 리스트에서 한 행을 선택해 상세 분석을 여세요.")
         return
     try:
         all_sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
@@ -1491,11 +1608,19 @@ def render_v32_analysis_center() -> None:
         with st.expander("공간·활동량 세부 차트", expanded=False):
             left_col, right_col = st.columns(2)
             with left_col:
-                render_activity_ratio(player.player_id, player.name, tactical_ratio)
-                render_season_heatmap(player.player_id, player.name, tactical_ratio.get("heatmap_key") if tactical_ratio else None)
+                render_activity_ratio(player.player_id, player.name, tactical_ratio, rank=rank)
+                render_season_heatmap(
+                    player.player_id, player.name,
+                    tactical_ratio.get("heatmap_key") if tactical_ratio else None,
+                    tactical_ratio,
+                )
             with right_col:
-                render_activity_ratio(opponent.player_id, opponent.name, opponent_ratio)
-                render_season_heatmap(opponent.player_id, opponent.name, opponent_ratio.get("heatmap_key") if opponent_ratio else None)
+                render_activity_ratio(opponent.player_id, opponent.name, opponent_ratio, rank=opponent_rank)
+                render_season_heatmap(
+                    opponent.player_id, opponent.name,
+                    opponent_ratio.get("heatmap_key") if opponent_ratio else None,
+                    opponent_ratio,
+                )
         return
     # A role override recalculates only the selected player's score against
     # the same natural-role cohort.  The cached calculation makes switching
@@ -1535,6 +1660,11 @@ def render_v32_analysis_center() -> None:
                 if score_rank and score_percent is not None and score_population else ""
             )
             st.subheader(f"👑 {player.name}  ·  [{spear_tier}-Tier]  S.P.E.A.R. {spear_score:.1f}/100{rank_text}")
+            st.caption(
+                comparison_population_criteria(
+                    selected_stats.league_id, filters["season"], filters["comparison_scope"],
+                )
+            )
             st.caption(f"동적 가중치 적용: {getattr(rank, 'spear_role', 'Type A · 정통 타겟/포처')}")
             if spear_coverage < len(SPEAR_FACTOR_AXES):
                 st.caption(f"현재 산출 가능한 팩터 {spear_coverage}/{len(SPEAR_FACTOR_AXES)}개 기준의 잠정 점수입니다.")
@@ -1568,12 +1698,14 @@ def render_v32_analysis_center() -> None:
             render_activity_ratio(
                 player.player_id, player.name, tactical_ratio,
                 force_type_b=getattr(rank, "false_nine_penalty", False),
+                rank=rank,
             )
         with heatmap_col:
             render_season_heatmap(
                 player.player_id,
                 player.name,
                 tactical_ratio.get("heatmap_key") if tactical_ratio else None,
+                tactical_ratio,
             )
     render_player_report(
         player, [filters["season"]], "전체", True, 0,
