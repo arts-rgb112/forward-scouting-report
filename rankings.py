@@ -20,7 +20,8 @@ from tactical_ratio import get_tactical_ratio_for_session, passes_final_third_fi
 
 MINIMUM_SPEAR_XG = 1.0
 CUP_COMPETITION_IDS = frozenset({42, 73, 102})
-CUP_MINIMUM_MINUTES = 270.0
+LEAGUE_MINIMUM_MINUTES = 450.0
+CUP_MINIMUM_MINUTES = 180.0
 COMPARISON_SCOPES = {
     3: frozenset({47, 55, 87}),
     5: frozenset({47, 53, 54, 55, 87}),
@@ -115,6 +116,14 @@ class LeaguePercentiles:
     danger_zone_density_rank: Optional[int] = None
     spear_shot_quality_top_percent: Optional[float] = None
     spear_shot_quality_rank: Optional[int] = None
+    spear_score: Optional[float] = None
+    spear_score_rank: Optional[int] = None
+    spear_score_top_percent: Optional[float] = None
+    spear_score_eligible: int = 0
+
+
+def _minimum_minutes_for_competition(league_id: int) -> float:
+    return CUP_MINIMUM_MINUTES if league_id in CUP_COMPETITION_IDS else LEAGUE_MINIMUM_MINUTES
 
 
 def _value(row: dict) -> Optional[float]:
@@ -247,7 +256,7 @@ def _fetch_live_spear_cohort(
     metrics_by_player = {
         player_id: metric for player_id, metric in metrics_by_player.items()
         if (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
-        and (league_id not in CUP_COMPETITION_IDS or (metric.minutes_played or 0.0) >= CUP_MINIMUM_MINUTES)
+        and (metric.minutes_played or 0.0) >= _minimum_minutes_for_competition(league_id)
     }
     metrics_by_player = {
         player_id: metric for player_id, metric in metrics_by_player.items()
@@ -264,7 +273,12 @@ def _fetch_elite_dribbler_metrics(
 ) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
     """Prefer the static cohort; retain live FotMob as a safe bootstrap fallback."""
     if restrict_to_forwards:
-        target_leagues = COMPARISON_SCOPES.get(comparison_scope, frozenset({league_id}))
+        # Continental cups remain isolated even when a cross-league scope is
+        # selected; only domestic competitions use the 3/5/7 league unions.
+        target_leagues = (
+            frozenset({league_id}) if league_id in CUP_COMPETITION_IDS
+            else COMPARISON_SCOPES.get(comparison_scope, frozenset({league_id}))
+        )
         static_metrics = {}
         for target_league_id in target_leagues:
             cohort_metrics, _ = get_static_spear_cohort(target_league_id, season_name)
@@ -273,7 +287,7 @@ def _fetch_elite_dribbler_metrics(
             static_metrics = {
                 player_id: metric for player_id, metric in static_metrics.items()
                 if (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
-                and (league_id not in CUP_COMPETITION_IDS or (metric.minutes_played or 0.0) >= CUP_MINIMUM_MINUTES)
+                and (metric.minutes_played or 0.0) >= _minimum_minutes_for_competition(target_league_id)
                 and passes_final_third_filter(player_id, minimum_final_third_ratio)
             }
             return static_metrics, {player_id: 0.0 for player_id in static_metrics}
@@ -384,7 +398,10 @@ def get_tactical_matrix(
     """
     peers, _ = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
     leaderboard_rows = fetch_league_stat_table(league_id, season_name, "minutes_played")
-    names = {str(row.get("id")): row.get("name", "Unknown") for row in leaderboard_rows}
+    names = {
+        str(row.get("id")): (str(row.get("name") or "").strip() or "선수 정보 미제공")
+        for row in leaderboard_rows
+    }
     rows = []
     for player_id, metric in peers.items():
         net_progression = metric.net_progression_per90
@@ -393,7 +410,7 @@ def get_tactical_matrix(
             continue
         rows.append({
             "player_id": player_id,
-            "player_name": names.get(player_id, "Unknown"),
+            "player_name": names.get(player_id) or "선수 정보 미제공",
             "team_name": metric.team_name or "정보 없음",
             "net_progression_per90": net_progression,
             "in_box_xgot_minus_xg": finishing,
@@ -580,6 +597,10 @@ def calculate_league_percentiles(
         peer.shot_quality_per90 for peer in peers.values()
         if peer.shot_quality_per90 is not None
     ]
+    spear_shot_scores = _scores_from_population({
+        peer_id: peer.shot_quality_per90
+        for peer_id, peer in peers.items() if peer.shot_quality_per90 is not None
+    })
     spear_shot_quality = metrics.shot_quality_per90
     if spear_shot_quality_population:
         spear_sq_pct, spear_sq_rk = _rank_info(spear_shot_quality, spear_shot_quality_population)
@@ -647,6 +668,14 @@ def calculate_league_percentiles(
     micro_scores = _scores_from_population(micro_values)
     danger_scores = _scores_from_population(danger_values)
     cca_scores = _scores_from_population(cca_values)
+    aerial_scores = _scores_from_population({
+        peer_id: peer.aerial_margin_per90
+        for peer_id, peer in peers.items() if peer.aerial_margin_per90 is not None
+    })
+    duel_scores = _scores_from_population({
+        peer_id: peer.duel_margin_per90
+        for peer_id, peer in peers.items() if peer.duel_margin_per90 is not None
+    })
     deep_box_scores = _combined_scores(in_box_scores, micro_scores, 0.70)
     danger_progression_scores = _combined_scores(dribble_scores, danger_scores, 0.70)
     micro_pct, micro_rank = _rank_score(player_key, micro_scores)
@@ -654,6 +683,24 @@ def calculate_league_percentiles(
     danger_pct, danger_rank = _rank_score(player_key, danger_progression_scores)
     cca_pct, cca_rank = _rank_score(player_key, cca_scores)
     danger_density_pct, danger_density_rank = _rank_score(player_key, danger_scores)
+    # S.P.E.A.R. 2.0 uses the micro-zone factor derived from the explicitly
+    # weighted Gold/Silver/Bronze score, rather than a legacy volume average.
+    # Players are ranked only against peers with enough data for every factor.
+    spear_factor_weights = (
+        (spear_shot_scores, 0.20),
+        (deep_box_scores, 0.25),
+        (danger_progression_scores, 0.15),
+        (aerial_scores, 0.10),
+        (duel_scores, 0.10),
+        (cca_scores, 0.20),
+    )
+    shared_spear_ids = set.intersection(*(set(scores) for scores, _ in spear_factor_weights)) if spear_factor_weights else set()
+    spear_scores = {
+        peer_id: round(sum(scores[peer_id] * weight for scores, weight in spear_factor_weights), 2)
+        for peer_id in shared_spear_ids
+    }
+    spear_score = spear_scores.get(player_key)
+    spear_score_top_percent, spear_score_rank = _rank_score(player_key, spear_scores)
     progression_eligible = int(progression_percentiles["cohort_count"])
     duels_eligible = progression_eligible
     aerials_eligible = progression_eligible
@@ -740,6 +787,10 @@ def calculate_league_percentiles(
         danger_zone_density_rank=danger_density_rank,
         spear_shot_quality_top_percent=spear_sq_pct,
         spear_shot_quality_rank=spear_sq_rk,
+        spear_score=spear_score,
+        spear_score_rank=spear_score_rank,
+        spear_score_top_percent=spear_score_top_percent,
+        spear_score_eligible=len(spear_scores),
     )
 
 

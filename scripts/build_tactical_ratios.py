@@ -58,11 +58,11 @@ ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward",
 ACTIVITY_GRID_SIZE = 5.0
 MIN_CELL_OVERLAP = 3
 ACTIVITY_FILTER_VERSION = "cluster-v1"
-CORE_COVERAGE_SHARE = 0.70
+CORE_COVERAGE_SHARE = 0.50
 PITCH_AREA = 100.0 * 100.0
-GOLD_ZONE_WEIGHT = 1.00
-SILVER_ZONE_WEIGHT = 0.65
-BRONZE_ZONE_WEIGHT = 0.30
+GOLD_ZONE_WEIGHT = 1.50
+SILVER_ZONE_WEIGHT = 1.00
+BRONZE_ZONE_WEIGHT = 0.50
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 if str(ROOT) not in sys.path:
@@ -294,7 +294,7 @@ def spatial_metrics(points: list[tuple[float, float]]) -> dict[str, float]:
     if not points:
         return empty
 
-    # CCA: retain the densest cells until they contain the core 70% of the
+    # CCA: retain the densest cells until they contain the core 50% of the
     # repeated activity population, then calculate their convex-hull area.
     cell_counts = Counter((int(x // ACTIVITY_GRID_SIZE), int(y // ACTIVITY_GRID_SIZE)) for x, y in points)
     core_target = len(points) * CORE_COVERAGE_SHARE
@@ -338,10 +338,12 @@ def spatial_metrics(points: list[tuple[float, float]]) -> dict[str, float]:
         # Gold (six-yard), Silver (penalty spot), Bronze (wide box).  This
         # activity-location score remains distinct from shot quality and is
         # combined with FotMob's in-box finishing only at ranking time.
+        # Normalise by the Gold weight so a pure 6-yard profile remains 100,
+        # while Silver and Bronze profiles receive 66.7 and 33.3 respectively.
         empty["deep_box_zone_score"] = round(
-            (empty["box_six_yard_ratio"] * GOLD_ZONE_WEIGHT)
+            ((empty["box_six_yard_ratio"] * GOLD_ZONE_WEIGHT)
             + (empty["box_penalty_spot_ratio"] * SILVER_ZONE_WEIGHT)
-            + (empty["box_wide_ratio"] * BRONZE_ZONE_WEIGHT),
+            + (empty["box_wide_ratio"] * BRONZE_ZONE_WEIGHT)) / GOLD_ZONE_WEIGHT,
             2,
         )
     return empty

@@ -420,7 +420,7 @@ TWIN_SECTOR_MATRIX = {
 
 SPEAR_FACTOR_DETAILS = {
     "spear_shot_quality_top_percent": ("shot_quality_per90", "spear_shot_quality_rank", "progression_eligible"),
-    "micro_zoning_finishing_top_percent": ("tactical:box_six_yard_ratio", "micro_zoning_finishing_rank", "progression_eligible"),
+    "micro_zoning_finishing_top_percent": ("tactical:deep_box_zone_score", "micro_zoning_finishing_rank", "progression_eligible"),
     "danger_zone_progression_top_percent": ("tactical:danger_zone_density", "danger_zone_progression_rank", "progression_eligible"),
     "aerial_margin_per90_top_percent": ("aerial_margin_per90", "aerial_margin_per90_rank", "progression_eligible"),
     "duel_margin_per90_top_percent": ("duel_margin_per90", "duel_margin_per90_rank", "progression_eligible"),
@@ -440,6 +440,13 @@ def _spear_tier(score: float) -> str:
     return "D"
 
 
+def comparison_population_label(league_id: int | None, scope: int) -> str:
+    cup_names = {42: "챔피언스리그", 73: "유로파리그", 102: "컨퍼런스리그"}
+    if league_id in cup_names:
+        return f"{cup_names[league_id]} 기준"
+    return f"{scope}대 리그 기준" if scope in (3, 5, 7) else "동일 대회 기준"
+
+
 def _spear_total(rank) -> tuple[float | None, str | None, int]:
     """Return the visible S.P.E.A.R. total from the actually bound radar axes.
 
@@ -449,6 +456,9 @@ def _spear_total(rank) -> tuple[float | None, str | None, int]:
     """
     if rank is None:
         return None, None, 0
+    if getattr(rank, "spear_score", None) is not None:
+        score = float(rank.spear_score)
+        return score, _spear_tier(score), len(SPEAR_FACTOR_AXES)
     values = [
         _radar_score(getattr(rank, attr))
         for _, attr in SPEAR_FACTOR_AXES
@@ -462,13 +472,12 @@ def _spear_total(rank) -> tuple[float | None, str | None, int]:
 
 def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
     """Resolve all six Volume × Ratio 5×5 descriptions for the player."""
-    if rank is None:
-        return []
     summaries = []
     for sector in TWIN_SECTOR_MATRIX.values():
-        volume_percent = getattr(rank, sector["volume"], None)
-        ratio_percent = getattr(rank, sector["ratio"], None)
+        volume_percent = getattr(rank, sector["volume"], None) if rank else None
+        ratio_percent = getattr(rank, sector["ratio"], None) if rank else None
         if volume_percent is None or ratio_percent is None:
+            summaries.append((sector["title"], "[자료 부족] Insufficient Data"))
             continue
         volume_tier = _spear_tier(_radar_score(volume_percent))
         ratio_tier = _spear_tier(_radar_score(ratio_percent))
@@ -499,10 +508,6 @@ def render_twin_radar_sector_summaries(rank) -> None:
     """Display all six cross-matrix outcomes as an ordered 3×2 card grid."""
     summaries = twin_radar_sector_summaries(rank)
     st.markdown("#### 💡 볼륨 × 비율 교차 프로필")
-    if not summaries:
-        st.caption("두 레이더의 상대평가 데이터가 확보되면 6개 섹터의 5×5 교차 설명이 표시됩니다.")
-        return
-
     st.markdown(
         """
         <style>
@@ -545,7 +550,9 @@ def render_twin_radar_sector_summaries(rank) -> None:
         tiers = badge.removeprefix("[").split("×")
         # A single D makes the cross-profile critical; otherwise favor the
         # best displayed tier so exceptional combinations scan immediately.
-        if "D" in tiers:
+        if "자료 부족" in badge:
+            tone = "warning"
+        elif "D" in tiers:
             tone = "danger"
         elif "S" in tiers:
             tone = "elite"
@@ -570,7 +577,7 @@ def render_twin_radar_sector_summaries(rank) -> None:
 
 def render_spear_radar(
     player_name: str, rank, stats: DecisionMetrics | None, *, volume: bool,
-    tactical_ratio: dict[str, object] | None = None,
+    tactical_ratio: dict[str, object] | None = None, comparison_label: str = "동일 대회 기준",
 ) -> None:
     """Render one of the synchronized volume/ratio S.P.E.A.R. radars."""
     axes = VOLUME_FACTOR_AXES if volume else SPEAR_FACTOR_AXES
@@ -606,7 +613,7 @@ def render_spear_radar(
     figure = go.Figure()
     for name, trace_values, color, fill in (
         (player_name, values, "#22C55E", "rgba(34,197,94,0.28)"),
-        ("동일 대회 xG 1+ 평균", [50.0] * len(labels), "#94A3B8", "rgba(148,163,184,0.16)"),
+        (f"{comparison_label} 평균", [50.0] * len(labels), "#94A3B8", "rgba(148,163,184,0.16)"),
     ):
         is_player = name == player_name
         figure.add_trace(go.Scatterpolar(
@@ -621,7 +628,7 @@ def render_spear_radar(
         ))
     heading = "볼륨(Volume)" if volume else "비율(Ratio)"
     figure.update_layout(
-        title=f"S.P.E.A.R. {heading} 레이더 · 동일 대회 xG 1+ 기준",
+        title=f"S.P.E.A.R. {heading} 레이더 · {comparison_label}",
         height=455, margin={"l": 38, "r": 38, "t": 55, "b": 35},
         paper_bgcolor="rgba(0,0,0,0)",
         polar={
@@ -789,8 +796,58 @@ def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | N
         figure.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=line, fillcolor="rgba(34,197,94,0.06)" if x0 == 83 else "rgba(0,0,0,0)")
     figure.add_shape(type="line", x0=50, y0=0, x1=50, y1=100, line=line)
     figure.add_shape(type="circle", x0=43, y0=43, x1=57, y1=57, line=line)
-    figure.update_layout(height=390, margin={"l": 10, "r": 10, "t": 15, "b": 15}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#4d704c", xaxis={"range": [0, 100], "visible": False, "fixedrange": True}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True}, showlegend=False)
+    figure.update_layout(height=410, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#4d704c", xaxis={"range": [1.5, 98.5], "visible": False, "fixedrange": True}, yaxis={"range": [1.5, 98.5], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True}, showlegend=False)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+
+def spatial_identity_badges(ratio: dict[str, object] | None) -> list[tuple[str, str]]:
+    """Return the three compact spatial identities used by the profile header."""
+    if not ratio:
+        return [("자료 부족", "공간·활동량 정적 데이터가 아직 준비되지 않았습니다.")]
+    badges: list[tuple[str, str]] = []
+    micro_fields = ("box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio")
+    if all(ratio.get(field) is not None for field in micro_fields):
+        gold, silver, bronze = (float(ratio[field]) for field in micro_fields)
+        if gold + silver + bronze > 0:
+            if max(gold, silver, bronze) - min(gold, silver, bronze) <= 10.0:
+                badges.append(("⚖️ 전방위 타격형", "식스야드 쇄도와 컷백 대기를 가리지 않고, 박스 안 어디서든 득점 찬스를 창출"))
+            elif gold >= max(silver, bronze):
+                badges.append(("🥇 문전 심층 포처형", "발만 갖다 대면 득점이 되는 6야드 박스 안을 집요하게 파고드는 포식자"))
+            elif silver >= bronze:
+                badges.append(("🥈 컷백 피니셔형", "무리한 심층 진입보다는 박스 정면 공간을 선점하며, 동료의 컷백 타격에 최적화"))
+            else:
+                badges.append(("🥉 박스 외곽 겉돎형", "상대 견제에 밀려 킬링 존 진입을 주저하고, 슈팅 각도가 제한적인 박스 측면을 맴도는 유형"))
+        else:
+            badges.append(("자료 부족", "박스 내 반복 좌표 표본이 부족해 마이크로 조닝 성향을 판정할 수 없습니다."))
+    else:
+        badges.append(("자료 부족", "마이크로 조닝 정적 데이터가 아직 준비되지 않았습니다."))
+
+    lane_fields = ("lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio")
+    if all(ratio.get(field) is not None for field in lane_fields):
+        lanes = [max(0.0, float(ratio[field])) for field in lane_fields]
+        total = sum(lanes)
+        if total > 0:
+            lanes = [value / total * 100.0 for value in lanes]
+            wing_ratio, halfspace_ratio, center_ratio = lanes[0] + lanes[4], lanes[1] + lanes[3], lanes[2]
+            if halfspace_ratio > 40.0:
+                badges.append(("🎯 하프스페이스 타격형", "수비진의 치명적 균열을 유발하는 안쪽 채널 침투에 능한 현대적 포워드"))
+            elif center_ratio > 50.0:
+                badges.append(("⚓ 중앙 밀집형", "측면으로 빠지기보다 피치 중앙에 머무르며 상대 센터백과 직접 경합하는 정적인 타겟"))
+            elif wing_ratio > 30.0:
+                badges.append(("🏃 와이드 타겟", "밀집 수비를 피해 측면(터치라인)으로 넓게 빠져서 볼을 받아주는 측면 지향적 움직임"))
+            else:
+                badges.append(("🌪️ 전방위 스위칭", "특정 레인에 국한되지 않고 횡적으로 피치를 폭넓게 오가며 공간을 창출하는 프리롤"))
+            # SportsAPI's horizontal coordinate is mirrored against the
+            # viewer's broadcast orientation, hence the intentionally swapped
+            # labels below.
+            left_ratio, right_ratio = lanes[0] + lanes[1], lanes[3] + lanes[4]
+            if left_ratio - right_ratio > 15.0:
+                badges.append(("➡️ 우측면 지향", "주로 우측면에 머무르며(Right-biased), 좌측면 활용도는 상대적으로 떨어짐"))
+            elif right_ratio - left_ratio > 15.0:
+                badges.append(("⬅️ 좌측면 지향", "주로 좌측면에 머무르며(Left-biased), 우측면 활용도는 상대적으로 떨어짐"))
+            else:
+                badges.append(("⚖️ 좌우 밸런스형", "좌우를 가리지 않고 양쪽 공간을 고르게 활용하는 밸런스 잡힌 동선"))
+    return badges
 
 
 def render_lane_analysis(player_name: str, ratio: dict[str, object]) -> None:
@@ -860,8 +917,10 @@ def render_lane_analysis(player_name: str, ratio: dict[str, object]) -> None:
         yaxis={"visible": False, "fixedrange": True},
     )
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
-    st.markdown(f"**[{activity_badge}]** : {activity_text}")
-    st.markdown(f"**[{balance_badge}]** : {balance_text}")
+    # Keep the panel and profile header on the exact same interpretation of
+    # the mirrored SportsAPI horizontal coordinate.
+    for badge, text in spatial_identity_badges(ratio)[-2:]:
+        st.markdown(f"**[{badge}]** : {text}")
 
 
 def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, object] | None = None) -> None:
@@ -914,7 +973,14 @@ def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, obj
             else "페널티 스팟 컷백 타격형" if silver >= bronze
             else "와이드 박스 앵글 제한형"
         )
-        st.caption(f"🥊 박스 내 마이크로 조닝 · 가중 심층 점유 {weighted:.1f}/100 · {tendency}")
+        label_col, help_col = st.columns([5, 1])
+        with label_col:
+            st.caption(f"🥊 박스 내 마이크로 조닝 · 킬링 존 타격 지수 {weighted:.1f}/100 · {tendency}")
+        with help_col:
+            with st.popover("❓ 구역 안내"):
+                st.markdown("**골드 존**: 6야드 박스, 가장 높은 득점 확률 구역")
+                st.markdown("**실버 존**: 페널티 스팟 정면, 컷백 타격 구역")
+                st.markdown("**브론즈 존**: 박스 측면, 슈팅 각도가 제한되는 구역")
         zone_cols = st.columns(3)
         for column, (label, field, color) in zip(zone_cols, zone_fields):
             with column:
@@ -1155,7 +1221,7 @@ def select_player(query: str, key: str):
 def render_player_report(
     player, selected_seasons: list[str], competition_filter: str,
     restrict_to_forwards: bool, minimum_final_third_ratio: int, show_activity: bool = True,
-    selected_league_id: int | None = None,
+    selected_league_id: int | None = None, comparison_scope: int = 0,
 ) -> None:
     try:
         with st.spinner(f"{player.name}의 전술 스탯을 분석 중입니다..."):
@@ -1218,6 +1284,7 @@ def render_player_report(
                     player.player_id, season_str, stats, min_xg=minimum_xg,
                     restrict_to_forwards=restrict_to_forwards,
                     minimum_final_third_ratio=minimum_final_third_ratio,
+                    comparison_scope=comparison_scope,
                 )
             except Exception:
                 rank = None
@@ -1247,7 +1314,8 @@ def render_player_report(
                 return getattr(rank, attr, None) if rank else None
 
             progression_eligible = get_rank("progression_eligible") or 0
-            cohort_label = "동일 대회 · xG 1 이상"
+            minimum_minutes = 180 if stats.league_id in (42, 73, 102) else 450
+            cohort_label = f"{comparison_population_label(stats.league_id, comparison_scope)} · {minimum_minutes}분 이상 · xG 1 이상"
             with st.expander(
                 f"🏃 순수 전진 기여도 상대평가 · {cohort_label} · 비교군 {progression_eligible}명",
                 expanded=True,
@@ -1272,7 +1340,7 @@ def render_player_report(
             st.divider()
             
             if rank and rank.eligible_players:
-                with st.expander(f"🎯 결정력 상대평가 · 동일 대회 xG {minimum_xg} 이상 {rank.eligible_players}명", expanded=True):
+                with st.expander(f"🎯 결정력 상대평가 · {cohort_label} · {rank.eligible_players}명", expanded=True):
                     st.caption("⭐ 메인 지표 · 박스 안 마무리 / 보조 지표 · 중거리 성향 및 슛 이후 변수")
                     render_unified_bar("박스 안 순수 결정력", stats.in_box_finishing, rank.in_box_finishing_median,
                                        rank.in_box_finishing_top_percent, rank.in_box_finishing_rank, progression_eligible, "골")
@@ -1407,19 +1475,32 @@ def render_v32_analysis_center() -> None:
         if spear_score is None:
             st.subheader(f"👑 {player.name}  ·  🏷️ S.P.E.A.R. 데이터 부족")
         else:
-            st.subheader(f"👑 {player.name}  ·  [{spear_tier}-Tier]  S.P.E.A.R. {spear_score:.1f}/100")
+            score_rank = getattr(rank, "spear_score_rank", None)
+            score_percent = getattr(rank, "spear_score_top_percent", None)
+            score_population = getattr(rank, "spear_score_eligible", 0) or rank.eligible_players
+            rank_text = (
+                f" ({score_rank}위 / {score_population}명 · 상위 {score_percent:.1f}%)"
+                if score_rank and score_percent is not None and score_population else ""
+            )
+            st.subheader(f"👑 {player.name}  ·  [{spear_tier}-Tier]  S.P.E.A.R. {spear_score:.1f}/100{rank_text}")
             if spear_coverage < len(SPEAR_FACTOR_AXES):
                 st.caption(f"현재 산출 가능한 팩터 {spear_coverage}/{len(SPEAR_FACTOR_AXES)}개 기준의 잠정 점수입니다.")
+            identities = spatial_identity_badges(tactical_ratio)
+            if identities:
+                st.markdown("**💡 전술 공간 아이덴티티**")
+                for badge, text in identities:
+                    st.markdown(f"**[{badge}]** : {text}")
     with help_col:
         with st.popover("❓ 점수 산출 방식"):
             st.markdown("**S.P.E.A.R.**  \\n슈팅 50% · 수비 부수기 30% · 위치 선정 20%")
             st.caption("1,000분 이상 전문 공격수의 Z-점수를 0~100 점수로 변환합니다.")
             st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
     volume_col, ratio_col = st.columns(2)
+    selected_population_label = comparison_population_label(selected_stats.league_id, filters["comparison_scope"])
     with volume_col:
-        render_spear_radar(player.name, rank, selected_stats, volume=True, tactical_ratio=tactical_ratio)
+        render_spear_radar(player.name, rank, selected_stats, volume=True, tactical_ratio=tactical_ratio, comparison_label=selected_population_label)
     with ratio_col:
-        render_spear_radar(player.name, rank, selected_stats, volume=False, tactical_ratio=tactical_ratio)
+        render_spear_radar(player.name, rank, selected_stats, volume=False, tactical_ratio=tactical_ratio, comparison_label=selected_population_label)
     if rank is None:
         st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)과 C 등급으로 표시됩니다.")
     render_twin_radar_sector_summaries(rank)
@@ -1438,6 +1519,7 @@ def render_v32_analysis_center() -> None:
     render_player_report(
         player, [filters["season"]], "전체", True, 0,
         show_activity=False, selected_league_id=selected_stats.league_id,
+        comparison_scope=filters["comparison_scope"],
     )
     if not rank or (rank.eligible_players or 0) < 10:
         st.caption("해당 대회 표본이 부족하여 잠정 수치가 적용되었습니다.")
