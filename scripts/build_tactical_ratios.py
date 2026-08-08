@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -258,7 +259,22 @@ def read_fotmob_map(path: Path) -> dict[str, str]:
 
 
 def _normalise_name(value: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", value.lower())
+    """Compare names across providers without losing accented letters.
+
+    SportsAPI commonly supplies the native spelling (for example ``Dženan
+    Pejčinović``), while FotMob's search index often uses an ASCII spelling.
+    The former ASCII-only expression silently discarded those letters, making
+    otherwise unique candidates look different.  Transliterate first, then
+    compare the remaining alphanumeric characters.  A few letters do not
+    decompose under Unicode normalisation, so handle those explicitly.
+    """
+    replacements = str.maketrans({
+        "ł": "l", "ø": "o", "ß": "ss", "æ": "ae", "œ": "oe",
+        "đ": "d", "ð": "d", "þ": "th", "ı": "i",
+    })
+    ascii_name = unicodedata.normalize("NFKD", value.lower().translate(replacements))
+    ascii_name = ascii_name.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]", "", ascii_name)
 
 
 def resolve_fotmob_id(player_name: str) -> str | None:
@@ -266,8 +282,14 @@ def resolve_fotmob_id(player_name: str) -> str | None:
     try:
         from fotmob_client import FotMobError, search_players
         target = _normalise_name(player_name)
-        matches = [candidate for candidate in search_players(player_name) if _normalise_name(candidate.name) == target]
-        return matches[0].player_id if len(matches) == 1 else None
+        # The same player can appear in more than one result group.  Deduplicate
+        # by player ID before deciding whether a match is unambiguous.
+        matches = {
+            candidate.player_id
+            for candidate in search_players(player_name)
+            if _normalise_name(candidate.name) == target
+        }
+        return next(iter(matches)) if len(matches) == 1 else None
     except (ImportError, FotMobError):
         return None
 
