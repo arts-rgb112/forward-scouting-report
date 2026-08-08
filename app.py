@@ -595,6 +595,55 @@ def render_spear_radar(
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
+def render_spear_head_to_head(left_name: str, left_rank, right_name: str, right_rank) -> None:
+    """Overlay the two independent S.P.E.A.R. 2.0 ratio profiles."""
+    labels = [label for label, _ in SPEAR_FACTOR_AXES]
+    left_scores = [_radar_score(getattr(left_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES]
+    right_scores = [_radar_score(getattr(right_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES]
+    figure = go.Figure()
+    for name, scores, color, fill in (
+        (left_name, left_scores, "#38BDF8", "rgba(56,189,248,0.25)"),
+        (right_name, right_scores, "#FB7185", "rgba(251,113,133,0.24)"),
+    ):
+        tiers = [_spear_tier(score) for score in scores]
+        figure.add_trace(go.Scatterpolar(
+            r=scores + [scores[0]], theta=[f"{label} [{tier}]" for label, tier in zip(labels, tiers)] + [f"{labels[0]} [{tiers[0]}]"],
+            mode="lines+markers", name=name, fill="toself", fillcolor=fill,
+            line={"color": color, "width": 2.5}, marker={"color": color, "size": 6},
+            hovertemplate="<b>%{theta}</b><br>%{fullData.name}: %{r:.1f}/100<extra></extra>",
+        ))
+    figure.update_layout(
+        title="S.P.E.A.R. 2.0 Head-to-Head · 비율 프로필",
+        height=500, margin={"l": 44, "r": 44, "t": 55, "b": 38},
+        paper_bgcolor="rgba(0,0,0,0)",
+        polar={
+            "bgcolor": "rgba(0,0,0,0)",
+            "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100]},
+            "angularaxis": {"rotation": 90, "direction": "clockwise"},
+        },
+        legend={"orientation": "h", "y": -0.1, "x": 0.5, "xanchor": "center"},
+    )
+    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+
+
+def render_head_to_head_cards(left_name: str, left_rank, left_stats, right_name: str, right_rank, right_stats) -> None:
+    """Show each player's matrix evidence independently; never concatenate copy."""
+    left_cards = dict(twin_radar_sector_summaries(left_rank))
+    right_cards = dict(twin_radar_sector_summaries(right_rank))
+    for title in TWIN_SECTOR_MATRIX.values():
+        sector_title = title["title"]
+        left_text = left_cards.get(sector_title, "비교군 또는 공간 데이터 부족")
+        right_text = right_cards.get(sector_title, "비교군 또는 공간 데이터 부족")
+        with st.expander(sector_title, expanded=False):
+            left_col, right_col = st.columns(2)
+            with left_col:
+                st.markdown(f"**{left_name}**")
+                st.write(left_text)
+            with right_col:
+                st.markdown(f"**{right_name}**")
+                st.write(right_text)
+
+
 def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards: bool, minimum_final_third_ratio: int):
     """Use the first displayed league-season to drive the analysis-center radar."""
     try:
@@ -1100,6 +1149,49 @@ def render_v32_analysis_center() -> None:
     st.divider()
     tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", filters["season"])
     rank = spear_rank_for_session(player, filters["season"], selected_stats, True)
+    view_mode = st.radio("분석 보기", ["단일 분석", "Head-to-Head"], horizontal=True, key="v32_view_mode")
+    if view_mode == "Head-to-Head":
+        st.caption("두 선수는 같은 시즌·같은 대회 세션에서 각각 독립적으로 상대평가됩니다.")
+        opponent = select_player(
+            st.text_input("비교 선수 검색", key="v32_opponent_query", placeholder="예: Robert Lewandowski"),
+            "v32_opponent_player",
+        )
+        if not opponent:
+            return
+        try:
+            opponent_sessions = extract_multi_season_metrics(cached_player_data(opponent.player_id))
+        except FotMobError as exc:
+            st.error(f"비교 선수 세션 데이터를 불러오지 못했습니다: {exc}")
+            return
+        opponent_stats = next((
+            stats for key, stats in opponent_sessions.items()
+            if key.split("_", 1)[0] == filters["season"] and stats.league_id == selected_stats.league_id
+        ), None)
+        if opponent_stats is None:
+            st.warning(f"{opponent.name}은(는) {filters['season']} {selected_stats.league_name}에 독립된 세션이 없습니다.")
+            return
+        opponent_rank = spear_rank_for_session(opponent, filters["season"], opponent_stats, True)
+        left_total = sum(_radar_score(getattr(rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES) if rank else 0.0
+        right_total = sum(_radar_score(getattr(opponent_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES) if opponent_rank else 0.0
+        if abs(left_total - right_total) < 0.01:
+            result = "🤝 동일한 전술 프로필"
+        elif left_total > right_total:
+            result = f"🏆 {player.name} 우세"
+        else:
+            result = f"🏆 {opponent.name} 우세"
+        st.subheader(f"{result} · {selected_stats.league_name}")
+        render_spear_head_to_head(player.name, rank, opponent.name, opponent_rank)
+        render_head_to_head_cards(player.name, rank, selected_stats, opponent.name, opponent_rank, opponent_stats)
+        with st.expander("공간·활동량 세부 차트", expanded=False):
+            left_col, right_col = st.columns(2)
+            with left_col:
+                render_activity_ratio(player.player_id, player.name, tactical_ratio)
+                render_season_heatmap(player.player_id, player.name, tactical_ratio.get("heatmap_key") if tactical_ratio else None)
+            with right_col:
+                opponent_ratio = get_tactical_ratio_for_session(opponent.player_id, opponent_stats.league_name or "", filters["season"])
+                render_activity_ratio(opponent.player_id, opponent.name, opponent_ratio)
+                render_season_heatmap(opponent.player_id, opponent.name, opponent_ratio.get("heatmap_key") if opponent_ratio else None)
+        return
     title_col, help_col = st.columns([4, 1])
     with title_col:
         st.subheader(f"👑 {player.name}  ·  🏷️ S.P.E.A.R. 동기화 대기  (—/100)")
