@@ -793,10 +793,11 @@ def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | N
     ))
     line = {"color": "rgba(12,34,28,0.92)", "width": 1.3}
     for x0, y0, x1, y1 in ((0, 0, 100, 100), (83, 21.1, 100, 78.9), (0, 21.1, 17, 78.9)):
-        figure.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=line, fillcolor="rgba(34,197,94,0.06)" if x0 == 83 else "rgba(0,0,0,0)")
+        fill = "#4d704c" if (x0, y0, x1, y1) == (0, 0, 100, 100) else "rgba(34,197,94,0.06)" if x0 == 83 else "rgba(0,0,0,0)"
+        figure.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=line, fillcolor=fill, layer="below")
     figure.add_shape(type="line", x0=50, y0=0, x1=50, y1=100, line=line)
     figure.add_shape(type="circle", x0=43, y0=43, x1=57, y1=57, line=line)
-    figure.update_layout(height=410, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#4d704c", xaxis={"range": [1.5, 98.5], "visible": False, "fixedrange": True}, yaxis={"range": [1.5, 98.5], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True}, showlegend=False)
+    figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [0, 100], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True, "constrain": "domain"}, showlegend=False)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
@@ -968,14 +969,17 @@ def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, obj
         silver = float(ratio["box_penalty_spot_ratio"])
         bronze = float(ratio["box_wide_ratio"])
         weighted = float(ratio.get("deep_box_zone_score", 0.0))
-        tendency = (
-            "골 에어리어 심층 침투형" if gold >= max(silver, bronze)
-            else "페널티 스팟 컷백 타격형" if silver >= bronze
-            else "와이드 박스 앵글 제한형"
-        )
+        micro_badge, micro_text = spatial_identity_badges(ratio)[0]
         label_col, help_col = st.columns([5, 1])
         with label_col:
-            st.caption(f"🥊 박스 내 마이크로 조닝 · 킬링 존 타격 지수 {weighted:.1f}/100 · {tendency}")
+            st.markdown("### 🎯 박스 내 마이크로 조닝 요약")
+            st.markdown(
+                f"<div style='padding:0.7rem 0.85rem; border-left:5px solid #F6C945; "
+                f"background:rgba(246,201,69,0.12); border-radius:0.35rem; font-size:1.08rem; font-weight:750; line-height:1.55;'>"
+                f"[ {micro_badge} ] : {micro_text}</div>",
+                unsafe_allow_html=True,
+            )
+            st.caption(f"킬링 존 타격 지수 {weighted:.1f}/100")
         with help_col:
             with st.popover("❓ 구역 안내"):
                 st.markdown("**골드 존**: 6야드 박스, 가장 높은 득점 확률 구역")
