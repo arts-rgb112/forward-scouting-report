@@ -294,6 +294,11 @@ def _fetch_elite_dribbler_metrics(
             })
         if static_metrics:
             return static_metrics, {player_id: 0.0 for player_id in static_metrics}
+        # A historical snapshot may not be available yet.  Do not turn a
+        # dashboard view into hundreds of player-profile requests: the UI can
+        # honestly show an unavailable comparison cohort until the scheduled
+        # static refresh is explicitly resumed.
+        return {}, {}
     return _fetch_live_spear_cohort(
         league_id, season_name, restrict_to_forwards, minimum_final_third_ratio,
     )
