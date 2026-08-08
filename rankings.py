@@ -203,6 +203,12 @@ def _fetch_live_spear_cohort(
     the cohort. Exact player metrics then enforce the shared xG floor only.
     """
     rows = fetch_league_stat_table(league_id, season_name, "won_contest")
+    # Some smaller leagues and continental competitions expose no contest
+    # leaderboard even though their player stats are available.  xG is the
+    # cohort's actual eligibility floor, so it is the correct lossless seed
+    # for those sessions rather than treating the whole competition as empty.
+    if not rows:
+        rows = fetch_league_stat_table(league_id, season_name, "expected_goals")
     
     # Seed with every listed player; no contest-stat cutoff.
     successes = {
