@@ -56,10 +56,25 @@ def build(season_name: str) -> list[dict[str, object]]:
 
 
 def write(rows: list[dict[str, object]]) -> None:
+    """Replace one season while retaining every previously cached season.
+
+    The former writer overwrote ``spear_cohort.csv`` on every workflow run.
+    That made an older season silently fall back to live requests and produced
+    under-sized historical comparison populations in the dashboard.
+    """
     DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    refreshed_seasons = {str(row.get("season_name", "")).strip() for row in rows}
+    retained: list[dict[str, str]] = []
+    if DATA_PATH.exists():
+        with DATA_PATH.open(encoding="utf-8", newline="") as source:
+            retained = [
+                row for row in csv.DictReader(source)
+                if str(row.get("season_name", "")).strip() not in refreshed_seasons
+            ]
     with DATA_PATH.open("w", encoding="utf-8", newline="") as target:
         writer = csv.DictWriter(target, fieldnames=CSV_FIELDS)
         writer.writeheader()
+        writer.writerows(retained)
         writer.writerows(rows)
 
 
