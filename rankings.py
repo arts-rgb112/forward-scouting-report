@@ -385,10 +385,19 @@ def get_spear_leaderboard(
         if not all(player_id in source for source, _ in weights):
             continue
         score = round(sum(source[player_id] * weight for source, weight in weights), 2)
+        def factor_tier(source: dict[str, float]) -> str:
+            return _spear_tier(source[player_id]) if player_id in source else "-"
         records.append({
             "player_id": player_id, "player_name": names.get(player_id, "Unknown"),
             "team_name": metric.team_name or "-", "score": score,
             "tier": _spear_tier(score), "role": "Type B" if is_type_b else "Type A",
+            "position": metric.position or metric.position_group or "미분류",
+            "outside_shot_tier": factor_tier(shot_scores),
+            "deep_box_tier": factor_tier(deep_scores),
+            "danger_zone_tier": factor_tier(progression_scores),
+            "aerial_tier": factor_tier(aerial_scores),
+            "ground_duel_tier": factor_tier(duel_scores),
+            "space_control_tier": factor_tier(cca_scores),
         })
     table = pd.DataFrame(records)
     if table.empty:

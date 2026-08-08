@@ -1318,9 +1318,12 @@ def select_player(query: str, key: str):
     return candidates[st.selectbox("선수 선택", range(len(candidates)), format_func=lambda i: labels[i], key=key)]
 
 
-def render_spear_leaderboard(season: str, comparison_scope: int) -> PlayerCandidate | None:
+def render_spear_leaderboard(
+    season: str, comparison_scope: int, league_id: int = 47,
+    position_filter: str = "전체", role_filter: str = "전체",
+) -> PlayerCandidate | None:
     """Show a local, sortable scouting list and return the selected player."""
-    table = cached_spear_leaderboard(47, season, comparison_scope)
+    table = cached_spear_leaderboard(league_id, season, comparison_scope)
     st.subheader("🏆 S.P.E.A.R. 스카우팅 리스트")
     st.caption(comparison_population_criteria(47, season, comparison_scope))
     if table.empty:
@@ -1329,10 +1332,33 @@ def render_spear_leaderboard(season: str, comparison_scope: int) -> PlayerCandid
             "상세 검색은 가능하며, 리더보드는 시즌 스냅샷이 적재되면 자동 활성화됩니다."
         )
         return None
+    if position_filter != "전체" and "position" in table:
+        position_tokens = {
+            "FW": ("striker", "forward", "winger", "attacking"),
+            "MF": ("midfielder",),
+            "DF": ("back", "defender"),
+        }
+        tokens = position_tokens.get(position_filter, ())
+        table = table[
+            table["position"].astype(str).str.lower().apply(
+                lambda value: any(token in value for token in tokens)
+            )
+        ]
+    if role_filter in {"Type A", "Type B"}:
+        table = table[table["role"] == role_filter]
+    if table.empty:
+        st.info("현재 필터 조합에 맞는 S.P.E.A.R. 선수 데이터가 없습니다.")
+        return None
     display = table.rename(columns={
         "rank": "순위", "player_name": "선수", "team_name": "팀",
         "score": "S.P.E.A.R.", "tier": "티어", "role": "기본 롤",
-    })[["순위", "선수", "팀", "S.P.E.A.R.", "티어", "기본 롤"]].copy()
+        "outside_shot_tier": "박스 밖 슈팅", "deep_box_tier": "심층 타격",
+        "danger_zone_tier": "위험 구역", "aerial_tier": "공중볼",
+        "ground_duel_tier": "지상 경합", "space_control_tier": "공간 장악",
+    })[[
+        "순위", "선수", "팀", "S.P.E.A.R.", "티어", "박스 밖 슈팅", "심층 타격",
+        "위험 구역", "공중볼", "지상 경합", "공간 장악", "기본 롤",
+    ]].copy()
     display.insert(
         1, "프로필",
         "https://images.fotmob.com/image_resources/playerimages/" + table["player_id"].astype(str) + ".png",
@@ -1354,6 +1380,10 @@ def render_spear_leaderboard(season: str, comparison_scope: int) -> PlayerCandid
     try:
         st.query_params["player"] = str(selected["player_id"])
         st.query_params["season"] = season
+        st.query_params["scope"] = str(comparison_scope)
+        st.query_params["name"] = str(selected["player_name"])
+        st.query_params["team"] = str(selected["team_name"])
+        st.query_params["page"] = "detail"
     except Exception:
         pass
     return PlayerCandidate(
@@ -1716,62 +1746,239 @@ def render_v32_analysis_center() -> None:
         st.caption("해당 대회 표본이 부족하여 잠정 수치가 적용되었습니다.")
 
 
-def main() -> None:
-    render_v32_analysis_center()
-    return
-    st.title("🎯 스트라이커 전술 스카우팅 리포트")
-    st.caption("2차 스탯 기반 선수 기여도 분석 · 동일 포맷의 1:1 비교 지원")
-    selected_seasons = st.multiselect("📊 조회할 시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], default=["25/26", "24/25"])
-    competition_filter = st.radio("대회", ["전체", "리그", "챔피언스리그"], horizontal=True)
-    compare_mode = st.toggle("선수 비교 모드")
-    restrict_to_forwards = st.toggle(
-        "전문 공격수·윙어·공격형 미드필더 비교군만 사용",
-        value=True,
-        help="켜면 Striker, Forward, Attacker, CF, 좌·우 윙어, 공격형 미드필더만 비교합니다. 끄면 동일 대회에서 볼 경합 성공 1회 이상인 모든 포지션을 비교합니다.",
-    )
-    minimum_final_third_ratio = st.slider(
-        "파이널써드 활동 비중 최소 조건 (%)",
-        min_value=0, max_value=100, value=0,
-        help="선택한 비율 이상인 선수만 모든 상대평가의 비교군에 포함합니다.",
-    )
+def _query_text(name: str, default: str = "") -> str:
+    value = st.query_params.get(name, default)
+    return str(value[0] if isinstance(value, list) else value)
 
-    if compare_mode:
-        left, right = st.columns(2)
-        with left:
-            left_player = select_player(st.text_input("왼쪽 선수 검색", key="left_query", placeholder="예: Francisco Panichelli"), "left_player")
-        with right:
-            right_player = select_player(st.text_input("오른쪽 선수 검색", key="right_query", placeholder="예: Robert Lewandowski"), "right_player")
-        if left_player and right_player:
-            profiles = [
-                build_radar_profile(left_player, selected_seasons, competition_filter, restrict_to_forwards, minimum_final_third_ratio),
-                build_radar_profile(right_player, selected_seasons, competition_filter, restrict_to_forwards, minimum_final_third_ratio),
-            ]
-            render_radar_chart([profile for profile in profiles if profile], "🕸️ 전술 프로필 비교 · 전문 공격수 백분위")
-            st.divider()
-            left, right = st.columns(2)
-            with left:
-                render_player_report(left_player, selected_seasons, competition_filter, restrict_to_forwards, minimum_final_third_ratio)
-            with right:
-                render_player_report(right_player, selected_seasons, competition_filter, restrict_to_forwards, minimum_final_third_ratio)
-        return
 
-    player = select_player(st.text_input("🔍 선수 이름 검색", placeholder="예: Erling Haaland, Lamine Yamal"), "single_player")
-    if player:
-        st.divider()
-        render_player_report(player, selected_seasons, competition_filter, restrict_to_forwards, minimum_final_third_ratio)
-        return
-
-    st.divider()
-    st.subheader("🏆 25/26 시즌 박스 안 순수 결정력 (xGOT-xG) Top 20")
+def _query_scope(default: int = 5) -> int:
     try:
-        ranking_tables = cached_top20(minimum_final_third_ratio)
-        if ranking_tables and not ranking_tables.get("통합", pd.DataFrame()).empty:
-            tabs = st.tabs(["통합", "Premier League", "LaLiga", "Bundesliga", "Serie A", "Champions League"])
-            for tab, name in zip(tabs, ["통합", "Premier League", "LaLiga", "Bundesliga", "Serie A", "Champions League"]):
-                with tab:
-                    st.dataframe(style_dataframe(ranking_tables.get(name, pd.DataFrame())), use_container_width=True, height=735)
-    except Exception as exc:
-        st.info(f"랭킹 데이터를 불러오지 못했습니다: {exc}")
+        value = int(_query_text("scope", str(default)))
+        return value if value in {3, 5, 7} else default
+    except ValueError:
+        return default
+
+
+def _route(page: str, **params: object) -> None:
+    st.query_params["page"] = page
+    for key, value in params.items():
+        st.query_params[key] = str(value)
+
+
+def render_leaderboard_page() -> None:
+    """Page 1 — independent scouting-pool search and ranking list."""
+    st.title("🔍 선수 검색 및 리더보드")
+    st.caption("정적 S.P.E.A.R. 스냅샷으로 즉시 정렬되며, 선수 행을 선택하면 상세 리포트로 이동합니다.")
+    league_options = {
+        "통합 리그 범위": 47,
+        "Premier League": 47, "LaLiga": 87, "Bundesliga": 54,
+        "Serie A": 55, "Ligue 1": 53,
+    }
+    default_season = _query_text("season", "25/26")
+    default_scope = _query_scope()
+    default_league = _query_text("league_name", "통합 리그 범위")
+    if default_league not in league_options:
+        default_league = "통합 리그 범위"
+    with st.form("leaderboard_filters", border=True):
+        league_col, season_col, position_col, role_col, search_col, action_col = st.columns([1.4, 1, 1, 1, 1.8, 0.9])
+        with league_col:
+            league_name = st.selectbox("리그", list(league_options), index=list(league_options).index(default_league))
+        with season_col:
+            season = st.selectbox("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], index=["25/26", "24/25", "23/24", "22/23", "21/22"].index(default_season) if default_season in {"25/26", "24/25", "23/24", "22/23", "21/22"} else 0)
+        with position_col:
+            position = st.selectbox("포지션", ["전체", "FW", "MF", "DF"], index=["전체", "FW", "MF", "DF"].index(_query_text("position", "전체")) if _query_text("position", "전체") in {"전체", "FW", "MF", "DF"} else 0)
+        with role_col:
+            role = st.selectbox("롤", ["전체", "Type A", "Type B"], index=["전체", "Type A", "Type B"].index(_query_text("role", "전체")) if _query_text("role", "전체") in {"전체", "Type A", "Type B"} else 0)
+        with search_col:
+            query = st.text_input("선수명 검색", value=_query_text("search", ""), placeholder="예: Erling Haaland")
+        with action_col:
+            st.write("")
+            submitted = st.form_submit_button("적용", use_container_width=True, type="primary")
+        if submitted:
+            _route("leaderboard", season=season, scope=default_scope, league_name=league_name, position=position, role=role, search=query.strip())
+            st.rerun()
+
+    active_season = _query_text("season", default_season)
+    active_league_name = _query_text("league_name", default_league)
+    active_position = _query_text("position", "전체")
+    active_role = _query_text("role", "전체")
+    active_query = _query_text("search", "")
+    selected = render_spear_leaderboard(
+        active_season, default_scope, league_options.get(active_league_name, 47),
+        active_position, active_role,
+    )
+    if selected:
+        st.rerun()
+    if active_query:
+        st.divider()
+        candidate = select_player(active_query, "leaderboard_search_player")
+        if candidate:
+            _route(
+                "detail", player=candidate.player_id, name=candidate.name,
+                team=candidate.team_name or "", season=active_season, scope=default_scope,
+            )
+            st.rerun()
+
+
+def _render_role_overview(player, filters: dict[str, object], stats: DecisionMetrics, tactical_ratio, role: str) -> object:
+    """Render one independent Type A or Type B detail-tab overview."""
+    rank = cached_percentiles(
+        player.player_id, str(filters["season"]), stats, 1.0, True, 0,
+        int(filters["scope"]), role,
+    )
+    spear_score, spear_tier, spear_coverage = _spear_total(rank)
+    if spear_score is None:
+        st.warning("현재 역할 뷰의 S.P.E.A.R. 비교군이 준비되지 않았습니다.")
+        return rank
+    score_rank = getattr(rank, "spear_score_rank", None)
+    score_percent = getattr(rank, "spear_score_top_percent", None)
+    score_population = getattr(rank, "spear_score_eligible", 0) or rank.eligible_players
+    rank_text = (
+        f" ({score_rank}위 / {score_population}명 · 상위 {score_percent:.1f}%)"
+        if score_rank and score_percent is not None and score_population else ""
+    )
+    st.subheader(f"[{spear_tier}-Tier] S.P.E.A.R. {spear_score:.1f}/100{rank_text}")
+    st.caption(comparison_population_criteria(stats.league_id, str(filters["season"]), int(filters["scope"])))
+    st.caption(f"적용 롤: {getattr(rank, 'spear_role', role)} · 산출 팩터 {spear_coverage}/6개")
+    identities = spatial_identity_badges(tactical_ratio, force_type_b=role == "type_b")
+    for badge, text in identities:
+        st.markdown(f"**[{badge}]** : {text}")
+    volume_col, ratio_col = st.columns(2)
+    population_label = comparison_population_label(stats.league_id, int(filters["scope"]))
+    with volume_col:
+        render_spear_radar(player.name, rank, stats, volume=True, tactical_ratio=tactical_ratio, comparison_label=population_label)
+    with ratio_col:
+        render_spear_radar(player.name, rank, stats, volume=False, tactical_ratio=tactical_ratio, comparison_label=population_label)
+    render_twin_radar_sector_summaries(rank)
+    return rank
+
+
+def render_player_detail_page() -> None:
+    """Page 2 — URL-addressable player detail report with role tabs."""
+    st.title("📊 선수 상세 분석 리포트")
+    player_id = _query_text("player")
+    if not player_id:
+        st.info("리더보드에서 선수를 선택하거나, 검색 페이지에서 선수명을 입력해 주세요.")
+        return
+    filters = {"season": _query_text("season", "25/26"), "scope": _query_scope()}
+    player = PlayerCandidate(player_id, _query_text("name", "선수"), _query_text("team", ""))
+    try:
+        sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
+    except FotMobError as exc:
+        st.error(f"선수 세션 데이터를 불러오지 못했습니다: {exc}")
+        return
+    session_rows = [(key, stats) for key, stats in sessions.items() if key.split("_", 1)[0] == filters["season"]]
+    if not session_rows:
+        st.warning(f"{filters['season']} 시즌에 조회 가능한 대회 기록이 없습니다.")
+        return
+    selected_index = st.selectbox(
+        "대회", range(len(session_rows)),
+        format_func=lambda index: session_rows[index][1].league_name or "대회 정보 없음",
+        key=f"detail_competition_{player.player_id}_{filters['season']}",
+    )
+    _, selected_stats = session_rows[selected_index]
+    st.caption(f"{player.name} · {filters['season']} · {selected_stats.league_name or '대회 정보 미제공'} · {selected_stats.team_name or '팀 정보 미제공'}")
+    tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", str(filters["season"]))
+    type_a_tab, type_b_tab = st.tabs(["🎯 정통 9번 뷰 (Type A)", "👻 펄스 나인 뷰 (Type B)"])
+    with type_a_tab:
+        rank_a = _render_role_overview(player, filters, selected_stats, tactical_ratio, "type_a")
+    with type_b_tab:
+        rank_b = _render_role_overview(player, filters, selected_stats, tactical_ratio, "type_b")
+    st.divider()
+    st.subheader("세부 상대평가")
+    render_player_report(
+        player, [str(filters["season"])], "전체", True, 0,
+        show_activity=False, selected_league_id=selected_stats.league_id,
+        comparison_scope=int(filters["scope"]),
+    )
+    with st.expander(f"📍 {filters['season']} · {selected_stats.league_name or '선택 대회'} 공간·활동량", expanded=True):
+        activity_col, heatmap_col = st.columns([1, 1.45])
+        with activity_col:
+            render_activity_ratio(player.player_id, player.name, tactical_ratio, rank=rank_a or rank_b)
+        with heatmap_col:
+            render_season_heatmap(player.player_id, player.name, tactical_ratio.get("heatmap_key") if tactical_ratio else None, tactical_ratio)
+
+
+def render_head_to_head_page() -> None:
+    """Page 3 — dedicated player-versus-player analysis."""
+    st.title("⚔️ 비교 분석 집중 페이지")
+    st.caption("두 선수는 같은 시즌·같은 대회에서 각자 독립된 상대평가를 받습니다.")
+    if "h2h_filters" not in st.session_state:
+        st.session_state.h2h_filters = None
+    with st.form("h2h_filters", border=True):
+        season_col, scope_col, left_col, right_col, action_col = st.columns([1, 1, 2, 2, 1])
+        with season_col:
+            season = st.selectbox("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], key="h2h_season")
+        with scope_col:
+            scope = st.selectbox("비교 범위", [3, 5, 7], index=1, key="h2h_scope")
+        with left_col:
+            left_query = st.text_input("왼쪽 선수", placeholder="예: Erling Haaland")
+        with right_col:
+            right_query = st.text_input("오른쪽 선수", placeholder="예: Robert Lewandowski")
+        with action_col:
+            st.write("")
+            submit = st.form_submit_button("비교", use_container_width=True, type="primary")
+        if submit:
+            st.session_state.h2h_filters = {"season": season, "scope": scope, "left": left_query, "right": right_query}
+    filters = st.session_state.h2h_filters
+    if not filters:
+        return
+    left_player = select_player(str(filters["left"]), "h2h_left_player")
+    right_player = select_player(str(filters["right"]), "h2h_right_player")
+    if not left_player or not right_player:
+        return
+    try:
+        left_sessions = extract_multi_season_metrics(cached_player_data(left_player.player_id))
+        right_sessions = extract_multi_season_metrics(cached_player_data(right_player.player_id))
+    except FotMobError as exc:
+        st.error(f"선수 세션 데이터를 불러오지 못했습니다: {exc}")
+        return
+    right_season_stats = [
+        stats for key, stats in right_sessions.items()
+        if key.split("_", 1)[0] == filters["season"]
+    ]
+    candidates = [
+        (key, stats) for key, stats in left_sessions.items()
+        if key.split("_", 1)[0] == filters["season"]
+        and any(other.league_id == stats.league_id for other in right_season_stats)
+    ]
+    if not candidates:
+        st.warning("두 선수의 공통 시즌·대회 세션을 찾지 못했습니다.")
+        return
+    selected_index = st.selectbox("비교 대회", range(len(candidates)), format_func=lambda index: candidates[index][1].league_name or "대회 정보 없음")
+    _, left_stats = candidates[selected_index]
+    right_stats = next(stats for stats in right_season_stats if stats.league_id == left_stats.league_id)
+    left_rank = cached_percentiles(left_player.player_id, str(filters["season"]), left_stats, 1.0, True, 0, int(filters["scope"]))
+    right_rank = cached_percentiles(right_player.player_id, str(filters["season"]), right_stats, 1.0, True, 0, int(filters["scope"]))
+    left_ratio = get_tactical_ratio_for_session(left_player.player_id, left_stats.league_name or "", str(filters["season"]))
+    right_ratio = get_tactical_ratio_for_session(right_player.player_id, right_stats.league_name or "", str(filters["season"]))
+    render_spear_head_to_head(left_player.name, left_rank, right_player.name, right_rank)
+    render_head_to_head_cards(left_player.name, left_rank, left_stats, left_ratio, right_player.name, right_rank, right_stats, right_ratio)
+
+
+def main() -> None:
+    """URL-addressable three-page navigation for the scouting workflow."""
+    pages = {
+        "leaderboard": "🔍 선수 검색 및 리더보드",
+        "detail": "📊 선수 상세 분석 리포트",
+        "compare": "⚔️ 비교 분석 집중 페이지",
+    }
+    current = _query_text("page", "leaderboard")
+    if current not in pages:
+        current = "leaderboard"
+    with st.sidebar:
+        st.title("S.P.E.A.R. 2.0")
+        selected_label = st.radio("페이지", list(pages.values()), index=list(pages).index(current))
+        selected_page = next(page for page, label in pages.items() if label == selected_label)
+        if selected_page != current:
+            _route(selected_page)
+            st.rerun()
+    if current == "leaderboard":
+        render_leaderboard_page()
+    elif current == "detail":
+        render_player_detail_page()
+    else:
+        render_head_to_head_page()
 
 if __name__ == "__main__":
     main()
