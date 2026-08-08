@@ -1,7 +1,7 @@
 """Populate missing season-specific team names in the static S.P.E.A.R. cohort.
 
-This intentionally uses one FotMob stat-table request per league/season group
-instead of a player-profile request for every row.  It is safe to run after a
+This intentionally resolves each distinct FotMob team ID once instead of
+fetching a player profile for every cohort row.  It is safe to run after a
 cohort refresh, or by itself to repair an existing static snapshot.
 """
 
@@ -9,15 +9,15 @@ from __future__ import annotations
 
 import csv
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from fotmob_client import FotMobError, fetch_league_stat_table
+from fotmob_client import fetch_team_name
 from spear_cohort import CSV_FIELDS, DATA_PATH
-from build_spear_cohort import _team_name_from_leaderboard_row
 
 
 def main() -> None:
@@ -26,38 +26,32 @@ def main() -> None:
     with DATA_PATH.open(encoding="utf-8", newline="") as source:
         rows = list(csv.DictReader(source))
 
-    targets = {
-        (int(row["league_id"]), str(row["season_name"]))
+    team_ids = sorted({
+        int(row["team_id"])
         for row in rows
-        if row.get("league_id") and row.get("season_name") and not row.get("team_name")
-    }
-    if not targets:
+        if row.get("team_id") and not row.get("team_name")
+    })
+    if not team_ids:
         print("All static S.P.E.A.R. cohort rows already have a team name.")
         return
 
-    team_maps: dict[tuple[int, str], dict[str, str]] = {}
-    for league_id, season_name in sorted(targets):
-        try:
-            leaderboard = fetch_league_stat_table(league_id, season_name, "won_contest")
-        except FotMobError as exc:
-            print(f"Skipping {league_id} / {season_name}: {exc}")
-            continue
-        team_maps[(league_id, season_name)] = {
-            str(row.get("id")): _team_name_from_leaderboard_row(row)
-            for row in leaderboard
-            if row.get("id") and _team_name_from_leaderboard_row(row)
-        }
-        print(f"{league_id} / {season_name}: {len(team_maps[(league_id, season_name)])} team mappings")
+    team_names: dict[int, str] = {}
+    for index, team_id in enumerate(team_ids):
+        if index:
+            time.sleep(0.12)
+        if team_name := fetch_team_name(team_id):
+            team_names[team_id] = team_name
+    print(f"Resolved {len(team_names)} / {len(team_ids)} unique team IDs.")
 
     updated = 0
     for row in rows:
         if row.get("team_name"):
             continue
         try:
-            key = (int(row["league_id"]), str(row["season_name"]))
+            team_id = int(row["team_id"])
         except (TypeError, ValueError):
             continue
-        team_name = team_maps.get(key, {}).get(str(row.get("player_id", "")))
+        team_name = team_names.get(team_id)
         if team_name:
             row["team_name"] = team_name
             updated += 1

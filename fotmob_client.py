@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import functools
 import json
 import re
 import time
@@ -36,6 +37,20 @@ def _get(url: str) -> str:
         raise FotMobError(f"FotMob request failed (HTTP {exc.code}).") from exc
     except URLError as exc:
         raise FotMobError("Could not reach FotMob.") from exc
+
+
+@functools.lru_cache(maxsize=512)
+def fetch_team_name(team_id: int) -> str | None:
+    """Resolve a FotMob team ID without fetching any player profile."""
+    if not team_id:
+        return None
+    try:
+        payload = json.loads(_get(f"https://www.fotmob.com/api/data/teams?id={int(team_id)}"))
+    except (ValueError, FotMobError):
+        return None
+    details = payload.get("details") if isinstance(payload, dict) else None
+    name = details.get("name") if isinstance(details, dict) else None
+    return str(name).strip() if name else None
 
 
 def search_players(term: str) -> list[PlayerCandidate]:
