@@ -32,6 +32,28 @@ COMPETITIONS = {
 }
 
 
+def _team_name_from_leaderboard_row(row: dict[str, object]) -> str:
+    """Read the team field carried by FotMob's bulk stat-table payload.
+
+    The field name varies slightly by competition payload, so use the known
+    alternatives before falling back to a nested team object.  This uses the
+    same one-request-per-competition leaderboard already fetched for player
+    names; it never introduces a player-profile fan-out.
+    """
+    for key in ("teamName", "team_name", "teamShortName"):
+        value = row.get(key)
+        if value:
+            return str(value).strip()
+    team = row.get("team")
+    if isinstance(team, dict):
+        for key in ("name", "shortName", "teamName"):
+            if team.get(key):
+                return str(team[key]).strip()
+    if isinstance(team, str):
+        return team.strip()
+    return ""
+
+
 def build(season_name: str) -> list[dict[str, object]]:
     output: list[dict[str, object]] = []
     for competition_name, league_id in COMPETITIONS.items():
@@ -44,12 +66,18 @@ def build(season_name: str) -> list[dict[str, object]]:
             print(f"Skipping {competition_name}: {exc}")
             continue
         names = {str(row.get("id")): str(row.get("name", "Unknown")) for row in name_rows}
+        teams = {str(row.get("id")): _team_name_from_leaderboard_row(row) for row in name_rows}
         for player_id, metric in metrics_by_player.items():
+            payload = asdict(metric)
+            # Preserve a season-specific team from the bulk leaderboard when
+            # the metrics record does not supply it.
+            if not payload.get("team_name"):
+                payload["team_name"] = teams.get(player_id, "")
             output.append({
                 "player_id": player_id,
                 "player_name": names.get(player_id, "Unknown"),
                 "season_name": season_name,
-                **asdict(metric),
+                **payload,
             })
         print(f"{competition_name}: cached {len(metrics_by_player)} same-competition xG1+ players")
     return output

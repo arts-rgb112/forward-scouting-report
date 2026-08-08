@@ -5,6 +5,7 @@ import numpy as np
 import math
 import itertools
 import html
+from urllib.parse import quote
 
 from fotmob_client import FotMobError, PlayerCandidate, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
@@ -1324,6 +1325,7 @@ def render_spear_leaderboard(
 ) -> PlayerCandidate | None:
     """Show a local, sortable scouting list and return the selected player."""
     table = cached_spear_leaderboard(league_id, season, comparison_scope)
+    role_filter = {"정통형": "Type A", "펄스 나인형": "Type B"}.get(role_filter, role_filter)
     st.subheader("🏆 S.P.E.A.R. 스카우팅 리스트")
     st.caption(comparison_population_criteria(47, season, comparison_scope))
     if table.empty:
@@ -1350,24 +1352,45 @@ def render_spear_leaderboard(
         st.info("현재 필터 조합에 맞는 S.P.E.A.R. 선수 데이터가 없습니다.")
         return None
     display = table.rename(columns={
-        "rank": "순위", "player_name": "선수", "team_name": "팀",
+        "rank": "순위", "player_name": "선수", "team_name": "팀", "league_name": "리그",
         "score": "S.P.E.A.R.", "tier": "티어", "role": "기본 롤",
         "outside_shot_tier": "박스 밖 슈팅", "deep_box_tier": "심층 타격",
         "danger_zone_tier": "위험 구역", "aerial_tier": "공중볼",
         "ground_duel_tier": "지상 경합", "space_control_tier": "공간 장악",
     })[[
-        "순위", "선수", "팀", "S.P.E.A.R.", "티어", "박스 밖 슈팅", "심층 타격",
+        "순위", "선수", "팀", "리그", "S.P.E.A.R.", "티어", "박스 밖 슈팅", "심층 타격",
         "위험 구역", "공중볼", "지상 경합", "공간 장악", "기본 롤",
     ]].copy()
     display.insert(
         1, "프로필",
         "https://images.fotmob.com/image_resources/playerimages/" + table["player_id"].astype(str) + ".png",
     )
+    # Keep the familiar table layout while making the actual player name a
+    # shareable direct link to the independent detail page.  Row selection is
+    # retained as a keyboard-friendly fallback.
+    def detail_url(row: pd.Series) -> str:
+        player_name = str(row["player_name"])
+        return (
+            f"?page=detail&player={quote(str(row['player_id']))}"
+            f"&name={quote(player_name)}&team={quote(str(row['team_name']))}"
+            f"&season={quote(season)}&scope={comparison_scope}&label={player_name}"
+        )
+
+    display["선수"] = table.apply(detail_url, axis=1)
+    display["기본 롤"] = display["기본 롤"].map({
+        "Type A": "정통형", "Type B": "펄스 나인형",
+    }).fillna(display["기본 롤"])
     display["S.P.E.A.R."] = display["S.P.E.A.R."].map(lambda value: f"{value:.1f}")
     event = st.dataframe(
         display, use_container_width=True, hide_index=True, height=430,
         on_select="rerun", selection_mode="single-row",
-        column_config={"프로필": st.column_config.ImageColumn("프로필", width="small")},
+        column_config={
+            "프로필": st.column_config.ImageColumn("프로필", width="small"),
+            "선수": st.column_config.LinkColumn(
+                "선수", display_text=r".*[?&]label=([^&]+).*",
+                help="선수 이름을 클릭하면 상세 분석 리포트로 이동합니다.",
+            ),
+        },
         key=f"v32_leaderboard_{season}_{comparison_scope}",
     )
     selected_rows = getattr(getattr(event, "selection", None), "rows", [])
@@ -1788,7 +1811,10 @@ def render_leaderboard_page() -> None:
         with position_col:
             position = st.selectbox("포지션", ["전체", "FW", "MF", "DF"], index=["전체", "FW", "MF", "DF"].index(_query_text("position", "전체")) if _query_text("position", "전체") in {"전체", "FW", "MF", "DF"} else 0)
         with role_col:
-            role = st.selectbox("롤", ["전체", "Type A", "Type B"], index=["전체", "Type A", "Type B"].index(_query_text("role", "전체")) if _query_text("role", "전체") in {"전체", "Type A", "Type B"} else 0)
+            role_options = ["전체", "정통형", "펄스 나인형"]
+            saved_role = _query_text("role", "전체")
+            saved_role = {"Type A": "정통형", "Type B": "펄스 나인형"}.get(saved_role, saved_role)
+            role = st.selectbox("기본 롤", role_options, index=role_options.index(saved_role) if saved_role in role_options else 0)
         with search_col:
             query = st.text_input("선수명 검색", value=_query_text("search", ""), placeholder="예: Erling Haaland")
         with action_col:
