@@ -639,17 +639,28 @@ def render_spear_head_to_head(left_name: str, left_rank, right_name: str, right_
     labels = [label for label, _ in SPEAR_FACTOR_AXES]
     left_scores = [_radar_score(getattr(left_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES]
     right_scores = [_radar_score(getattr(right_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES]
+    left_tiers = [_spear_tier(score) for score in left_scores]
+    right_tiers = [_spear_tier(score) for score in right_scores]
+    # Plotly treats theta strings as categorical positions.  The former code
+    # embedded each player's own tier in that string, making identical axes
+    # (for example "공중볼 [B]" vs "공중볼 [D]") separate categories and
+    # rotating/distorting the opponent polygon.  Both traces must share one
+    # identical theta sequence.
+    shared_labels = [
+        f"{label} [{left_tier}/{right_tier}]"
+        for label, left_tier, right_tier in zip(labels, left_tiers, right_tiers)
+    ]
     figure = go.Figure()
-    for name, scores, color, fill in (
-        (left_name, left_scores, "#38BDF8", "rgba(56,189,248,0.25)"),
-        (right_name, right_scores, "#FB7185", "rgba(251,113,133,0.24)"),
+    for name, scores, tiers, color, fill in (
+        (left_name, left_scores, left_tiers, "#38BDF8", "rgba(56,189,248,0.25)"),
+        (right_name, right_scores, right_tiers, "#FB7185", "rgba(251,113,133,0.24)"),
     ):
-        tiers = [_spear_tier(score) for score in scores]
         figure.add_trace(go.Scatterpolar(
-            r=scores + [scores[0]], theta=[f"{label} [{tier}]" for label, tier in zip(labels, tiers)] + [f"{labels[0]} [{tiers[0]}]"],
+            r=scores + [scores[0]], theta=shared_labels + [shared_labels[0]],
             mode="lines+markers", name=name, fill="toself", fillcolor=fill,
             line={"color": color, "width": 2.5}, marker={"color": color, "size": 6},
-            hovertemplate="<b>%{theta}</b><br>%{fullData.name}: %{r:.1f}/100<extra></extra>",
+            customdata=tiers + [tiers[0]],
+            hovertemplate="<b>%{theta}</b><br>%{fullData.name}: %{r:.1f}/100 · %{customdata}-Tier<extra></extra>",
         ))
     figure.update_layout(
         title="S.P.E.A.R. 2.0 Head-to-Head · 비율 프로필",
@@ -672,17 +683,23 @@ def render_head_to_head_cards(
     """Show each player's matrix evidence independently; never concatenate copy."""
     left_cards = dict(twin_radar_sector_summaries(left_rank))
     right_cards = dict(twin_radar_sector_summaries(right_rank))
+    # Stable sector IDs are the H2H data contract.  UI titles change as the
+    # product wording evolves, so using them as dictionary keys caused the
+    # live KeyError after the twin-radar labels were updated.
     raw_fields = {
-        "🚀 박스 밖 슈팅력": ("out_box_shots", "out_box_shot_quality", "박스 밖 슛", "xGOT-xG"),
-        "🥊 심층 타격 효율": ("in_box_shots", "in_box_finishing", "박스 안 슛", "박스 안 xGOT-xG"),
-        "⚡ 위험 구역 파괴력": ("dribble_attempts", "dribble_margin_per90", "돌파 시도", "드리블 마진/90"),
-        "🦅 공중볼 장악력": ("aerial_duel_attempts", "aerial_margin_per90", "공중볼 시도", "공중볼 마진/90"),
-        "🪨 지상 경합 능력": ("ground_duel_attempts", "duel_margin_per90", "지상 경합 시도", "지상 마진/90"),
-        "🧠 공간 장악력": ("tactical:cca_area_pct", "tactical:danger_zone_density", "CCA", "위험구역 밀도"),
+        "outside_box_shooting": ("out_box_shots", "out_box_shot_quality", "박스 밖 슈팅 시도", "박스 밖 xGOT-xG"),
+        "deep_box_lethality": ("in_box_shots", "in_box_finishing", "박스 안 슈팅 시도", "박스 안 xGOT-xG"),
+        "danger_zone_progression": ("dribble_attempts", "dribble_margin_per90", "돌파 시도", "드리블 마진/90"),
+        "aerial": ("aerial_duel_attempts", "aerial_margin_per90", "공중볼 경합 시도", "공중볼 마진/90"),
+        "ground": ("ground_duel_attempts", "duel_margin_per90", "지상 경합 시도", "지상 경합 마진/90"),
+        "space_control": ("tactical:cca_area_pct", "tactical:danger_zone_density", "CCA", "위험 구역 밀도"),
     }
 
-    def raw_fact(title, stats, ratio):
-        first, second, first_label, second_label = raw_fields[title]
+    def raw_fact(sector_id, stats, ratio):
+        fields = raw_fields.get(sector_id)
+        if fields is None:
+            return "보조 원시 지표 매핑이 아직 준비되지 않았습니다."
+        first, second, first_label, second_label = fields
         def value(field):
             if field.startswith("tactical:"):
                 return (ratio or {}).get(field.removeprefix("tactical:"))
@@ -690,8 +707,8 @@ def render_head_to_head_cards(
         one, two = value(first), value(second)
         fmt = lambda item: "—" if item is None else f"{float(item):.2f}"
         return f"원시값 · {first_label} {fmt(one)} / {second_label} {fmt(two)}"
-    for title in TWIN_SECTOR_MATRIX.values():
-        sector_title = title["title"]
+    for sector_id, sector in TWIN_SECTOR_MATRIX.items():
+        sector_title = sector["title"]
         left_text = left_cards.get(sector_title, "비교군 또는 공간 데이터 부족")
         right_text = right_cards.get(sector_title, "비교군 또는 공간 데이터 부족")
         with st.expander(sector_title, expanded=False):
@@ -699,11 +716,11 @@ def render_head_to_head_cards(
             with left_col:
                 st.markdown(f"**{left_name}**")
                 st.write(left_text)
-                st.caption(raw_fact(sector_title, left_stats, left_ratio))
+                st.caption(raw_fact(sector_id, left_stats, left_ratio))
             with right_col:
                 st.markdown(f"**{right_name}**")
                 st.write(right_text)
-                st.caption(raw_fact(sector_title, right_stats, right_ratio))
+                st.caption(raw_fact(sector_id, right_stats, right_ratio))
 
 
 def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards: bool, minimum_final_third_ratio: int):
