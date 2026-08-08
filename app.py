@@ -32,12 +32,13 @@ def cached_player_data(player_id: str):
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_percentiles(
     player_id: str, season: str, metrics: DecisionMetrics, min_xg: float,
-    restrict_to_forwards: bool, minimum_final_third_ratio: int,
+    restrict_to_forwards: bool, minimum_final_third_ratio: int, comparison_scope: int = 0,
 ):
     return calculate_league_percentiles(
         player_id, season, metrics, minimum_xg=min_xg,
         restrict_to_forwards=restrict_to_forwards,
         minimum_final_third_ratio=minimum_final_third_ratio,
+        comparison_scope=comparison_scope,
     )
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -1132,16 +1133,22 @@ def render_v32_analysis_center() -> None:
         st.session_state.v32_filters = None
 
     with st.form("global_analysis_filters", border=True):
-        season_col, player_col, action_col = st.columns([1.4, 2.2, 1.0])
+        season_col, scope_col, player_col, action_col = st.columns([1.2, 1.3, 2.1, 1.0])
         with season_col:
             season = st.selectbox("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], index=0)
+        with scope_col:
+            comparison_scope = st.selectbox(
+                "비교 모집단", [3, 5, 7], index=1,
+                format_func=lambda value: f"{value}대 리그",
+                help="3대: LaLiga·Premier League·Serie A / 5대: 여기에 Bundesliga·Ligue 1 / 7대: 여기에 Eredivisie·Primeira Liga",
+            )
         with player_col:
             query = st.text_input("선수명 검색", placeholder="예: Erling Haaland")
         with action_col:
             st.write("")
             submitted = st.form_submit_button("🔍 데이터 분석", use_container_width=True, type="primary")
         if submitted:
-            st.session_state.v32_filters = {"season": season, "query": query.strip()}
+            st.session_state.v32_filters = {"season": season, "comparison_scope": comparison_scope, "query": query.strip()}
 
     filters = st.session_state.v32_filters
     if not filters:
@@ -1174,7 +1181,12 @@ def render_v32_analysis_center() -> None:
     session_key, selected_stats = session_rows[selected_index]
     st.divider()
     tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", filters["season"])
-    rank = spear_rank_for_session(player, filters["season"], selected_stats, True)
+    rank = cached_percentiles(
+        player.player_id, filters["season"], selected_stats, 1.0, True, 0,
+        filters["comparison_scope"],
+    )
+    if filters["comparison_scope"] == 7:
+        st.caption("7대 리그 모드: Eredivisie·Primeira Liga 코호트는 다음 정적 코호트 수집 후 자동으로 포함됩니다. 현재는 적재된 5대 리그 기준입니다.")
     view_mode = st.radio("분석 보기", ["단일 분석", "Head-to-Head"], horizontal=True, key="v32_view_mode")
     if view_mode == "Head-to-Head":
         st.caption("두 선수는 같은 시즌·같은 대회 세션에서 각각 독립적으로 상대평가됩니다.")
@@ -1196,7 +1208,10 @@ def render_v32_analysis_center() -> None:
         if opponent_stats is None:
             st.warning(f"{opponent.name}은(는) {filters['season']} {selected_stats.league_name}에 독립된 세션이 없습니다.")
             return
-        opponent_rank = spear_rank_for_session(opponent, filters["season"], opponent_stats, True)
+        opponent_rank = cached_percentiles(
+            opponent.player_id, filters["season"], opponent_stats, 1.0, True, 0,
+            filters["comparison_scope"],
+        )
         left_total = sum(_radar_score(getattr(rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES) if rank else 0.0
         right_total = sum(_radar_score(getattr(opponent_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES) if opponent_rank else 0.0
         if abs(left_total - right_total) < 0.01:

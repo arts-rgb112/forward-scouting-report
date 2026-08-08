@@ -21,6 +21,11 @@ from tactical_ratio import get_tactical_ratio_for_session, passes_final_third_fi
 MINIMUM_SPEAR_XG = 1.0
 CUP_COMPETITION_IDS = frozenset({42, 73, 102})
 CUP_MINIMUM_MINUTES = 270.0
+COMPARISON_SCOPES = {
+    3: frozenset({47, 55, 87}),
+    5: frozenset({47, 53, 54, 55, 87}),
+    7: frozenset({47, 53, 54, 55, 57, 61, 87}),
+}
 
 
 @dataclass(frozen=True)
@@ -247,11 +252,15 @@ def _fetch_live_spear_cohort(
 @functools.lru_cache(maxsize=64)
 def _fetch_elite_dribbler_metrics(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
-    minimum_final_third_ratio: int = 0,
+    minimum_final_third_ratio: int = 0, comparison_scope: int = 0,
 ) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
     """Prefer the static cohort; retain live FotMob as a safe bootstrap fallback."""
     if restrict_to_forwards:
-        static_metrics, _ = get_static_spear_cohort(league_id, season_name)
+        target_leagues = COMPARISON_SCOPES.get(comparison_scope, frozenset({league_id}))
+        static_metrics = {}
+        for target_league_id in target_leagues:
+            cohort_metrics, _ = get_static_spear_cohort(target_league_id, season_name)
+            static_metrics.update(cohort_metrics)
         if static_metrics:
             static_metrics = {
                 player_id: metric for player_id, metric in static_metrics.items()
@@ -268,9 +277,12 @@ def _fetch_elite_dribbler_metrics(
 def _calculate_progression_percentiles(
     player_id: str, league_id: int, season_name: str, player: DecisionMetrics,
     restrict_to_forwards: bool = True, minimum_final_third_ratio: int = 0,
+    comparison_scope: int = 0,
 ) -> dict[str, Optional[float] | Optional[int] | int]:
     try:
-        peers, successes = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
+        peers, successes = _fetch_elite_dribbler_metrics(
+            league_id, season_name, restrict_to_forwards, minimum_final_third_ratio, comparison_scope,
+        )
     except FotMobError:
         peers, successes = {}, {}
 
@@ -412,6 +424,7 @@ def _fetch_fallback_xgot(season: str, pids: tuple) -> dict:
 def calculate_league_percentiles(
     player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 1.0,
     restrict_to_forwards: bool = True, minimum_final_third_ratio: int = 0,
+    comparison_scope: int = 0,
 ) -> LeaguePercentiles:
     if metrics.league_id is None:
         return LeaguePercentiles(None, None, None, None, None, None, None, None, None, None, 0)
@@ -492,9 +505,11 @@ def calculate_league_percentiles(
     duels_pct, duels_rk = None, None
     aerials_pct, aerials_rk = None, None
     progression_percentiles = _calculate_progression_percentiles(
-        player_key, metrics.league_id, season_name, metrics, restrict_to_forwards, minimum_final_third_ratio
+        player_key, metrics.league_id, season_name, metrics, restrict_to_forwards, minimum_final_third_ratio, comparison_scope,
     )
-    peers, _ = _fetch_elite_dribbler_metrics(metrics.league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
+    peers, _ = _fetch_elite_dribbler_metrics(
+        metrics.league_id, season_name, restrict_to_forwards, minimum_final_third_ratio, comparison_scope,
+    )
     # Keep the S.P.E.A.R. shooting factor on the exact same xG>=1 cohort
     # competition cohort as the other five radar axes.
     spear_shot_quality_population = [
