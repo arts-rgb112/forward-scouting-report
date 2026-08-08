@@ -653,10 +653,31 @@ def render_spear_head_to_head(left_name: str, left_rank, right_name: str, right_
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
-def render_head_to_head_cards(left_name: str, left_rank, left_stats, right_name: str, right_rank, right_stats) -> None:
+def render_head_to_head_cards(
+    left_name: str, left_rank, left_stats, left_ratio,
+    right_name: str, right_rank, right_stats, right_ratio,
+) -> None:
     """Show each player's matrix evidence independently; never concatenate copy."""
     left_cards = dict(twin_radar_sector_summaries(left_rank))
     right_cards = dict(twin_radar_sector_summaries(right_rank))
+    raw_fields = {
+        "🚀 박스 밖 슈팅력": ("out_box_shots", "out_box_shot_quality", "박스 밖 슛", "xGOT-xG"),
+        "🥊 심층 타격 효율": ("in_box_shots", "in_box_finishing", "박스 안 슛", "박스 안 xGOT-xG"),
+        "⚡ 위험 구역 파괴력": ("dribble_attempts", "dribble_margin_per90", "돌파 시도", "드리블 마진/90"),
+        "🦅 공중볼 장악력": ("aerial_duel_attempts", "aerial_margin_per90", "공중볼 시도", "공중볼 마진/90"),
+        "🪨 지상 경합 능력": ("ground_duel_attempts", "duel_margin_per90", "지상 경합 시도", "지상 마진/90"),
+        "🧠 공간 장악력": ("tactical:cca_area_pct", "tactical:danger_zone_density", "CCA", "위험구역 밀도"),
+    }
+
+    def raw_fact(title, stats, ratio):
+        first, second, first_label, second_label = raw_fields[title]
+        def value(field):
+            if field.startswith("tactical:"):
+                return (ratio or {}).get(field.removeprefix("tactical:"))
+            return getattr(stats, field, None)
+        one, two = value(first), value(second)
+        fmt = lambda item: "—" if item is None else f"{float(item):.2f}"
+        return f"원시값 · {first_label} {fmt(one)} / {second_label} {fmt(two)}"
     for title in TWIN_SECTOR_MATRIX.values():
         sector_title = title["title"]
         left_text = left_cards.get(sector_title, "비교군 또는 공간 데이터 부족")
@@ -666,9 +687,11 @@ def render_head_to_head_cards(left_name: str, left_rank, left_stats, right_name:
             with left_col:
                 st.markdown(f"**{left_name}**")
                 st.write(left_text)
+                st.caption(raw_fact(sector_title, left_stats, left_ratio))
             with right_col:
                 st.markdown(f"**{right_name}**")
                 st.write(right_text)
+                st.caption(raw_fact(sector_title, right_stats, right_ratio))
 
 
 def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards: bool, minimum_final_third_ratio: int):
@@ -1220,16 +1243,21 @@ def render_v32_analysis_center() -> None:
             result = f"🏆 {player.name} 우세"
         else:
             result = f"🏆 {opponent.name} 우세"
+        opponent_ratio = get_tactical_ratio_for_session(
+            opponent.player_id, opponent_stats.league_name or "", filters["season"],
+        )
         st.subheader(f"{result} · {selected_stats.league_name}")
         render_spear_head_to_head(player.name, rank, opponent.name, opponent_rank)
-        render_head_to_head_cards(player.name, rank, selected_stats, opponent.name, opponent_rank, opponent_stats)
+        render_head_to_head_cards(
+            player.name, rank, selected_stats, tactical_ratio,
+            opponent.name, opponent_rank, opponent_stats, opponent_ratio,
+        )
         with st.expander("공간·활동량 세부 차트", expanded=False):
             left_col, right_col = st.columns(2)
             with left_col:
                 render_activity_ratio(player.player_id, player.name, tactical_ratio)
                 render_season_heatmap(player.player_id, player.name, tactical_ratio.get("heatmap_key") if tactical_ratio else None)
             with right_col:
-                opponent_ratio = get_tactical_ratio_for_session(opponent.player_id, opponent_stats.league_name or "", filters["season"])
                 render_activity_ratio(opponent.player_id, opponent.name, opponent_ratio)
                 render_season_heatmap(opponent.player_id, opponent.name, opponent_ratio.get("heatmap_key") if opponent_ratio else None)
         return

@@ -24,6 +24,8 @@ COMPETITIONS = {
     "Bundesliga": 54,
     "Serie A": 55,
     "Ligue 1": 53,
+    "Eredivisie": 57,
+    "Primeira Liga": 61,
     "UEFA Champions League": 42,
     "UEFA Europa League": 73,
     "UEFA Europa Conference League": 102,
