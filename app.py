@@ -478,7 +478,7 @@ def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
         ratio_percent = getattr(rank, sector["ratio"], None) if rank else None
         if sector_id == "deep_box_lethality" and getattr(rank, "false_nine_penalty", False):
             volume_tier = _spear_tier(_radar_score(volume_percent)) if volume_percent is not None else "D"
-            text = "펄스 나인(False 9) 롤을 수행하며 2선 연계에는 기여하나, 정통 스트라이커에게 필수적인 '킬링 존 진입 및 타격 능력'이 완벽히 거세되어 전방 득점원으로서는 낙제점인 자원."
+            text = "2선 연계와 전방위 공간 창출에 치중하는 전술적 롤(Role)을 부여받아, 심층 득점력 자체는 정통 스트라이커 대비 제한적인 자원"
             summaries.append((sector["title"], f"[{volume_tier}×D] {text}"))
             continue
         if volume_percent is None or ratio_percent is None:
@@ -809,7 +809,7 @@ def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | N
 def spatial_identity_badges(ratio: dict[str, object] | None) -> list[tuple[str, str]]:
     """Return the three compact spatial identities used by the profile header."""
     false_nine_badge = "👻 2선 지향 펄스 나인형 (Deep-Lying)"
-    false_nine_text = "상대 수비와의 물리적 마찰을 피해 2선으로 내려와 연계에 치중하지만, 정작 정통 스트라이커로서의 박스 내 장악력은 심각하게 결여된 유형"
+    false_nine_text = "상대 수비와의 물리적 마찰을 피해 2선으로 내려와 플레이메이킹과 공간 창출에 집중하는 변칙적 포워드"
     if not ratio:
         return [(false_nine_badge, false_nine_text)]
     badges: list[tuple[str, str]] = []
@@ -1504,6 +1504,7 @@ def render_v32_analysis_center() -> None:
                 if score_rank and score_percent is not None and score_population else ""
             )
             st.subheader(f"👑 {player.name}  ·  [{spear_tier}-Tier]  S.P.E.A.R. {spear_score:.1f}/100{rank_text}")
+            st.caption(f"동적 가중치 적용: {getattr(rank, 'spear_role', 'Type A · 정통 타겟/포처')}")
             if spear_coverage < len(SPEAR_FACTOR_AXES):
                 st.caption(f"현재 산출 가능한 팩터 {spear_coverage}/{len(SPEAR_FACTOR_AXES)}개 기준의 잠정 점수입니다.")
             identities = spatial_identity_badges(tactical_ratio)

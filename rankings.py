@@ -121,6 +121,7 @@ class LeaguePercentiles:
     spear_score_top_percent: Optional[float] = None
     spear_score_eligible: int = 0
     false_nine_penalty: bool = False
+    spear_role: str = "Type A · 정통 타겟/포처"
 
 
 def _minimum_minutes_for_competition(league_id: int) -> float:
@@ -697,22 +698,32 @@ def calculate_league_percentiles(
     danger_pct, danger_rank = _rank_score(player_key, danger_progression_scores)
     cca_pct, cca_rank = _rank_score(player_key, cca_scores)
     danger_density_pct, danger_density_rank = _rank_score(player_key, danger_scores)
-    # S.P.E.A.R. 2.0 uses the micro-zone factor derived from the explicitly
-    # weighted Gold/Silver/Bronze score, rather than a legacy volume average.
-    # Players are ranked only against peers with enough data for every factor.
-    spear_factor_weights = (
-        (spear_shot_scores, 0.20),
-        (deep_box_scores, 0.25),
-        (danger_progression_scores, 0.15),
-        (aerial_scores, 0.10),
-        (duel_scores, 0.10),
-        (cca_scores, 0.20),
+    # Dynamic S.P.E.A.R. 2.0 role weights.  Type B intentionally excludes
+    # deep-box efficiency from the total while its radar axis remains 0/D as a
+    # transparent description of role, not a hidden scoring penalty.
+    type_a_weights = (
+        (deep_box_scores, 0.30), (spear_shot_scores, 0.20),
+        (danger_progression_scores, 0.15), (cca_scores, 0.15),
+        (aerial_scores, 0.10), (duel_scores, 0.10),
     )
-    shared_spear_ids = set.intersection(*(set(scores) for scores, _ in spear_factor_weights)) if spear_factor_weights else set()
-    spear_scores = {
-        peer_id: round(sum(scores[peer_id] * weight for scores, weight in spear_factor_weights), 2)
-        for peer_id in shared_spear_ids
-    }
+    type_b_weights = (
+        (danger_progression_scores, 0.30), (cca_scores, 0.30),
+        (spear_shot_scores, 0.25), (duel_scores, 0.10),
+        (aerial_scores, 0.05),
+    )
+
+    def is_type_b(peer_id: str) -> bool:
+        row = spatial_rows.get(peer_id)
+        if row is None:
+            return True
+        zone_total = sum(float(row.get(field) or 0.0) for field in micro_fields)
+        return float(row.get("in_box_ratio") or 0.0) < 15.0 or zone_total <= 0.0
+
+    spear_scores: dict[str, float] = {}
+    for peer_id in peers:
+        weights = type_b_weights if is_type_b(peer_id) else type_a_weights
+        if all(peer_id in scores for scores, _ in weights):
+            spear_scores[peer_id] = round(sum(scores[peer_id] * weight for scores, weight in weights), 2)
     spear_score = spear_scores.get(player_key)
     spear_score_top_percent, spear_score_rank = _rank_score(player_key, spear_scores)
     progression_eligible = int(progression_percentiles["cohort_count"])
@@ -806,6 +817,7 @@ def calculate_league_percentiles(
         spear_score_top_percent=spear_score_top_percent,
         spear_score_eligible=len(spear_scores),
         false_nine_penalty=false_nine_penalty,
+        spear_role="Type B · 2선 지향/펄스 나인" if false_nine_penalty else "Type A · 정통 타겟/포처",
     )
 
 
