@@ -25,6 +25,8 @@ COMPETITIONS = {
     "Serie A": 55,
     "Ligue 1": 53,
     "UEFA Champions League": 42,
+    "UEFA Europa League": 73,
+    "UEFA Europa Conference League": 102,
 }
 
 

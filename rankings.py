@@ -15,10 +15,12 @@ from fotmob_client import (
 )
 from metrics import DecisionMetrics, extract_multi_season_metrics
 from spear_cohort import get_static_spear_cohort
-from tactical_ratio import passes_final_third_filter
+from tactical_ratio import get_tactical_ratio_for_session, passes_final_third_filter
 
 
 MINIMUM_SPEAR_XG = 1.0
+CUP_COMPETITION_IDS = frozenset({42, 73, 102})
+CUP_MINIMUM_MINUTES = 270.0
 
 
 @dataclass(frozen=True)
@@ -96,6 +98,16 @@ class LeaguePercentiles:
     xg_volume_top_percent: Optional[float] = None
     xg_volume_rank: Optional[int] = None
     spear_volume_eligible: int = 0
+    outside_box_shots_attempts_top_percent: Optional[float] = None
+    outside_box_shots_attempts_rank: Optional[int] = None
+    micro_zoning_finishing_top_percent: Optional[float] = None
+    micro_zoning_finishing_rank: Optional[int] = None
+    danger_zone_progression_top_percent: Optional[float] = None
+    danger_zone_progression_rank: Optional[int] = None
+    cca_area_top_percent: Optional[float] = None
+    cca_area_rank: Optional[int] = None
+    danger_zone_density_top_percent: Optional[float] = None
+    danger_zone_density_rank: Optional[int] = None
 
 
 def _value(row: dict) -> Optional[float]:
@@ -140,6 +152,35 @@ def _progression_value(metric: DecisionMetrics) -> Optional[float]:
             + (duels_won or 0.0) + (aerial_won or 0.0)
             - (duels_lost or 0.0) - (aerial_lost or 0.0)
             - (dribble_failed or 0.0) - (dispossessed or 0.0))
+
+
+def _scores_from_population(values: dict[str, float]) -> dict[str, float]:
+    """Convert raw values to 0-100 percentile scores without fitting a model."""
+    population = list(values.values())
+    scores: dict[str, float] = {}
+    for player_id, value in values.items():
+        top_percent, _ = _rank_info(value, population)
+        if top_percent is not None:
+            scores[player_id] = 100.0 - top_percent
+    return scores
+
+
+def _rank_score(player_id: str, scores: dict[str, float]) -> tuple[Optional[float], Optional[int]]:
+    if player_id not in scores or not scores:
+        return None, None
+    score = scores[player_id]
+    rank = 1 + sum(candidate > score for candidate in scores.values())
+    return round(100.0 - score, 1), rank
+
+
+def _combined_scores(
+    primary: dict[str, float], secondary: dict[str, float], primary_weight: float,
+) -> dict[str, float]:
+    """Combine two already-normalised dimensions only where both are present."""
+    return {
+        player_id: round(primary_weight * primary[player_id] + (1.0 - primary_weight) * secondary[player_id], 2)
+        for player_id in primary.keys() & secondary.keys()
+    }
 
 
 @functools.lru_cache(maxsize=64)
@@ -193,6 +234,7 @@ def _fetch_live_spear_cohort(
     metrics_by_player = {
         player_id: metric for player_id, metric in metrics_by_player.items()
         if (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
+        and (league_id not in CUP_COMPETITION_IDS or (metric.minutes_played or 0.0) >= CUP_MINIMUM_MINUTES)
     }
     metrics_by_player = {
         player_id: metric for player_id, metric in metrics_by_player.items()
@@ -214,6 +256,7 @@ def _fetch_elite_dribbler_metrics(
             static_metrics = {
                 player_id: metric for player_id, metric in static_metrics.items()
                 if (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
+                and (league_id not in CUP_COMPETITION_IDS or (metric.minutes_played or 0.0) >= CUP_MINIMUM_MINUTES)
                 and passes_final_third_filter(player_id, minimum_final_third_ratio)
             }
             return static_metrics, {player_id: 0.0 for player_id in static_metrics}
@@ -475,11 +518,67 @@ def calculate_league_percentiles(
         return _rank_info(getattr(metrics, attr, None), population)
 
     total_shots_pct, total_shots_rank = volume_rank("total_shots")
+    outside_box_shots_pct, outside_box_shots_rank = volume_rank("out_box_shots")
     box_shots_pct, box_shots_rank = volume_rank("in_box_shots")
     dribble_attempts_pct, dribble_attempts_rank = volume_rank("dribble_attempts")
     aerial_attempts_pct, aerial_attempts_rank = volume_rank("aerial_duel_attempts")
     ground_attempts_pct, ground_attempts_rank = volume_rank("ground_duel_attempts")
     xg_volume_pct, xg_volume_rank = volume_rank("xg")
+
+    # S.P.E.A.R. 2.0 spatial factors are sourced only from the exact
+    # player/competition/season heatmap session.  A missing heatmap row stays
+    # missing: silently substituting another competition would contaminate the
+    # comparison cohort.
+    spatial_rows = {
+        peer_id: get_tactical_ratio_for_session(
+            peer_id, peer.league_name or metrics.league_name or "", season_name,
+        )
+        for peer_id, peer in peers.items()
+    }
+    player_spatial = get_tactical_ratio_for_session(
+        player_key, metrics.league_name or "", season_name,
+    )
+
+    def spatial_values(field: str) -> dict[str, float]:
+        return {
+            peer_id: float(row[field])
+            for peer_id, row in spatial_rows.items()
+            if row is not None and row.get(field) is not None
+        }
+
+    in_box_scores = _scores_from_population({
+        peer_id: peer.in_box_finishing
+        for peer_id, peer in peers.items() if peer.in_box_finishing is not None
+    })
+    dribble_scores = _scores_from_population({
+        peer_id: peer.dribble_margin_per90
+        for peer_id, peer in peers.items() if peer.dribble_margin_per90 is not None
+    })
+    micro_values = {
+        peer_id: (values["box_six_yard_ratio"] * 0.65) + (values["box_penalty_spot_ratio"] * 0.35)
+        for peer_id, values in spatial_rows.items()
+        if values is not None
+        and values.get("box_six_yard_ratio") is not None
+        and values.get("box_penalty_spot_ratio") is not None
+    }
+    danger_values = spatial_values("danger_zone_density")
+    cca_values = spatial_values("cca_area_pct")
+    micro_scores = _scores_from_population(micro_values)
+    danger_scores = _scores_from_population(danger_values)
+    cca_scores = _scores_from_population(cca_values)
+    deep_box_scores = _combined_scores(in_box_scores, micro_scores, 0.70)
+    danger_progression_scores = _combined_scores(dribble_scores, danger_scores, 0.70)
+    player_micro = None
+    if player_spatial is not None:
+        six_yard = player_spatial.get("box_six_yard_ratio")
+        penalty_spot = player_spatial.get("box_penalty_spot_ratio")
+        if six_yard is not None and penalty_spot is not None:
+            player_micro = (float(six_yard) * 0.65) + (float(penalty_spot) * 0.35)
+    micro_pct, micro_rank = _rank_score(player_key, micro_scores)
+    deep_box_pct, deep_box_rank = _rank_score(player_key, deep_box_scores)
+    danger_pct, danger_rank = _rank_score(player_key, danger_progression_scores)
+    cca_pct, cca_rank = _rank_score(player_key, cca_scores)
+    danger_density_pct, danger_density_rank = _rank_score(player_key, danger_scores)
     progression_eligible = int(progression_percentiles["cohort_count"])
     duels_eligible = progression_eligible
     aerials_eligible = progression_eligible
@@ -543,6 +642,8 @@ def calculate_league_percentiles(
         net_progression_eligible=int(progression_percentiles["net_count"]),
         total_shots_volume_top_percent=total_shots_pct,
         total_shots_volume_rank=total_shots_rank,
+        outside_box_shots_attempts_top_percent=outside_box_shots_pct,
+        outside_box_shots_attempts_rank=outside_box_shots_rank,
         box_shots_volume_top_percent=box_shots_pct,
         box_shots_volume_rank=box_shots_rank,
         dribble_attempts_volume_top_percent=dribble_attempts_pct,
@@ -554,6 +655,14 @@ def calculate_league_percentiles(
         xg_volume_top_percent=xg_volume_pct,
         xg_volume_rank=xg_volume_rank,
         spear_volume_eligible=len(peers),
+        micro_zoning_finishing_top_percent=deep_box_pct,
+        micro_zoning_finishing_rank=deep_box_rank,
+        danger_zone_progression_top_percent=danger_pct,
+        danger_zone_progression_rank=danger_rank,
+        cca_area_top_percent=cca_pct,
+        cca_area_rank=cca_rank,
+        danger_zone_density_top_percent=danger_density_pct,
+        danger_zone_density_rank=danger_density_rank,
     )
 
 
