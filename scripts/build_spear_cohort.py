@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import sys
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from fotmob_client import FotMobError, fetch_league_stat_table
+from fotmob_client import FotMobError, fetch_league_stat_table, fetch_team_name
 from rankings import _fetch_live_spear_cohort
 from spear_cohort import CSV_FIELDS, DATA_PATH
 
@@ -31,29 +32,6 @@ COMPETITIONS = {
     "UEFA Europa Conference League": 102,
 }
 
-
-def _team_name_from_leaderboard_row(row: dict[str, object]) -> str:
-    """Read the team field carried by FotMob's bulk stat-table payload.
-
-    The field name varies slightly by competition payload, so use the known
-    alternatives before falling back to a nested team object.  This uses the
-    same one-request-per-competition leaderboard already fetched for player
-    names; it never introduces a player-profile fan-out.
-    """
-    for key in ("teamName", "team_name", "teamShortName"):
-        value = row.get(key)
-        if value:
-            return str(value).strip()
-    team = row.get("team")
-    if isinstance(team, dict):
-        for key in ("name", "shortName", "teamName"):
-            if team.get(key):
-                return str(team[key]).strip()
-    if isinstance(team, str):
-        return team.strip()
-    return ""
-
-
 def build(season_name: str) -> list[dict[str, object]]:
     output: list[dict[str, object]] = []
     for competition_name, league_id in COMPETITIONS.items():
@@ -66,13 +44,21 @@ def build(season_name: str) -> list[dict[str, object]]:
             print(f"Skipping {competition_name}: {exc}")
             continue
         names = {str(row.get("id")): str(row.get("name", "Unknown")) for row in name_rows}
-        teams = {str(row.get("id")): _team_name_from_leaderboard_row(row) for row in name_rows}
+        # Stat-table rows expose a team ID rather than a team name.  Resolve
+        # each distinct team once, never once per player.
+        team_ids = sorted({int(metric.team_id) for metric in metrics_by_player.values() if metric.team_id})
+        teams_by_id: dict[int, str] = {}
+        for index, team_id in enumerate(team_ids):
+            if index:
+                time.sleep(0.12)
+            if team_name := fetch_team_name(team_id):
+                teams_by_id[team_id] = team_name
         for player_id, metric in metrics_by_player.items():
             payload = asdict(metric)
-            # Preserve a season-specific team from the bulk leaderboard when
-            # the metrics record does not supply it.
+            # Resolve the season record's team ID only when metrics did not
+            # already include a team label.
             if not payload.get("team_name"):
-                payload["team_name"] = teams.get(player_id, "")
+                payload["team_name"] = teams_by_id.get(metric.team_id or 0, "")
             output.append({
                 "player_id": player_id,
                 "player_name": names.get(player_id, "Unknown"),
