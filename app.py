@@ -473,9 +473,14 @@ def _spear_total(rank) -> tuple[float | None, str | None, int]:
 def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
     """Resolve all six Volume × Ratio 5×5 descriptions for the player."""
     summaries = []
-    for sector in TWIN_SECTOR_MATRIX.values():
+    for sector_id, sector in TWIN_SECTOR_MATRIX.items():
         volume_percent = getattr(rank, sector["volume"], None) if rank else None
         ratio_percent = getattr(rank, sector["ratio"], None) if rank else None
+        if sector_id == "deep_box_lethality" and getattr(rank, "false_nine_penalty", False):
+            volume_tier = _spear_tier(_radar_score(volume_percent)) if volume_percent is not None else "D"
+            text = "펄스 나인(False 9) 롤을 수행하며 2선 연계에는 기여하나, 정통 스트라이커에게 필수적인 '킬링 존 진입 및 타격 능력'이 완벽히 거세되어 전방 득점원으로서는 낙제점인 자원."
+            summaries.append((sector["title"], f"[{volume_tier}×D] {text}"))
+            continue
         if volume_percent is None or ratio_percent is None:
             summaries.append((sector["title"], "[자료 부족] Insufficient Data"))
             continue
@@ -803,11 +808,16 @@ def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | N
 
 def spatial_identity_badges(ratio: dict[str, object] | None) -> list[tuple[str, str]]:
     """Return the three compact spatial identities used by the profile header."""
+    false_nine_badge = "👻 2선 지향 펄스 나인형 (Deep-Lying)"
+    false_nine_text = "상대 수비와의 물리적 마찰을 피해 2선으로 내려와 연계에 치중하지만, 정작 정통 스트라이커로서의 박스 내 장악력은 심각하게 결여된 유형"
     if not ratio:
-        return [("자료 부족", "공간·활동량 정적 데이터가 아직 준비되지 않았습니다.")]
+        return [(false_nine_badge, false_nine_text)]
     badges: list[tuple[str, str]] = []
     micro_fields = ("box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio")
-    if all(ratio.get(field) is not None for field in micro_fields):
+    box_ratio = float(ratio.get("in_box_ratio") or 0.0)
+    if box_ratio < 15.0:
+        badges.append((false_nine_badge, false_nine_text))
+    elif all(ratio.get(field) is not None for field in micro_fields):
         gold, silver, bronze = (float(ratio[field]) for field in micro_fields)
         if gold + silver + bronze > 0:
             if max(gold, silver, bronze) - min(gold, silver, bronze) <= 10.0:
@@ -819,9 +829,9 @@ def spatial_identity_badges(ratio: dict[str, object] | None) -> list[tuple[str, 
             else:
                 badges.append(("🥉 박스 외곽 겉돎형", "상대 견제에 밀려 킬링 존 진입을 주저하고, 슈팅 각도가 제한적인 박스 측면을 맴도는 유형"))
         else:
-            badges.append(("자료 부족", "박스 내 반복 좌표 표본이 부족해 마이크로 조닝 성향을 판정할 수 없습니다."))
+            badges.append((false_nine_badge, false_nine_text))
     else:
-        badges.append(("자료 부족", "마이크로 조닝 정적 데이터가 아직 준비되지 않았습니다."))
+        badges.append((false_nine_badge, false_nine_text))
 
     lane_fields = ("lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio")
     if all(ratio.get(field) is not None for field in lane_fields):
@@ -994,7 +1004,14 @@ def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, obj
                     unsafe_allow_html=True,
                 )
     else:
-        st.caption("박스 내 반복 좌표 표본이 부족해 골드·실버·브론즈 비율을 아직 산출할 수 없습니다. 0%를 의미하지 않습니다.")
+        false_nine_badge, false_nine_text = spatial_identity_badges(ratio)[0]
+        st.markdown("### 🎯 박스 내 마이크로 조닝 요약")
+        st.markdown(
+            f"<div style='padding:0.7rem 0.85rem; border-left:5px solid #A855F7; "
+            f"background:rgba(168,85,247,0.12); border-radius:0.35rem; font-size:1.08rem; font-weight:750; line-height:1.55;'>"
+            f"[ {false_nine_badge} ] : {false_nine_text}</div>",
+            unsafe_allow_html=True,
+        )
 
 
 def build_radar_profile(

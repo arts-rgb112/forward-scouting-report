@@ -120,6 +120,7 @@ class LeaguePercentiles:
     spear_score_rank: Optional[int] = None
     spear_score_top_percent: Optional[float] = None
     spear_score_eligible: int = 0
+    false_nine_penalty: bool = False
 
 
 def _minimum_minutes_for_competition(league_id: int) -> float:
@@ -638,6 +639,10 @@ def calculate_league_percentiles(
     player_spatial = get_tactical_ratio_for_session(
         player_key, metrics.league_name or "", season_name,
     )
+    micro_fields = ("box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio")
+    player_box_ratio = float(player_spatial.get("in_box_ratio") or 0.0) if player_spatial else 0.0
+    player_micro_total = sum(float(player_spatial.get(field) or 0.0) for field in micro_fields) if player_spatial else 0.0
+    false_nine_penalty = player_box_ratio < 15.0 or player_micro_total <= 0.0
 
     def spatial_values(field: str) -> dict[str, float]:
         return {
@@ -677,9 +682,18 @@ def calculate_league_percentiles(
         for peer_id, peer in peers.items() if peer.duel_margin_per90 is not None
     })
     deep_box_scores = _combined_scores(in_box_scores, micro_scores, 0.70)
+    if false_nine_penalty:
+        # This is a tactical penalty, not an absent-data neutral score: a
+        # player who does not enter the box cannot qualify as a striker on the
+        # deep-box axis even if he contributes well as a linking False 9.
+        micro_scores[player_key] = 0.0
+        if player_key in in_box_scores:
+            deep_box_scores[player_key] = 0.0
     danger_progression_scores = _combined_scores(dribble_scores, danger_scores, 0.70)
     micro_pct, micro_rank = _rank_score(player_key, micro_scores)
     deep_box_pct, deep_box_rank = _rank_score(player_key, deep_box_scores)
+    if false_nine_penalty:
+        deep_box_pct, deep_box_rank = 100.0, max(1, len(peers))
     danger_pct, danger_rank = _rank_score(player_key, danger_progression_scores)
     cca_pct, cca_rank = _rank_score(player_key, cca_scores)
     danger_density_pct, danger_density_rank = _rank_score(player_key, danger_scores)
@@ -791,6 +805,7 @@ def calculate_league_percentiles(
         spear_score_rank=spear_score_rank,
         spear_score_top_percent=spear_score_top_percent,
         spear_score_eligible=len(spear_scores),
+        false_nine_penalty=false_nine_penalty,
     )
 
 
