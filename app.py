@@ -13,7 +13,6 @@ from rankings import (
     get_league_metric_medians,
     get_tactical_matrix,
     get_top_leagues_shot_quality,
-    spear_minimum_minutes,
 )
 from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
 
@@ -561,7 +560,7 @@ def render_spear_radar(player_name: str, rank, stats: DecisionMetrics | None, *,
     figure = go.Figure()
     for name, trace_values, color, fill in (
         (player_name, values, "#22C55E", "rgba(34,197,94,0.28)"),
-        ("동일 대회 F·M 평균", [50.0] * len(labels), "#94A3B8", "rgba(148,163,184,0.16)"),
+        ("동일 대회 xG 1+ 평균", [50.0] * len(labels), "#94A3B8", "rgba(148,163,184,0.16)"),
     ):
         is_player = name == player_name
         figure.add_trace(go.Scatterpolar(
@@ -575,9 +574,8 @@ def render_spear_radar(player_name: str, rank, stats: DecisionMetrics | None, *,
             ),
         ))
     heading = "볼륨(Volume)" if volume else "비율(Ratio)"
-    minimum_minutes = int(spear_minimum_minutes(stats.league_id if stats else None))
     figure.update_layout(
-        title=f"S.P.E.A.R. {heading} 레이더 · 동일 대회 F·M({minimum_minutes}분+·xG 1+) 기준",
+        title=f"S.P.E.A.R. {heading} 레이더 · 동일 대회 xG 1+ 기준",
         height=455, margin={"l": 38, "r": 38, "t": 55, "b": 35},
         paper_bgcolor="rgba(0,0,0,0)",
         polar={
@@ -1008,12 +1006,7 @@ def render_player_report(
                 return getattr(rank, attr, None) if rank else None
 
             progression_eligible = get_rank("progression_eligible") or 0
-            minimum_minutes = int(spear_minimum_minutes(stats.league_id))
-            cohort_label = (
-                f"F·M 통합 모집단 · {minimum_minutes}분 이상 · xG 1 이상"
-                if restrict_to_forwards
-                else f"포지션 전체 · {minimum_minutes}분 이상 · xG 1 이상"
-            )
+            cohort_label = "동일 대회 · xG 1 이상"
             with st.expander(
                 f"🏃 순수 전진 기여도 상대평가 · {cohort_label} · 비교군 {progression_eligible}명",
                 expanded=True,
@@ -1134,7 +1127,7 @@ def render_v32_analysis_center() -> None:
         player, [filters["season"]], "전체", "FW (ST/CF)" in filters["positions"], 0,
         show_activity=False, selected_league_id=selected_stats.league_id,
     )
-    if (getattr(selected_stats, "minutes_played", 0) or 0) < 1000 or not rank or (rank.eligible_players or 0) < 10:
+    if not rank or (rank.eligible_players or 0) < 10:
         st.caption("해당 대회 표본이 부족하여 잠정 수치가 적용되었습니다.")
 
 
