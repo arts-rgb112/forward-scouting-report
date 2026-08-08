@@ -33,12 +33,14 @@ def cached_player_data(player_id: str):
 def cached_percentiles(
     player_id: str, season: str, metrics: DecisionMetrics, min_xg: float,
     restrict_to_forwards: bool, minimum_final_third_ratio: int, comparison_scope: int = 0,
+    role_override: str = "auto",
 ):
     return calculate_league_percentiles(
         player_id, season, metrics, minimum_xg=min_xg,
         restrict_to_forwards=restrict_to_forwards,
         minimum_final_third_ratio=minimum_final_third_ratio,
         comparison_scope=comparison_scope,
+        role_override=role_override,
     )
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -806,7 +808,9 @@ def render_season_heatmap(player_id: str, player_name: str, heatmap_key: str | N
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
-def spatial_identity_badges(ratio: dict[str, object] | None) -> list[tuple[str, str]]:
+def spatial_identity_badges(
+    ratio: dict[str, object] | None, force_type_b: bool = False,
+) -> list[tuple[str, str]]:
     """Return the three compact spatial identities used by the profile header."""
     false_nine_badge = "👻 2선 지향 펄스 나인형 (Deep-Lying)"
     false_nine_text = "상대 수비와의 물리적 마찰을 피해 2선으로 내려와 플레이메이킹과 공간 창출에 집중하는 변칙적 포워드"
@@ -815,7 +819,7 @@ def spatial_identity_badges(ratio: dict[str, object] | None) -> list[tuple[str, 
     badges: list[tuple[str, str]] = []
     micro_fields = ("box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio")
     box_ratio = float(ratio.get("in_box_ratio") or 0.0)
-    if box_ratio < 15.0:
+    if force_type_b or box_ratio < 15.0:
         badges.append((false_nine_badge, false_nine_text))
     elif all(ratio.get(field) is not None for field in micro_fields):
         gold, silver, bronze = (float(ratio[field]) for field in micro_fields)
@@ -934,7 +938,10 @@ def render_lane_analysis(player_name: str, ratio: dict[str, object]) -> None:
         st.markdown(f"**[{badge}]** : {text}")
 
 
-def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, object] | None = None) -> None:
+def render_activity_ratio(
+    player_id: str, player_name: str, ratio: dict[str, object] | None = None,
+    force_type_b: bool = False,
+) -> None:
     """Render the ETL-backed mid/final-third activity split without live API calls."""
     ratio = ratio or get_tactical_ratio(player_id) or get_tactical_ratio_by_name(player_name)
     st.markdown("#### 🏃 주요 활동 반경")
@@ -979,7 +986,7 @@ def render_activity_ratio(player_id: str, player_name: str, ratio: dict[str, obj
         silver = float(ratio["box_penalty_spot_ratio"])
         bronze = float(ratio["box_wide_ratio"])
         weighted = float(ratio.get("deep_box_zone_score", 0.0))
-        micro_badge, micro_text = spatial_identity_badges(ratio)[0]
+        micro_badge, micro_text = spatial_identity_badges(ratio, force_type_b=force_type_b)[0]
         label_col, help_col = st.columns([5, 1])
         with label_col:
             st.markdown("### 🎯 박스 내 마이크로 조닝 요약")
@@ -1490,8 +1497,32 @@ def render_v32_analysis_center() -> None:
                 render_activity_ratio(opponent.player_id, opponent.name, opponent_ratio)
                 render_season_heatmap(opponent.player_id, opponent.name, opponent_ratio.get("heatmap_key") if opponent_ratio else None)
         return
+    # A role override recalculates only the selected player's score against
+    # the same natural-role cohort.  The cached calculation makes switching
+    # instantaneous while still applying the backend Soft Floor rules.
+    default_role = "type_b" if getattr(rank, "false_nine_penalty", False) else "type_a"
+    title_col, role_col, help_col = st.columns([4.2, 3.0, 1.0])
+    with role_col:
+        selected_role = st.radio(
+            "S.P.E.A.R. 롤 시뮬레이션",
+            ("type_a", "type_b"),
+            index=0 if default_role == "type_a" else 1,
+            format_func=lambda role: (
+                "🎯 정통 9번 롤 (Type A)" if role == "type_a"
+                else "👻 펄스 나인 롤 (Type B)"
+            ),
+            horizontal=True,
+            key=(
+                f"v32_role_{player.player_id}_{filters['season']}_"
+                f"{selected_stats.league_id}_{filters['comparison_scope']}"
+            ),
+        )
+    if selected_role != default_role:
+        rank = cached_percentiles(
+            player.player_id, filters["season"], selected_stats, 1.0, True, 0,
+            filters["comparison_scope"], selected_role,
+        )
     spear_score, spear_tier, spear_coverage = _spear_total(rank)
-    title_col, help_col = st.columns([4, 1])
     with title_col:
         if spear_score is None:
             st.subheader(f"👑 {player.name}  ·  🏷️ S.P.E.A.R. 데이터 부족")
@@ -1507,7 +1538,10 @@ def render_v32_analysis_center() -> None:
             st.caption(f"동적 가중치 적용: {getattr(rank, 'spear_role', 'Type A · 정통 타겟/포처')}")
             if spear_coverage < len(SPEAR_FACTOR_AXES):
                 st.caption(f"현재 산출 가능한 팩터 {spear_coverage}/{len(SPEAR_FACTOR_AXES)}개 기준의 잠정 점수입니다.")
-            identities = spatial_identity_badges(tactical_ratio)
+            identities = spatial_identity_badges(
+                tactical_ratio,
+                force_type_b=getattr(rank, "false_nine_penalty", False),
+            )
             if identities:
                 st.markdown("**💡 전술 공간 아이덴티티**")
                 for badge, text in identities:
@@ -1531,7 +1565,10 @@ def render_v32_analysis_center() -> None:
     with st.expander(f"📍 {filters['season']} · {competition_name} 공간·활동량", expanded=True):
         activity_col, heatmap_col = st.columns([1, 1.45])
         with activity_col:
-            render_activity_ratio(player.player_id, player.name, tactical_ratio)
+            render_activity_ratio(
+                player.player_id, player.name, tactical_ratio,
+                force_type_b=getattr(rank, "false_nine_penalty", False),
+            )
         with heatmap_col:
             render_season_heatmap(
                 player.player_id,
