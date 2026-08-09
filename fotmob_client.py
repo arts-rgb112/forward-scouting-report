@@ -200,9 +200,12 @@ def _league_selections(
     """
     if not isinstance(data, dict):
         raise PlayerNotFoundError("FotMob did not return a player season history.")
+    stat_seasons = data.get("statSeasons", [])
+    if not isinstance(stat_seasons, list):
+        raise PlayerNotFoundError("FotMob did not return a player season list.")
     selections: list[dict[str, Any]] = []
     seasons_seen = 0
-    for row in data.get("statSeasons", []):
+    for row in stat_seasons:
         if not isinstance(row, dict) or not re.fullmatch(r"\d{4}/\d{4}", str(row.get("seasonName"))):
             continue
         if target_season and row.get("seasonName") != target_season:
