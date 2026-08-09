@@ -1716,17 +1716,27 @@ def render_spear_leaderboard(
     display["M.E.S.S.I."] = display["M.E.S.S.I."].map(lambda value: f"{value:.1f}")
 
     # Streamlit's interactive dataframe sorts text lexicographically, which
-    # puts an A-tier ahead of S-tier on a descending sort.  Prefix each visible
-    # label with invisible word joiners so the underlying string order matches
-    # football tier order (S > A > B > C > D) without changing the UI label.
+    # puts an A-tier ahead of S-tier on a descending sort. Keep numeric values
+    # in the dataframe (S=5 ... D=1) and use SelectboxColumn's display mapper
+    # so the user still only sees the familiar S/A/B/C/D labels.
     tier_sort_weight = {"S": 5, "A": 4, "B": 3, "C": 2, "D": 1}
+    tier_display = {5: "S", 4: "A", 3: "B", 2: "C", 1: "D", 0: "-"}
     factor_tier_columns = [
         "박스 밖 슈팅", "박스 안 슈팅", "드리블 능력", "공중 경합", "지상 경합", "오프더볼",
     ]
     for column in factor_tier_columns:
-        display[column] = display[column].map(
-            lambda value: "\u2060" * tier_sort_weight.get(str(value), 0) + str(value)
+        display[column] = display[column].map(tier_sort_weight).fillna(0).astype("int64")
+    factor_tier_config = {
+        column: st.column_config.SelectboxColumn(
+            column,
+            options=[5, 4, 3, 2, 1, 0],
+            format_func=lambda value: tier_display.get(int(value), "-"),
+            disabled=True,
+            width="small",
+            help="내림차순 정렬 시 S → A → B → C → D 순서입니다.",
         )
+        for column in factor_tier_columns
+    }
     st.dataframe(
         display, use_container_width=True, hide_index=True, height=430,
         column_config={
@@ -1749,6 +1759,7 @@ def render_spear_leaderboard(
                 "선수", display_text=r".*[?&]label=([^&]+).*",
                 help="선수 이름을 클릭하면 상세 분석 리포트로 이동합니다.",
             ),
+            **factor_tier_config,
         },
         key=f"v32_leaderboard_{league_id}_{season}_{comparison_scope}",
     )
