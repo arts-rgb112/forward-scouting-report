@@ -957,7 +957,10 @@ def render_season_heatmap(
 ) -> None:
     points = get_heatmap_points(player_id, heatmap_key)
     st.markdown("#### 📍 시즌 활동 히트맵")
-    st.caption("저장된 시즌 좌표를 기반으로 활동 밀도를 표시합니다. 반복 동선 필터 데이터는 수집 완료 후 자동 반영됩니다.")
+    st.caption(
+        "저장된 시즌 좌표를 기반으로 활동 밀도를 표시합니다. 공격 방향은 화면 왼쪽→오른쪽이며, "
+        "화면 위는 좌측 레인(Lane 1), 아래는 우측 레인(Lane 5)입니다."
+    )
     if not points:
         st.caption("정적 히트맵 좌표 데이터가 아직 생성되지 않았습니다.")
         return
@@ -1013,7 +1016,11 @@ def render_season_heatmap(
         figure.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=line, fillcolor=fill, layer="below")
     figure.add_shape(type="line", x0=50, y0=0, x1=50, y1=100, line=line)
     figure.add_shape(type="circle", x0=43, y0=43, x1=57, y1=57, line=line)
-    figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [0, 100], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True, "constrain": "domain"}, showlegend=False)
+    # SportsAPI measures the lateral Y coordinate from the top touchline.
+    # Plotly's ordinary Y axis starts at the bottom, which previously mirrored
+    # the left/right lanes in the pitch view while the 5-Lane text was right.
+    # Keep the ETL lane bins untouched and reverse only the rendered axis.
+    figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [0, 100], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [100, 0], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True, "constrain": "domain"}, showlegend=False)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
