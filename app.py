@@ -1603,7 +1603,10 @@ def render_v32_analysis_center() -> None:
         key=f"v32_competition_{player.player_id}_{filters['season']}",
     )
     session_key, selected_stats = session_rows[selected_index]
-    session_team = selected_stats.team_name or "팀 정보 미제공"
+    # A static leaderboard link carries the season-specific roster team.  Use
+    # it when the live session payload omits a team label, rather than showing
+    # an avoidable “team information unavailable” caption on the report.
+    session_team = selected_stats.team_name or player.team_name or "팀 정보 미제공"
     st.caption(
         f"분석 세션: {filters['season']} · {selected_stats.league_name or '대회 정보 미제공'} · {session_team} "
         "(검색 결과의 소속 표기는 현재 소속일 수 있습니다.)"
@@ -1903,7 +1906,8 @@ def render_player_detail_page() -> None:
         key=f"detail_competition_{player.player_id}_{filters['season']}",
     )
     _, selected_stats = session_rows[selected_index]
-    st.caption(f"{player.name} · {filters['season']} · {selected_stats.league_name or '대회 정보 미제공'} · {selected_stats.team_name or '팀 정보 미제공'}")
+    session_team = selected_stats.team_name or player.team_name or "팀 정보 미제공"
+    st.caption(f"{player.name} · {filters['season']} · {selected_stats.league_name or '대회 정보 미제공'} · {session_team}")
     tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", str(filters["season"]))
     type_a_tab, type_b_tab = st.tabs(["🎯 정통 9번 뷰 (Type A)", "👻 펄스 나인 뷰 (Type B)"])
     with type_a_tab:
