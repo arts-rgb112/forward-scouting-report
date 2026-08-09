@@ -1914,12 +1914,23 @@ def render_leaderboard_page() -> None:
     default_league = _query_text("league_name", "통합 리그 범위")
     if default_league not in league_options:
         default_league = "통합 리그 범위"
+    season_options = ["25/26", "24/25", "23/24", "22/23", "21/22"]
+    # Keep the season switch separate from the dense search form.  Scouting
+    # users should be able to move through historical leaderboards without
+    # having to rediscover a small dropdown or press the general filter button.
+    if "leaderboard_season_picker" not in st.session_state:
+        st.session_state.leaderboard_season_picker = (
+            default_season if default_season in season_options else season_options[0]
+        )
+    active_season = st.radio(
+        "리더보드 시즌", season_options, horizontal=True,
+        key="leaderboard_season_picker",
+        help="선택 즉시 유럽대항전과 리그 리더보드를 해당 시즌 스냅샷으로 전환합니다.",
+    )
     with st.form("leaderboard_filters", border=True):
-        league_col, season_col, position_col, role_col, search_col, action_col = st.columns([1.4, 1, 1, 1, 1.8, 0.9])
+        league_col, position_col, role_col, search_col, action_col = st.columns([1.4, 1, 1, 1.8, 0.9])
         with league_col:
             league_name = st.selectbox("리그", list(league_options), index=list(league_options).index(default_league))
-        with season_col:
-            season = st.selectbox("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], index=["25/26", "24/25", "23/24", "22/23", "21/22"].index(default_season) if default_season in {"25/26", "24/25", "23/24", "22/23", "21/22"} else 0)
         with position_col:
             position = st.selectbox("포지션", ["전체", "FW", "MF", "DF"], index=["전체", "FW", "MF", "DF"].index(_query_text("position", "전체")) if _query_text("position", "전체") in {"전체", "FW", "MF", "DF"} else 0)
         with role_col:
@@ -1933,10 +1944,9 @@ def render_leaderboard_page() -> None:
             st.write("")
             submitted = st.form_submit_button("적용", use_container_width=True, type="primary")
         if submitted:
-            _route("leaderboard", season=season, scope=default_scope, league_name=league_name, position=position, role=role, search=query.strip())
+            _route("leaderboard", season=active_season, scope=default_scope, league_name=league_name, position=position, role=role, search=query.strip())
             st.rerun()
 
-    active_season = _query_text("season", default_season)
     active_league_name = _query_text("league_name", default_league)
     active_position = _query_text("position", "전체")
     active_role = _query_text("role", "전체")
