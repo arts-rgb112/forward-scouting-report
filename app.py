@@ -2023,7 +2023,8 @@ def _render_role_overview(player, filters: dict[str, object], stats: DecisionMet
         st.markdown(
             "<div style='text-align: center; padding-top: 0.25rem;'>"
             f"<span style='font-size: 1.75rem; font-weight: 800;'>"
-            f"[{spear_tier}-Tier] M.E.S.S.I. {spear_score:.1f}/100{rank_text}</span>"
+            f"{html.escape(player.name)} · [{spear_tier}-Tier] "
+            f"M.E.S.S.I. {spear_score:.1f}/100{rank_text}</span>"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -2089,8 +2090,6 @@ def render_player_detail_page() -> None:
         key=f"detail_competition_{player.player_id}_{filters['season']}",
     )
     _, selected_stats = session_rows[selected_index]
-    session_team = selected_stats.team_name or player.team_name or "팀 정보 미제공"
-    st.caption(f"{player.name} · {filters['season']} · {selected_stats.league_name or '대회 정보 미제공'} · {session_team}")
     tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", str(filters["season"]))
     type_a_tab, type_b_tab = st.tabs(["🎯 정통 9번 뷰 (Type A)", "👻 펄스 나인 뷰 (Type B)"])
     with type_a_tab:
