@@ -1370,9 +1370,10 @@ def render_spear_leaderboard(
         1, "프로필",
         "https://images.fotmob.com/image_resources/playerimages/" + table["player_id"].astype(str) + ".png",
     )
-    # Keep the familiar table layout while making the actual player name a
-    # shareable direct link to the independent detail page.  Row selection is
-    # retained as a keyboard-friendly fallback.
+    # The player name is the only list-to-detail navigation control.  Do not
+    # auto-route on dataframe-row selection: Streamlit preserves a selected
+    # row across reruns, which previously sent users straight back to Detail
+    # after they had clicked the Leaderboard page in the sidebar.
     def detail_url(row: pd.Series) -> str:
         player_name = str(row["player_name"])
         return (
@@ -1386,9 +1387,8 @@ def render_spear_leaderboard(
         "Type A": "정통형", "Type B": "펄스 나인형",
     }).fillna(display["기본 롤"])
     display["S.P.E.A.R."] = display["S.P.E.A.R."].map(lambda value: f"{value:.1f}")
-    event = st.dataframe(
+    st.dataframe(
         display, use_container_width=True, hide_index=True, height=430,
-        on_select="rerun", selection_mode="single-row",
         column_config={
             "프로필": st.column_config.ImageColumn("프로필", width="small"),
             "선수": st.column_config.LinkColumn(
@@ -1398,25 +1398,8 @@ def render_spear_leaderboard(
         },
         key=f"v32_leaderboard_{league_id}_{season}_{comparison_scope}",
     )
-    selected_rows = getattr(getattr(event, "selection", None), "rows", [])
-    if not selected_rows:
-        st.caption("행을 선택하면 아래에 해당 선수의 상세 분석 대시보드를 엽니다.")
-        return None
-    selected = table.iloc[selected_rows[0]]
-    # Keep the list-to-detail transition shareable without adding a second
-    # Streamlit process or duplicating the dashboard's state.
-    try:
-        st.query_params["player"] = str(selected["player_id"])
-        st.query_params["season"] = season
-        st.query_params["scope"] = str(comparison_scope)
-        st.query_params["name"] = str(selected["player_name"])
-        st.query_params["team"] = str(selected["team_name"])
-        st.query_params["page"] = "detail"
-    except Exception:
-        pass
-    return PlayerCandidate(
-        str(selected["player_id"]), str(selected["player_name"]), str(selected["team_name"]),
-    )
+    st.caption("선수 이름을 클릭하면 해당 선수의 상세 분석 리포트로 이동합니다.")
+    return None
 
 def render_player_report(
     player, selected_seasons: list[str], competition_filter: str,
@@ -1800,6 +1783,13 @@ def _query_scope(default: int = 5) -> int:
 
 
 def _route(page: str, **params: object) -> None:
+    if page == "leaderboard":
+        # A player-specific URL must not survive an explicit return to the
+        # leaderboard.  Keeping it made navigation feel like the detail page
+        # was forced even when the sidebar selection had changed correctly.
+        for key in ("player", "name", "team", "label"):
+            if key in st.query_params:
+                del st.query_params[key]
     st.query_params["page"] = page
     for key, value in params.items():
         st.query_params[key] = str(value)
