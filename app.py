@@ -2098,8 +2098,8 @@ def render_leaderboard_page() -> None:
             st.rerun()
 
 
-def _render_role_overview(player, filters: dict[str, object], stats: DecisionMetrics, tactical_ratio, role: str) -> object:
-    """Render one independent Type A or Type B detail-tab overview."""
+def _render_role_overview(player, filters: dict[str, object], stats: DecisionMetrics, tactical_ratio, role: str = "auto") -> object:
+    """Render the player's automatically classified, unmasked detail profile."""
     rank = cached_percentiles(
         player.player_id, str(filters["season"]), stats, 1.0, True, 0,
         int(filters["scope"]), role,
@@ -2148,7 +2148,7 @@ def _render_role_overview(player, filters: dict[str, object], stats: DecisionMet
             unsafe_allow_html=True,
         )
 
-    identities = spatial_identity_badges(tactical_ratio, force_type_b=role == "type_b")
+    identities = spatial_identity_badges(tactical_ratio, force_type_b=False)
     for badge, text in identities:
         st.markdown(f"**[{badge}]** : {text}")
     footprint = activity_coverage_identity(rank)
@@ -2205,11 +2205,8 @@ def render_player_detail_page() -> None:
         competition=selected_stats.league_name or "unknown",
     )
     tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", str(filters["season"]))
-    type_a_tab, type_b_tab = st.tabs(["🎯 정통 9번 뷰 (Type A)", "👻 펄스 나인 뷰 (Type B)"])
-    with type_a_tab:
-        rank_a = _render_role_overview(player, filters, selected_stats, tactical_ratio, "type_a")
-    with type_b_tab:
-        rank_b = _render_role_overview(player, filters, selected_stats, tactical_ratio, "type_b")
+    st.caption("역할은 해당 대회·시즌의 박스 점유율을 기준으로 자동 분류됩니다. 수동 탭 전환은 점수나 역할 표기를 바꾸지 않습니다.")
+    rank = _render_role_overview(player, filters, selected_stats, tactical_ratio)
     st.divider()
     st.subheader("세부 상대평가")
     render_player_report(
@@ -2220,7 +2217,7 @@ def render_player_detail_page() -> None:
     with st.expander(f"📍 {filters['season']} · {selected_stats.league_name or '선택 대회'} 공간·활동량", expanded=True):
         activity_col, heatmap_col = st.columns([1, 1.45])
         with activity_col:
-            render_activity_ratio(player.player_id, player.name, tactical_ratio, rank=rank_a or rank_b)
+            render_activity_ratio(player.player_id, player.name, tactical_ratio, rank=rank)
         with heatmap_col:
             render_season_heatmap(player.player_id, player.name, tactical_ratio.get("heatmap_key") if tactical_ratio else None, tactical_ratio)
 
