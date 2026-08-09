@@ -242,7 +242,9 @@ def _fetch_live_spear_cohort(
             else:
                 short_season = season_name
 
-            parsed = extract_multi_season_metrics(fetch_player_multi_season_data(player_id))
+            parsed = extract_multi_season_metrics(
+                fetch_player_multi_season_data(player_id, target_season=season_name)
+            )
             for season_key, stat_obj in parsed.items():
                 if season_key.startswith(f"{short_season}_") and stat_obj.league_id == league_id:
                     return player_id, stat_obj
