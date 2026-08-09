@@ -67,15 +67,17 @@ UEFA_TOURNAMENT_NAMES = {
     "uefa conference league": "UEFA Europa Conference League",
     "europa conference league": "UEFA Europa Conference League",
 }
-# The production dashboard is explicitly scoped to the five major domestic
-# leagues and the three UEFA competitions. IDs remain dynamically discovered;
-# these are stable display labels used only to validate source coverage.
+# The production dashboard covers seven domestic leagues and the three UEFA
+# competitions. IDs remain dynamically discovered; these are stable display
+# labels used only to validate source coverage.
 REQUIRED_HEATMAP_COMPETITIONS = (
     "Premier League",
     "LaLiga",
     "Bundesliga",
     "Serie A",
     "Ligue 1",
+    "Eredivisie",
+    "Primeira Liga",
     "UEFA Champions League",
     "UEFA Europa League",
     "UEFA Europa Conference League",

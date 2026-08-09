@@ -2169,13 +2169,14 @@ def render_leaderboard_page() -> None:
     league_options = {
         "5대 리그": 47,
         "3대 리그": 47,
+        "7대 리그": 47,
         "Premier League": 47, "LaLiga": 87, "Bundesliga": 54,
         "Serie A": 55, "Ligue 1": 53,
     }
     # The static cohort already defines these comparison unions.  Keep the
     # selector labels aligned with the actual scoring population instead of
     # presenting the old ambiguous "integrated league range" wording.
-    league_scope_options = {"3대 리그": 3, "5대 리그": 5}
+    league_scope_options = {"3대 리그": 3, "5대 리그": 5, "7대 리그": 7}
     default_season = _query_text("season", "25/26")
     default_league = _query_text("league_name", "5대 리그")
     # Preserve links generated before the selector was renamed.
@@ -2201,7 +2202,7 @@ def render_leaderboard_page() -> None:
         with league_col:
             league_name = st.selectbox(
                 "리그", list(league_options), index=list(league_options).index(default_league),
-                help="3대 리그: Premier League·LaLiga·Serie A / 5대 리그: 3대 리그 + Bundesliga·Ligue 1",
+                help="3대 리그: Premier League·LaLiga·Serie A / 5대 리그: 3대 리그 + Bundesliga·Ligue 1 / 7대 리그: 5대 리그 + Eredivisie·Primeira Liga",
             )
         with position_col:
             position = st.selectbox("포지션", ["전체", "FW", "MF", "DF"], index=["전체", "FW", "MF", "DF"].index(_query_text("position", "전체")) if _query_text("position", "전체") in {"전체", "FW", "MF", "DF"} else 0)
@@ -2274,7 +2275,7 @@ def render_leaderboard_page() -> None:
         index=list(league_scope_options).index(active_league_name)
         if active_league_name in league_scope_options else 0,
         key=f"league_leaderboard_scope_{active_season}",
-        help="3대 리그: Premier League·LaLiga·Serie A / 5대 리그: 3대 리그 + Bundesliga·Ligue 1",
+        help="3대 리그: Premier League·LaLiga·Serie A / 5대 리그: 3대 리그 + Bundesliga·Ligue 1 / 7대 리그: 5대 리그 + Eredivisie·Primeira Liga",
     )
     league_selected = render_spear_leaderboard(
         active_season, league_scope_options[leaderboard_scope_name], 47,
