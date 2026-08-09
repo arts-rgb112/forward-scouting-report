@@ -1042,43 +1042,13 @@ def render_season_heatmap(
     st.markdown("#### 📍 시즌 활동 히트맵")
     st.caption(
         "저장된 시즌 좌표를 기반으로 활동 밀도를 표시합니다. 공격 방향은 화면 왼쪽→오른쪽이며, "
-        "화면 위는 좌측 레인(Lane 1), 아래는 우측 레인(Lane 5)입니다. 히트맵은 5-Lane 원본 분포와 동일하게 보정됩니다."
+        "화면 위는 우측 레인(Lane 1), 아래는 좌측 레인(Lane 5)입니다. 5-Lane 막대와 같은 좌표 기준을 사용합니다."
     )
     if not points:
         st.caption("정적 히트맵 좌표 데이터가 아직 생성되지 않았습니다.")
         return
     x = [point[0] for point in points if isinstance(point, list) and len(point) == 2]
     y = [point[1] for point in points if isinstance(point, list) and len(point) == 2]
-    # The CSV lane ratios are computed from the full cluster-filtered payload,
-    # while this file contains a compact visual sample. Some older samples were
-    # coordinate-ordered and could visually overstate the opposite flank. Map
-    # the sample's lateral ranks back to the full five-lane distribution so the
-    # pitch and the 5-Lane panel always describe the same player profile.
-    lane_fields = ("lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio")
-    if tactical_ratio and y and all(tactical_ratio.get(field) is not None for field in lane_fields):
-        target = np.array([max(0.0, float(tactical_ratio[field])) for field in lane_fields])
-        if target.sum() > 0:
-            target = target / target.sum() * len(y)
-            target_counts = np.floor(target).astype(int)
-            for index in np.argsort(target - target_counts)[::-1][:len(y) - int(target_counts.sum())]:
-                target_counts[index] += 1
-            aligned_y = list(y)
-            ordered_indices = sorted(range(len(y)), key=lambda index: y[index])
-            cursor = 0
-            for lane_index, count in enumerate(target_counts):
-                if count <= 0:
-                    continue
-                indices = ordered_indices[cursor:cursor + int(count)]
-                cursor += int(count)
-                source = [y[index] for index in indices]
-                source_min, source_max = min(source), max(source)
-                for rank_in_lane, point_index in enumerate(indices):
-                    relative = (
-                        (y[point_index] - source_min) / (source_max - source_min)
-                        if source_max > source_min else (rank_in_lane + 0.5) / len(indices)
-                    )
-                    aligned_y[point_index] = lane_index * 20.0 + 1.0 + 18.0 * relative
-            y = aligned_y
     # Smooth a fixed grid so repeatedly visited zones visibly intensify instead
     # of rendering as indistinguishable overlapping dots.
     density, y_edges, x_edges = np.histogram2d(y, x, bins=(22, 32), range=((0, 100), (0, 100)))
@@ -1111,10 +1081,10 @@ def render_season_heatmap(
         figure.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=line, fillcolor=fill, layer="below")
     figure.add_shape(type="line", x0=50, y0=0, x1=50, y1=100, line=line)
     figure.add_shape(type="circle", x0=43, y0=43, x1=57, y1=57, line=line)
-    # SportsAPI measures the lateral Y coordinate from the top touchline.
-    # Plotly's ordinary Y axis starts at the bottom, which previously mirrored
-    # the left/right lanes in the pitch view while the 5-Lane text was right.
-    # Keep the ETL lane bins untouched and reverse only the rendered axis.
+    # SportsAPI Y=0 is the top touchline in this attack-left-to-right view.
+    # In the provider's attacking orientation that is the player's right flank:
+    # Lane 1/2 = right side, Lane 4/5 = left side. Reverse only Plotly's display
+    # axis so its top edge keeps that same provider orientation.
     figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [0, 100], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [100, 0], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True, "constrain": "domain"}, showlegend=False)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
@@ -1122,9 +1092,9 @@ def render_season_heatmap(
 def lane_summary(ratio: dict[str, object] | None) -> tuple[str, str] | None:
     """Return one direction-aware lateral identity from the shared lane bins.
 
-    SportsAPI's Y coordinate is the pitch width.  Lane 1/2 is always shown as
-    the left side and Lane 4/5 as the right side here and in the heatmap, so
-    the profile header can no longer invert the 5-Lane panel's interpretation.
+    SportsAPI's Y coordinate is the pitch width. In its attacking orientation,
+    Lane 1/2 (the screen top) is the player's right side and Lane 4/5 is the
+    player's left. The profile header and heatmap use this same convention.
     """
     if not ratio:
         return None
@@ -1136,7 +1106,7 @@ def lane_summary(ratio: dict[str, object] | None) -> tuple[str, str] | None:
     if total <= 0.0:
         return None
     lanes = [value / total * 100.0 for value in lanes]
-    left, right = lanes[0] + lanes[1], lanes[3] + lanes[4]
+    right, left = lanes[0] + lanes[1], lanes[3] + lanes[4]
     halfspace, center, wing = lanes[1] + lanes[3], lanes[2], lanes[0] + lanes[4]
     direction = "좌측" if left - right > 15.0 else "우측" if right - left > 15.0 else "양측"
     if halfspace > 40.0:
@@ -1216,11 +1186,11 @@ def activity_coverage_identity(rank) -> tuple[str, str] | None:
 def render_lane_analysis(player_name: str, ratio: dict[str, object], rank=None) -> None:
     """Render the ETL-backed 5-Lane occupation and directional summary."""
     lane_fields = (
-        ("Lane 1 · 좌측 윙", "lane_1_ratio", "#2563EB"),
-        ("Lane 2 · 좌측 하프스페이스", "lane_2_ratio", "#38BDF8"),
+        ("Lane 1 · 우측 윙", "lane_1_ratio", "#2563EB"),
+        ("Lane 2 · 우측 하프스페이스", "lane_2_ratio", "#38BDF8"),
         ("Lane 3 · 중앙", "lane_3_ratio", "#A78BFA"),
-        ("Lane 4 · 우측 하프스페이스", "lane_4_ratio", "#FB923C"),
-        ("Lane 5 · 우측 윙", "lane_5_ratio", "#DC2626"),
+        ("Lane 4 · 좌측 하프스페이스", "lane_4_ratio", "#FB923C"),
+        ("Lane 5 · 좌측 윙", "lane_5_ratio", "#DC2626"),
     )
     if not all(ratio.get(field) is not None for _, field, _ in lane_fields):
         st.caption("5-Lane 횡적 동선 데이터가 아직 준비되지 않았습니다.")
@@ -1238,8 +1208,8 @@ def render_lane_analysis(player_name: str, ratio: dict[str, object], rank=None) 
     wing_ratio = lanes[0] + lanes[4]
     halfspace_ratio = lanes[1] + lanes[3]
     center_ratio = lanes[2]
-    left_ratio = lanes[0] + lanes[1]
-    right_ratio = lanes[3] + lanes[4]
+    right_ratio = lanes[0] + lanes[1]
+    left_ratio = lanes[3] + lanes[4]
 
     if halfspace_ratio > 40.0:
         activity_badge = "🎯 하프스페이스 타격형"
