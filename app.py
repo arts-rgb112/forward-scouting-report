@@ -2185,22 +2185,37 @@ def render_head_to_head_page() -> None:
 def main() -> None:
     """URL-addressable three-page navigation for the scouting workflow."""
     pages = {
-        "leaderboard": "🔍 선수 검색 및 리더보드",
-        "detail": "📊 선수 상세 분석 리포트",
-        "compare": "⚔️ 비교 분석 집중 페이지",
+        "leaderboard": "🔍 리더보드",
+        "detail": "📊 선수 상세 분석",
+        "compare": "⚔️ 비교 분석",
     }
     current = _query_text("page", "leaderboard")
     if current not in pages:
         current = "leaderboard"
-    with st.sidebar:
-        st.title("M.E.S.S.I. 2.0")
-        with st.expander("💡 M.E.S.S.I. 프레임워크"):
-            st.markdown(MESSI_FRAMEWORK)
-        selected_label = st.radio("페이지", list(pages.values()), index=list(pages).index(current))
-        selected_page = next(page for page, label in pages.items() if label == selected_label)
-        if selected_page != current:
-            _route(selected_page)
-            st.rerun()
+
+    # Top navigation keeps the three product surfaces visible without taking
+    # permanent horizontal space from the scouting visuals as a sidebar does.
+    with st.container(border=True):
+        brand_col, leaderboard_col, detail_col, compare_col, info_col = st.columns([1.45, 1.2, 1.25, 1.15, 0.7])
+        with brand_col:
+            st.markdown("#### M.E.S.S.I. 2.0")
+        for column, page, label in (
+            (leaderboard_col, "leaderboard", pages["leaderboard"]),
+            (detail_col, "detail", pages["detail"]),
+            (compare_col, "compare", pages["compare"]),
+        ):
+            with column:
+                if st.button(
+                    label, key=f"top_navigation_{page}", use_container_width=True,
+                    type="primary" if current == page else "secondary",
+                ) and current != page:
+                    _route(page)
+                    st.rerun()
+        with info_col:
+            with st.popover("💡 안내", use_container_width=True):
+                st.markdown("#### M.E.S.S.I. 프레임워크")
+                st.markdown(MESSI_FRAMEWORK)
+    st.divider()
     if current == "leaderboard":
         render_leaderboard_page()
     elif current == "detail":
