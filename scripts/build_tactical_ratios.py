@@ -54,6 +54,19 @@ TARGET_TOURNAMENTS = {
     ("uefa conference league", "europe"): "UEFA Europa Conference League",
     ("europa conference league", "europe"): "UEFA Europa Conference League",
 }
+# UEFA competitions have unique names but SportsAPI's country label has varied
+# between "Europe", "International", and an empty string in historic catalog
+# responses. Domestic names such as Premier League remain country-qualified;
+# only these unambiguous UEFA names intentionally ignore country metadata.
+UEFA_TOURNAMENT_NAMES = {
+    "uefa champions league": "UEFA Champions League",
+    "champions league": "UEFA Champions League",
+    "uefa europa league": "UEFA Europa League",
+    "europa league": "UEFA Europa League",
+    "uefa europa conference league": "UEFA Europa Conference League",
+    "uefa conference league": "UEFA Europa Conference League",
+    "europa conference league": "UEFA Europa Conference League",
+}
 # The production dashboard is explicitly scoped to the five major domestic
 # leagues and the three UEFA competitions. IDs remain dynamically discovered;
 # these are stable display labels used only to validate source coverage.
@@ -170,12 +183,13 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
             str(candidate.get("name", "")).strip().lower(),
             str(candidate.get("countryName", "")).strip().lower(),
         )
-        canonical_name = TARGET_TOURNAMENTS.get(key)
+        canonical_name = TARGET_TOURNAMENTS.get(key) or UEFA_TOURNAMENT_NAMES.get(key[0])
         if identifier is not None and canonical_name:
             matches.setdefault(canonical_name, {"id": identifier, "name": canonical_name})
     if not matches:
         root_keys = ",".join(sorted(payload.keys())) if isinstance(payload, dict) else type(payload).__name__
         print(f"No target leagues found. Root keys: {root_keys}")
+    print(f"Discovered target competitions: {', '.join(sorted(matches)) or 'none'}")
     return [matches[name] for name in sorted(matches)]
 
 
