@@ -226,7 +226,7 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
 
 SPEAR_FACTOR_AXES = [
     ("박스 밖 킥 순도", "spear_shot_quality_top_percent"),
-    ("심층 타격 효율", "micro_zoning_finishing_top_percent"),
+    ("박스 타격 효율", "micro_zoning_finishing_top_percent"),
     ("위험 구역 파괴력", "danger_zone_progression_top_percent"),
     ("공중볼 장악력", "aerial_margin_per90_top_percent"),
     ("지상 경합 능력", "duel_margin_per90_top_percent"),
@@ -236,7 +236,7 @@ SPEAR_FACTOR_AXES = [
 MESSI_FRAMEWORK = """
 **M (Micro-zoning)** — 마이크로 조닝 기반 공간 분석
 
-**E (Efficiency)** — 심층 타격 및 득점 효율
+**E (Efficiency)** — 박스 타격 및 득점 효율
 
 **S (Space)** — 공간 장악 및 5-Lane 활용
 
@@ -328,7 +328,7 @@ TWIN_SECTOR_MATRIX = {
         },
     },
     "deep_box_lethality": {
-        "title": "\U0001f94a \uc2ec\uce35 \ud0c0\uaca9 \ud6a8\uc728",
+        "title": "\U0001f94a \ubc15\uc2a4 \ud0c0\uaca9 \ud6a8\uc728",
         "volume": "box_shots_volume_top_percent",
         "ratio": "micro_zoning_finishing_top_percent",
         "rows": {
@@ -610,11 +610,6 @@ def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
     for sector_id, sector in TWIN_SECTOR_MATRIX.items():
         volume_percent = getattr(rank, sector["volume"], None) if rank else None
         ratio_percent = getattr(rank, sector["ratio"], None) if rank else None
-        if sector_id == "deep_box_lethality" and getattr(rank, "false_nine_penalty", False):
-            volume_tier = _spear_tier(_radar_score(volume_percent)) if volume_percent is not None else "D"
-            text = "2선 연계와 전방위 공간 창출에 치중하는 전술적 롤(Role)을 부여받아, 심층 득점력 자체는 정통 스트라이커 대비 제한적인 자원"
-            summaries.append((sector["title"], f"[{volume_tier}×D] {text}"))
-            continue
         if volume_percent is None or ratio_percent is None:
             summaries.append((sector["title"], "[자료 부족] Insufficient Data"))
             continue
@@ -909,7 +904,7 @@ def render_head_to_head_profile_headers(
                     st.caption(f"산출 팩터 {coverage}/{len(SPEAR_FACTOR_AXES)}개 기준의 잠정 점수")
 
                 identities = spatial_identity_badges(
-                    ratio, force_type_b=bool(getattr(rank, "false_nine_penalty", False)),
+                    ratio, force_type_b=False,
                 )
                 footprint = activity_coverage_identity(rank)
                 # The order is tactical lane identity, activity coverage, then
@@ -1557,11 +1552,11 @@ def render_spear_leaderboard(
     display = table.rename(columns={
         "rank": "순위", "player_name": "선수", "team_name": "팀", "league_name": "리그",
         "score": "M.E.S.S.I.", "tier": "티어", "role": "기본 롤",
-        "outside_shot_tier": "박스 밖 슈팅", "deep_box_tier": "심층 타격",
+        "outside_shot_tier": "박스 밖 슈팅", "deep_box_tier": "박스 타격",
         "danger_zone_tier": "위험 구역", "aerial_tier": "공중볼",
         "ground_duel_tier": "지상 경합", "space_control_tier": "공간 장악",
     })[[
-        "순위", "선수", "팀", "리그", "M.E.S.S.I.", "티어", "박스 밖 슈팅", "심층 타격",
+        "순위", "선수", "팀", "리그", "M.E.S.S.I.", "티어", "박스 밖 슈팅", "박스 타격",
         "위험 구역", "공중볼", "지상 경합", "공간 장악", "기본 롤",
     ]].copy()
     display.insert(
@@ -1874,10 +1869,9 @@ def render_v32_analysis_center() -> None:
                     opponent_ratio,
                 )
         return
-    # A role override recalculates only the selected player's score against
-    # the same natural-role cohort.  The cached calculation makes switching
-    # instantaneous while still applying the backend Soft Floor rules.
-    default_role = "type_b" if getattr(rank, "false_nine_penalty", False) else "type_a"
+    # Role remains a tactical descriptor. Both views use the identical,
+    # transparent six-factor score formula and never mask box activity.
+    default_role = "type_b" if getattr(rank, "is_type_b", False) else "type_a"
     title_col, role_col, help_col = st.columns([4.2, 3.0, 1.0])
     with role_col:
         selected_role = st.radio(
@@ -1917,12 +1911,15 @@ def render_v32_analysis_center() -> None:
                     selected_stats.league_id, filters["season"], filters["comparison_scope"],
                 )
             )
-            st.caption(f"동적 가중치 적용: {getattr(rank, 'spear_role', 'Type A · 정통 타겟/포처')}")
+            st.caption(
+                f"전술 역할: {getattr(rank, 'spear_role', 'Type A · 정통 타겟/포처')} "
+                "· 모든 역할에 동일한 6개 팩터 가중치 적용"
+            )
             if spear_coverage < len(SPEAR_FACTOR_AXES):
                 st.caption(f"현재 산출 가능한 팩터 {spear_coverage}/{len(SPEAR_FACTOR_AXES)}개 기준의 잠정 점수입니다.")
             identities = spatial_identity_badges(
                 tactical_ratio,
-                force_type_b=getattr(rank, "false_nine_penalty", False),
+                force_type_b=False,
             )
             if identities:
                 st.markdown("**💡 전술 공간 아이덴티티**")
@@ -1957,7 +1954,7 @@ def render_v32_analysis_center() -> None:
         with activity_col:
             render_activity_ratio(
                 player.player_id, player.name, tactical_ratio,
-                force_type_b=getattr(rank, "false_nine_penalty", False),
+                force_type_b=False,
                 rank=rank,
             )
         with heatmap_col:
@@ -2363,7 +2360,7 @@ def render_messi_about_page() -> None:
             "Q2. M.E.S.S.I.는 무엇의 약자인가요?",
             "\n".join([
                 "- **M — Micro-zoning:** 박스 안 골드·실버·브론즈 존과 활동 위치 분석",
-                "- **E — Efficiency:** 심층 타격과 득점 효율",
+                "- **E — Efficiency:** 박스 타격과 득점 효율",
                 "- **S — Space:** 핵심 활동 반경(CCA)과 5-Lane 공간 활용",
                 "- **S — Striking:** 위험 구역 파괴와 박스 밖 슈팅력",
                 "- **I — Intensity:** 지상·공중 경합 및 물리적 강도",
@@ -2392,7 +2389,7 @@ def render_messi_about_page() -> None:
         (
             "Q6. 6개 평가 축은 무엇을 보나요?",
             "\n".join([
-                "1. **심층 타격 효율** — 박스 안 생산성과 유리한 마무리 구역 점유",
+                "1. **박스 타격 효율** — 박스 안 생산성과 유리한 마무리 구역 점유",
                 "2. **위험 구역 파괴력** — 전진·돌파로 수비 블록을 흔드는 능력",
                 "3. **박스 밖 슈팅력** — 외곽 타격의 볼륨과 순도",
                 "4. **공간 장악력** — CCA, 위험 구역 점유, 5-Lane 활용",
@@ -2402,10 +2399,9 @@ def render_messi_about_page() -> None:
         ),
         (
             "Q7. Type A와 Type B는 어떻게 달라지나요?",
-            "**Type A(정통 9번)**는 Box Ratio가 15% 이상인 선수로, 심층 타격 효율에 가장 큰 30% "
-            "가중치를 둡니다. **Type B(펄스 나인)**는 15% 미만으로, 심층 타격 효율을 0%로 두는 대신 "
-            "위험 구역 파괴력과 공간 장악력에 각각 30%를 부여합니다. 이는 역할 차이를 감점이 아니라 "
-            "평가 기준의 전환으로 처리하기 위한 장치입니다.",
+            "**Type A(정통 9번)**와 **Type B(펄스 나인)**는 Box Ratio 15%를 기준으로 한 활동 성향 분류입니다. "
+            "두 유형 모두 박스 타격 효율을 포함한 동일한 6개 팩터와 동일 가중치로 평가됩니다. 따라서 Type B의 "
+            "박스 침투·마무리 데이터도 마스킹하거나 총점에서 제외하지 않습니다.",
         ),
         (
             "Q8. M.E.S.S.I. 점수와 티어는 어떻게 읽나요?",
@@ -2422,9 +2418,8 @@ def render_messi_about_page() -> None:
         ),
         (
             "Q10. 자료 부족이나 역할 미스매치는 어떻게 처리하나요?",
-            "공간·마이크로 조닝 표본이 부족하면 해당 사실을 UI에 표시하고 임의의 평균값으로 숨기지 않습니다. "
-            "또한 역할 탭에서 본래 역할과 다른 롤을 시뮬레이션할 때 결측치가 생기면, 원래 티어를 기준으로 한 "
-            "Soft Floor를 적용해 비현실적인 0점 붕괴를 방지합니다.",
+            "공간·마이크로 조닝 표본이 부족하면 해당 사실을 UI에 표시하고 임의의 평균값이나 보정값으로 숨기지 않습니다. "
+            "Type A·B 역할 표기는 전술 성향을 설명할 뿐, 박스 타격 수치나 총점 가중치를 마스킹·보정하지 않습니다.",
         ),
     ]
     for index, (question, answer) in enumerate(questions):
