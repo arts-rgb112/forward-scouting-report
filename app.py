@@ -65,8 +65,12 @@ def cached_league_medians(
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_tactical_matrix(
     league_id: int, season_name: str, restrict_to_forwards: bool, minimum_final_third_ratio: int,
+    comparison_scope: int,
 ) -> pd.DataFrame:
-    return get_tactical_matrix(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
+    return get_tactical_matrix(
+        league_id, season_name, restrict_to_forwards,
+        minimum_final_third_ratio, comparison_scope,
+    )
 
 
 RADAR_AXES = [
@@ -1206,7 +1210,10 @@ def build_radar_profile(
         return None
     return None
 
-def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, selected_name: str) -> None:
+def render_tactical_matrix(
+    matrix: pd.DataFrame, selected_player_id: str, selected_name: str,
+    comparison_label: str = "동일 대회 기준",
+) -> None:
     if matrix.empty:
         st.info("사분면을 구성할 수 있는 비교군 데이터가 없습니다.")
         return
@@ -1226,9 +1233,11 @@ def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, select
     
     figure = go.Figure()
     figure.add_trace(go.Scatter(
-        x=background["net_progression_per90"], y=background["in_box_xgot_minus_xg"], mode="markers",
+        x=background["net_progression_per90"], y=background["in_box_xgot_minus_xg"],
+        mode="markers+text", text=background["player_name"], textposition="top center",
         customdata=background[["player_name", "team_name", "net_progression_per90", "in_box_xgot_minus_xg"]],
         marker={"size": 10, "color": "rgba(140, 140, 140, 0.45)"},
+        textfont={"size": 10, "color": "rgba(185, 185, 185, 0.88)"},
         hovertemplate=("<b>%{customdata[0]}</b><br>%{customdata[1]}<br>"
                        "Net Progression /90: %{customdata[2]:.2f}<br>"
                        "In-Box xGOT - xG: %{customdata[3]:.2f}<extra></extra>"),
@@ -1248,9 +1257,9 @@ def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, select
 
     quadrants = [
         (x_range[0], x_median, y_median, y_range[1], "rgba(78, 121, 167, 0.08)", "포처"),
-        (x_median, x_range[1], y_median, y_range[1], "rgba(89, 161, 79, 0.10)", "컴플리트 포워드"),
-        (x_range[0], x_median, y_range[0], y_median, "rgba(225, 87, 89, 0.07)", "전술적 보완 필요"),
-        (x_median, x_range[1], y_range[0], y_median, "rgba(242, 142, 43, 0.08)", "딥라잉 포워드"),
+        (x_median, x_range[1], y_median, y_range[1], "rgba(89, 161, 79, 0.10)", "컴플리트포워드"),
+        (x_range[0], x_median, y_range[0], y_median, "rgba(225, 87, 89, 0.07)", "컴플리트낙제점"),
+        (x_median, x_range[1], y_range[0], y_median, "rgba(242, 142, 43, 0.08)", "펄스나인"),
     ]
     for x0, x1, y0, y1, color, label in quadrants:
         figure.add_shape(type="rect", x0=x0, x1=x1, y0=y0, y1=y1, fillcolor=color, line={"width": 0}, layer="below")
@@ -1261,7 +1270,7 @@ def render_tactical_matrix(matrix: pd.DataFrame, selected_player_id: str, select
     figure.update_layout(
         template="plotly_dark" if is_dark else "plotly_white", height=600,
         margin={"l": 25, "r": 25, "t": 45, "b": 25}, showlegend=False,
-        title="전술 사분면 매트릭스",
+        title=f"전술 사분면 매트릭스 · {comparison_label}",
         xaxis={"title": "Net Progression / 90분", "range": x_range, "zeroline": True},
         yaxis={"title": "In-Box xGOT - xG", "range": y_range, "zeroline": True},
     )
@@ -1565,7 +1574,10 @@ def render_player_report(
             )
 
             try:
-                matrix = cached_tactical_matrix(stats.league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
+                matrix = cached_tactical_matrix(
+                    stats.league_id, season_name, restrict_to_forwards,
+                    minimum_final_third_ratio, comparison_scope,
+                )
                 if str(player.player_id) not in matrix.get("player_id", pd.Series(dtype=str)).astype(str).tolist():
                     matrix = pd.concat([matrix, pd.DataFrame([{
                         "player_id": str(player.player_id), "player_name": player.name,
@@ -1573,8 +1585,14 @@ def render_player_report(
                         "net_progression_per90": net_progression,  # 수정한 지역 변수 사용
                         "in_box_xgot_minus_xg": stats.in_box_finishing,
                     }])], ignore_index=True)
-                st.caption("📊 전술 사분면 매트릭스")
-                render_tactical_matrix(matrix, player.player_id, player.name)
+                st.caption(
+                    "📊 전술 사분면 매트릭스 · "
+                    + comparison_population_criteria(stats.league_id, season_str, comparison_scope)
+                )
+                render_tactical_matrix(
+                    matrix, player.player_id, player.name,
+                    comparison_population_label(stats.league_id, comparison_scope),
+                )
             except Exception:
                 st.caption("사분면 매트릭스를 구성할 비교 집단 데이터가 없습니다.")
 
