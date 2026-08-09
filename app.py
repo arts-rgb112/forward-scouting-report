@@ -1042,7 +1042,7 @@ def render_season_heatmap(
     st.markdown("#### 📍 시즌 활동 히트맵")
     st.caption(
         "저장된 시즌 좌표를 기반으로 활동 밀도를 표시합니다. 공격 방향은 화면 왼쪽→오른쪽이며, "
-        "화면 위는 우측 레인(Lane 1), 아래는 좌측 레인(Lane 5)입니다. 5-Lane 막대와 같은 좌표 기준을 사용합니다."
+        "화면 아래는 우측 레인(Lane 1), 위는 좌측 레인(Lane 5)입니다. 5-Lane 막대와 같은 좌표 기준을 사용합니다."
     )
     if not points:
         st.caption("정적 히트맵 좌표 데이터가 아직 생성되지 않았습니다.")
@@ -1081,11 +1081,11 @@ def render_season_heatmap(
         figure.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=line, fillcolor=fill, layer="below")
     figure.add_shape(type="line", x0=50, y0=0, x1=50, y1=100, line=line)
     figure.add_shape(type="circle", x0=43, y0=43, x1=57, y1=57, line=line)
-    # SportsAPI Y=0 is the top touchline in this attack-left-to-right view.
-    # In the provider's attacking orientation that is the player's right flank:
-    # Lane 1/2 = right side, Lane 4/5 = left side. Reverse only Plotly's display
-    # axis so its top edge keeps that same provider orientation.
-    figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [0, 100], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [100, 0], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True, "constrain": "domain"}, showlegend=False)
+    # SportsAPI Y=0 is the player's right touchline. Plotly's ordinary axis
+    # places that coordinate at the bottom, which matches the conventional
+    # viewer perspective for left-to-right attacking: right wing below, left
+    # wing above. Keep raw coordinates and only use that display orientation.
+    figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [0, 100], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True, "constrain": "domain"}, showlegend=False)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
 
 
