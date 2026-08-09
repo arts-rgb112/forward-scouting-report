@@ -2107,7 +2107,10 @@ def _queue_top_navigation(page: str) -> None:
 def render_leaderboard_page() -> None:
     """Page 1 — independent scouting-pool search and ranking list."""
     st.title("🔍 선수 검색 및 리더보드")
-    st.caption("정적 M.E.S.S.I. 스냅샷으로 즉시 정렬되며, 선수 이름을 클릭하면 상세 리포트로 이동합니다.")
+    st.caption(
+        "정적 M.E.S.S.I. 스냅샷으로 즉시 정렬되며, 검색 결과에서 선수를 직접 선택하거나 "
+        "선수 이름을 클릭하면 상세 리포트로 이동합니다."
+    )
     league_options = {
         "통합 리그 범위": 47,
         "Premier League": 47, "LaLiga": 87, "Bundesliga": 54,
@@ -2165,7 +2168,7 @@ def render_leaderboard_page() -> None:
     active_role = _query_text("role", "전체")
     active_query = _query_text("search", "")
     if active_query:
-        st.caption("검색 결과에서 선수를 직접 선택하면 상세 분석 리포트로 이동합니다.")
+        st.markdown("#### 🔎 검색 결과")
         candidate = select_player(active_query, "leaderboard_search_player_v2", "검색 결과")
         if candidate:
             _route(
@@ -2173,6 +2176,11 @@ def render_leaderboard_page() -> None:
                 team=candidate.team_name or "", season=active_season, scope=default_scope,
             )
             st.rerun()
+
+    # Keep the direct-player search visually separate from the broad scouting
+    # tables, whether a query is active or not.
+    st.divider()
+    st.markdown("#### 🏆 리더보드")
     european_competitions = {
         "유럽대항전 통합 (UCL · UEL · UECL)": EUROPEAN_LEADERBOARD_ID,
         "UEFA Champions League": 42,
