@@ -150,6 +150,28 @@ def _static_session_rows(player_id: str, season: str) -> list[tuple[str, Decisio
         rows.append((f"{season}_{league_id}", metric))
     return sorted(rows, key=lambda item: ((item[1].league_name or ""), item[1].league_id or 0))
 
+
+def _resolve_static_player(player: PlayerCandidate, season: str) -> PlayerCandidate:
+    """Use a season-local cached ID when search returns a stale replacement ID."""
+    target_season = _long_season_name(season)
+    cohorts = [
+        cohort for (_, cohort_season), cohort in load_spear_cohort().items()
+        if cohort_season == target_season
+    ]
+    if any(str(player.player_id) in cohort for cohort in cohorts) or not player.name.strip():
+        return player
+    normalise = lambda value: "".join(char for char in str(value).casefold() if char.isalnum())
+    target_name = normalise(player.name)
+    matches: dict[str, tuple[str, DecisionMetrics]] = {}
+    for cohort in cohorts:
+        for cached_id, (cached_name, metric) in cohort.items():
+            if normalise(cached_name) == target_name:
+                matches[str(cached_id)] = (cached_name, metric)
+    if len(matches) != 1:
+        return player
+    cached_id, (cached_name, metric) = next(iter(matches.items()))
+    return PlayerCandidate(cached_id, cached_name or player.name, metric.team_name or player.team_name)
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_percentiles(
     player_id: str, season: str, metrics: DecisionMetrics, min_xg: float,
@@ -2251,12 +2273,39 @@ def _render_role_overview(player, filters: dict[str, object], stats: DecisionMet
 def render_player_detail_page() -> None:
     """Page 2 — URL-addressable player detail report with role tabs."""
     st.title("📊 선수 상세 분석 리포트")
+    season_options = ["25/26", "24/25", "23/24", "22/23", "21/22"]
+    saved_season = _query_text("season", "25/26")
+    with st.container(border=True):
+        search_col, season_col = st.columns([2.2, 1])
+        with search_col:
+            detail_query = st.text_input(
+                "선수명 검색", key="detail_player_query",
+                placeholder="예: Antoine Semenyo",
+                help="두 글자 이상 입력하면 후보 목록에서 선택할 수 있습니다.",
+            )
+        with season_col:
+            detail_season = st.selectbox(
+                "분석 시즌", season_options,
+                index=season_options.index(saved_season) if saved_season in season_options else 0,
+                key="detail_season_picker",
+            )
+        selected_candidate = (
+            select_player(detail_query, "detail_search_player")
+            if len(detail_query.strip()) >= 2 else None
+        )
+        if selected_candidate:
+            _route(
+                "detail", player=selected_candidate.player_id, name=selected_candidate.name,
+                team=selected_candidate.team_name or "", season=detail_season, scope=_query_scope(),
+            )
+            st.rerun()
     player_id = _query_text("player")
     if not player_id:
-        st.info("리더보드에서 선수를 선택하거나, 검색 페이지에서 선수명을 입력해 주세요.")
+        st.info("위 검색창에서 선수를 선택하거나, 리더보드에서 선수를 선택해 주세요.")
         return
     filters = {"season": _query_text("season", "25/26"), "scope": _query_scope()}
     player = PlayerCandidate(player_id, _query_text("name", "선수"), _query_text("team", ""))
+    player = _resolve_static_player(player, filters["season"])
     try:
         sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
     except (FotMobError, TypeError, ValueError, KeyError):
@@ -2379,6 +2428,8 @@ def render_head_to_head_page() -> None:
         return
     left_player = PlayerCandidate(filters["left_id"], filters["left_name"], filters.get("left_team") or None)
     right_player = PlayerCandidate(filters["right_id"], filters["right_name"], filters.get("right_team") or None)
+    left_player = _resolve_static_player(left_player, str(filters["left_season"]))
+    right_player = _resolve_static_player(right_player, str(filters["right_season"]))
     try:
         left_sessions = extract_multi_season_metrics(cached_player_data(left_player.player_id))
     except (FotMobError, TypeError, ValueError, KeyError) as exc:
