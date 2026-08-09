@@ -602,6 +602,7 @@ def render_twin_radar_sector_summaries(rank) -> None:
 def render_spear_radar(
     player_name: str, rank, stats: DecisionMetrics | None, *, volume: bool,
     tactical_ratio: dict[str, object] | None = None, comparison_label: str = "동일 대회 기준",
+    chart_key: str | None = None,
 ) -> None:
     """Render one of the synchronized volume/ratio S.P.E.A.R. radars."""
     axes = VOLUME_FACTOR_AXES if volume else SPEAR_FACTOR_AXES
@@ -662,7 +663,9 @@ def render_spear_radar(
         },
         legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"},
     )
-    st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(
+        figure, use_container_width=True, config={"displayModeBar": False}, key=chart_key,
+    )
 
 
 def render_spear_head_to_head(left_name: str, left_rank, right_name: str, right_rank) -> None:
@@ -1740,9 +1743,17 @@ def render_v32_analysis_center() -> None:
     volume_col, ratio_col = st.columns(2)
     selected_population_label = comparison_population_label(selected_stats.league_id, filters["comparison_scope"])
     with volume_col:
-        render_spear_radar(player.name, rank, selected_stats, volume=True, tactical_ratio=tactical_ratio, comparison_label=selected_population_label)
+        render_spear_radar(
+            player.name, rank, selected_stats, volume=True, tactical_ratio=tactical_ratio,
+            comparison_label=selected_population_label,
+            chart_key=f"analysis_radar_{player.player_id}_{selected_stats.league_id}_{filters['season']}_volume",
+        )
     with ratio_col:
-        render_spear_radar(player.name, rank, selected_stats, volume=False, tactical_ratio=tactical_ratio, comparison_label=selected_population_label)
+        render_spear_radar(
+            player.name, rank, selected_stats, volume=False, tactical_ratio=tactical_ratio,
+            comparison_label=selected_population_label,
+            chart_key=f"analysis_radar_{player.player_id}_{selected_stats.league_id}_{filters['season']}_ratio",
+        )
     if rank is None:
         st.caption("비교군 데이터를 불러오지 못한 축은 중립값(50)과 C 등급으로 표시됩니다.")
     render_twin_radar_sector_summaries(rank)
@@ -1875,9 +1886,17 @@ def _render_role_overview(player, filters: dict[str, object], stats: DecisionMet
     volume_col, ratio_col = st.columns(2)
     population_label = comparison_population_label(stats.league_id, int(filters["scope"]))
     with volume_col:
-        render_spear_radar(player.name, rank, stats, volume=True, tactical_ratio=tactical_ratio, comparison_label=population_label)
+        render_spear_radar(
+            player.name, rank, stats, volume=True, tactical_ratio=tactical_ratio,
+            comparison_label=population_label,
+            chart_key=f"detail_radar_{player.player_id}_{stats.league_id}_{filters['season']}_{role}_volume",
+        )
     with ratio_col:
-        render_spear_radar(player.name, rank, stats, volume=False, tactical_ratio=tactical_ratio, comparison_label=population_label)
+        render_spear_radar(
+            player.name, rank, stats, volume=False, tactical_ratio=tactical_ratio,
+            comparison_label=population_label,
+            chart_key=f"detail_radar_{player.player_id}_{stats.league_id}_{filters['season']}_{role}_ratio",
+        )
     render_twin_radar_sector_summaries(rank)
     return rank
 
