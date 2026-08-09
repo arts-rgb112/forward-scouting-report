@@ -2259,9 +2259,11 @@ def render_player_detail_page() -> None:
     player = PlayerCandidate(player_id, _query_text("name", "선수"), _query_text("team", ""))
     try:
         sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
-    except FotMobError:
+    except (FotMobError, TypeError, ValueError, KeyError):
         # An archived cohort may still contain this player/season even after
-        # the mutable player-history response has been removed upstream.
+        # the mutable player-history response has been removed upstream. The
+        # extra structural exceptions are an upstream-response safety net: an
+        # unavailable player must render a fallback notice, never a red page.
         sessions = {}
     session_rows = [(key, stats) for key, stats in sessions.items() if key.split("_", 1)[0] == filters["season"]]
     using_static_snapshot = False
@@ -2379,12 +2381,12 @@ def render_head_to_head_page() -> None:
     right_player = PlayerCandidate(filters["right_id"], filters["right_name"], filters.get("right_team") or None)
     try:
         left_sessions = extract_multi_season_metrics(cached_player_data(left_player.player_id))
-    except FotMobError as exc:
+    except (FotMobError, TypeError, ValueError, KeyError) as exc:
         left_sessions = {}
         st.caption(f"A 선수의 현재 이력 API를 읽지 못해 정적 시즌 스냅샷을 확인합니다: {exc}")
     try:
         right_sessions = extract_multi_season_metrics(cached_player_data(right_player.player_id))
-    except FotMobError as exc:
+    except (FotMobError, TypeError, ValueError, KeyError) as exc:
         right_sessions = {}
         st.caption(f"B 선수의 현재 이력 API를 읽지 못해 정적 시즌 스냅샷을 확인합니다: {exc}")
     left_candidates = [
