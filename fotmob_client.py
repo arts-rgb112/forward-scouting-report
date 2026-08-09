@@ -178,7 +178,8 @@ _CUP_HINTS = ("cup", "copa", "super")
 
 
 def _league_selections(
-    data: dict[str, Any], max_seasons: int = 3, competitions_per_season: int = 4
+    data: dict[str, Any], max_seasons: int = 3, competitions_per_season: int = 4,
+    target_season: str | None = None,
 ) -> list[dict[str, Any]]:
     """Choose the domestic-league tournament, and (if present) the Champions
     League/Europa League tournament, from the latest club seasons.
@@ -193,6 +194,8 @@ def _league_selections(
     seasons_seen = 0
     for row in data.get("statSeasons", []):
         if not isinstance(row, dict) or not re.fullmatch(r"\d{4}/\d{4}", str(row.get("seasonName"))):
+            continue
+        if target_season and row.get("seasonName") != target_season:
             continue
         tournaments = row.get("tournaments", [])
         if not isinstance(tournaments, list) or not tournaments:
@@ -221,15 +224,23 @@ def _league_selections(
             continue
         selections.extend(season_selections)
         seasons_seen += 1
-        if seasons_seen == max_seasons:
+        if target_season or seasons_seen == max_seasons:
             break
     return selections
 
 
-def fetch_player_multi_season_data(player_id: str) -> dict[str, Any]:
+def fetch_player_multi_season_data(
+    player_id: str, *, target_season: str | None = None,
+) -> dict[str, Any]:
+    """Fetch selected club competitions, optionally for one historical season.
+
+    Interactive reports retain the latest-three-season behaviour.  Batch
+    cohort builders pass ``target_season`` so a 21/22 request does not silently
+    stop after inspecting only a player's three most recent seasons.
+    """
     base = fetch_player_next_data(player_id)
     season_records = []
-    for index, selection in enumerate(_league_selections(base)):
+    for index, selection in enumerate(_league_selections(base, target_season=target_season)):
         if index:
             time.sleep(1.2)
         try:
