@@ -2216,10 +2216,17 @@ def render_leaderboard_page() -> None:
         section_title=f"🌍 {european_name} · M.E.S.S.I. 리더보드",
     )
     st.divider()
+    leaderboard_scope_name = st.selectbox(
+        "리그 리더보드", list(league_scope_options),
+        index=list(league_scope_options).index(active_league_name)
+        if active_league_name in league_scope_options else 0,
+        key=f"league_leaderboard_scope_{active_season}",
+        help="3대 리그: Premier League·LaLiga·Serie A / 5대 리그: 3대 리그 + Bundesliga·Ligue 1",
+    )
     league_selected = render_spear_leaderboard(
-        active_season, active_scope, league_options.get(active_league_name, 47),
+        active_season, league_scope_options[leaderboard_scope_name], 47,
         active_position, active_role,
-        section_title=f"🏆 {active_league_name} · 리그 M.E.S.S.I. 리더보드",
+        section_title=f"🏆 {leaderboard_scope_name} · 리그 M.E.S.S.I. 리더보드",
     )
     selected = european_selected or league_selected
     if selected:
