@@ -17,7 +17,6 @@ from rankings import (
     get_spear_leaderboard,
     get_tactical_matrix,
     get_top_leagues_shot_quality,
-    messi_rank_tier,
 )
 from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
@@ -639,6 +638,35 @@ def _spear_tier(score: float) -> str:
     return "D"
 
 
+_MESSI_RANK_TIER_BANDS = (
+    ("💎", "다이아몬드", 0.0, 4.0),
+    ("❇️", "플래티넘", 4.0, 11.0),
+    ("🥇", "골드", 11.0, 40.0),
+    ("🥈", "실버", 40.0, 77.0),
+    ("🥉", "브론즈", 77.0, 96.0),
+    ("⚙️", "아이언", 96.0, 100.0),
+)
+
+
+def _messi_rank_tier(rank: int | None, population: int) -> str:
+    """Render the score's relative tier without an import-time dependency.
+
+    The same band definition lives in ``rankings.py`` for the static
+    leaderboard.  Keeping this tiny display helper local lets a Streamlit
+    rolling deploy start safely even if its cached rankings module is one
+    revision behind app.py.
+    """
+    if rank is None or rank < 1 or population < 1:
+        return "—"
+    top_percent = min(100.0, max(0.0, ((rank - 1) / population) * 100.0))
+    for index, (icon, title, start, end) in enumerate(_MESSI_RANK_TIER_BANDS):
+        if top_percent <= end or index == len(_MESSI_RANK_TIER_BANDS) - 1:
+            width = (end - start) / 5.0
+            level = min(5, max(1, int((top_percent - start) / width) + 1))
+            return f"{icon} {title} {level}"
+    return "⚙️ 아이언 5"
+
+
 def comparison_population_label(league_id: int | None, scope: int) -> str:
     if league_id == EUROPEAN_LEADERBOARD_ID:
         return "유럽대항전 통합(UCL·UEL·UECL) 기준"
@@ -676,7 +704,7 @@ def _spear_total(rank) -> tuple[float | None, str | None, int]:
             for sector in TWIN_SECTOR_MATRIX.values()
             if sector["volume"] not in imputed and sector["ratio"] not in imputed
         )
-        return score, messi_rank_tier(
+        return score, _messi_rank_tier(
             getattr(rank, "spear_score_rank", None),
             int(getattr(rank, "spear_score_eligible", 0) or 0),
         ), covered_axes
