@@ -32,9 +32,14 @@ COMPETITIONS = {
     "UEFA Europa Conference League": 108,
 }
 
-def build(season_name: str) -> list[dict[str, object]]:
+def build(
+    season_name: str, competition_names: tuple[str, ...] | list[str] | None = None,
+) -> list[dict[str, object]]:
+    """Build one season, optionally refreshing only selected competition slices."""
     output: list[dict[str, object]] = []
-    for competition_name, league_id in COMPETITIONS.items():
+    selected_competitions = tuple(competition_names or COMPETITIONS.keys())
+    for competition_name in selected_competitions:
+        league_id = COMPETITIONS[competition_name]
         try:
             metrics_by_player, _ = _fetch_live_spear_cohort(
                 league_id, season_name, True, 0,
@@ -105,8 +110,12 @@ def write(rows: list[dict[str, object]]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--season-name", default="2025/2026")
+    parser.add_argument(
+        "--competitions", nargs="+", choices=tuple(COMPETITIONS),
+        help="Optional competition slices to refresh; defaults to every supported competition.",
+    )
     args = parser.parse_args()
-    rows = build(args.season_name)
+    rows = build(args.season_name, args.competitions)
     if not rows:
         raise SystemExit("No S.P.E.A.R. cohort rows were generated; preserving no partial data.")
     write(rows)
