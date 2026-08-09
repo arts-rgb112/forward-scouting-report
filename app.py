@@ -2293,15 +2293,15 @@ def render_player_detail_page() -> None:
     st.caption("역할은 해당 대회·시즌의 박스 점유율을 기준으로 자동 분류됩니다. 수동 탭 전환은 점수나 역할 표기를 바꾸지 않습니다.")
     rank = _render_role_overview(player, filters, selected_stats, tactical_ratio)
     if using_static_snapshot:
-        st.caption("과거 원본 선수 이력이 제공되지 않아, 세부 바·히트맵은 해당 시즌 데이터 보강 후 표시됩니다.")
-        return
-    st.divider()
-    st.subheader("세부 상대평가")
-    render_player_report(
-        player, [str(filters["season"])], "전체", True, 0,
-        show_activity=False, selected_league_id=selected_stats.league_id,
-        comparison_scope=int(filters["scope"]),
-    )
+        st.caption("과거 원본 선수 이력 API가 없는 시즌입니다. 세부 상대평가 바는 생략하고, 적재된 공간·히트맵 데이터를 표시합니다.")
+    else:
+        st.divider()
+        st.subheader("세부 상대평가")
+        render_player_report(
+            player, [str(filters["season"])], "전체", True, 0,
+            show_activity=False, selected_league_id=selected_stats.league_id,
+            comparison_scope=int(filters["scope"]),
+        )
     with st.expander(f"📍 {filters['season']} · {selected_stats.league_name or '선택 대회'} 공간·활동량", expanded=True):
         activity_col, heatmap_col = st.columns([1, 1.45])
         with activity_col:
@@ -2379,10 +2379,14 @@ def render_head_to_head_page() -> None:
     right_player = PlayerCandidate(filters["right_id"], filters["right_name"], filters.get("right_team") or None)
     try:
         left_sessions = extract_multi_season_metrics(cached_player_data(left_player.player_id))
+    except FotMobError as exc:
+        left_sessions = {}
+        st.caption(f"A 선수의 현재 이력 API를 읽지 못해 정적 시즌 스냅샷을 확인합니다: {exc}")
+    try:
         right_sessions = extract_multi_season_metrics(cached_player_data(right_player.player_id))
     except FotMobError as exc:
-        st.error(f"선수 세션 데이터를 불러오지 못했습니다: {exc}")
-        return
+        right_sessions = {}
+        st.caption(f"B 선수의 현재 이력 API를 읽지 못해 정적 시즌 스냅샷을 확인합니다: {exc}")
     left_candidates = [
         (key, stats) for key, stats in left_sessions.items()
         if key.split("_", 1)[0] == filters["left_season"]
@@ -2391,6 +2395,10 @@ def render_head_to_head_page() -> None:
         (key, stats) for key, stats in right_sessions.items()
         if key.split("_", 1)[0] == filters["right_season"]
     ]
+    if not left_candidates:
+        left_candidates = _static_session_rows(left_player.player_id, filters["left_season"])
+    if not right_candidates:
+        right_candidates = _static_session_rows(right_player.player_id, filters["right_season"])
     if not left_candidates or not right_candidates:
         missing = "A 선수" if not left_candidates else "B 선수"
         missing_season = filters["left_season"] if not left_candidates else filters["right_season"]
