@@ -173,7 +173,9 @@ def fetch_league_stat_table(league_id: int, season_name: str, stat: str) -> list
     return [row for row in rows if isinstance(row, dict)]
 
 
-_CONTINENTAL_HINTS = ("champions league", "ucl", "europa")
+_CONTINENTAL_HINTS = (
+    "champions league", "ucl", "europa league", "conference league",
+)
 _CUP_HINTS = ("cup", "copa", "super")
 
 
@@ -181,8 +183,7 @@ def _league_selections(
     data: dict[str, Any], max_seasons: int = 3, competitions_per_season: int = 4,
     target_season: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Choose the domestic-league tournament, and (if present) the Champions
-    League/Europa League tournament, from the latest club seasons.
+    """Choose the domestic league and any UEFA club competition from club seasons.
 
     FotMob lists a club season's tournaments starting with the domestic league;
     other entries in the same season can be cups, super cups, or continental

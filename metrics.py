@@ -367,7 +367,13 @@ def find_stat_value(raw_data: Any, season: str, titles: set[str]) -> Optional[fl
     return None
 
 
-TARGET_LEAGUES = ["premier league", "laliga", "bundesliga", "serie a", "ligue 1", "champions league", "ucl"]
+# These are the competitions that feed reports and S.P.E.A.R. cohorts.  Keep
+# all three UEFA competitions here: before Europa/Conference were added, their
+# raw FotMob records were fetched correctly but silently discarded below.
+TARGET_LEAGUES = [
+    "premier league", "laliga", "bundesliga", "serie a", "ligue 1",
+    "champions league", "ucl", "europa league", "conference league",
+]
 _FORWARD_POSITION_KEYS = {"f", "forward", "striker", "attacker", "centre-forward", "center-forward", "winger"}
 _MIDFIELDER_POSITION_KEYS = {"m", "midfielder", "central midfielder", "attacking midfielder", "wide midfielder"}
 
@@ -423,7 +429,10 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
         # 컵 대회 등 원치 않는 대회 차단
         if not any(t in lname_lower for t in TARGET_LEAGUES):
             continue
-        if "cup" in lname_lower and "champions" not in lname_lower:
+        if "cup" in lname_lower and not any(
+            continental in lname_lower
+            for continental in ("champions", "europa", "conference")
+        ):
             continue
         if "copa" in lname_lower or "super" in lname_lower or "friendlies" in lname_lower:
             continue
@@ -435,6 +444,8 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
         elif "bundesliga" in lname_lower: league_id = 54
         elif "serie a" in lname_lower: league_id = 55
         elif "champions" in lname_lower: league_id = 42
+        elif "europa league" in lname_lower and "conference" not in lname_lower: league_id = 73
+        elif "conference league" in lname_lower: league_id = 108
 
         stats_payload = record.get("stats")
         zone_totals = _shotmap_zone_totals(stats_payload.get("shotmap") if isinstance(stats_payload, dict) else None)

@@ -10,6 +10,7 @@ from urllib.parse import quote
 from fotmob_client import FotMobError, PlayerCandidate, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
 from rankings import (
+    EUROPEAN_LEADERBOARD_ID,
     calculate_league_percentiles,
     get_league_metric_medians,
     get_spear_leaderboard,
@@ -451,7 +452,9 @@ def _spear_tier(score: float) -> str:
 
 
 def comparison_population_label(league_id: int | None, scope: int) -> str:
-    cup_names = {42: "챔피언스리그", 73: "유로파리그", 102: "컨퍼런스리그"}
+    if league_id == EUROPEAN_LEADERBOARD_ID:
+        return "유럽대항전 통합(UCL·UEL·UECL) 기준"
+    cup_names = {42: "챔피언스리그", 73: "유로파리그", 108: "컨퍼런스리그"}
     if league_id in cup_names:
         return f"{cup_names[league_id]} 기준"
     return f"{scope}대 리그 기준" if scope in (3, 5, 7) else "동일 대회 기준"
@@ -459,8 +462,9 @@ def comparison_population_label(league_id: int | None, scope: int) -> str:
 
 def comparison_population_criteria(league_id: int | None, season: str, scope: int) -> str:
     """Make the ranking cohort explicit beside every S.P.E.A.R. rank."""
-    minimum_minutes = 180 if league_id in {42, 73, 102} else 450
-    minimum_xg = 1.0 if league_id in {42, 73, 102} else 2.0
+    is_european = league_id == EUROPEAN_LEADERBOARD_ID or league_id in {42, 73, 108}
+    minimum_minutes = 180 if is_european else 450
+    minimum_xg = 1.0 if is_european else 2.0
     return (
         f"기준: {season} 시즌 · {comparison_population_label(league_id, scope)} · "
         f"최소 {minimum_minutes}분 · xG {minimum_xg:.1f} 이상"
@@ -1497,8 +1501,8 @@ def render_player_report(
                 return getattr(rank, attr, None) if rank else None
 
             progression_eligible = get_rank("progression_eligible") or 0
-            minimum_minutes = 180 if stats.league_id in (42, 73, 102) else 450
-            minimum_xg = 1.0 if stats.league_id in {42, 73, 102} else 2.0
+            minimum_minutes = 180 if stats.league_id in (42, 73, 108) else 450
+            minimum_xg = 1.0 if stats.league_id in {42, 73, 108} else 2.0
             cohort_label = f"{comparison_population_label(stats.league_id, comparison_scope)} · {minimum_minutes}분 이상 · xG {minimum_xg:.1f} 이상"
             with st.expander(
                 f"🏃 순수 전진 기여도 상대평가 · {cohort_label} · 비교군 {progression_eligible}명",
@@ -1837,9 +1841,10 @@ def render_leaderboard_page() -> None:
     active_role = _query_text("role", "전체")
     active_query = _query_text("search", "")
     european_competitions = {
+        "유럽대항전 통합 (UCL · UEL · UECL)": EUROPEAN_LEADERBOARD_ID,
         "UEFA Champions League": 42,
         "UEFA Europa League": 73,
-        "UEFA Conference League": 102,
+        "UEFA Conference League": 108,
     }
     european_name = st.selectbox(
         "유럽대항전 리더보드", list(european_competitions),
