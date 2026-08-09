@@ -65,7 +65,7 @@ def build(season_name: str) -> list[dict[str, object]]:
                 "season_name": season_name,
                 **payload,
             })
-        print(f"{competition_name}: cached {len(metrics_by_player)} same-competition xG1+ players")
+        print(f"{competition_name}: cached {len(metrics_by_player)} eligible players")
     return output
 
 
