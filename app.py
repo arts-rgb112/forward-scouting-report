@@ -2008,11 +2008,26 @@ def _render_role_overview(player, filters: dict[str, object], stats: DecisionMet
         f" ({score_rank}위 / {score_population}명 · 상위 {score_percent:.1f}%)"
         if score_rank and score_percent is not None and score_population else ""
     )
-    st.subheader(f"[{spear_tier}-Tier] M.E.S.S.I. {spear_score:.1f}/100{rank_text}")
-    st.caption(comparison_population_criteria(stats.league_id, str(filters["season"]), int(filters["scope"])))
-    st.caption(f"적용 롤: {getattr(rank, 'spear_role', role)} · 산출 팩터 {spear_coverage}/6개")
+    score_col, portrait_col = st.columns([7.2, 0.8])
+    with score_col:
+        st.subheader(f"[{spear_tier}-Tier] M.E.S.S.I. {spear_score:.1f}/100{rank_text}")
+        st.caption(comparison_population_criteria(stats.league_id, str(filters["season"]), int(filters["scope"])))
+        st.caption(f"적용 롤: {getattr(rank, 'spear_role', role)} · 산출 팩터 {spear_coverage}/6개")
+    with portrait_col:
+        # FotMob's player-image CDN uses the same stable player id used by
+        # this report, so the portrait stays aligned when the user changes
+        # season, competition, or role view.
+        st.image(
+            f"https://images.fotmob.com/image_resources/playerimages/{player.player_id}.png",
+            width=76,
+        )
+
     identities = spatial_identity_badges(tactical_ratio, force_type_b=role == "type_b")
     for badge, text in identities:
+        st.markdown(f"**[{badge}]** : {text}")
+    footprint = activity_coverage_identity(rank)
+    if footprint:
+        badge, text = footprint
         st.markdown(f"**[{badge}]** : {text}")
     volume_col, ratio_col = st.columns(2)
     population_label = comparison_population_label(stats.league_id, int(filters["scope"]))
