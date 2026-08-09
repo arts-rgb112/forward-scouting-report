@@ -5,6 +5,7 @@ import numpy as np
 import math
 import itertools
 import html
+import json
 from urllib.parse import quote
 
 from fotmob_client import FotMobError, PlayerCandidate, fetch_player_multi_season_data, search_players
@@ -22,7 +23,100 @@ from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_
 
 _UNIFIED_BAR_COUNTER = itertools.count()
 
+# A GA4 measurement ID is public by design: it is delivered to the browser
+# with the Google tag.  A Streamlit secret can override this default later
+# (for example, when messi.kr uses a separate production data stream).
+DEFAULT_GA_MEASUREMENT_ID = "G-8ZFS0ZM3NS"
+
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="wide")
+
+
+def _ga_measurement_id() -> str:
+    """Return a validated GA4 measurement ID without exposing any secret."""
+    try:
+        configured = str(st.secrets.get("GA_MEASUREMENT_ID", DEFAULT_GA_MEASUREMENT_ID)).strip()
+    except Exception:
+        configured = DEFAULT_GA_MEASUREMENT_ID
+    return configured if configured.startswith("G-") else ""
+
+
+def _render_ga_javascript(script: str) -> None:
+    """Run trusted GA JavaScript in Streamlit's app document, not an iframe."""
+    if not hasattr(st, "html"):
+        return
+    st.html(f"<script>{script}</script>", unsafe_allow_javascript=True)
+
+
+def initialize_ga4_tracking() -> None:
+    """Load GA4 once and emit one page view for each URL-level app page."""
+    measurement_id = _ga_measurement_id()
+    if not measurement_id:
+        return
+    measurement_json = json.dumps(measurement_id)
+    _render_ga_javascript(
+        "(() => {"
+        f"const measurementId = {measurement_json};"
+        "window.dataLayer = window.dataLayer || [];"
+        "window.gtag = window.gtag || function(){ window.dataLayer.push(arguments); };"
+        "if (!window.__messiGa4Loaded) {"
+        "  const tag = document.createElement('script');"
+        "  tag.async = true;"
+        "  tag.src = 'https://www.googletagmanager.com/gtag/js?id=' + measurementId;"
+        "  document.head.appendChild(tag);"
+        "  window.gtag('js', new Date());"
+        "  window.gtag('config', measurementId, {send_page_view: false});"
+        "  window.__messiGa4Loaded = true;"
+        "}"
+        "const pagePath = window.location.pathname + window.location.search;"
+        "if (window.__messiGa4LastPath !== pagePath) {"
+        "  window.gtag('event', 'page_view', {page_path: pagePath, page_title: document.title});"
+        "  window.__messiGa4LastPath = pagePath;"
+        "}"
+        "})();"
+    )
+
+
+def queue_ga_event(event_name: str, **params: object) -> None:
+    """Persist one non-PII interaction event across the following rerun."""
+    st.session_state["_pending_ga_event"] = {
+        "name": event_name,
+        "params": {key: str(value) for key, value in params.items() if value not in (None, "")},
+    }
+
+
+def emit_ga_event(event_name: str, **params: object) -> None:
+    """Send one trusted, non-PII GA4 interaction event."""
+    if not event_name or not _ga_measurement_id():
+        return
+    event_params = {key: str(value) for key, value in params.items() if value not in (None, "")}
+    _render_ga_javascript(
+        "(() => {"
+        "window.dataLayer = window.dataLayer || [];"
+        "window.gtag = window.gtag || function(){ window.dataLayer.push(arguments); };"
+        f"window.gtag('event', {json.dumps(event_name)}, {json.dumps(event_params)});"
+        "})();"
+    )
+
+
+def emit_ga_event_once(event_name: str, fingerprint: str, **params: object) -> None:
+    """Avoid duplicate detail events caused by harmless Streamlit reruns."""
+    state_key = f"_ga_event_once_{event_name}"
+    if st.session_state.get(state_key) == fingerprint:
+        return
+    st.session_state[state_key] = fingerprint
+    emit_ga_event(event_name, **params)
+
+
+def emit_queued_ga_event() -> None:
+    """Send the interaction queued before a Streamlit rerun or URL change."""
+    pending = st.session_state.pop("_pending_ga_event", None)
+    if not pending or not _ga_measurement_id():
+        return
+    event_name = str(pending.get("name", ""))
+    event_params = pending.get("params", {})
+    if not event_name or not isinstance(event_params, dict):
+        return
+    emit_ga_event(event_name, **event_params)
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_search(term: str):
@@ -1949,6 +2043,15 @@ def render_leaderboard_page() -> None:
             st.write("")
             submitted = st.form_submit_button("적용", use_container_width=True, type="primary")
         if submitted:
+            # Deliberately omit the raw search phrase: GA only receives the
+            # selected scouting dimensions, never arbitrary visitor input.
+            queue_ga_event(
+                "leaderboard_filter_apply",
+                season=active_season,
+                league=league_name,
+                position=position,
+                role=role,
+            )
             _route("leaderboard", season=active_season, scope=default_scope, league_name=league_name, position=position, role=role, search=query.strip())
             st.rerun()
 
@@ -2090,6 +2193,13 @@ def render_player_detail_page() -> None:
         key=f"detail_competition_{player.player_id}_{filters['season']}",
     )
     _, selected_stats = session_rows[selected_index]
+    emit_ga_event_once(
+        "player_report_open",
+        f"{player.player_id}:{filters['season']}:{selected_stats.league_id}",
+        player_name=player.name,
+        season=filters["season"],
+        competition=selected_stats.league_name or "unknown",
+    )
     tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", str(filters["season"]))
     type_a_tab, type_b_tab = st.tabs(["🎯 정통 9번 뷰 (Type A)", "👻 펄스 나인 뷰 (Type B)"])
     with type_a_tab:
@@ -2158,6 +2268,14 @@ def render_head_to_head_page() -> None:
                 "right_name": right_player.name,
                 "right_team": right_player.team_name or "",
             }
+            emit_ga_event(
+                "player_comparison_open",
+                left_player=left_player.name,
+                left_season=left_season,
+                right_player=right_player.name,
+                right_season=right_season,
+                comparison_scope=scope,
+            )
     filters = st.session_state.h2h_filters
     # Drop the pre-autocomplete form state from an already-open browser
     # session after deployment, so legacy {left, right} values cannot cause a
@@ -2326,6 +2444,12 @@ def main() -> None:
     if requested_page in pages and requested_page != current:
         _route(requested_page)
         st.rerun()
+
+    # This tag executes in the app document and keeps page views deduplicated
+    # across ordinary Streamlit widget reruns.  Queued events are emitted only
+    # after the target page URL has become active.
+    initialize_ga4_tracking()
+    emit_queued_ga_event()
 
     # Top navigation keeps the three product surfaces visible without taking
     # permanent horizontal space from the scouting visuals as a sidebar does.
