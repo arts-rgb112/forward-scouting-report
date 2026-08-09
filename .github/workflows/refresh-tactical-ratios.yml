@@ -7,6 +7,10 @@ on:
         description: Season label used by SportsAPI discovery (for example 2025/2026)
         required: true
         default: "2025/2026"
+      season_names:
+        description: Optional comma-separated batch of seasons, processed sequentially
+        required: false
+        default: ""
   schedule:
     - cron: "15 3 * * 1"
 
@@ -30,9 +34,23 @@ jobs:
           SPORTSAPIPRO_ALL_LEAGUES_API_KEY: ${{ secrets.SPORTSAPIPRO_ALL_LEAGUES_API_KEY }}
           SPORTSAPIPRO_TOURNAMENT_API_KEY: ${{ secrets.SPORTSAPIPRO_TOURNAMENT_API_KEY }}
           SPORTSAPIPRO_API_KEY: ${{ secrets.SPORTSAPIPRO_API_KEY }}
-        run: python scripts/build_tactical_ratios.py --season-name "${{ inputs.season_name || '2025/2026' }}"
+        run: |
+          seasons="${{ inputs.season_names }}"
+          if [ -z "$seasons" ]; then
+            seasons="${{ inputs.season_name || '2025/2026' }}"
+          fi
+          IFS=',' read -ra season_list <<< "$seasons"
+          for raw_season in "${season_list[@]}"; do
+            season="$(echo "$raw_season" | xargs)"
+            [ -n "$season" ] || continue
+            echo "Refreshing tactical data for $season"
+            python scripts/build_tactical_ratios.py --season-name "$season"
+          done
       - name: Commit refreshed static data
-        if: success()
+        # Each completed competition is checkpointed by the ETL.  Persist that
+        # work even when a later competition reaches the API quota, so the next
+        # run resumes from the last durable season/tournament checkpoint.
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
