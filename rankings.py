@@ -389,6 +389,22 @@ def get_spear_leaderboard(
     danger_scores = scores(spatial_values("danger_zone_density"))
     cca_scores = scores(spatial_values("cca_area_pct"))
     progression_scores = _combined_scores(dribble_scores, danger_scores, 0.70)
+    volume_scores = {
+        "outside_box": scores({pid: metric.out_box_shots for pid, metric in peers.items() if metric.out_box_shots is not None}),
+        "box": scores({pid: metric.in_box_shots for pid, metric in peers.items() if metric.in_box_shots is not None}),
+        "dribble": scores({pid: metric.dribble_attempts for pid, metric in peers.items() if metric.dribble_attempts is not None}),
+        "aerial": scores({pid: metric.aerial_duel_attempts for pid, metric in peers.items() if metric.aerial_duel_attempts is not None}),
+        "ground": scores({pid: metric.ground_duel_attempts for pid, metric in peers.items() if metric.ground_duel_attempts is not None}),
+        "space": cca_scores,
+    }
+    sector_scores = {
+        "outside_box": _combined_scores(volume_scores["outside_box"], scores({pid: metric.out_box_shot_quality for pid, metric in peers.items() if metric.out_box_shot_quality is not None}), 0.50),
+        "box": _combined_scores(volume_scores["box"], deep_scores, 0.50),
+        "danger": _combined_scores(volume_scores["dribble"], progression_scores, 0.50),
+        "aerial": _combined_scores(volume_scores["aerial"], aerial_scores, 0.50),
+        "ground": _combined_scores(volume_scores["ground"], duel_scores, 0.50),
+        "space": _combined_scores(volume_scores["space"], danger_scores, 0.50),
+    }
 
     records: list[dict[str, object]] = []
     for player_id, metric in peers.items():
@@ -398,8 +414,9 @@ def get_spear_leaderboard(
         # never turn a conventional box player into a false nine.
         is_type_b = row is not None and box_ratio < 15.0
         weights = (
-            (deep_scores, 0.30), (shot_scores, 0.20), (progression_scores, 0.15),
-            (cca_scores, 0.15), (aerial_scores, 0.10), (duel_scores, 0.10),
+            (sector_scores["box"], 0.30), (sector_scores["outside_box"], 0.20),
+            (sector_scores["danger"], 0.15), (sector_scores["space"], 0.15),
+            (sector_scores["aerial"], 0.10), (sector_scores["ground"], 0.10),
         )
         if not all(player_id in source for source, _ in weights):
             continue
@@ -417,12 +434,12 @@ def get_spear_leaderboard(
             "tier": _spear_tier(score),
             "role": "Type B" if is_type_b else "Type A",
             "position": metric.position or metric.position_group or "미분류",
-            "outside_shot_tier": factor_tier(shot_scores),
-            "deep_box_tier": factor_tier(deep_scores),
-            "danger_zone_tier": factor_tier(progression_scores),
-            "aerial_tier": factor_tier(aerial_scores),
-            "ground_duel_tier": factor_tier(duel_scores),
-            "space_control_tier": factor_tier(cca_scores),
+            "outside_shot_tier": factor_tier(sector_scores["outside_box"]),
+            "deep_box_tier": factor_tier(sector_scores["box"]),
+            "danger_zone_tier": factor_tier(sector_scores["danger"]),
+            "aerial_tier": factor_tier(sector_scores["aerial"]),
+            "ground_duel_tier": factor_tier(sector_scores["ground"]),
+            "space_control_tier": factor_tier(sector_scores["space"]),
         })
     table = pd.DataFrame(records)
     if table.empty:
@@ -694,6 +711,13 @@ def calculate_league_percentiles(
     aerial_attempts_pct, aerial_attempts_rank = volume_rank("aerial_duel_attempts")
     ground_attempts_pct, ground_attempts_rank = volume_rank("ground_duel_attempts")
     xg_volume_pct, xg_volume_rank = volume_rank("xg")
+    volume_scores = {
+        "outside_box": _scores_from_population({peer_id: peer.out_box_shots for peer_id, peer in peers.items() if peer.out_box_shots is not None}),
+        "box": _scores_from_population({peer_id: peer.in_box_shots for peer_id, peer in peers.items() if peer.in_box_shots is not None}),
+        "dribble": _scores_from_population({peer_id: peer.dribble_attempts for peer_id, peer in peers.items() if peer.dribble_attempts is not None}),
+        "aerial": _scores_from_population({peer_id: peer.aerial_duel_attempts for peer_id, peer in peers.items() if peer.aerial_duel_attempts is not None}),
+        "ground": _scores_from_population({peer_id: peer.ground_duel_attempts for peer_id, peer in peers.items() if peer.ground_duel_attempts is not None}),
+    }
 
     # S.P.E.A.R. 2.0 spatial factors are sourced only from the exact
     # player/competition/season heatmap session.  A missing heatmap row stays
@@ -735,6 +759,10 @@ def calculate_league_percentiles(
     }
     danger_values = spatial_values("danger_zone_density")
     cca_values = spatial_values("cca_area_pct")
+    out_box_scores = _scores_from_population({
+        peer_id: peer.out_box_shot_quality
+        for peer_id, peer in peers.items() if peer.out_box_shot_quality is not None
+    })
     micro_scores = _scores_from_population(micro_values)
     danger_scores = _scores_from_population(danger_values)
     cca_scores = _scores_from_population(cca_values)
@@ -753,6 +781,16 @@ def calculate_league_percentiles(
     }
     base_deep_box_scores = dict(deep_box_scores)
     danger_progression_scores = _combined_scores(dribble_scores, danger_scores, 0.70)
+    sector_scores = {
+        # Each M.E.S.S.I. sector is the exact pair visualised by the volume ×
+        # ratio grid: equal credit for repeated involvement and effectiveness.
+        "outside_box": _combined_scores(volume_scores["outside_box"], out_box_scores, 0.50),
+        "box": _combined_scores(volume_scores["box"], base_deep_box_scores, 0.50),
+        "danger": _combined_scores(volume_scores["dribble"], danger_progression_scores, 0.50),
+        "aerial": _combined_scores(volume_scores["aerial"], aerial_scores, 0.50),
+        "ground": _combined_scores(volume_scores["ground"], duel_scores, 0.50),
+        "space": _combined_scores(cca_scores, danger_scores, 0.50),
+    }
     micro_pct, micro_rank = _rank_score(player_key, micro_scores)
     deep_box_pct, deep_box_rank = _rank_score(player_key, deep_box_scores)
     danger_pct, danger_rank = _rank_score(player_key, danger_progression_scores)
@@ -761,9 +799,9 @@ def calculate_league_percentiles(
     # Role is descriptive only. Every player uses the same six-factor formula;
     # Type B no longer receives a masked box score or a score shield.
     common_weights = (
-        (base_deep_box_scores, 0.30), (spear_shot_scores, 0.20),
-        (danger_progression_scores, 0.15), (cca_scores, 0.15),
-        (aerial_scores, 0.10), (duel_scores, 0.10),
+        (sector_scores["box"], 0.30), (sector_scores["outside_box"], 0.20),
+        (sector_scores["danger"], 0.15), (sector_scores["space"], 0.15),
+        (sector_scores["aerial"], 0.10), (sector_scores["ground"], 0.10),
     )
 
     def is_type_b(peer_id: str) -> bool:
@@ -793,8 +831,7 @@ def calculate_league_percentiles(
     if active_score is not None:
         spear_scores[player_key] = active_score
     spear_score_top_percent, spear_score_rank = _rank_score(player_key, spear_scores)
-    # Keep the original weighted S.P.E.A.R. scale for the rating and tier.
-    # Rank/Top % remain a separate, same-session relative comparison.
+    # Tier and rank use the same volume-and-ratio blended M.E.S.S.I. score.
     spear_score = spear_scores.get(player_key)
     progression_eligible = int(progression_percentiles["cohort_count"])
     duels_eligible = progression_eligible
