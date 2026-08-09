@@ -1714,6 +1714,19 @@ def render_spear_leaderboard(
         "Type A": "정통형", "Type B": "펄스 나인형",
     }).fillna(display["기본 롤"])
     display["M.E.S.S.I."] = display["M.E.S.S.I."].map(lambda value: f"{value:.1f}")
+
+    # Streamlit's interactive dataframe sorts text lexicographically, which
+    # puts an A-tier ahead of S-tier on a descending sort.  Prefix each visible
+    # label with invisible word joiners so the underlying string order matches
+    # football tier order (S > A > B > C > D) without changing the UI label.
+    tier_sort_weight = {"S": 5, "A": 4, "B": 3, "C": 2, "D": 1}
+    factor_tier_columns = [
+        "박스 밖 슈팅", "박스 안 슈팅", "드리블 능력", "공중 경합", "지상 경합", "오프더볼",
+    ]
+    for column in factor_tier_columns:
+        display[column] = display[column].map(
+            lambda value: "\u2060" * tier_sort_weight.get(str(value), 0) + str(value)
+        )
     st.dataframe(
         display, use_container_width=True, hide_index=True, height=430,
         column_config={
