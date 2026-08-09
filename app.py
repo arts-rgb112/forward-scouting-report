@@ -1307,7 +1307,7 @@ def style_dataframe(df: pd.DataFrame):
     except Exception:
         return df
 
-def select_player(query: str, key: str):
+def select_player(query: str, key: str, label: str = "선수 선택"):
     if not query.strip():
         return None
     try:
@@ -1319,7 +1319,7 @@ def select_player(query: str, key: str):
         st.warning("일치하는 선수를 찾지 못했습니다.")
         return None
     labels = [f"{row.name} · {row.team_name}" if row.team_name else row.name for row in candidates]
-    return candidates[st.selectbox("선수 선택", range(len(candidates)), format_func=lambda i: labels[i], key=key)]
+    return candidates[st.selectbox(label, range(len(candidates)), format_func=lambda i: labels[i], key=key)]
 
 
 def render_spear_leaderboard(
@@ -1954,28 +1954,55 @@ def render_head_to_head_page() -> None:
     st.caption("두 선수는 같은 시즌·같은 대회에서 각자 독립된 상대평가를 받습니다.")
     if "h2h_filters" not in st.session_state:
         st.session_state.h2h_filters = None
-    with st.form("h2h_filters", border=True):
+    st.caption("선수명을 2자 이상 입력하면 후보 드롭다운에서 바로 선택할 수 있습니다.")
+    with st.container(border=True):
         season_col, scope_col, left_col, right_col, action_col = st.columns([1, 1, 2, 2, 1])
         with season_col:
             season = st.selectbox("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], key="h2h_season")
         with scope_col:
             scope = st.selectbox("비교 범위", [3, 5, 7], index=1, key="h2h_scope")
         with left_col:
-            left_query = st.text_input("왼쪽 선수", placeholder="예: Erling Haaland")
+            left_query = st.text_input("왼쪽 선수", key="h2h_left_query", placeholder="예: Erling Haaland")
+            left_player = (
+                select_player(left_query, "h2h_left_player", "왼쪽 선수 후보")
+                if len(left_query.strip()) >= 2 else None
+            )
         with right_col:
-            right_query = st.text_input("오른쪽 선수", placeholder="예: Robert Lewandowski")
+            right_query = st.text_input("오른쪽 선수", key="h2h_right_query", placeholder="예: Robert Lewandowski")
+            right_player = (
+                select_player(right_query, "h2h_right_player", "오른쪽 선수 후보")
+                if len(right_query.strip()) >= 2 else None
+            )
         with action_col:
             st.write("")
-            submit = st.form_submit_button("비교", use_container_width=True, type="primary")
-        if submit:
-            st.session_state.h2h_filters = {"season": season, "scope": scope, "left": left_query, "right": right_query}
+            st.write("")
+            submit = st.button(
+                "비교 시작", use_container_width=True, type="primary",
+                disabled=left_player is None or right_player is None,
+                key="h2h_submit",
+            )
+        if submit and left_player and right_player:
+            st.session_state.h2h_filters = {
+                "season": season,
+                "scope": scope,
+                "left_id": left_player.player_id,
+                "left_name": left_player.name,
+                "left_team": left_player.team_name or "",
+                "right_id": right_player.player_id,
+                "right_name": right_player.name,
+                "right_team": right_player.team_name or "",
+            }
     filters = st.session_state.h2h_filters
+    # Drop the pre-autocomplete form state from an already-open browser
+    # session after deployment, so legacy {left, right} values cannot cause a
+    # KeyError before the user makes a new selection.
+    if filters and "left_id" not in filters:
+        st.session_state.h2h_filters = None
+        filters = None
     if not filters:
         return
-    left_player = select_player(str(filters["left"]), "h2h_left_player")
-    right_player = select_player(str(filters["right"]), "h2h_right_player")
-    if not left_player or not right_player:
-        return
+    left_player = PlayerCandidate(filters["left_id"], filters["left_name"], filters.get("left_team") or None)
+    right_player = PlayerCandidate(filters["right_id"], filters["right_name"], filters.get("right_team") or None)
     try:
         left_sessions = extract_multi_season_metrics(cached_player_data(left_player.player_id))
         right_sessions = extract_multi_season_metrics(cached_player_data(right_player.player_id))
