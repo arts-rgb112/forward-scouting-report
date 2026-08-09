@@ -917,7 +917,15 @@ def calculate_league_percentiles(
     active_score = weighted_score(player_key, common_weights)
     if active_score is not None:
         spear_scores[player_key] = active_score
-    spear_score_top_percent, spear_score_rank = _rank_score(player_key, spear_scores)
+    # ``_rank_score`` returns ``100 - score`` for percentile-normalised single
+    # metrics.  A weighted M.E.S.S.I. total is not itself a percentile, so its
+    # visible top percentage must instead come from its actual rank and the
+    # full score cohort (e.g. 1st / 673 = top 0.1%, never 100 - 82.5 = 17.5%).
+    _, spear_score_rank = _rank_score(player_key, spear_scores)
+    spear_score_top_percent = (
+        round((spear_score_rank / len(spear_scores)) * 100.0, 1)
+        if spear_score_rank is not None and spear_scores else None
+    )
     # Tier and rank use the same volume-and-ratio blended M.E.S.S.I. score.
     spear_score = spear_scores.get(player_key)
     progression_eligible = int(progression_percentiles["cohort_count"])
