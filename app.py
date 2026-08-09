@@ -1889,16 +1889,20 @@ def _query_scope(default: int = 5) -> int:
 
 
 def _route(page: str, **params: object) -> None:
-    if page == "leaderboard":
-        # A player-specific URL must not survive an explicit return to the
-        # leaderboard.  Keeping it made navigation feel like the detail page
-        # was forced even when the sidebar selection had changed correctly.
-        for key in ("player", "name", "team", "label"):
-            if key in st.query_params:
-                del st.query_params[key]
-    st.query_params["page"] = page
-    for key, value in params.items():
-        st.query_params[key] = str(value)
+    """Replace the URL state atomically when moving between app surfaces."""
+    # Updating individual query parameters creates intermediate browser
+    # history states.  In particular, a Detail URL could retain its player
+    # context while the user was returning to the leaderboard.  Rebuilding
+    # the full URL ensures each top-level page starts with only its own state.
+    route_params = {"page": page}
+    route_params.update({key: str(value) for key, value in params.items()})
+    st.query_params.clear()
+    st.query_params.from_dict(route_params)
+
+
+def _queue_top_navigation(page: str) -> None:
+    """Defer URL mutation until the next Streamlit run triggered by a click."""
+    st.session_state["_pending_top_navigation"] = page
 
 
 def render_leaderboard_page() -> None:
@@ -2283,6 +2287,14 @@ def main() -> None:
     if current not in pages:
         current = "leaderboard"
 
+    # Button callbacks run before the script body.  Apply the queued page
+    # switch here so a Detail-page widget cannot interfere with the URL update
+    # that returns the user to the leaderboard.
+    requested_page = st.session_state.pop("_pending_top_navigation", None)
+    if requested_page in pages and requested_page != current:
+        _route(requested_page)
+        st.rerun()
+
     # Top navigation keeps the three product surfaces visible without taking
     # permanent horizontal space from the scouting visuals as a sidebar does.
     with st.container(border=True):
@@ -2297,12 +2309,15 @@ def main() -> None:
             (about_col, "about", pages["about"]),
         ):
             with column:
-                if st.button(
-                    label, key=f"top_navigation_{page}", use_container_width=True,
+                st.button(
+                    label,
+                    key=f"top_navigation_{page}",
+                    use_container_width=True,
                     type="primary" if current == page else "secondary",
-                ) and current != page:
-                    _route(page)
-                    st.rerun()
+                    disabled=current == page,
+                    on_click=_queue_top_navigation,
+                    args=(page,),
+                )
     st.divider()
     if current == "leaderboard":
         render_leaderboard_page()
