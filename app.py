@@ -1086,9 +1086,9 @@ def spatial_identity_badges(
             elif gold >= max(silver, bronze):
                 badges.append(("🥇 문전 심층 포처형", "발만 갖다 대면 득점이 되는 6야드 박스 안을 집요하게 파고드는 포식자"))
             elif silver >= bronze:
-                badges.append(("🥈 컷백 피니셔형", "무리한 심층 진입보다는 박스 정면 공간을 선점하며, 동료의 컷백 타격에 최적화"))
+                badges.append(("🥈 중앙 박스 피니셔형", "박스 중앙의 컷백·세컨드볼 구역을 선점하며 마무리 기회를 노리는 유형"))
             else:
-                badges.append(("🥉 박스 외곽 겉돎형", "상대 견제에 밀려 킬링 존 진입을 주저하고, 슈팅 각도가 제한적인 박스 측면을 맴도는 유형"))
+                badges.append(("🥉 박스 측면 활용형", "박스 측면과 제한된 슈팅 각도 구역의 활동 비중이 높은 유형"))
         else:
             badges.append((false_nine_badge, false_nine_text))
     else:
@@ -1238,7 +1238,7 @@ def render_activity_ratio(
     render_lane_analysis(player_name, ratio, rank=rank)
     zone_fields = (
         ("🥇 골드 존 · 6야드", "box_six_yard_ratio", "#F6C945"),
-        ("🥈 실버 존 · 페널티 스팟", "box_penalty_spot_ratio", "#CBD5E1"),
+        ("🥈 실버 존 · 중앙 박스", "box_penalty_spot_ratio", "#CBD5E1"),
         ("🥉 브론즈 존 · 와이드 박스", "box_wide_ratio", "#CD7F32"),
     )
     micro_values = [ratio.get(field) for _, field, _ in zone_fields]
@@ -2386,8 +2386,8 @@ def render_messi_about_page() -> None:
         (
             "Q5. 박스 내 마이크로 조닝은 무엇인가요?",
             "전체 활동 좌표 중 박스 안 좌표의 비율(Box Ratio)을 구하고, 박스 안을 골드 존(6야드), "
-            "실버 존(페널티 스폿), 브론즈 존(와이드 박스)으로 나눕니다. 골드 존 비중은 문전 침투, "
-            "실버 존은 컷백 대응, 브론즈 존은 제한된 각도에서의 활동 경향을 해석하는 근거입니다.",
+            "실버 존(중앙 박스), 브론즈 존(와이드 박스)으로 나눕니다. 골드 존 비중은 문전 침투, "
+            "실버 존은 중앙 컷백·세컨드볼 대응, 브론즈 존은 실제 측면 활동 경향을 해석하는 근거입니다.",
         ),
         (
             "Q6. 6개 평가 축은 무엇을 보나요?",

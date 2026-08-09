@@ -23,6 +23,72 @@ SPATIAL_FIELDS = (
 )
 
 
+def _micro_zone_metrics(points: list[list[float]]) -> dict[str, float] | None:
+    """Classify stored box activity using mutually exclusive spatial zones.
+
+    The former Bronze calculation was a residual bucket: it included central
+    activity between the box edge and the penalty spot.  That made a player
+    who occupied the middle of the box appear to be a wide-box player.  Gold
+    is the six-yard box, Silver is the remaining central box corridor, and
+    Bronze is now reserved for the actual wide sides of the penalty area.
+    """
+    parsed_points: list[tuple[float, float]] = []
+    for point in points:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            parsed_points.append((float(point[0]), float(point[1])))
+        except (TypeError, ValueError):
+            continue
+
+    box_points = [
+        (x, y) for x, y in parsed_points
+        if x >= 83.0 and 21.1 <= y <= 78.9
+    ]
+    if not box_points:
+        return None
+
+    total = float(len(box_points))
+    central = [(x, y) for x, y in box_points if 36.8 <= y <= 63.2]
+    gold = [(x, y) for x, y in central if x >= 94.0]
+    # The central corridor from the penalty-area edge to the six-yard box is
+    # one continuous cutback/finishing zone.  It must not be labelled "wide".
+    silver = [(x, y) for x, y in central if x < 94.0]
+    bronze = [(x, y) for x, y in box_points if not (36.8 <= y <= 63.2)]
+
+    gold_ratio = round(len(gold) / total * 100.0, 2)
+    silver_ratio = round(len(silver) / total * 100.0, 2)
+    bronze_ratio = round(len(bronze) / total * 100.0, 2)
+    return {
+        "box_six_yard_ratio": gold_ratio,
+        "box_penalty_spot_ratio": silver_ratio,
+        "box_wide_ratio": bronze_ratio,
+        "deep_box_zone_score": round(
+            (gold_ratio * 1.5 + silver_ratio * 1.0 + bronze_ratio * 0.5) / 1.5,
+            2,
+        ),
+    }
+
+
+def _with_current_micro_zone_definition(ratio: dict[str, float]) -> dict[str, float]:
+    """Apply the corrected zone definition to historical static rows too.
+
+    This uses already stored visual points only; it never calls SportsAPI.
+    Consequently deployed historical sessions are corrected immediately while
+    the next ETL refresh writes the same definition to the CSV.
+    """
+    points = get_heatmap_points(
+        str(ratio.get("fotmob_player_id", "")),
+        str(ratio.get("heatmap_key", "")) or None,
+    )
+    metrics = _micro_zone_metrics(points)
+    if not metrics:
+        return ratio
+    corrected = dict(ratio)
+    corrected.update(metrics)
+    return corrected
+
+
 def _normalise(value: object) -> str:
     return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
 
@@ -103,14 +169,14 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
 
 def get_tactical_ratio(player_id: str | int) -> Optional[dict[str, float]]:
     matches = [row for row in load_tactical_ratios().values() if str(row.get("fotmob_player_id")) == str(player_id)]
-    return matches[0] if matches else None
+    return _with_current_micro_zone_definition(matches[0]) if matches else None
 
 
 def get_tactical_ratio_by_name(player_name: str) -> Optional[dict[str, float]]:
     """Use only an unambiguous normalized-name fallback for duplicate search IDs."""
     normalized = re.sub(r"[^a-z0-9]", "", player_name.lower())
     matches = [ratio for ratio in load_tactical_ratios().values() if re.sub(r"[^a-z0-9]", "", str(ratio.get("player_name", "")).lower()) == normalized]
-    return matches[0] if len(matches) == 1 else None
+    return _with_current_micro_zone_definition(matches[0]) if len(matches) == 1 else None
 
 
 def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, season_label: str) -> Optional[dict[str, float]]:
@@ -121,7 +187,7 @@ def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, 
         and _same_competition(row.get("competition_name") or TOURNAMENT_NAMES.get(str(row.get("tournament_id")), ""), competition_name)
         and (not row.get("season_name") or _same_season(row.get("season_name"), season_label))
     ]
-    return candidates[0] if len(candidates) == 1 else None
+    return _with_current_micro_zone_definition(candidates[0]) if len(candidates) == 1 else None
 
 
 @functools.lru_cache(maxsize=1)
