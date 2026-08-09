@@ -370,6 +370,9 @@ def spatial_metrics(points: list[tuple[float, float]]) -> dict[str, float]:
 
     total = float(len(points))
     lane_counts = [0, 0, 0, 0, 0]
+    # Provider attacking orientation: y=0 is the player's right touchline
+    # (screen top in the app), and y=100 is the left touchline. Keep the raw
+    # Lane 1..5 keys stable; the UI owns the human-readable flank labels.
     for _, y in points:
         lane_counts[min(4, int(y // 20.0))] += 1
     for index, count in enumerate(lane_counts, start=1):
