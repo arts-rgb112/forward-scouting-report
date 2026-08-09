@@ -1605,7 +1605,16 @@ def select_player(query: str, key: str, label: str = "선수 선택"):
         st.warning("일치하는 선수를 찾지 못했습니다.")
         return None
     labels = [f"{row.name} · {row.team_name}" if row.team_name else row.name for row in candidates]
-    return candidates[st.selectbox(label, range(len(candidates)), format_func=lambda i: labels[i], key=key)]
+    # Never treat the first autocomplete match as a selection. Search endpoints
+    # often return several similarly named players, so navigation must wait for
+    # an explicit user choice from the visible candidate list.
+    options = [None, *range(len(candidates))]
+    selected_index = st.selectbox(
+        label, options,
+        format_func=lambda index: "선수를 선택하세요" if index is None else labels[index],
+        key=key,
+    )
+    return candidates[selected_index] if selected_index is not None else None
 
 
 def render_spear_leaderboard(
@@ -2155,6 +2164,15 @@ def render_leaderboard_page() -> None:
     active_position = _query_text("position", "전체")
     active_role = _query_text("role", "전체")
     active_query = _query_text("search", "")
+    if active_query:
+        st.caption("검색 결과에서 선수를 직접 선택하면 상세 분석 리포트로 이동합니다.")
+        candidate = select_player(active_query, "leaderboard_search_player_v2", "검색 결과")
+        if candidate:
+            _route(
+                "detail", player=candidate.player_id, name=candidate.name,
+                team=candidate.team_name or "", season=active_season, scope=default_scope,
+            )
+            st.rerun()
     european_competitions = {
         "유럽대항전 통합 (UCL · UEL · UECL)": EUROPEAN_LEADERBOARD_ID,
         "UEFA Champions League": 42,
@@ -2179,15 +2197,6 @@ def render_leaderboard_page() -> None:
     selected = european_selected or league_selected
     if selected:
         st.rerun()
-    if active_query:
-        st.divider()
-        candidate = select_player(active_query, "leaderboard_search_player")
-        if candidate:
-            _route(
-                "detail", player=candidate.player_id, name=candidate.name,
-                team=candidate.team_name or "", season=active_season, scope=default_scope,
-            )
-            st.rerun()
 
 
 def _render_role_overview(player, filters: dict[str, object], stats: DecisionMetrics, tactical_ratio, role: str = "auto") -> object:
