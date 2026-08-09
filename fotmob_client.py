@@ -83,9 +83,16 @@ def _payload_from_html(html: str) -> dict[str, Any]:
     if not match:
         raise FotMobError("The player page did not include its embedded data.")
     try:
-        return json.loads(match.group(1))["props"]["pageProps"]["data"]
+        payload = json.loads(match.group(1))["props"]["pageProps"]["data"]
     except (ValueError, KeyError, TypeError) as exc:
         raise PlayerNotFoundError("Could not read player data from the page.") from exc
+    # Some removed, merged, or temporarily unavailable player pages render a
+    # valid Next.js document with ``data: null``. Treat it as a normal FotMob
+    # availability error so Streamlit can fall back to a static cohort instead
+    # of leaking an AttributeError/TypeError from a later ``.get`` call.
+    if not isinstance(payload, dict):
+        raise PlayerNotFoundError("FotMob did not return a player data object.")
+    return payload
 
 
 def fetch_player_next_data(player_id: str, season: str | None = None, slug: str | None = None) -> dict[str, Any]:
@@ -191,6 +198,8 @@ def _league_selections(
     entry that looks continental, while skipping obvious cup competitions and
     one-year national-team seasons (World Cup, Nations League, etc.).
     """
+    if not isinstance(data, dict):
+        raise PlayerNotFoundError("FotMob did not return a player season history.")
     selections: list[dict[str, Any]] = []
     seasons_seen = 0
     for row in data.get("statSeasons", []):
