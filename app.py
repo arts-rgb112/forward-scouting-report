@@ -731,7 +731,7 @@ def render_head_to_head_cards(
     left_name: str, left_rank, left_stats, left_ratio,
     right_name: str, right_rank, right_stats, right_ratio,
 ) -> None:
-    """Show each player's matrix evidence independently; never concatenate copy."""
+    """Show both players' six sector descriptions in a scannable 3x2 grid."""
     left_cards = dict(twin_radar_sector_summaries(left_rank))
     right_cards = dict(twin_radar_sector_summaries(right_rank))
     # Stable sector IDs are the H2H data contract.  UI titles change as the
@@ -758,20 +758,73 @@ def render_head_to_head_cards(
         one, two = value(first), value(second)
         fmt = lambda item: "—" if item is None else f"{float(item):.2f}"
         return f"원시값 · {first_label} {fmt(one)} / {second_label} {fmt(two)}"
-    for sector_id, sector in TWIN_SECTOR_MATRIX.items():
+    st.markdown("### 🧩 분야별 볼륨 × 비율 교차 프로필")
+    st.caption("같은 분야에서 두 선수의 활동량과 효율 평가 문장을 나란히 비교합니다.")
+    columns = st.columns(3)
+    for index, (sector_id, sector) in enumerate(TWIN_SECTOR_MATRIX.items()):
         sector_title = sector["title"]
         left_text = left_cards.get(sector_title, "비교군 또는 공간 데이터 부족")
         right_text = right_cards.get(sector_title, "비교군 또는 공간 데이터 부족")
-        with st.expander(sector_title, expanded=False):
-            left_col, right_col = st.columns(2)
-            with left_col:
-                st.markdown(f"**{left_name}**")
+        with columns[index % 3]:
+            with st.container(border=True):
+                st.markdown(f"#### {sector_title}")
+                st.markdown(f"**🟦 {left_name}**")
                 st.write(left_text)
                 st.caption(raw_fact(sector_id, left_stats, left_ratio))
-            with right_col:
-                st.markdown(f"**{right_name}**")
+                st.divider()
+                st.markdown(f"**🟥 {right_name}**")
                 st.write(right_text)
                 st.caption(raw_fact(sector_id, right_stats, right_ratio))
+
+
+def render_head_to_head_profile_headers(
+    left_name: str, left_rank, left_stats, left_ratio: dict[str, object] | None, left_season: str,
+    right_name: str, right_rank, right_stats, right_ratio: dict[str, object] | None, right_season: str,
+    scope: int,
+) -> None:
+    """Keep scores and spatial identities visible before the H2H radar.
+
+    A comparison can now span seasons and competitions, so each card declares
+    its own cohort rather than implying that the two percentiles share one N.
+    """
+    st.markdown("### 👑 M.E.S.S.I. 프로필 비교")
+    left_col, right_col = st.columns(2)
+
+    def render_profile(column, name, rank, stats, ratio, season, color):
+        score, tier, coverage = _spear_total(rank)
+        score_text = "동기화 대기" if score is None else f"{score:.1f}/100"
+        with column:
+            with st.container(border=True):
+                st.markdown(f"#### {color} {name}")
+                st.metric("M.E.S.S.I. 점수", score_text, f"{tier}-Tier" if tier else None)
+                if stats is not None:
+                    league_name = stats.league_name or "대회 정보 없음"
+                    st.caption(f"{season} · {league_name}")
+                    st.caption(comparison_population_criteria(stats.league_id, season, scope))
+                if score is not None and rank is not None:
+                    score_rank = getattr(rank, "spear_score_rank", None)
+                    score_top_percent = getattr(rank, "spear_score_top_percent", None)
+                    population = getattr(rank, "spear_score_eligible", 0) or getattr(rank, "eligible_players", 0)
+                    if score_rank and score_top_percent is not None and population:
+                        st.caption(f"{score_rank}위 / {population}명 · 상위 {score_top_percent:.1f}%")
+                if coverage and coverage < len(SPEAR_FACTOR_AXES):
+                    st.caption(f"산출 팩터 {coverage}/{len(SPEAR_FACTOR_AXES)}개 기준의 잠정 점수")
+
+                identities = spatial_identity_badges(
+                    ratio, force_type_b=bool(getattr(rank, "false_nine_penalty", False)),
+                )
+                footprint = activity_coverage_identity(rank)
+                # The order is tactical lane identity, activity coverage, then
+                # micro-zoning: it matches the requested profile scan order.
+                lane_identity = identities[1] if len(identities) > 1 else None
+                micro_identity = identities[0] if identities else None
+                for identity in (lane_identity, footprint, micro_identity):
+                    if identity:
+                        badge, text = identity
+                        st.markdown(f"**[{badge}]** : {text}")
+
+    render_profile(left_col, left_name, left_rank, left_stats, left_ratio, left_season, "🟦")
+    render_profile(right_col, right_name, right_rank, right_stats, right_ratio, right_season, "🟥")
 
 
 def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards: bool, minimum_final_third_ratio: int):
@@ -940,6 +993,24 @@ def spatial_identity_badges(
     if profile:
         badges.append(profile)
     return badges
+
+
+def activity_coverage_identity(rank) -> tuple[str, str] | None:
+    """Describe the repeat-activity footprint used by the CCA radar axis."""
+    cca_top_percent = getattr(rank, "cca_area_top_percent", None) if rank else None
+    if cca_top_percent is None:
+        return None
+    coverage_score = max(0.0, min(100.0, 100.0 - float(cca_top_percent)))
+    if coverage_score >= 65.0:
+        badge = "🏃 활동 반경 넓은 전방위형"
+        text = "반복 활동 셀의 코어 커버리지가 비교군 평균보다 넓습니다"
+    elif coverage_score <= 35.0:
+        badge = "🏃 활동 반경 좁은 고립형"
+        text = "특정 구역에 머무르는 정적인 반복 동선이 확인됩니다"
+    else:
+        badge = "🏃 활동 반경 균형형"
+        text = "반복 활동 구역의 코어 커버리지가 비교군 중간권입니다"
+    return f"{badge} · 백분위 {coverage_score:.0f}", text
 
 
 def render_lane_analysis(player_name: str, ratio: dict[str, object], rank=None) -> None:
@@ -1978,28 +2049,30 @@ def render_player_detail_page() -> None:
 def render_head_to_head_page() -> None:
     """Page 3 — dedicated player-versus-player analysis."""
     st.title("⚔️ 비교 분석 집중 페이지")
-    st.caption("두 선수는 같은 시즌·같은 대회에서 각자 독립된 상대평가를 받습니다.")
+    st.caption("양쪽 선수의 시즌과 대회를 독립적으로 선택합니다. 백분위는 각자 선택한 대회의 동일 조건 모집단을 기준으로 계산됩니다.")
     if "h2h_filters" not in st.session_state:
         st.session_state.h2h_filters = None
     st.caption("선수명을 2자 이상 입력하면 후보 드롭다운에서 바로 선택할 수 있습니다.")
     with st.container(border=True):
-        season_col, scope_col, left_col, right_col, action_col = st.columns([1, 1, 2, 2, 1])
-        with season_col:
-            season = st.selectbox("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], key="h2h_season")
-        with scope_col:
-            scope = st.selectbox("비교 범위", [3, 5, 7], index=1, key="h2h_scope")
+        left_season_col, left_col, right_season_col, right_col, scope_col, action_col = st.columns([1, 2, 1, 2, 1, 1])
+        with left_season_col:
+            left_season = st.selectbox("A 시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], key="h2h_left_season")
         with left_col:
-            left_query = st.text_input("왼쪽 선수", key="h2h_left_query", placeholder="예: Erling Haaland")
+            left_query = st.text_input("A 선수", key="h2h_left_query", placeholder="예: Lionel Messi")
             left_player = (
-                select_player(left_query, "h2h_left_player", "왼쪽 선수 후보")
+                select_player(left_query, "h2h_left_player", "A 선수 후보")
                 if len(left_query.strip()) >= 2 else None
             )
+        with right_season_col:
+            right_season = st.selectbox("B 시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], key="h2h_right_season")
         with right_col:
-            right_query = st.text_input("오른쪽 선수", key="h2h_right_query", placeholder="예: Robert Lewandowski")
+            right_query = st.text_input("B 선수", key="h2h_right_query", placeholder="예: Lamine Yamal")
             right_player = (
-                select_player(right_query, "h2h_right_player", "오른쪽 선수 후보")
+                select_player(right_query, "h2h_right_player", "B 선수 후보")
                 if len(right_query.strip()) >= 2 else None
             )
+        with scope_col:
+            scope = st.selectbox("비교 범위", [3, 5, 7], index=1, key="h2h_scope")
         with action_col:
             st.write("")
             st.write("")
@@ -2010,7 +2083,8 @@ def render_head_to_head_page() -> None:
             )
         if submit and left_player and right_player:
             st.session_state.h2h_filters = {
-                "season": season,
+                "left_season": left_season,
+                "right_season": right_season,
                 "scope": scope,
                 "left_id": left_player.player_id,
                 "left_name": left_player.name,
@@ -2023,7 +2097,8 @@ def render_head_to_head_page() -> None:
     # Drop the pre-autocomplete form state from an already-open browser
     # session after deployment, so legacy {left, right} values cannot cause a
     # KeyError before the user makes a new selection.
-    if filters and "left_id" not in filters:
+    required_filter_keys = {"left_id", "right_id", "left_season", "right_season", "scope"}
+    if filters and not required_filter_keys.issubset(filters):
         st.session_state.h2h_filters = None
         filters = None
     if not filters:
@@ -2036,25 +2111,44 @@ def render_head_to_head_page() -> None:
     except FotMobError as exc:
         st.error(f"선수 세션 데이터를 불러오지 못했습니다: {exc}")
         return
-    right_season_stats = [
-        stats for key, stats in right_sessions.items()
-        if key.split("_", 1)[0] == filters["season"]
-    ]
-    candidates = [
+    left_candidates = [
         (key, stats) for key, stats in left_sessions.items()
-        if key.split("_", 1)[0] == filters["season"]
-        and any(other.league_id == stats.league_id for other in right_season_stats)
+        if key.split("_", 1)[0] == filters["left_season"]
     ]
-    if not candidates:
-        st.warning("두 선수의 공통 시즌·대회 세션을 찾지 못했습니다.")
+    right_candidates = [
+        (key, stats) for key, stats in right_sessions.items()
+        if key.split("_", 1)[0] == filters["right_season"]
+    ]
+    if not left_candidates or not right_candidates:
+        missing = "A 선수" if not left_candidates else "B 선수"
+        missing_season = filters["left_season"] if not left_candidates else filters["right_season"]
+        st.warning(f"{missing}의 {missing_season} 시즌 대회 세션을 찾지 못했습니다.")
         return
-    selected_index = st.selectbox("비교 대회", range(len(candidates)), format_func=lambda index: candidates[index][1].league_name or "대회 정보 없음")
-    _, left_stats = candidates[selected_index]
-    right_stats = next(stats for stats in right_season_stats if stats.league_id == left_stats.league_id)
-    left_rank = cached_percentiles(left_player.player_id, str(filters["season"]), left_stats, 1.0, True, 0, int(filters["scope"]))
-    right_rank = cached_percentiles(right_player.player_id, str(filters["season"]), right_stats, 1.0, True, 0, int(filters["scope"]))
-    left_ratio = get_tactical_ratio_for_session(left_player.player_id, left_stats.league_name or "", str(filters["season"]))
-    right_ratio = get_tactical_ratio_for_session(right_player.player_id, right_stats.league_name or "", str(filters["season"]))
+    left_selector, right_selector = st.columns(2)
+    with left_selector:
+        left_index = st.selectbox(
+            "A 선수 대회", range(len(left_candidates)), key="h2h_left_competition",
+            format_func=lambda index: left_candidates[index][1].league_name or "대회 정보 없음",
+        )
+    with right_selector:
+        right_index = st.selectbox(
+            "B 선수 대회", range(len(right_candidates)), key="h2h_right_competition",
+            format_func=lambda index: right_candidates[index][1].league_name or "대회 정보 없음",
+        )
+    _, left_stats = left_candidates[left_index]
+    _, right_stats = right_candidates[right_index]
+    left_season = str(filters["left_season"])
+    right_season = str(filters["right_season"])
+    scope = int(filters["scope"])
+    left_rank = cached_percentiles(left_player.player_id, left_season, left_stats, 1.0, True, 0, scope)
+    right_rank = cached_percentiles(right_player.player_id, right_season, right_stats, 1.0, True, 0, scope)
+    left_ratio = get_tactical_ratio_for_session(left_player.player_id, left_stats.league_name or "", left_season)
+    right_ratio = get_tactical_ratio_for_session(right_player.player_id, right_stats.league_name or "", right_season)
+    render_head_to_head_profile_headers(
+        left_player.name, left_rank, left_stats, left_ratio, left_season,
+        right_player.name, right_rank, right_stats, right_ratio, right_season,
+        scope,
+    )
     render_spear_head_to_head(left_player.name, left_rank, right_player.name, right_rank)
     render_head_to_head_cards(left_player.name, left_rank, left_stats, left_ratio, right_player.name, right_rank, right_stats, right_ratio)
 
