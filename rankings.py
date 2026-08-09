@@ -518,19 +518,29 @@ def get_league_metric_medians(
 @functools.lru_cache(maxsize=64)
 def get_tactical_matrix(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
-    minimum_final_third_ratio: int = 0,
+    minimum_final_third_ratio: int = 0, comparison_scope: int = 0,
 ) -> pd.DataFrame:
-    """Return the elite-dribbler cohort used in the tactical quadrant chart.
+    """Return the exact percentile cohort used in the tactical quadrant chart.
 
     Both axes are available only after the player-level fetch: Net Progression
     is composed from five event stats, while finishing is in-box xGOT minus xG.
     """
-    peers, _ = _fetch_elite_dribbler_metrics(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
-    leaderboard_rows = fetch_league_stat_table(league_id, season_name, "minutes_played")
-    names = {
-        str(row.get("id")): (str(row.get("name") or "").strip() or "선수 정보 미제공")
-        for row in leaderboard_rows
-    }
+    peers, _ = _fetch_elite_dribbler_metrics(
+        league_id, season_name, restrict_to_forwards,
+        minimum_final_third_ratio, comparison_scope,
+    )
+    # The old name lookup queried only ``league_id``.  When the report used a
+    # 3/5/7-league comparison scope, every peer from the added leagues then
+    # became "선수 정보 미제공".  Read names from the same static cohort used
+    # to form the percentile population instead.
+    target_leagues = (
+        frozenset({league_id}) if league_id in CUP_COMPETITION_IDS
+        else COMPARISON_SCOPES.get(comparison_scope, frozenset({league_id}))
+    )
+    names: dict[str, str] = {}
+    for target_league_id in target_leagues:
+        _, cohort_names = get_static_spear_cohort(target_league_id, season_name)
+        names.update(cohort_names)
     rows = []
     for player_id, metric in peers.items():
         net_progression = metric.net_progression_per90
