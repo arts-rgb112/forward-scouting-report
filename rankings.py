@@ -25,6 +25,10 @@ LEAGUE_MINIMUM_MINUTES = 450.0
 CUP_MINIMUM_MINUTES = 180.0
 LEAGUE_MINIMUM_XG = 2.0
 CUP_MINIMUM_XG = 1.0
+# A component omitted by the provider is never treated as average.  It gets a
+# visible, conservative D-tier floor so the six-sector score remains rankable
+# without disguising the missing source data.
+MISSING_COMPONENT_SCORE = 20.0
 COMPARISON_SCOPES = {
     3: frozenset({47, 55, 87}),
     5: frozenset({47, 53, 54, 55, 87}),
@@ -123,6 +127,8 @@ class LeaguePercentiles:
     spear_score_rank: Optional[int] = None
     spear_score_top_percent: Optional[float] = None
     spear_score_eligible: int = 0
+    spear_imputed_volume_attrs: tuple[str, ...] = ()
+    spear_imputed_ratio_attrs: tuple[str, ...] = ()
     is_type_b: bool = False
     spear_role: str = "Type A · 정통 타겟/포처"
 
@@ -206,6 +212,25 @@ def _combined_scores(
     return {
         player_id: round(primary_weight * primary[player_id] + (1.0 - primary_weight) * secondary[player_id], 2)
         for player_id in primary.keys() & secondary.keys()
+    }
+
+
+def _blend_volume_ratio_scores(
+    volume_scores: dict[str, float], ratio_scores: dict[str, float], player_ids,
+) -> dict[str, float]:
+    """Score every eligible player with the same volume/ratio pair.
+
+    A source omission receives a conservative 20-point component score, not a
+    neutral average. This lets a report retain its total/rank while keeping the
+    UI free to explicitly label the affected axis as insufficient data.
+    """
+    return {
+        player_id: round(
+            0.50 * volume_scores.get(player_id, MISSING_COMPONENT_SCORE)
+            + 0.50 * ratio_scores.get(player_id, MISSING_COMPONENT_SCORE),
+            2,
+        )
+        for player_id in player_ids
     }
 
 
@@ -398,12 +423,12 @@ def get_spear_leaderboard(
         "space": cca_scores,
     }
     sector_scores = {
-        "outside_box": _combined_scores(volume_scores["outside_box"], scores({pid: metric.out_box_shot_quality for pid, metric in peers.items() if metric.out_box_shot_quality is not None}), 0.50),
-        "box": _combined_scores(volume_scores["box"], deep_scores, 0.50),
-        "danger": _combined_scores(volume_scores["dribble"], progression_scores, 0.50),
-        "aerial": _combined_scores(volume_scores["aerial"], aerial_scores, 0.50),
-        "ground": _combined_scores(volume_scores["ground"], duel_scores, 0.50),
-        "space": _combined_scores(volume_scores["space"], danger_scores, 0.50),
+        "outside_box": _blend_volume_ratio_scores(volume_scores["outside_box"], scores({pid: metric.out_box_shot_quality for pid, metric in peers.items() if metric.out_box_shot_quality is not None}), peers),
+        "box": _blend_volume_ratio_scores(volume_scores["box"], deep_scores, peers),
+        "danger": _blend_volume_ratio_scores(volume_scores["dribble"], progression_scores, peers),
+        "aerial": _blend_volume_ratio_scores(volume_scores["aerial"], aerial_scores, peers),
+        "ground": _blend_volume_ratio_scores(volume_scores["ground"], duel_scores, peers),
+        "space": _blend_volume_ratio_scores(volume_scores["space"], danger_scores, peers),
     }
 
     records: list[dict[str, object]] = []
@@ -602,6 +627,16 @@ def calculate_league_percentiles(
     peers, _ = _fetch_elite_dribbler_metrics(
         metrics.league_id, season_name, restrict_to_forwards, minimum_final_third_ratio, comparison_scope,
     )
+    # A selected player can be absent from an older static cohort snapshot
+    # even though the currently loaded session passes the report's eligibility
+    # rule. Include that exact session once so its score can be ranked against
+    # the same peer population instead of falling back to a partial average.
+    if (
+        player_key not in peers
+        and (metrics.xg or 0.0) >= minimum_xg
+        and (metrics.minutes_played or 0.0) >= _minimum_minutes_for_competition(metrics.league_id)
+    ):
+        peers = {**peers, player_key: metrics}
     # One report must use one cohort.  The former implementation mixed the
     # leaderboard's broad xG population with this filtered player cohort,
     # which made a header such as "99 players" coexist with bars ranked /7.
@@ -784,13 +819,33 @@ def calculate_league_percentiles(
     sector_scores = {
         # Each M.E.S.S.I. sector is the exact pair visualised by the volume ×
         # ratio grid: equal credit for repeated involvement and effectiveness.
-        "outside_box": _combined_scores(volume_scores["outside_box"], out_box_scores, 0.50),
-        "box": _combined_scores(volume_scores["box"], base_deep_box_scores, 0.50),
-        "danger": _combined_scores(volume_scores["dribble"], danger_progression_scores, 0.50),
-        "aerial": _combined_scores(volume_scores["aerial"], aerial_scores, 0.50),
-        "ground": _combined_scores(volume_scores["ground"], duel_scores, 0.50),
-        "space": _combined_scores(cca_scores, danger_scores, 0.50),
+        "outside_box": _blend_volume_ratio_scores(volume_scores["outside_box"], out_box_scores, peers),
+        "box": _blend_volume_ratio_scores(volume_scores["box"], base_deep_box_scores, peers),
+        "danger": _blend_volume_ratio_scores(volume_scores["dribble"], danger_progression_scores, peers),
+        "aerial": _blend_volume_ratio_scores(volume_scores["aerial"], aerial_scores, peers),
+        "ground": _blend_volume_ratio_scores(volume_scores["ground"], duel_scores, peers),
+        "space": _blend_volume_ratio_scores(cca_scores, danger_scores, peers),
     }
+    imputed_volume_attrs = tuple(
+        attr for attr, source in (
+            ("outside_box_shots_attempts_top_percent", volume_scores["outside_box"]),
+            ("box_shots_volume_top_percent", volume_scores["box"]),
+            ("dribble_attempts_volume_top_percent", volume_scores["dribble"]),
+            ("aerial_duel_attempts_volume_top_percent", volume_scores["aerial"]),
+            ("ground_duel_attempts_volume_top_percent", volume_scores["ground"]),
+            ("cca_area_top_percent", cca_scores),
+        ) if player_key not in source
+    )
+    imputed_ratio_attrs = tuple(
+        attr for attr, source in (
+            ("out_box_shot_quality_top_percent", out_box_scores),
+            ("micro_zoning_finishing_top_percent", base_deep_box_scores),
+            ("danger_zone_progression_top_percent", danger_progression_scores),
+            ("aerial_margin_per90_top_percent", aerial_scores),
+            ("duel_margin_per90_top_percent", duel_scores),
+            ("danger_zone_density_top_percent", danger_scores),
+        ) if player_key not in source
+    )
     micro_pct, micro_rank = _rank_score(player_key, micro_scores)
     deep_box_pct, deep_box_rank = _rank_score(player_key, deep_box_scores)
     danger_pct, danger_rank = _rank_score(player_key, danger_progression_scores)
@@ -923,6 +978,8 @@ def calculate_league_percentiles(
         spear_score_rank=spear_score_rank,
         spear_score_top_percent=spear_score_top_percent,
         spear_score_eligible=len(spear_scores),
+        spear_imputed_volume_attrs=imputed_volume_attrs,
+        spear_imputed_ratio_attrs=imputed_ratio_attrs,
         is_type_b=active_type_b,
         spear_role="Type B · 2선 지향/펄스 나인" if active_type_b else "Type A · 정통 타겟/포처",
     )
