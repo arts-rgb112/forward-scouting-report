@@ -168,6 +168,31 @@ def as_number(value: Any) -> float | None:
         return None
 
 
+def cached_tournament_discoveries() -> dict[str, dict[str, Any]]:
+    """Reuse IDs dynamically discovered by a prior successful refresh.
+
+    The all-leagues catalog can temporarily expose only domestic competitions
+    for a valid key.  Tournament IDs are stable entity identifiers, and the
+    cache contains IDs obtained from previous API discovery rather than any
+    hardcoded value.  The current season is still discovered and validated via
+    ``/tournaments/{id}/seasons`` before a request is made.
+    """
+    path = DATA_DIR / "tactical_3zone_ratio.csv"
+    if not path.exists():
+        return {}
+    recovered: dict[str, dict[str, Any]] = {}
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            for row in csv.DictReader(source):
+                name = str(row.get("competition_name", "")).strip()
+                tournament_id = str(row.get("tournament_id", "")).strip()
+                if name in REQUIRED_HEATMAP_COMPETITIONS and tournament_id:
+                    recovered.setdefault(name, {"id": tournament_id, "name": name})
+    except OSError:
+        return {}
+    return recovered
+
+
 def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
     payload = client.get("tournaments?refresh=false", "all_leagues")
     matches: dict[str, dict[str, Any]] = {}
@@ -186,10 +211,15 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
         canonical_name = TARGET_TOURNAMENTS.get(key) or UEFA_TOURNAMENT_NAMES.get(key[0])
         if identifier is not None and canonical_name:
             matches.setdefault(canonical_name, {"id": identifier, "name": canonical_name})
+    recovered = cached_tournament_discoveries()
+    recovered_names = [name for name in recovered if name not in matches]
+    for name in recovered_names:
+        matches[name] = recovered[name]
     if not matches:
         root_keys = ",".join(sorted(payload.keys())) if isinstance(payload, dict) else type(payload).__name__
         print(f"No target leagues found. Root keys: {root_keys}")
-    print(f"Discovered target competitions: {', '.join(sorted(matches)) or 'none'}")
+    source_note = f"; recovered from prior discovery: {', '.join(sorted(recovered_names))}" if recovered_names else ""
+    print(f"Discovered target competitions: {', '.join(sorted(matches)) or 'none'}{source_note}")
     return [matches[name] for name in sorted(matches)]
 
 
