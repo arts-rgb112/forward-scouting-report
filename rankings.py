@@ -545,33 +545,6 @@ def get_tactical_matrix(
     return pd.DataFrame(rows)
 
 
-@functools.lru_cache(maxsize=32)
-def _fetch_fallback_xgot(season: str, pids: tuple) -> dict:
-    mapping = {}
-    if len(season) == 5 and "/" in season:
-        s1, s2 = season.split("/")
-        possible_seasons = [season, f"20{s1}/20{s2}", f"20{s1}/{s2}"]
-    else:
-        possible_seasons = [season]
-
-    def fetch_individual(pid: str) -> tuple[str, Optional[float]]:
-        try:
-            raw_data = fetch_player_multi_season_data(pid)
-            stats = extract_multi_season_metrics(raw_data)
-            for key, stat_obj in stats.items():
-                if any(ps in key for ps in possible_seasons) and stat_obj.xgot is not None:
-                    return pid, stat_obj.xgot
-        except Exception:
-            pass
-        return pid, None
-        
-    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
-        for pid, xgot_val in executor.map(fetch_individual, pids):
-            if xgot_val is not None:
-                mapping[pid] = xgot_val
-    return mapping
-
-
 def calculate_league_percentiles(
     player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 1.0,
     restrict_to_forwards: bool = True, minimum_final_third_ratio: int = 0,
@@ -587,76 +560,6 @@ def calculate_league_percentiles(
     season_name = f"20{season[:2]}/20{season[3:]}" if len(season) == 5 and "/" in season else season
     player_key = str(player_id)
     
-    # 1. 득점 및 xG 관련 지표
-    goals_rows = fetch_league_stat_table(metrics.league_id, season_name, "goals")
-    xg_rows = fetch_league_stat_table(metrics.league_id, season_name, "expected_goals")
-    
-    goals_by_player = {str(row.get("id")): _value(row) for row in goals_rows if _value(row) is not None}
-    xg_by_player = {str(row.get("id")): _value(row) for row in xg_rows if _value(row) is not None}
-    
-    xgot_by_player = {}
-    try:
-        # 수정됨: 올바른 API 키 적용 (언더스코어 제거)
-        xgot_rows = fetch_league_stat_table(metrics.league_id, season_name, "expected_goalsontarget")
-        xgot_by_player = {str(row.get("id")): _value(row) for row in xgot_rows if _value(row) is not None}
-    except Exception:
-        pass
-
-    if not xgot_by_player:
-        target_pids = tuple(pid for pid, xg in xg_by_player.items() if xg >= minimum_xg)
-        fallback_xgot = _fetch_fallback_xgot(season, target_pids)
-        xgot_by_player.update(fallback_xgot)
-
-    if player_key not in xgot_by_player and metrics.xgot is not None:
-        xgot_by_player[player_key] = metrics.xgot
-
-    player_goals = goals_by_player.get(player_key, 0.0)
-    player_xg = xg_by_player.get(player_key)
-    player_xgot = xgot_by_player.get(player_key)
-
-    player_sq = player_xgot - player_xg if (player_xg is not None and player_xgot is not None) else None
-    player_of = player_goals - player_xg if player_xg is not None else None
-    player_gk = player_goals - player_xgot if player_xgot is not None else None
-
-    valid_pids = {
-        pid for pid, xg in xg_by_player.items()
-        if xg >= minimum_xg and passes_final_third_filter(pid, minimum_final_third_ratio)
-    }
-    
-    goal_population = [goals_by_player.get(pid, 0.0) for pid in valid_pids]
-    xg_population = [xg_by_player[pid] for pid in valid_pids]
-    shot_quality_population = [xgot_by_player.get(key, 0.0) - xg for key, xg in xg_by_player.items() if key in valid_pids and key in xgot_by_player]
-    overall_finishing_population = [goals_by_player.get(key, 0.0) - xg for key, xg in xg_by_player.items() if key in valid_pids]
-    gk_impact_population = [goals_by_player.get(key, 0.0) - xgot_by_player.get(key, 0.0) for key, xg in xg_by_player.items() if key in valid_pids and key in xgot_by_player]
-
-    goals_median = float(pd.Series(goal_population).median()) if goal_population else None
-    shot_quality_median = float(pd.Series(shot_quality_population).median()) if shot_quality_population else None
-    overall_finishing_median = float(pd.Series(overall_finishing_population).median()) if overall_finishing_population else None
-    gk_impact_median = float(pd.Series(gk_impact_population).median()) if gk_impact_population else None
-        
-    goals_pct, goals_rk = _rank_info(player_goals, goal_population)
-    xg_pct, xg_rk = _rank_info(player_xg, xg_population)
-    sq_pct, sq_rk = _rank_info(player_sq, shot_quality_population)
-    of_pct, of_rk = _rank_info(player_of, overall_finishing_population)
-    gk_pct, gk_rk = _rank_info(player_gk, gk_impact_population)
-    
-    eligible_players_count = len(valid_pids)
-
-    # 💡 2. 드리블 성공률 (%) 수정됨: won_contest의 substatValue 사용
-    dribbles_pct, dribbles_rk, dribbles_eligible = None, None, 0
-    try:
-        dribbles_rows = fetch_league_stat_table(metrics.league_id, season_name, "won_contest")
-        # _sub_value 헬퍼를 사용하여 퍼센트 추출
-        dribbles_pct_dict = {str(r.get("id")): _sub_value(r) for r in dribbles_rows if _sub_value(r) is not None}
-        
-        if dribbles_pct_dict:
-            population = list(dribbles_pct_dict.values())
-            dribbles_eligible = len(population)
-            if player_key in dribbles_pct_dict:
-                dribbles_pct, dribbles_rk = _rank_info(dribbles_pct_dict[player_key], population)
-    except Exception:
-        pass
-
     duels_pct, duels_rk = None, None
     aerials_pct, aerials_rk = None, None
     peers, _ = _fetch_elite_dribbler_metrics(
@@ -677,8 +580,9 @@ def calculate_league_percentiles(
             return _rank_info(-value if value is not None else None, [-item for item in population])
         return _rank_info(value, population)
 
-    # Rebind every finishing/goal value to the same filtered cohort as the
-    # progression and S.P.E.A.R. factors.
+    # Every report value is derived directly from this one filtered cohort.
+    # Do not add a broad leaderboard population here: it caused the historic
+    # mismatch where a 99-player header coexisted with bars ranked out of 7.
     goal_population = [peer.goals for peer in peers.values() if peer.goals is not None]
     xg_population = [peer.xg for peer in peers.values() if peer.xg is not None]
     shot_quality_population = [peer.shot_quality for peer in peers.values() if peer.shot_quality is not None]
@@ -694,6 +598,22 @@ def calculate_league_percentiles(
     of_pct, of_rk = _rank_info(metrics.overall_finishing, overall_finishing_population)
     gk_pct, gk_rk = _rank_info(metrics.luck_or_gk_impact, gk_impact_population)
     eligible_players_count = cohort_count
+
+    def dribble_success_rate(metric: DecisionMetrics) -> Optional[float]:
+        successful = metric.dribbles_succeeded_per90
+        failed = metric.dribbles_failed_per90
+        if successful is None or failed is None or successful + failed <= 0:
+            return None
+        return 100.0 * successful / (successful + failed)
+
+    dribble_rate_population = [
+        rate for peer in peers.values()
+        if (rate := dribble_success_rate(peer)) is not None
+    ]
+    dribbles_pct, dribbles_rk = _rank_info(
+        dribble_success_rate(metrics), dribble_rate_population,
+    )
+    dribbles_eligible = len(dribble_rate_population)
 
     progression_percentiles = {
         "cohort_count": cohort_count,
