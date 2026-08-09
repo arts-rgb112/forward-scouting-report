@@ -1234,10 +1234,11 @@ def render_tactical_matrix(
     figure = go.Figure()
     figure.add_trace(go.Scatter(
         x=background["net_progression_per90"], y=background["in_box_xgot_minus_xg"],
-        mode="markers+text", text=background["player_name"], textposition="top center",
+        # Comparison players remain uncluttered points.  Their name, team and
+        # both coordinates are retained in ``customdata`` for hover only.
+        mode="markers",
         customdata=background[["player_name", "team_name", "net_progression_per90", "in_box_xgot_minus_xg"]],
         marker={"size": 10, "color": "rgba(140, 140, 140, 0.45)"},
-        textfont={"size": 10, "color": "rgba(185, 185, 185, 0.88)"},
         hovertemplate=("<b>%{customdata[0]}</b><br>%{customdata[1]}<br>"
                        "Net Progression /90: %{customdata[2]:.2f}<br>"
                        "In-Box xGOT - xG: %{customdata[3]:.2f}<extra></extra>"),
