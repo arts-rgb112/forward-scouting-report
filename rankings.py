@@ -316,23 +316,6 @@ def _spear_tier(score: float) -> str:
     return "D"
 
 
-def _spear_rating_from_rank(rank: Optional[int], population_size: int) -> Optional[float]:
-    """Map a cohort rank to a stable 0–100 S.P.E.A.R. rating.
-
-    Factor percentiles are already relative to the active comparison cohort,
-    but a weighted average of those percentiles rarely reaches 95.  Showing
-    that raw average as a final rating made the cohort leader appear as a
-    B-tier player.  The final rating therefore uses the player's resulting
-    cohort rank: rank 1 is 100, the final rank is 0, and the intermediate
-    values are linearly interpolated.
-    """
-    if rank is None or population_size <= 0:
-        return None
-    if population_size == 1:
-        return 50.0
-    return round(100.0 * (1.0 - ((rank - 1) / (population_size - 1))), 1)
-
-
 @functools.lru_cache(maxsize=32)
 def get_spear_leaderboard(
     league_id: int, season_name: str, comparison_scope: int = 0,
@@ -408,10 +391,11 @@ def get_spear_leaderboard(
             "player_id": player_id, "player_name": names.get(player_id, "Unknown"),
             "team_name": metric.team_name or "정보 미제공",
             "league_name": metric.league_name or "대회 정보 미제공",
-            # Keep the weighted factor value only for deterministic sorting.
-            # The displayed S.P.E.A.R. rating is assigned from final cohort
-            # rank below so tiers always describe relative standing correctly.
-            "raw_score": score,
+            # The fixed-scale weighted score intentionally remains separate
+            # from rank.  A weak season may have a B-tier leader, while a
+            # stronger season can contain several S-tier players.
+            "score": score,
+            "tier": _spear_tier(score),
             "role": "Type B" if is_type_b else "Type A",
             "position": metric.position or metric.position_group or "미분류",
             "outside_shot_tier": factor_tier(shot_scores),
@@ -424,11 +408,8 @@ def get_spear_leaderboard(
     table = pd.DataFrame(records)
     if table.empty:
         return pd.DataFrame(columns=["rank", "player_id", "player_name", "team_name", "score", "tier", "role"])
-    table = table.sort_values(["raw_score", "player_name"], ascending=[False, True], kind="stable").reset_index(drop=True)
+    table = table.sort_values(["score", "player_name"], ascending=[False, True], kind="stable").reset_index(drop=True)
     table.insert(0, "rank", table.index + 1)
-    population_size = len(table)
-    table["score"] = table["rank"].map(lambda rank: _spear_rating_from_rank(int(rank), population_size))
-    table["tier"] = table["score"].map(_spear_tier)
     return table
 
 
@@ -885,12 +866,7 @@ def calculate_league_percentiles(
     }
     original_type_b = is_type_b(player_key)
     original_score = original_spear_scores.get(player_key)
-    original_rank = (
-        1 + sum(score > original_score for score in original_spear_scores.values())
-        if original_score is not None else None
-    )
-    original_rating = _spear_rating_from_rank(original_rank, len(original_spear_scores))
-    original_tier = tier_for_score(original_rating)
+    original_tier = tier_for_score(original_score)
     active_type_b = original_type_b if role_override not in {"type_a", "type_b"} else role_override == "type_b"
     role_mismatch = active_type_b != original_type_b
 
@@ -916,10 +892,9 @@ def calculate_league_percentiles(
         deep_box_pct = round(100.0 - deep_floor, 1)
         deep_box_rank = 1 + sum(score > deep_floor for score in base_deep_box_scores.values())
     spear_score_top_percent, spear_score_rank = _rank_score(player_key, spear_scores)
-    # ``spear_scores`` remains a weighted percentile average for ranking and
-    # role-simulation calculations.  Expose a rank-normalised 0–100 rating to
-    # the UI so the score and S/A/B/C/D tiers communicate cohort standing.
-    spear_score = _spear_rating_from_rank(spear_score_rank, len(spear_scores))
+    # Keep the original weighted S.P.E.A.R. scale for the rating and tier.
+    # Rank/Top % remain a separate, same-session relative comparison.
+    spear_score = spear_scores.get(player_key)
     progression_eligible = int(progression_percentiles["cohort_count"])
     duels_eligible = progression_eligible
     aerials_eligible = progression_eligible
