@@ -352,6 +352,36 @@ def _spear_tier(score: float) -> str:
     return "D"
 
 
+MESSI_RANK_TIER_BANDS = (
+    ("💎", "다이아몬드", 0.0, 4.0),
+    ("❇️", "플래티넘", 4.0, 11.0),
+    ("🥇", "골드", 11.0, 40.0),
+    ("🥈", "실버", 40.0, 77.0),
+    ("🥉", "브론즈", 77.0, 96.0),
+    ("⚙️", "아이언", 96.0, 100.0),
+)
+
+
+def messi_rank_tier(rank: Optional[int], population: int) -> str:
+    """Return the 6×5 relative M.E.S.S.I. tier for a score rank.
+
+    The score remains the framework's deliberately strict 0–100 score.  Its
+    tier is a separate, within-cohort signal: we map score rank to the
+    specified Stanine-style percentile bands, then split each band into five
+    equal sub-tiers.  ``rank - 1`` makes the first-ranked player 0.0% and
+    therefore guarantees a Diamond 1 for every non-empty cohort.
+    """
+    if rank is None or rank < 1 or population < 1:
+        return "—"
+    top_percent = min(100.0, max(0.0, ((rank - 1) / population) * 100.0))
+    for index, (icon, title, start, end) in enumerate(MESSI_RANK_TIER_BANDS):
+        if top_percent <= end or index == len(MESSI_RANK_TIER_BANDS) - 1:
+            width = (end - start) / 5.0
+            level = min(5, max(1, int((top_percent - start) / width) + 1))
+            return f"{icon} {title} {level}"
+    return "⚙️ 아이언 5"
+
+
 @functools.lru_cache(maxsize=32)
 def get_spear_leaderboard(
     league_id: int, season_name: str, comparison_scope: int = 0,
@@ -452,11 +482,11 @@ def get_spear_leaderboard(
             "player_id": player_id, "player_name": names.get(player_id, "Unknown"),
             "team_name": metric.team_name or "정보 미제공",
             "league_name": metric.league_name or "대회 정보 미제공",
-            # The fixed-scale weighted score intentionally remains separate
-            # from rank.  A weak season may have a B-tier leader, while a
-            # stronger season can contain several S-tier players.
+            # The strict score is intentionally independent from its relative
+            # tier.  The latter is assigned only after every cohort score is
+            # ranked below.
             "score": score,
-            "tier": _spear_tier(score),
+            "tier": "—",
             "role": "Type B" if is_type_b else "Type A",
             "position": metric.position or metric.position_group or "미분류",
             "outside_shot_tier": factor_tier(sector_scores["outside_box"]),
@@ -471,6 +501,8 @@ def get_spear_leaderboard(
         return pd.DataFrame(columns=["rank", "player_id", "player_name", "team_name", "score", "tier", "role"])
     table = table.sort_values(["score", "player_name"], ascending=[False, True], kind="stable").reset_index(drop=True)
     table.insert(0, "rank", table.index + 1)
+    population = len(table)
+    table["tier"] = table["rank"].map(lambda rank: messi_rank_tier(int(rank), population))
     return table
 
 

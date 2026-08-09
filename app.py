@@ -17,6 +17,7 @@ from rankings import (
     get_spear_leaderboard,
     get_tactical_matrix,
     get_top_leagues_shot_quality,
+    messi_rank_tier,
 )
 from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
@@ -675,7 +676,10 @@ def _spear_total(rank) -> tuple[float | None, str | None, int]:
             for sector in TWIN_SECTOR_MATRIX.values()
             if sector["volume"] not in imputed and sector["ratio"] not in imputed
         )
-        return score, _spear_tier(score), covered_axes
+        return score, messi_rank_tier(
+            getattr(rank, "spear_score_rank", None),
+            int(getattr(rank, "spear_score_eligible", 0) or 0),
+        ), covered_axes
     values = [
         _radar_score(getattr(rank, attr))
         for _, attr in SPEAR_FACTOR_AXES
@@ -684,7 +688,8 @@ def _spear_total(rank) -> tuple[float | None, str | None, int]:
     if not values:
         return None, None, 0
     score = round(sum(values) / len(values), 1)
-    return score, _spear_tier(score), len(values)
+    # A relative tier must never be fabricated when no score cohort exists.
+    return score, None, len(values)
 
 
 def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
@@ -999,7 +1004,7 @@ def render_head_to_head_profile_headers(
         with column:
             with st.container(border=True):
                 st.markdown(f"#### {color} {name}")
-                st.metric("M.E.S.S.I. 점수", score_text, f"{tier}-Tier" if tier else None)
+                st.metric("M.E.S.S.I. 점수", score_text, tier)
                 if stats is not None:
                     league_name = stats.league_name or "대회 정보 없음"
                     st.caption(f"{season} · {league_name}")
@@ -1685,6 +1690,20 @@ def render_spear_leaderboard(
         display, use_container_width=True, hide_index=True, height=430,
         column_config={
             "프로필": st.column_config.ImageColumn("프로필", width="small"),
+            "M.E.S.S.I.": st.column_config.TextColumn(
+                "M.E.S.S.I.",
+                help=(
+                    "M.E.S.S.I. Score 100점 만점의 기준은 축구 역사상 최고의 펄스 나인 퍼포먼스"
+                    "(Prime Messi)에 맞춰져 있어 평가 잣대가 매우 엄격합니다."
+                ),
+            ),
+            "티어": st.column_config.TextColumn(
+                "티어",
+                help=(
+                    "현재 티어는 해당 시즌 동일 포지션 선수들을 정규분포(Stanine)에 기반하여 "
+                    "줄 세운 상대적 통계 백분위입니다."
+                ),
+            ),
             "선수": st.column_config.LinkColumn(
                 "선수", display_text=r".*[?&]label=([^&]+).*",
                 help="선수 이름을 클릭하면 상세 분석 리포트로 이동합니다.",
@@ -2006,7 +2025,10 @@ def render_v32_analysis_center() -> None:
                 f" ({score_rank}위 / {score_population}명 · 상위 {score_percent:.1f}%)"
                 if score_rank and score_percent is not None and score_population else ""
             )
-            st.subheader(f"👑 {player.name}  ·  [{spear_tier}-Tier]  M.E.S.S.I. {spear_score:.1f}/100{rank_text}")
+            st.subheader(
+                f"👑 {player.name}  ·  [{spear_tier or '상대 티어 대기'}]  "
+                f"M.E.S.S.I. {spear_score:.1f}/100{rank_text}"
+            )
             st.caption(
                 comparison_population_criteria(
                     selected_stats.league_id, filters["season"], filters["comparison_scope"],
@@ -2029,8 +2051,11 @@ def render_v32_analysis_center() -> None:
     with help_col:
         with st.popover("❓ M.E.S.S.I. 프레임워크"):
             st.markdown(MESSI_FRAMEWORK)
-            st.caption("동일 대회 비교군의 정규화된 팩터를 0~100 점수로 변환합니다.")
-            st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
+            st.caption(
+                "점수는 엄격한 Prime Messi 기준의 0~100 절대 척도이며, 티어는 동일 시즌 "
+                "코호트 내 상대 백분위로 별도 산출합니다."
+            )
+            st.markdown("💎 다이아몬드(상위 4%) · ❇️ 플래티넘(11%) · 🥇 골드(40%) · 🥈 실버(77%) · 🥉 브론즈(96%) · ⚙️ 아이언")
     volume_col, ratio_col = st.columns(2)
     selected_population_label = comparison_population_label(selected_stats.league_id, filters["comparison_scope"])
     with volume_col:
@@ -2265,7 +2290,7 @@ def _render_role_overview(player, filters: dict[str, object], stats: DecisionMet
         st.markdown(
             "<div style='text-align: center; padding-top: 0.25rem;'>"
             f"<span style='font-size: 1.75rem; font-weight: 800;'>"
-            f"{html.escape(player.name)} · [{spear_tier}-Tier] "
+            f"{html.escape(player.name)} · [{html.escape(spear_tier or '상대 티어 대기')}] "
             f"M.E.S.S.I. {spear_score:.1f}/100{rank_text}</span>"
             "</div>",
             unsafe_allow_html=True,
@@ -2595,8 +2620,11 @@ def render_messi_about_page() -> None:
         (
             "Q8. M.E.S.S.I. 점수와 티어는 어떻게 읽나요?",
             "모든 원본 지표는 선택 시즌·대회·비교군 안에서 백분위 점수(상위 0% = 100점)로 정규화합니다. "
-            "그 뒤 6개 섹터 점수를 가중합해 0~100점의 M.E.S.S.I. 점수를 만들고, 이 점수로 등수·상위 %·티어를 "
-            "동시에 산출합니다. S(95+), A(85~94), B(65~84), C(35~64), D(34 이하) 티어를 사용합니다.",
+            "그 뒤 6개 섹터 점수를 가중합해 엄격한 Prime Messi 기준의 0~100점 M.E.S.S.I. Score를 만듭니다. "
+            "점수 자체는 절대 척도로 시즌 간에도 그대로 비교할 수 있습니다. 반면 티어는 같은 시즌의 유효 코호트 안에서 "
+            "총점 등수를 백분위로 환산해 별도로 정합니다. 다이아몬드(상위 4%), 플래티넘(11%), 골드(40%), "
+            "실버(77%), 브론즈(96%), 아이언 순이며, 각 구간은 다시 1~5단계로 균등 분할합니다. "
+            "1위는 항상 0.0% 위치에서 다이아몬드 1로 시작합니다.",
         ),
         (
             "Q9. 볼륨과 비율은 총점에 어떻게 반영되나요?",
