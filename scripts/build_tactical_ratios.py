@@ -481,6 +481,26 @@ def resolve_fotmob_id(player_name: str) -> str | None:
         return None
 
 
+def static_cohort_name_map(season_name: str) -> dict[str, str]:
+    """Return only unambiguous name → FotMob IDs from the M.E.S.S.I. cohort.
+
+    The cohort is already the authoritative comparison population for a season.
+    Prefer it over a live search response, whose similarly named candidates can
+    otherwise make a known player look "unmatched" and lose their heatmap.
+    """
+    try:
+        from spear_cohort import load_spear_cohort
+        matches: dict[str, set[str]] = {}
+        for (_, cohort_season), cohort in load_spear_cohort().items():
+            if cohort_season != season_name:
+                continue
+            for fotmob_id, (player_name, _) in cohort.items():
+                matches.setdefault(_normalise_name(player_name), set()).add(str(fotmob_id))
+        return {name: next(iter(ids)) for name, ids in matches.items() if len(ids) == 1}
+    except (ImportError, OSError, ValueError):
+        return {}
+
+
 OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "cca_area_pct", "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio", "danger_zone_density", "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score", "sample_points", "generated_at"]
 
 
@@ -549,6 +569,7 @@ def main() -> None:
     DATA_DIR.mkdir(exist_ok=True)
     client = SportsApiClient(api_keys, args.delay)
     id_map = read_fotmob_map(DATA_DIR / "fotmob_player_map.csv")
+    cohort_name_map = static_cohort_name_map(args.season_name)
     output_path = DATA_DIR / "tactical_3zone_ratio.csv"
     # A legacy two-zone row cannot be a valid checkpoint for the new schema.
     # The first 3-Zone refresh must re-read each eligible heatmap once.
@@ -611,7 +632,11 @@ def main() -> None:
             if ratios is None:
                 continue
             counts["heatmaps_with_ratio"] += 1
-            fotmob_id = id_map.get(sports_id) or resolve_fotmob_id(player["name"])
+            fotmob_id = (
+                id_map.get(sports_id)
+                or cohort_name_map.get(_normalise_name(player["name"]))
+                or resolve_fotmob_id(player["name"])
+            )
             if not fotmob_id:
                 unmatched.append({"sportsapi_player_id": sports_id, **player})
                 counts["unmatched"] += 1
