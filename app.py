@@ -135,6 +135,18 @@ SPEAR_FACTOR_AXES = [
     ("공간 장악력", "cca_area_top_percent"),
 ]
 
+MESSI_FRAMEWORK = """
+**M (Micro-zoning)** — 마이크로 조닝 기반 공간 분석
+
+**E (Efficiency)** — 심층 타격 및 득점 효율
+
+**S (Space)** — 공간 장악 및 5-Lane 활용
+
+**S (Striking)** — 위험 구역 붕괴 및 박스 밖 타격력
+
+**I (Intensity)** — 지상·공중 경합 및 물리적 강도
+"""
+
 VOLUME_FACTOR_AXES = [
     ("박스 밖 슈팅 시도", "outside_box_shots_attempts_top_percent", "out_box_shots", "outside_box_shots_attempts_rank"),
     ("박스 안 타격", "box_shots_volume_top_percent", "in_box_shots", "box_shots_volume_rank"),
@@ -461,7 +473,7 @@ def comparison_population_label(league_id: int | None, scope: int) -> str:
 
 
 def comparison_population_criteria(league_id: int | None, season: str, scope: int) -> str:
-    """Make the ranking cohort explicit beside every S.P.E.A.R. rank."""
+    """Make the ranking cohort explicit beside every M.E.S.S.I. rank."""
     is_european = league_id == EUROPEAN_LEADERBOARD_ID or league_id in {42, 73, 108}
     minimum_minutes = 180 if is_european else 450
     minimum_xg = 1.0 if is_european else 2.0
@@ -472,7 +484,7 @@ def comparison_population_criteria(league_id: int | None, season: str, scope: in
 
 
 def _spear_total(rank) -> tuple[float | None, str | None, int]:
-    """Return the visible S.P.E.A.R. total from the actually bound radar axes.
+    """Return the visible M.E.S.S.I. total from the actually bound radar axes.
 
     Missing axes are not silently converted to 50 here: a score is only shown
     when at least one real percentile is available, and the coverage count is
@@ -609,7 +621,7 @@ def render_spear_radar(
     tactical_ratio: dict[str, object] | None = None, comparison_label: str = "동일 대회 기준",
     chart_key: str | None = None,
 ) -> None:
-    """Render one of the synchronized volume/ratio S.P.E.A.R. radars."""
+    """Render one of the synchronized volume/ratio M.E.S.S.I. radars."""
     axes = VOLUME_FACTOR_AXES if volume else SPEAR_FACTOR_AXES
     details = []
     labels = []
@@ -658,7 +670,7 @@ def render_spear_radar(
         ))
     heading = "볼륨(Volume)" if volume else "비율(Ratio)"
     figure.update_layout(
-        title=f"S.P.E.A.R. {heading} 레이더 · {comparison_label}",
+        title=f"M.E.S.S.I. {heading} 레이더 · {comparison_label}",
         height=455, margin={"l": 38, "r": 38, "t": 55, "b": 35},
         paper_bgcolor="rgba(0,0,0,0)",
         polar={
@@ -674,7 +686,7 @@ def render_spear_radar(
 
 
 def render_spear_head_to_head(left_name: str, left_rank, right_name: str, right_rank) -> None:
-    """Overlay the two independent S.P.E.A.R. 2.0 ratio profiles."""
+    """Overlay the two independent M.E.S.S.I. 2.0 ratio profiles."""
     labels = [label for label, _ in SPEAR_FACTOR_AXES]
     left_scores = [_radar_score(getattr(left_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES]
     right_scores = [_radar_score(getattr(right_rank, attr, None)) for _, attr in SPEAR_FACTOR_AXES]
@@ -702,7 +714,7 @@ def render_spear_head_to_head(left_name: str, left_rank, right_name: str, right_
             hovertemplate="<b>%{theta}</b><br>%{fullData.name}: %{r:.1f}/100 · %{customdata}-Tier<extra></extra>",
         ))
     figure.update_layout(
-        title="S.P.E.A.R. 2.0 Head-to-Head · 비율 프로필",
+        title="M.E.S.S.I. 2.0 Head-to-Head · 비율 프로필",
         height=500, margin={"l": 44, "r": 44, "t": 55, "b": 38},
         paper_bgcolor="rgba(0,0,0,0)",
         polar={
@@ -1330,7 +1342,7 @@ def select_player(query: str, key: str, label: str = "선수 선택"):
 def render_spear_leaderboard(
     season: str, comparison_scope: int, league_id: int = 47,
     position_filter: str = "전체", role_filter: str = "전체",
-    section_title: str = "🏆 S.P.E.A.R. 스카우팅 리스트",
+    section_title: str = "🏆 M.E.S.S.I. 스카우팅 리스트",
 ) -> PlayerCandidate | None:
     """Show a local, sortable scouting list and return the selected player."""
     table = cached_spear_leaderboard(league_id, season, comparison_scope)
@@ -1339,7 +1351,7 @@ def render_spear_leaderboard(
     st.caption(comparison_population_criteria(league_id, season, comparison_scope))
     if table.empty:
         st.info(
-            f"{season} 시즌의 정적 S.P.E.A.R. 코호트가 아직 준비되지 않았습니다. "
+            f"{season} 시즌의 정적 M.E.S.S.I. 코호트가 아직 준비되지 않았습니다. "
             "상세 검색은 가능하며, 리더보드는 시즌 스냅샷이 적재되면 자동 활성화됩니다."
         )
         return None
@@ -1358,16 +1370,16 @@ def render_spear_leaderboard(
     if role_filter in {"Type A", "Type B"}:
         table = table[table["role"] == role_filter]
     if table.empty:
-        st.info("현재 필터 조합에 맞는 S.P.E.A.R. 선수 데이터가 없습니다.")
+        st.info("현재 필터 조합에 맞는 M.E.S.S.I. 선수 데이터가 없습니다.")
         return None
     display = table.rename(columns={
         "rank": "순위", "player_name": "선수", "team_name": "팀", "league_name": "리그",
-        "score": "S.P.E.A.R.", "tier": "티어", "role": "기본 롤",
+        "score": "M.E.S.S.I.", "tier": "티어", "role": "기본 롤",
         "outside_shot_tier": "박스 밖 슈팅", "deep_box_tier": "심층 타격",
         "danger_zone_tier": "위험 구역", "aerial_tier": "공중볼",
         "ground_duel_tier": "지상 경합", "space_control_tier": "공간 장악",
     })[[
-        "순위", "선수", "팀", "리그", "S.P.E.A.R.", "티어", "박스 밖 슈팅", "심층 타격",
+        "순위", "선수", "팀", "리그", "M.E.S.S.I.", "티어", "박스 밖 슈팅", "심층 타격",
         "위험 구역", "공중볼", "지상 경합", "공간 장악", "기본 롤",
     ]].copy()
     display.insert(
@@ -1390,7 +1402,7 @@ def render_spear_leaderboard(
     display["기본 롤"] = display["기본 롤"].map({
         "Type A": "정통형", "Type B": "펄스 나인형",
     }).fillna(display["기본 롤"])
-    display["S.P.E.A.R."] = display["S.P.E.A.R."].map(lambda value: f"{value:.1f}")
+    display["M.E.S.S.I."] = display["M.E.S.S.I."].map(lambda value: f"{value:.1f}")
     st.dataframe(
         display, use_container_width=True, hide_index=True, height=430,
         column_config={
@@ -1542,7 +1554,7 @@ def render_player_report(
 def render_v32_analysis_center() -> None:
     """Form-gated Ver 3.2 entry panel; expensive report work starts on submit."""
     st.title("🇪🇺 유럽 5대리그 공격기여도 분석센터")
-    st.caption("3-Zone 활동 비율 · S.P.E.A.R. · 동일 리그 비교 리포트")
+    st.caption("3-Zone 활동 비율 · M.E.S.S.I. · 동일 리그 비교 리포트")
     if "v32_filters" not in st.session_state:
         st.session_state.v32_filters = None
 
@@ -1678,7 +1690,7 @@ def render_v32_analysis_center() -> None:
     title_col, role_col, help_col = st.columns([4.2, 3.0, 1.0])
     with role_col:
         selected_role = st.radio(
-            "S.P.E.A.R. 롤 시뮬레이션",
+            "M.E.S.S.I. 롤 시뮬레이션",
             ("type_a", "type_b"),
             index=0 if default_role == "type_a" else 1,
             format_func=lambda role: (
@@ -1699,7 +1711,7 @@ def render_v32_analysis_center() -> None:
     spear_score, spear_tier, spear_coverage = _spear_total(rank)
     with title_col:
         if spear_score is None:
-            st.subheader(f"👑 {player.name}  ·  🏷️ S.P.E.A.R. 데이터 부족")
+            st.subheader(f"👑 {player.name}  ·  🏷️ M.E.S.S.I. 데이터 부족")
         else:
             score_rank = getattr(rank, "spear_score_rank", None)
             score_percent = getattr(rank, "spear_score_top_percent", None)
@@ -1708,7 +1720,7 @@ def render_v32_analysis_center() -> None:
                 f" ({score_rank}위 / {score_population}명 · 상위 {score_percent:.1f}%)"
                 if score_rank and score_percent is not None and score_population else ""
             )
-            st.subheader(f"👑 {player.name}  ·  [{spear_tier}-Tier]  S.P.E.A.R. {spear_score:.1f}/100{rank_text}")
+            st.subheader(f"👑 {player.name}  ·  [{spear_tier}-Tier]  M.E.S.S.I. {spear_score:.1f}/100{rank_text}")
             st.caption(
                 comparison_population_criteria(
                     selected_stats.league_id, filters["season"], filters["comparison_scope"],
@@ -1726,9 +1738,9 @@ def render_v32_analysis_center() -> None:
                 for badge, text in identities:
                     st.markdown(f"**[{badge}]** : {text}")
     with help_col:
-        with st.popover("❓ 점수 산출 방식"):
-            st.markdown("**S.P.E.A.R.**  \\n슈팅 50% · 수비 부수기 30% · 위치 선정 20%")
-            st.caption("1,000분 이상 전문 공격수의 Z-점수를 0~100 점수로 변환합니다.")
+        with st.popover("❓ M.E.S.S.I. 프레임워크"):
+            st.markdown(MESSI_FRAMEWORK)
+            st.caption("동일 대회 비교군의 정규화된 팩터를 0~100 점수로 변환합니다.")
             st.markdown("S 🌟 95+ · A 🔴 85~94 · B 🔵 65~84 · C 🟢 35~64 · D ⚪ 34 이하")
     volume_col, ratio_col = st.columns(2)
     selected_population_label = comparison_population_label(selected_stats.league_id, filters["comparison_scope"])
@@ -1802,7 +1814,7 @@ def _route(page: str, **params: object) -> None:
 def render_leaderboard_page() -> None:
     """Page 1 — independent scouting-pool search and ranking list."""
     st.title("🔍 선수 검색 및 리더보드")
-    st.caption("정적 S.P.E.A.R. 스냅샷으로 즉시 정렬되며, 선수 행을 선택하면 상세 리포트로 이동합니다.")
+    st.caption("정적 M.E.S.S.I. 스냅샷으로 즉시 정렬되며, 선수 이름을 클릭하면 상세 리포트로 이동합니다.")
     league_options = {
         "통합 리그 범위": 47,
         "Premier League": 47, "LaLiga": 87, "Bundesliga": 54,
@@ -1853,13 +1865,13 @@ def render_leaderboard_page() -> None:
     european_selected = render_spear_leaderboard(
         active_season, default_scope, european_competitions[european_name],
         active_position, active_role,
-        section_title=f"🌍 {european_name} · S.P.E.A.R. 리더보드",
+        section_title=f"🌍 {european_name} · M.E.S.S.I. 리더보드",
     )
     st.divider()
     league_selected = render_spear_leaderboard(
         active_season, default_scope, league_options.get(active_league_name, 47),
         active_position, active_role,
-        section_title=f"🏆 {active_league_name} · 리그 S.P.E.A.R. 리더보드",
+        section_title=f"🏆 {active_league_name} · 리그 M.E.S.S.I. 리더보드",
     )
     selected = european_selected or league_selected
     if selected:
@@ -1883,7 +1895,7 @@ def _render_role_overview(player, filters: dict[str, object], stats: DecisionMet
     )
     spear_score, spear_tier, spear_coverage = _spear_total(rank)
     if spear_score is None:
-        st.warning("현재 역할 뷰의 S.P.E.A.R. 비교군이 준비되지 않았습니다.")
+        st.warning("현재 역할 뷰의 M.E.S.S.I. 비교군이 준비되지 않았습니다.")
         return rank
     score_rank = getattr(rank, "spear_score_rank", None)
     score_percent = getattr(rank, "spear_score_top_percent", None)
@@ -1892,7 +1904,7 @@ def _render_role_overview(player, filters: dict[str, object], stats: DecisionMet
         f" ({score_rank}위 / {score_population}명 · 상위 {score_percent:.1f}%)"
         if score_rank and score_percent is not None and score_population else ""
     )
-    st.subheader(f"[{spear_tier}-Tier] S.P.E.A.R. {spear_score:.1f}/100{rank_text}")
+    st.subheader(f"[{spear_tier}-Tier] M.E.S.S.I. {spear_score:.1f}/100{rank_text}")
     st.caption(comparison_population_criteria(stats.league_id, str(filters["season"]), int(filters["scope"])))
     st.caption(f"적용 롤: {getattr(rank, 'spear_role', role)} · 산출 팩터 {spear_coverage}/6개")
     identities = spatial_identity_badges(tactical_ratio, force_type_b=role == "type_b")
@@ -2058,7 +2070,9 @@ def main() -> None:
     if current not in pages:
         current = "leaderboard"
     with st.sidebar:
-        st.title("S.P.E.A.R. 2.0")
+        st.title("M.E.S.S.I. 2.0")
+        with st.expander("💡 M.E.S.S.I. 프레임워크"):
+            st.markdown(MESSI_FRAMEWORK)
         selected_label = st.radio("페이지", list(pages.values()), index=list(pages).index(current))
         selected_page = next(page for page, label in pages.items() if label == selected_label)
         if selected_page != current:
