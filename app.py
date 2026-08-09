@@ -2424,7 +2424,11 @@ def render_player_detail_page() -> None:
     if not player_id:
         st.info("위 검색창에서 선수를 선택하거나, 리더보드에서 선수를 선택해 주세요.")
         return
-    filters = {"season": _query_text("season", "25/26"), "scope": _query_scope()}
+    # The season selector reruns the page immediately, but its selected value
+    # was previously ignored here in favour of the old URL query parameter.
+    # That left the control on (for example) 22/23 while the report continued
+    # to calculate and label every panel with 23/24 data.
+    filters = {"season": detail_season, "scope": _query_scope()}
     player = PlayerCandidate(player_id, _query_text("name", "선수"), _query_text("team", ""))
     player = _resolve_static_player(player, filters["season"])
     try:
