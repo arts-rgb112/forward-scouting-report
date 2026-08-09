@@ -70,20 +70,30 @@ def build(season_name: str) -> list[dict[str, object]]:
 
 
 def write(rows: list[dict[str, object]]) -> None:
-    """Replace one season while retaining every previously cached season.
+    """Replace only refreshed competition/season slices of the static cache.
 
-    The former writer overwrote ``spear_cohort.csv`` on every workflow run.
-    That made an older season silently fall back to live requests and produced
-    under-sized historical comparison populations in the dashboard.
+    A refresh can legitimately fail for one historical competition while the
+    other competitions still return rows. Replacing a whole season in that
+    situation used to erase an intact snapshot and make historic reports
+    silently incomplete. Preserve every slice this run did not replace.
     """
     DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    refreshed_seasons = {str(row.get("season_name", "")).strip() for row in rows}
+    refreshed_slices = {
+        (
+            str(row.get("season_name", "")).strip(),
+            str(row.get("league_id", "")).strip(),
+        )
+        for row in rows
+    }
     retained: list[dict[str, str]] = []
     if DATA_PATH.exists():
         with DATA_PATH.open(encoding="utf-8", newline="") as source:
             retained = [
                 row for row in csv.DictReader(source)
-                if str(row.get("season_name", "")).strip() not in refreshed_seasons
+                if (
+                    str(row.get("season_name", "")).strip(),
+                    str(row.get("league_id", "")).strip(),
+                ) not in refreshed_slices
             ]
     with DATA_PATH.open("w", encoding="utf-8", newline="") as target:
         writer = csv.DictWriter(target, fieldnames=CSV_FIELDS)

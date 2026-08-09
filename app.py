@@ -18,6 +18,7 @@ from rankings import (
     get_tactical_matrix,
     get_top_leagues_shot_quality,
 )
+from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
 
 
@@ -125,6 +126,29 @@ def cached_search(term: str):
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_player_data(player_id: str):
     return fetch_player_multi_season_data(player_id)
+
+
+def _long_season_name(season: str) -> str:
+    """Turn the UI season key (``21/22``) into the static-cache key."""
+    season = str(season).strip()
+    if len(season) == 5 and "/" in season:
+        return f"20{season[:2]}/20{season[3:]}"
+    return season
+
+
+def _static_session_rows(player_id: str, season: str) -> list[tuple[str, DecisionMetrics]]:
+    """Recover archived records when the mutable player-history API drops them."""
+    target_season = _long_season_name(season)
+    rows: list[tuple[str, DecisionMetrics]] = []
+    for (league_id, cohort_season), cohort in load_spear_cohort().items():
+        if cohort_season != target_season:
+            continue
+        item = cohort.get(str(player_id))
+        if item is None:
+            continue
+        _, metric = item
+        rows.append((f"{season}_{league_id}", metric))
+    return sorted(rows, key=lambda item: ((item[1].league_name or ""), item[1].league_id or 0))
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_percentiles(
@@ -2184,10 +2208,15 @@ def render_player_detail_page() -> None:
     player = PlayerCandidate(player_id, _query_text("name", "선수"), _query_text("team", ""))
     try:
         sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
-    except FotMobError as exc:
-        st.error(f"선수 세션 데이터를 불러오지 못했습니다: {exc}")
-        return
+    except FotMobError:
+        # An archived cohort may still contain this player/season even after
+        # the mutable player-history response has been removed upstream.
+        sessions = {}
     session_rows = [(key, stats) for key, stats in sessions.items() if key.split("_", 1)[0] == filters["season"]]
+    using_static_snapshot = False
+    if not session_rows:
+        session_rows = _static_session_rows(player.player_id, filters["season"])
+        using_static_snapshot = bool(session_rows)
     if not session_rows:
         st.warning(f"{filters['season']} 시즌에 조회 가능한 대회 기록이 없습니다.")
         return
@@ -2205,8 +2234,16 @@ def render_player_detail_page() -> None:
         competition=selected_stats.league_name or "unknown",
     )
     tactical_ratio = get_tactical_ratio_for_session(player.player_id, selected_stats.league_name or "", str(filters["season"]))
+    if using_static_snapshot:
+        st.info(
+            "이 리포트는 현재 선수 이력 API에서 제외된 과거 시즌을 정적 코호트 스냅샷으로 복원했습니다. "
+            "상대평가는 해당 대회·시즌 스냅샷을 기준으로 계산됩니다."
+        )
     st.caption("역할은 해당 대회·시즌의 박스 점유율을 기준으로 자동 분류됩니다. 수동 탭 전환은 점수나 역할 표기를 바꾸지 않습니다.")
     rank = _render_role_overview(player, filters, selected_stats, tactical_ratio)
+    if using_static_snapshot:
+        st.caption("과거 원본 선수 이력이 제공되지 않아, 세부 바·히트맵은 해당 시즌 데이터 보강 후 표시됩니다.")
+        return
     st.divider()
     st.subheader("세부 상대평가")
     render_player_report(
