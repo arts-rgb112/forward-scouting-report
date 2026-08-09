@@ -29,7 +29,7 @@ COMPETITIONS = {
     "Primeira Liga": 61,
     "UEFA Champions League": 42,
     "UEFA Europa League": 73,
-    "UEFA Europa Conference League": 102,
+    "UEFA Europa Conference League": 108,
 }
 
 def build(season_name: str) -> list[dict[str, object]]:

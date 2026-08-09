@@ -18,7 +18,9 @@ from spear_cohort import get_static_spear_cohort
 from tactical_ratio import get_tactical_ratio_for_session, passes_final_third_filter
 
 
-CUP_COMPETITION_IDS = frozenset({42, 73, 102})
+CUP_COMPETITION_IDS = frozenset({42, 73, 108})
+EUROPEAN_COMPETITION_IDS = CUP_COMPETITION_IDS
+EUROPEAN_LEADERBOARD_ID = -1
 LEAGUE_MINIMUM_MINUTES = 450.0
 CUP_MINIMUM_MINUTES = 180.0
 LEAGUE_MINIMUM_XG = 2.0
@@ -336,7 +338,8 @@ def get_spear_leaderboard(
     than spending requests while a user scrolls the scouting board.
     """
     target_leagues = (
-        frozenset({league_id}) if league_id in CUP_COMPETITION_IDS
+        EUROPEAN_COMPETITION_IDS if league_id == EUROPEAN_LEADERBOARD_ID
+        else frozenset({league_id}) if league_id in CUP_COMPETITION_IDS
         else COMPARISON_SCOPES.get(comparison_scope, frozenset({league_id}))
     )
     peers: dict[str, DecisionMetrics] = {}
