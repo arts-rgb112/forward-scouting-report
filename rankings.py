@@ -123,7 +123,7 @@ class LeaguePercentiles:
     spear_score_rank: Optional[int] = None
     spear_score_top_percent: Optional[float] = None
     spear_score_eligible: int = 0
-    false_nine_penalty: bool = False
+    is_type_b: bool = False
     spear_role: str = "Type A · 정통 타겟/포처"
 
 
@@ -378,7 +378,14 @@ def get_spear_leaderboard(
         if row is not None and row.get("deep_box_zone_score") is not None
         and sum(float(row.get(field) or 0.0) for field in micro_fields) > 0.0
     }
-    deep_scores = _combined_scores(in_box_scores, scores(micro_raw), 0.70)
+    micro_scores = scores(micro_raw)
+    # A stored heatmap row with no box activity is an observed zero, not a
+    # missing value. Keep it in the shared score scale for Type A and Type B.
+    deep_scores = {
+        player_id: round(0.70 * in_box_scores[player_id] + 0.30 * micro_scores.get(player_id, 0.0), 2)
+        for player_id, row in spatial.items()
+        if player_id in in_box_scores and row is not None
+    }
     danger_scores = scores(spatial_values("danger_zone_density"))
     cca_scores = scores(spatial_values("cca_area_pct"))
     progression_scores = _combined_scores(dribble_scores, danger_scores, 0.70)
@@ -390,9 +397,8 @@ def get_spear_leaderboard(
         micro_total = sum(float(row.get(field) or 0.0) for field in micro_fields) if row else 0.0
         is_type_b = box_ratio < 15.0 or micro_total <= 0.0
         weights = (
-            ((progression_scores, 0.30), (cca_scores, 0.30), (shot_scores, 0.25), (duel_scores, 0.10), (aerial_scores, 0.05))
-            if is_type_b else
-            ((deep_scores, 0.30), (shot_scores, 0.20), (progression_scores, 0.15), (cca_scores, 0.15), (aerial_scores, 0.10), (duel_scores, 0.10))
+            (deep_scores, 0.30), (shot_scores, 0.20), (progression_scores, 0.15),
+            (cca_scores, 0.15), (aerial_scores, 0.10), (duel_scores, 0.10),
         )
         if not all(player_id in source for source, _ in weights):
             continue
@@ -702,10 +708,6 @@ def calculate_league_percentiles(
         player_key, metrics.league_name or "", season_name,
     )
     micro_fields = ("box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio")
-    player_box_ratio = float(player_spatial.get("in_box_ratio") or 0.0) if player_spatial else 0.0
-    player_micro_total = sum(float(player_spatial.get(field) or 0.0) for field in micro_fields) if player_spatial else 0.0
-    false_nine_penalty = player_box_ratio < 15.0 or player_micro_total <= 0.0
-
     def spatial_values(field: str) -> dict[str, float]:
         return {
             peer_id: float(row[field])
@@ -743,34 +745,24 @@ def calculate_league_percentiles(
         peer_id: peer.duel_margin_per90
         for peer_id, peer in peers.items() if peer.duel_margin_per90 is not None
     })
-    deep_box_scores = _combined_scores(in_box_scores, micro_scores, 0.70)
+    deep_box_scores = {
+        peer_id: round(0.70 * in_box_scores[peer_id] + 0.30 * micro_scores.get(peer_id, 0.0), 2)
+        for peer_id, row in spatial_rows.items()
+        if peer_id in in_box_scores and row is not None
+    }
     base_deep_box_scores = dict(deep_box_scores)
-    if false_nine_penalty:
-        # This is a tactical penalty, not an absent-data neutral score: a
-        # player who does not enter the box cannot qualify as a striker on the
-        # deep-box axis even if he contributes well as a linking False 9.
-        micro_scores[player_key] = 0.0
-        if player_key in in_box_scores:
-            deep_box_scores[player_key] = 0.0
     danger_progression_scores = _combined_scores(dribble_scores, danger_scores, 0.70)
     micro_pct, micro_rank = _rank_score(player_key, micro_scores)
     deep_box_pct, deep_box_rank = _rank_score(player_key, deep_box_scores)
-    if false_nine_penalty:
-        deep_box_pct, deep_box_rank = 100.0, max(1, len(peers))
     danger_pct, danger_rank = _rank_score(player_key, danger_progression_scores)
     cca_pct, cca_rank = _rank_score(player_key, cca_scores)
     danger_density_pct, danger_density_rank = _rank_score(player_key, danger_scores)
-    # Dynamic S.P.E.A.R. 2.0 role weights. Type B excludes deep-box efficiency
-    # from the total while its radar axis remains 0/D as a role description.
-    type_a_weights = (
+    # Role is descriptive only. Every player uses the same six-factor formula;
+    # Type B no longer receives a masked box score or a score shield.
+    common_weights = (
         (base_deep_box_scores, 0.30), (spear_shot_scores, 0.20),
         (danger_progression_scores, 0.15), (cca_scores, 0.15),
         (aerial_scores, 0.10), (duel_scores, 0.10),
-    )
-    type_b_weights = (
-        (danger_progression_scores, 0.30), (cca_scores, 0.30),
-        (spear_shot_scores, 0.25), (duel_scores, 0.10),
-        (aerial_scores, 0.05),
     )
 
     def is_type_b(peer_id: str) -> bool:
@@ -780,63 +772,26 @@ def calculate_league_percentiles(
         zone_total = sum(float(row.get(field) or 0.0) for field in micro_fields)
         return float(row.get("in_box_ratio") or 0.0) < 15.0 or zone_total <= 0.0
 
-    def weighted_score(peer_id: str, weights, deep_floor: Optional[float] = None) -> Optional[float]:
+    def weighted_score(peer_id: str, weights) -> Optional[float]:
         values = []
         for scores, weight in weights:
-            if scores is base_deep_box_scores and deep_floor is not None:
-                values.append((deep_floor, weight))
-            elif peer_id in scores:
+            if peer_id in scores:
                 values.append((scores[peer_id], weight))
             else:
                 return None
         return round(sum(value * weight for value, weight in values), 2)
 
-    def tier_for_score(score: Optional[float]) -> str:
-        if score is None:
-            return "C"
-        if score >= 95:
-            return "S"
-        if score >= 85:
-            return "A"
-        if score >= 65:
-            return "B"
-        if score >= 35:
-            return "C"
-        return "D"
-
-    soft_floor_by_tier = {"S": 60.0, "A": 50.0, "B": 40.0, "C": 30.0, "D": 30.0}
     original_spear_scores = {
         peer_id: score
         for peer_id in peers
-        if (score := weighted_score(peer_id, type_b_weights if is_type_b(peer_id) else type_a_weights)) is not None
+        if (score := weighted_score(peer_id, common_weights)) is not None
     }
     original_type_b = is_type_b(player_key)
-    original_score = original_spear_scores.get(player_key)
-    original_tier = tier_for_score(original_score)
     active_type_b = original_type_b if role_override not in {"type_a", "type_b"} else role_override == "type_b"
-    role_mismatch = active_type_b != original_type_b
-
-    # Keep every peer at their original tactical role, and replace only the
-    # simulated player's value when the role switch is toggled.
     spear_scores = dict(original_spear_scores)
-    active_weights = type_b_weights if active_type_b else type_a_weights
-    # A Soft Floor is only an absent-stat defence.  If a naturally deep-lying
-    # player actually has enough box data, preserve that observed value when
-    # the user simulates him as a conventional No. 9.
-    missing_deep_box_score = player_key not in base_deep_box_scores
-    deep_floor = (
-        soft_floor_by_tier[original_tier]
-        if role_mismatch and original_type_b and not active_type_b and missing_deep_box_score
-        else None
-    )
-    active_score = weighted_score(player_key, active_weights, deep_floor)
+    active_score = weighted_score(player_key, common_weights)
     if active_score is not None:
         spear_scores[player_key] = active_score
-    if active_type_b:
-        deep_box_pct, deep_box_rank = 100.0, max(1, len(peers))
-    elif deep_floor is not None:
-        deep_box_pct = round(100.0 - deep_floor, 1)
-        deep_box_rank = 1 + sum(score > deep_floor for score in base_deep_box_scores.values())
     spear_score_top_percent, spear_score_rank = _rank_score(player_key, spear_scores)
     # Keep the original weighted S.P.E.A.R. scale for the rating and tier.
     # Rank/Top % remain a separate, same-session relative comparison.
@@ -931,7 +886,7 @@ def calculate_league_percentiles(
         spear_score_rank=spear_score_rank,
         spear_score_top_percent=spear_score_top_percent,
         spear_score_eligible=len(spear_scores),
-        false_nine_penalty=active_type_b,
+        is_type_b=active_type_b,
         spear_role="Type B · 2선 지향/펄스 나인" if active_type_b else "Type A · 정통 타겟/포처",
     )
 
