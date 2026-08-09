@@ -2182,12 +2182,102 @@ def render_head_to_head_page() -> None:
     render_head_to_head_cards(left_player.name, left_rank, left_stats, left_ratio, right_player.name, right_rank, right_stats, right_ratio)
 
 
+def render_messi_about_page() -> None:
+    """Explain the M.E.S.S.I. framework in a scouting-friendly Q&A format."""
+    st.title("❓ M.E.S.S.I. 스탯이란?")
+    st.caption("ver 2.0 · 공간 점유와 전술적 역할을 함께 반영하는 현대 공격수 평가 프레임워크")
+    st.info(
+        "M.E.S.S.I.는 단순 득점 순위가 아니라, 선수가 어디에서 움직이고 어떤 역할로 "
+        "공격에 기여하는지를 6개 축과 역할별 동적 가중치로 해석합니다."
+    )
+
+    questions = [
+        (
+            "Q1. 왜 기존 공격 스탯만으로는 부족한가요?",
+            "정통 타겟맨과 2선으로 내려와 연계·공간 창출을 맡는 펄스 나인은 박스 점유와 "
+            "슈팅 위치가 다릅니다. 같은 기준으로 줄세우면 펄스 나인형 선수가 '자료 부족'이나 "
+            "저효율로 과소평가될 수 있어, M.E.S.S.I.는 먼저 전술적 역할을 식별합니다.",
+        ),
+        (
+            "Q2. M.E.S.S.I.는 무엇의 약자인가요?",
+            "\n".join([
+                "- **M — Micro-zoning:** 박스 안 골드·실버·브론즈 존과 활동 위치 분석",
+                "- **E — Efficiency:** 심층 타격과 득점 효율",
+                "- **S — Space:** 핵심 활동 반경(CCA)과 5-Lane 공간 활용",
+                "- **S — Striking:** 위험 구역 파괴와 박스 밖 슈팅력",
+                "- **I — Intensity:** 지상·공중 경합 및 물리적 강도",
+            ]),
+        ),
+        (
+            "Q3. 비교군은 어떻게 구성되나요?",
+            "선택한 시즌·대회 안에서 충분한 출전 시간과 공격 기여가 확인된 선수만 포함합니다. "
+            "현재 기준은 리그 최소 450분, 컵대회 최소 180분이며, 화면의 각 리더보드·차트에 "
+            "적용된 xG 기준과 모집단 수를 함께 표시합니다. 따라서 등수와 백분위는 항상 해당 "
+            "화면에 명시된 동일 코호트 안에서 해석해야 합니다.",
+        ),
+        (
+            "Q4. 공간 데이터와 히트맵은 어떻게 해석하나요?",
+            "시즌 활동 좌표를 정적 데이터로 저장한 뒤, 반복 밀도가 높은 핵심 활동 반경(CCA)을 계산합니다. "
+            "CCA는 KDE(커널 밀도 추정)에서 상위 50% 밀도 영역을 기반으로 하며, 일회성 위치보다 "
+            "지속적으로 점유한 공간을 우선 반영합니다. 3-Zone은 전진 깊이, 5-Lane은 횡적 움직임과 "
+            "좌우 밸런스를 보여줍니다.",
+        ),
+        (
+            "Q5. 박스 내 마이크로 조닝은 무엇인가요?",
+            "전체 활동 좌표 중 박스 안 좌표의 비율(Box Ratio)을 구하고, 박스 안을 골드 존(6야드), "
+            "실버 존(페널티 스폿), 브론즈 존(와이드 박스)으로 나눕니다. 골드 존 비중은 문전 침투, "
+            "실버 존은 컷백 대응, 브론즈 존은 제한된 각도에서의 활동 경향을 해석하는 근거입니다.",
+        ),
+        (
+            "Q6. 6개 평가 축은 무엇을 보나요?",
+            "\n".join([
+                "1. **심층 타격 효율** — 박스 안 생산성과 유리한 마무리 구역 점유",
+                "2. **위험 구역 파괴력** — 전진·돌파로 수비 블록을 흔드는 능력",
+                "3. **박스 밖 슈팅력** — 외곽 타격의 볼륨과 순도",
+                "4. **공간 장악력** — CCA, 위험 구역 점유, 5-Lane 활용",
+                "5. **지상 경합 능력** — 소유권 방어·압박 강도",
+                "6. **공중볼 장악력** — 제공권과 롱볼·크로스 대응",
+            ]),
+        ),
+        (
+            "Q7. Type A와 Type B는 어떻게 달라지나요?",
+            "**Type A(정통 9번)**는 Box Ratio가 15% 이상인 선수로, 심층 타격 효율에 가장 큰 30% "
+            "가중치를 둡니다. **Type B(펄스 나인)**는 15% 미만으로, 심층 타격 효율을 0%로 두는 대신 "
+            "위험 구역 파괴력과 공간 장악력에 각각 30%를 부여합니다. 이는 역할 차이를 감점이 아니라 "
+            "평가 기준의 전환으로 처리하기 위한 장치입니다.",
+        ),
+        (
+            "Q8. M.E.S.S.I. 점수와 티어는 어떻게 읽나요?",
+            "6개 팩터는 선택 대회·코호트 내 백분위로 계산되고, 역할별 가중치로 합산해 0~100점의 "
+            "고정 스케일 점수를 만듭니다. 점수 자체는 단순 '이번 시즌 몇 위'가 아니라 가중 팩터 수준을 "
+            "보여주며, 옆의 등수·상위 %는 같은 모집단 안에서의 상대 위치를 설명합니다. S(95+), "
+            "A(85~94), B(65~84), C(35~64), D(34 이하) 티어를 사용합니다.",
+        ),
+        (
+            "Q9. 볼륨 레이더와 비율 레이더를 왜 함께 보나요?",
+            "볼륨 레이더는 얼마나 자주 해당 상황에 관여하는지, 비율 레이더는 그 관여가 얼마나 효율적인지 "
+            "보여줍니다. 둘을 함께 봐야 '많이 시도하지만 비효율적인 선수'와 '시도는 적어도 매우 날카로운 선수'를 "
+            "구분할 수 있습니다.",
+        ),
+        (
+            "Q10. 자료 부족이나 역할 미스매치는 어떻게 처리하나요?",
+            "공간·마이크로 조닝 표본이 부족하면 해당 사실을 UI에 표시하고 임의의 평균값으로 숨기지 않습니다. "
+            "또한 역할 탭에서 본래 역할과 다른 롤을 시뮬레이션할 때 결측치가 생기면, 원래 티어를 기준으로 한 "
+            "Soft Floor를 적용해 비현실적인 0점 붕괴를 방지합니다.",
+        ),
+    ]
+    for index, (question, answer) in enumerate(questions):
+        with st.expander(question, expanded=index < 2):
+            st.markdown(answer)
+
+
 def main() -> None:
     """URL-addressable three-page navigation for the scouting workflow."""
     pages = {
         "leaderboard": "🔍 리더보드",
         "detail": "📊 선수 상세 분석",
         "compare": "⚔️ 비교 분석",
+        "about": "❓ M.E.S.S.I. 스탯이란?",
     }
     current = _query_text("page", "leaderboard")
     if current not in pages:
@@ -2196,13 +2286,15 @@ def main() -> None:
     # Top navigation keeps the three product surfaces visible without taking
     # permanent horizontal space from the scouting visuals as a sidebar does.
     with st.container(border=True):
-        brand_col, leaderboard_col, detail_col, compare_col, info_col = st.columns([1.45, 1.2, 1.25, 1.15, 0.7])
+        brand_col, leaderboard_col, detail_col, compare_col, about_col = st.columns([1.05, 0.95, 1.1, 0.95, 1.55])
         with brand_col:
-            st.markdown("#### M.E.S.S.I. 2.0")
+            st.markdown("#### M.E.S.S.I.")
+            st.caption("ver 2.0")
         for column, page, label in (
             (leaderboard_col, "leaderboard", pages["leaderboard"]),
             (detail_col, "detail", pages["detail"]),
             (compare_col, "compare", pages["compare"]),
+            (about_col, "about", pages["about"]),
         ):
             with column:
                 if st.button(
@@ -2211,17 +2303,15 @@ def main() -> None:
                 ) and current != page:
                     _route(page)
                     st.rerun()
-        with info_col:
-            with st.popover("💡 안내", use_container_width=True):
-                st.markdown("#### M.E.S.S.I. 프레임워크")
-                st.markdown(MESSI_FRAMEWORK)
     st.divider()
     if current == "leaderboard":
         render_leaderboard_page()
     elif current == "detail":
         render_player_detail_page()
-    else:
+    elif current == "compare":
         render_head_to_head_page()
+    else:
+        render_messi_about_page()
 
 if __name__ == "__main__":
     main()
