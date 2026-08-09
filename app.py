@@ -460,9 +460,10 @@ def comparison_population_label(league_id: int | None, scope: int) -> str:
 def comparison_population_criteria(league_id: int | None, season: str, scope: int) -> str:
     """Make the ranking cohort explicit beside every S.P.E.A.R. rank."""
     minimum_minutes = 180 if league_id in {42, 73, 102} else 450
+    minimum_xg = 1.0 if league_id in {42, 73, 102} else 2.0
     return (
         f"기준: {season} 시즌 · {comparison_population_label(league_id, scope)} · "
-        f"최소 {minimum_minutes}분 · xG 1.0 이상"
+        f"최소 {minimum_minutes}분 · xG {minimum_xg:.1f} 이상"
     )
 
 
@@ -1325,12 +1326,13 @@ def select_player(query: str, key: str, label: str = "선수 선택"):
 def render_spear_leaderboard(
     season: str, comparison_scope: int, league_id: int = 47,
     position_filter: str = "전체", role_filter: str = "전체",
+    section_title: str = "🏆 S.P.E.A.R. 스카우팅 리스트",
 ) -> PlayerCandidate | None:
     """Show a local, sortable scouting list and return the selected player."""
     table = cached_spear_leaderboard(league_id, season, comparison_scope)
     role_filter = {"정통형": "Type A", "펄스 나인형": "Type B"}.get(role_filter, role_filter)
-    st.subheader("🏆 S.P.E.A.R. 스카우팅 리스트")
-    st.caption(comparison_population_criteria(47, season, comparison_scope))
+    st.subheader(section_title)
+    st.caption(comparison_population_criteria(league_id, season, comparison_scope))
     if table.empty:
         st.info(
             f"{season} 시즌의 정적 S.P.E.A.R. 코호트가 아직 준비되지 않았습니다. "
@@ -1394,7 +1396,7 @@ def render_spear_leaderboard(
                 help="선수 이름을 클릭하면 상세 분석 리포트로 이동합니다.",
             ),
         },
-        key=f"v32_leaderboard_{season}_{comparison_scope}",
+        key=f"v32_leaderboard_{league_id}_{season}_{comparison_scope}",
     )
     selected_rows = getattr(getattr(event, "selection", None), "rows", [])
     if not selected_rows:
@@ -1513,7 +1515,8 @@ def render_player_report(
 
             progression_eligible = get_rank("progression_eligible") or 0
             minimum_minutes = 180 if stats.league_id in (42, 73, 102) else 450
-            cohort_label = f"{comparison_population_label(stats.league_id, comparison_scope)} · {minimum_minutes}분 이상 · xG 1 이상"
+            minimum_xg = 1.0 if stats.league_id in {42, 73, 102} else 2.0
+            cohort_label = f"{comparison_population_label(stats.league_id, comparison_scope)} · {minimum_minutes}분 이상 · xG {minimum_xg:.1f} 이상"
             with st.expander(
                 f"🏃 순수 전진 기여도 상대평가 · {cohort_label} · 비교군 {progression_eligible}명",
                 expanded=True,
@@ -1843,10 +1846,27 @@ def render_leaderboard_page() -> None:
     active_position = _query_text("position", "전체")
     active_role = _query_text("role", "전체")
     active_query = _query_text("search", "")
-    selected = render_spear_leaderboard(
+    european_competitions = {
+        "UEFA Champions League": 42,
+        "UEFA Europa League": 73,
+        "UEFA Conference League": 102,
+    }
+    european_name = st.selectbox(
+        "유럽대항전 리더보드", list(european_competitions),
+        key=f"european_leaderboard_{active_season}",
+    )
+    european_selected = render_spear_leaderboard(
+        active_season, default_scope, european_competitions[european_name],
+        active_position, active_role,
+        section_title=f"🌍 {european_name} · S.P.E.A.R. 리더보드",
+    )
+    st.divider()
+    league_selected = render_spear_leaderboard(
         active_season, default_scope, league_options.get(active_league_name, 47),
         active_position, active_role,
+        section_title=f"🏆 {active_league_name} · 리그 S.P.E.A.R. 리더보드",
     )
+    selected = european_selected or league_selected
     if selected:
         st.rerun()
     if active_query:

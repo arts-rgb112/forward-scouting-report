@@ -18,10 +18,11 @@ from spear_cohort import get_static_spear_cohort
 from tactical_ratio import get_tactical_ratio_for_session, passes_final_third_filter
 
 
-MINIMUM_SPEAR_XG = 1.0
 CUP_COMPETITION_IDS = frozenset({42, 73, 102})
 LEAGUE_MINIMUM_MINUTES = 450.0
 CUP_MINIMUM_MINUTES = 180.0
+LEAGUE_MINIMUM_XG = 2.0
+CUP_MINIMUM_XG = 1.0
 COMPARISON_SCOPES = {
     3: frozenset({47, 55, 87}),
     5: frozenset({47, 53, 54, 55, 87}),
@@ -126,6 +127,11 @@ class LeaguePercentiles:
 
 def _minimum_minutes_for_competition(league_id: int) -> float:
     return CUP_MINIMUM_MINUTES if league_id in CUP_COMPETITION_IDS else LEAGUE_MINIMUM_MINUTES
+
+
+def _minimum_xg_for_competition(league_id: int | None) -> float:
+    """Use a stricter domestic-league xG floor without collapsing cup samples."""
+    return CUP_MINIMUM_XG if league_id in CUP_COMPETITION_IDS else LEAGUE_MINIMUM_XG
 
 
 def _value(row: dict) -> Optional[float]:
@@ -252,12 +258,13 @@ def _fetch_live_spear_cohort(
             if metric is not None:
                 metrics_by_player[player_id] = metric
     # S.P.E.A.R., pure progression, and finishing all share one transparent
-    # population: every player in the selected competition with xG >= 1.
+    # Population: individual cumulative xG >= 2.0 in domestic leagues and
+    # >= 1.0 in continental cups, with the matching appearance cutoff.
     # Keep ``restrict_to_forwards`` in the signature for cached-call
     # compatibility; it intentionally no longer narrows this population.
     metrics_by_player = {
         player_id: metric for player_id, metric in metrics_by_player.items()
-        if (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
+        if (metric.xg or 0.0) >= _minimum_xg_for_competition(league_id)
         and (metric.minutes_played or 0.0) >= _minimum_minutes_for_competition(league_id)
     }
     metrics_by_player = {
@@ -286,7 +293,7 @@ def _fetch_elite_dribbler_metrics(
             cohort_metrics, _ = get_static_spear_cohort(target_league_id, season_name)
             static_metrics.update({
                 player_id: metric for player_id, metric in cohort_metrics.items()
-                if (metric.xg or 0.0) >= MINIMUM_SPEAR_XG
+                if (metric.xg or 0.0) >= _minimum_xg_for_competition(metric.league_id or target_league_id)
                 and (metric.minutes_played or 0.0) >= _minimum_minutes_for_competition(
                     metric.league_id or target_league_id
                 )
@@ -335,7 +342,7 @@ def get_spear_leaderboard(
     for target_id in target_leagues:
         metrics, cohort_names = get_static_spear_cohort(target_id, season_name)
         for player_id, metric in metrics.items():
-            if ((metric.xg or 0.0) >= MINIMUM_SPEAR_XG
+            if ((metric.xg or 0.0) >= _minimum_xg_for_competition(metric.league_id or target_id)
                     and (metric.minutes_played or 0.0) >= _minimum_minutes_for_competition(metric.league_id or target_id)):
                 peers[player_id] = metric
                 names[player_id] = cohort_names.get(player_id, "Unknown")
@@ -570,6 +577,10 @@ def calculate_league_percentiles(
 ) -> LeaguePercentiles:
     if metrics.league_id is None:
         return LeaguePercentiles(None, None, None, None, None, None, None, None, None, None, 0)
+    # Call sites retained ``minimum_xg=1.0`` for backward compatibility.
+    # Apply the competition-specific floor centrally so every bar, median,
+    # S.P.E.A.R. axis, rank and leaderboard shares the same population rule.
+    minimum_xg = max(float(minimum_xg), _minimum_xg_for_competition(metrics.league_id))
     
     season_name = f"20{season[:2]}/20{season[3:]}" if len(season) == 5 and "/" in season else season
     player_key = str(player_id)
