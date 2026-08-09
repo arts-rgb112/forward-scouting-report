@@ -2082,7 +2082,9 @@ def _query_text(name: str, default: str = "") -> str:
 def _query_scope(default: int = 5) -> int:
     try:
         value = int(_query_text("scope", str(default)))
-        return value if value in {3, 5, 7} else default
+        # ``0`` deliberately represents a single selected domestic league.
+        # The named 3/5/7-league options remain the cross-league cohorts.
+        return value if value in {0, 3, 5, 7} else default
     except ValueError:
         return default
 
@@ -2112,15 +2114,22 @@ def render_leaderboard_page() -> None:
         "선수 이름을 클릭하면 상세 리포트로 이동합니다."
     )
     league_options = {
-        "통합 리그 범위": 47,
+        "5대 리그": 47,
+        "3대 리그": 47,
         "Premier League": 47, "LaLiga": 87, "Bundesliga": 54,
         "Serie A": 55, "Ligue 1": 53,
     }
+    # The static cohort already defines these comparison unions.  Keep the
+    # selector labels aligned with the actual scoring population instead of
+    # presenting the old ambiguous "integrated league range" wording.
+    league_scope_options = {"3대 리그": 3, "5대 리그": 5}
     default_season = _query_text("season", "25/26")
-    default_scope = _query_scope()
-    default_league = _query_text("league_name", "통합 리그 범위")
+    default_league = _query_text("league_name", "5대 리그")
+    # Preserve links generated before the selector was renamed.
+    if default_league == "통합 리그 범위":
+        default_league = "5대 리그"
     if default_league not in league_options:
-        default_league = "통합 리그 범위"
+        default_league = "5대 리그"
     season_options = ["25/26", "24/25", "23/24", "22/23", "21/22"]
     # Keep the season switch separate from the dense search form.  Scouting
     # users should be able to move through historical leaderboards without
@@ -2137,7 +2146,10 @@ def render_leaderboard_page() -> None:
     with st.form("leaderboard_filters", border=True):
         league_col, position_col, role_col, search_col, action_col = st.columns([1.4, 1, 1, 1.8, 0.9])
         with league_col:
-            league_name = st.selectbox("리그", list(league_options), index=list(league_options).index(default_league))
+            league_name = st.selectbox(
+                "리그", list(league_options), index=list(league_options).index(default_league),
+                help="3대 리그: Premier League·LaLiga·Serie A / 5대 리그: 3대 리그 + Bundesliga·Ligue 1",
+            )
         with position_col:
             position = st.selectbox("포지션", ["전체", "FW", "MF", "DF"], index=["전체", "FW", "MF", "DF"].index(_query_text("position", "전체")) if _query_text("position", "전체") in {"전체", "FW", "MF", "DF"} else 0)
         with role_col:
@@ -2160,20 +2172,27 @@ def render_leaderboard_page() -> None:
                 position=position,
                 role=role,
             )
-            _route("leaderboard", season=active_season, scope=default_scope, league_name=league_name, position=position, role=role, search=query.strip())
+            _route(
+                "leaderboard", season=active_season,
+                scope=league_scope_options.get(league_name, 0), league_name=league_name,
+                position=position, role=role, search=query.strip(),
+            )
             st.rerun()
 
     active_league_name = _query_text("league_name", default_league)
+    if active_league_name == "통합 리그 범위":
+        active_league_name = "5대 리그"
     active_position = _query_text("position", "전체")
     active_role = _query_text("role", "전체")
     active_query = _query_text("search", "")
+    active_scope = league_scope_options.get(active_league_name, 0)
     if active_query:
         st.markdown("#### 🔎 검색 결과")
         candidate = select_player(active_query, "leaderboard_search_player_v2", "검색 결과")
         if candidate:
             _route(
                 "detail", player=candidate.player_id, name=candidate.name,
-                team=candidate.team_name or "", season=active_season, scope=default_scope,
+                team=candidate.team_name or "", season=active_season, scope=active_scope,
             )
             st.rerun()
 
@@ -2192,13 +2211,13 @@ def render_leaderboard_page() -> None:
         key=f"european_leaderboard_{active_season}",
     )
     european_selected = render_spear_leaderboard(
-        active_season, default_scope, european_competitions[european_name],
+        active_season, active_scope, european_competitions[european_name],
         active_position, active_role,
         section_title=f"🌍 {european_name} · M.E.S.S.I. 리더보드",
     )
     st.divider()
     league_selected = render_spear_leaderboard(
-        active_season, default_scope, league_options.get(active_league_name, 47),
+        active_season, active_scope, league_options.get(active_league_name, 47),
         active_position, active_role,
         section_title=f"🏆 {active_league_name} · 리그 M.E.S.S.I. 리더보드",
     )
