@@ -1686,12 +1686,12 @@ def render_spear_leaderboard(
     display = table.rename(columns={
         "rank": "순위", "player_name": "선수", "team_name": "팀", "league_name": "리그",
         "score": "M.E.S.S.I.", "tier": "티어", "role": "기본 롤",
-        "outside_shot_tier": "박스 밖 슈팅", "deep_box_tier": "박스 타격",
-        "danger_zone_tier": "위험 구역", "aerial_tier": "공중볼",
-        "ground_duel_tier": "지상 경합", "space_control_tier": "공간 장악",
+        "outside_shot_tier": "박스 밖 슈팅", "deep_box_tier": "박스 안 슈팅",
+        "danger_zone_tier": "드리블 능력", "aerial_tier": "공중 경합",
+        "ground_duel_tier": "지상 경합", "space_control_tier": "오프더볼",
     })[[
-        "순위", "선수", "팀", "리그", "M.E.S.S.I.", "티어", "박스 밖 슈팅", "박스 타격",
-        "위험 구역", "공중볼", "지상 경합", "공간 장악", "기본 롤",
+        "순위", "선수", "팀", "리그", "M.E.S.S.I.", "티어", "박스 밖 슈팅", "박스 안 슈팅",
+        "드리블 능력", "공중 경합", "지상 경합", "오프더볼", "기본 롤",
     ]].copy()
     display.insert(
         1, "프로필",
