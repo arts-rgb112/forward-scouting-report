@@ -394,8 +394,9 @@ def get_spear_leaderboard(
     for player_id, metric in peers.items():
         row = spatial.get(player_id)
         box_ratio = float(row.get("in_box_ratio") or 0.0) if row else 0.0
-        micro_total = sum(float(row.get(field) or 0.0) for field in micro_fields) if row else 0.0
-        is_type_b = box_ratio < 15.0 or micro_total <= 0.0
+        # Role is a spatial-depth label only. Missing micro-zone values must
+        # never turn a conventional box player into a false nine.
+        is_type_b = row is not None and box_ratio < 15.0
         weights = (
             (deep_scores, 0.30), (shot_scores, 0.20), (progression_scores, 0.15),
             (cca_scores, 0.15), (aerial_scores, 0.10), (duel_scores, 0.10),
@@ -768,9 +769,8 @@ def calculate_league_percentiles(
     def is_type_b(peer_id: str) -> bool:
         row = spatial_rows.get(peer_id)
         if row is None:
-            return True
-        zone_total = sum(float(row.get(field) or 0.0) for field in micro_fields)
-        return float(row.get("in_box_ratio") or 0.0) < 15.0 or zone_total <= 0.0
+            return False
+        return float(row.get("in_box_ratio") or 0.0) < 15.0
 
     def weighted_score(peer_id: str, weights) -> Optional[float]:
         values = []
