@@ -331,11 +331,15 @@ def spatial_metrics(points: list[tuple[float, float]]) -> dict[str, float]:
     if box_points:
         box_total = float(len(box_points))
         six_yard = sum(x >= 94.0 and 36.8 <= y <= 63.2 for x, y in box_points)
-        penalty_spot = sum(88.0 <= x < 94.0 and 36.8 <= y <= 63.2 for x, y in box_points)
+        # Keep the three zones exhaustive and mutually exclusive.  The whole
+        # central corridor is Silver; only the lateral sides of the box are
+        # Bronze.  Treating x=83..88 central activity as a Bronze residual
+        # falsely labelled central strikers as wide-box players.
+        central_box = sum(83.0 <= x < 94.0 and 36.8 <= y <= 63.2 for x, y in box_points)
         empty["box_six_yard_ratio"] = round(six_yard / box_total * 100.0, 2)
-        empty["box_penalty_spot_ratio"] = round(penalty_spot / box_total * 100.0, 2)
-        empty["box_wide_ratio"] = round((box_total - six_yard - penalty_spot) / box_total * 100.0, 2)
-        # Gold (six-yard), Silver (penalty spot), Bronze (wide box).  This
+        empty["box_penalty_spot_ratio"] = round(central_box / box_total * 100.0, 2)
+        empty["box_wide_ratio"] = round((box_total - six_yard - central_box) / box_total * 100.0, 2)
+        # Gold (six-yard), Silver (central box), Bronze (wide box).  This
         # activity-location score remains distinct from shot quality and is
         # combined with FotMob's in-box finishing only at ranking time.
         # Normalise by the Gold weight so a pure 6-yard profile remains 100,
