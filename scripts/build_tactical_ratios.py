@@ -54,6 +54,19 @@ TARGET_TOURNAMENTS = {
     ("uefa conference league", "europe"): "UEFA Europa Conference League",
     ("europa conference league", "europe"): "UEFA Europa Conference League",
 }
+# The production dashboard is explicitly scoped to the five major domestic
+# leagues and the three UEFA competitions. IDs remain dynamically discovered;
+# these are stable display labels used only to validate source coverage.
+REQUIRED_HEATMAP_COMPETITIONS = (
+    "Premier League",
+    "LaLiga",
+    "Bundesliga",
+    "Serie A",
+    "Ligue 1",
+    "UEFA Champions League",
+    "UEFA Europa League",
+    "UEFA Europa Conference League",
+)
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ACTIVITY_GRID_SIZE = 5.0
 MIN_CELL_OVERLAP = 3
@@ -471,6 +484,10 @@ def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]],
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--season-name", required=True, help='display label, e.g. "2025/2026"')
+    parser.add_argument(
+        "--competitions", nargs="+", choices=REQUIRED_HEATMAP_COMPETITIONS,
+        help="Optional dynamically-discovered competition labels to refresh. Defaults to all required competitions.",
+    )
     parser.add_argument("--delay", type=float, default=0.5, help="seconds between requests")
     args = parser.parse_args()
     api_keys = {
@@ -500,7 +517,17 @@ def main() -> None:
     enrich_checkpoint_spatial_metrics(output, visual_points)
     completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output if str(row.get("heatmap_key", "")) in visual_points}
     unmatched, auto_mapped = [], []
-    for tournament in discover_tournaments(client):
+    discovered = {item["name"]: item for item in discover_tournaments(client)}
+    requested_competitions = tuple(args.competitions or REQUIRED_HEATMAP_COMPETITIONS)
+    missing_competitions = [name for name in requested_competitions if name not in discovered]
+    if missing_competitions:
+        raise SystemExit(
+            "Incomplete SportsAPI tournament discovery; no data was refreshed for "
+            f"{args.season_name}. Missing: {', '.join(missing_competitions)}"
+        )
+
+    for competition_name in requested_competitions:
+        tournament = discovered[competition_name]
         try:
             season = discover_season(client, tournament, args.season_name)
         except (HTTPError, URLError, TimeoutError) as exc:

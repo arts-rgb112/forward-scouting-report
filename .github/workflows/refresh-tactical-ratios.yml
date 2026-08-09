@@ -11,6 +11,10 @@ on:
         description: Optional comma-separated batch of seasons, processed sequentially
         required: false
         default: ""
+      competitions:
+        description: Optional comma-separated competition labels; leave blank to verify and refresh all 8 target competitions
+        required: false
+        default: ""
   schedule:
     - cron: "15 3 * * 1"
 
@@ -44,7 +48,20 @@ jobs:
             season="$(echo "$raw_season" | xargs)"
             [ -n "$season" ] || continue
             echo "Refreshing tactical data for $season"
-            python scripts/build_tactical_ratios.py --season-name "$season"
+            competition_args=()
+            competitions="${{ inputs.competitions }}"
+            if [ -n "$competitions" ]; then
+              IFS=',' read -ra competition_list <<< "$competitions"
+              for raw_competition in "${competition_list[@]}"; do
+                competition="$(echo "$raw_competition" | xargs)"
+                [ -n "$competition" ] && competition_args+=("$competition")
+              done
+            fi
+            if [ "${#competition_args[@]}" -gt 0 ]; then
+              python scripts/build_tactical_ratios.py --season-name "$season" --competitions "${competition_args[@]}"
+            else
+              python scripts/build_tactical_ratios.py --season-name "$season"
+            fi
           done
       - name: Commit refreshed static data
         # Each completed competition is checkpointed by the ETL.  Persist that
