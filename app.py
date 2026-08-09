@@ -212,6 +212,23 @@ def _radar_score(top_percent: float | None) -> float:
     return max(0.0, min(100.0, 100.0 - float(top_percent)))
 
 
+IMPUTED_LOW_TIER_SCORE = 20.0
+
+
+def _imputed_axis_attrs(rank, *, volume: bool) -> tuple[str, ...]:
+    """Return axes that use the conservative missing-data D-tier floor."""
+    field = "spear_imputed_volume_attrs" if volume else "spear_imputed_ratio_attrs"
+    values = getattr(rank, field, ()) if rank else ()
+    return tuple(values) if isinstance(values, (list, tuple)) else ()
+
+
+def _axis_score(rank, percentile_attr: str, *, volume: bool) -> tuple[float, bool]:
+    """Resolve a radar score without ever presenting a missing value as average."""
+    if percentile_attr in _imputed_axis_attrs(rank, volume=volume):
+        return IMPUTED_LOW_TIER_SCORE, True
+    return _radar_score(getattr(rank, percentile_attr, None) if rank else None), False
+
+
 def make_radar_profile(name: str, rank) -> dict[str, object]:
     return {
         "name": name,
@@ -630,7 +647,13 @@ def _spear_total(rank) -> tuple[float | None, str | None, int]:
         return None, None, 0
     if getattr(rank, "spear_score", None) is not None:
         score = float(rank.spear_score)
-        return score, _spear_tier(score), len(SPEAR_FACTOR_AXES)
+        imputed = set(_imputed_axis_attrs(rank, volume=True)) | set(_imputed_axis_attrs(rank, volume=False))
+        covered_axes = sum(
+            1
+            for sector in TWIN_SECTOR_MATRIX.values()
+            if sector["volume"] not in imputed and sector["ratio"] not in imputed
+        )
+        return score, _spear_tier(score), covered_axes
     values = [
         _radar_score(getattr(rank, attr))
         for _, attr in SPEAR_FACTOR_AXES
@@ -648,11 +671,20 @@ def twin_radar_sector_summaries(rank) -> list[tuple[str, str]]:
     for sector_id, sector in TWIN_SECTOR_MATRIX.items():
         volume_percent = getattr(rank, sector["volume"], None) if rank else None
         ratio_percent = getattr(rank, sector["ratio"], None) if rank else None
+        volume_score, volume_imputed = _axis_score(rank, sector["volume"], volume=True)
+        ratio_score, ratio_imputed = _axis_score(rank, sector["ratio"], volume=False)
+        if volume_imputed or ratio_imputed:
+            missing_part = "볼륨·비율" if volume_imputed and ratio_imputed else "볼륨" if volume_imputed else "비율"
+            summaries.append((
+                sector["title"],
+                f"[보수적 D 보정] {missing_part} 원천 데이터 부족 — 20점(D)으로 총점·등수에 반영",
+            ))
+            continue
         if volume_percent is None or ratio_percent is None:
             summaries.append((sector["title"], "[자료 부족] Insufficient Data"))
             continue
-        volume_tier = _spear_tier(_radar_score(volume_percent))
-        ratio_tier = _spear_tier(_radar_score(ratio_percent))
+        volume_tier = _spear_tier(volume_score)
+        ratio_tier = _spear_tier(ratio_score)
         text = sector["rows"][volume_tier][ratio_tier]
         summaries.append((sector["title"], f"[{volume_tier}×{ratio_tier}] {text}"))
     return summaries
@@ -666,12 +698,19 @@ def twin_matrix_coordinates(rank) -> tuple[tuple[str, str] | None, ...]:
     for sector in TWIN_SECTOR_MATRIX.values():
         volume_percent = getattr(rank, sector["volume"], None)
         ratio_percent = getattr(rank, sector["ratio"], None)
-        if volume_percent is None or ratio_percent is None:
+        volume_score, volume_imputed = _axis_score(rank, sector["volume"], volume=True)
+        ratio_score, ratio_imputed = _axis_score(rank, sector["ratio"], volume=False)
+        if volume_imputed or ratio_imputed:
+            coordinates.append((
+                _spear_tier(volume_score),
+                _spear_tier(ratio_score),
+            ))
+        elif volume_percent is None or ratio_percent is None:
             coordinates.append(None)
         else:
             coordinates.append((
-                _spear_tier(_radar_score(volume_percent)),
-                _spear_tier(_radar_score(ratio_percent)),
+                _spear_tier(volume_score),
+                _spear_tier(ratio_score),
             ))
     return tuple(coordinates)
 
@@ -722,7 +761,9 @@ def render_twin_radar_sector_summaries(rank) -> None:
         tiers = badge.removeprefix("[").split("×")
         # A single D makes the cross-profile critical; otherwise favor the
         # best displayed tier so exceptional combinations scan immediately.
-        if "자료 부족" in badge:
+        if "보수적 D" in badge:
+            tone = "danger"
+        elif "자료 부족" in badge:
             tone = "warning"
         elif "D" in tiers:
             tone = "danger"
@@ -765,7 +806,7 @@ def render_spear_radar(
             label, percentile_attr = axis
             raw_attr, rank_attr, total_attr = SPEAR_FACTOR_DETAILS[percentile_attr]
         top_percent = getattr(rank, percentile_attr, None) if rank else None
-        score = _radar_score(top_percent)
+        score, imputed = _axis_score(rank, percentile_attr, volume=volume)
         tier = _spear_tier(score)
         labels.append(f"{label} [{tier}]")
         values.append(score)
@@ -778,8 +819,8 @@ def render_spear_radar(
         total = getattr(rank, total_attr, None) if rank else None
         details.append([
             "—" if raw_value is None else f"{float(raw_value):.2f}",
-            f"{tier} 등급",
-            "데이터 부족" if top_percent is None else f"상위 {float(top_percent):.1f}%",
+            "보수적 D 보정" if imputed else f"{tier} 등급",
+            "원천 데이터 부족 · 20점 반영" if imputed else "데이터 부족" if top_percent is None else f"상위 {float(top_percent):.1f}%",
             "순위 데이터 부족" if rank_value is None or not total else f"{rank_value}위 / {total}명",
         ])
 
@@ -948,7 +989,7 @@ def render_head_to_head_profile_headers(
                     if score_rank and score_top_percent is not None and population:
                         st.caption(f"{score_rank}위 / {population}명 · 상위 {score_top_percent:.1f}%")
                 if coverage and coverage < len(SPEAR_FACTOR_AXES):
-                    st.caption(f"산출 팩터 {coverage}/{len(SPEAR_FACTOR_AXES)}개 기준의 잠정 점수")
+                    st.caption(f"원천 데이터 확인 {coverage}/{len(SPEAR_FACTOR_AXES)}개 · 나머지는 보수적 D(20점) 보정")
 
                 identities = spatial_identity_badges(
                     ratio, force_type_b=False,
@@ -1001,13 +1042,43 @@ def render_season_heatmap(
     st.markdown("#### 📍 시즌 활동 히트맵")
     st.caption(
         "저장된 시즌 좌표를 기반으로 활동 밀도를 표시합니다. 공격 방향은 화면 왼쪽→오른쪽이며, "
-        "화면 위는 좌측 레인(Lane 1), 아래는 우측 레인(Lane 5)입니다."
+        "화면 위는 좌측 레인(Lane 1), 아래는 우측 레인(Lane 5)입니다. 히트맵은 5-Lane 원본 분포와 동일하게 보정됩니다."
     )
     if not points:
         st.caption("정적 히트맵 좌표 데이터가 아직 생성되지 않았습니다.")
         return
     x = [point[0] for point in points if isinstance(point, list) and len(point) == 2]
     y = [point[1] for point in points if isinstance(point, list) and len(point) == 2]
+    # The CSV lane ratios are computed from the full cluster-filtered payload,
+    # while this file contains a compact visual sample. Some older samples were
+    # coordinate-ordered and could visually overstate the opposite flank. Map
+    # the sample's lateral ranks back to the full five-lane distribution so the
+    # pitch and the 5-Lane panel always describe the same player profile.
+    lane_fields = ("lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio")
+    if tactical_ratio and y and all(tactical_ratio.get(field) is not None for field in lane_fields):
+        target = np.array([max(0.0, float(tactical_ratio[field])) for field in lane_fields])
+        if target.sum() > 0:
+            target = target / target.sum() * len(y)
+            target_counts = np.floor(target).astype(int)
+            for index in np.argsort(target - target_counts)[::-1][:len(y) - int(target_counts.sum())]:
+                target_counts[index] += 1
+            aligned_y = list(y)
+            ordered_indices = sorted(range(len(y)), key=lambda index: y[index])
+            cursor = 0
+            for lane_index, count in enumerate(target_counts):
+                if count <= 0:
+                    continue
+                indices = ordered_indices[cursor:cursor + int(count)]
+                cursor += int(count)
+                source = [y[index] for index in indices]
+                source_min, source_max = min(source), max(source)
+                for rank_in_lane, point_index in enumerate(indices):
+                    relative = (
+                        (y[point_index] - source_min) / (source_max - source_min)
+                        if source_max > source_min else (rank_in_lane + 0.5) / len(indices)
+                    )
+                    aligned_y[point_index] = lane_index * 20.0 + 1.0 + 18.0 * relative
+            y = aligned_y
     # Smooth a fixed grid so repeatedly visited zones visibly intensify instead
     # of rendering as indistinguishable overlapping dots.
     density, y_edges, x_edges = np.histogram2d(y, x, bins=(22, 32), range=((0, 100), (0, 100)))
@@ -1017,24 +1088,6 @@ def render_season_heatmap(
             lambda row: np.convolve(np.pad(row, 2, mode="edge"), kernel, mode="valid"),
             axis, density,
         )
-    # The compact visual cache is intentionally sampled, while the lane ratios
-    # are calculated from every repeated activity point.  Reweight each visual
-    # lane to the full ETL distribution so the heatmap and 5-Lane card retain
-    # the same left/right balance even when a response was coordinate-sorted.
-    lane_fields = ("lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio")
-    if tactical_ratio and all(tactical_ratio.get(field) is not None for field in lane_fields):
-        target = np.array([max(0.0, float(tactical_ratio[field])) for field in lane_fields])
-        sample = np.array([
-            sum(1 for value in y if lower <= value < upper)
-            for lower, upper in ((0, 20), (20, 40), (40, 60), (60, 80), (80, 100.001))
-        ], dtype=float)
-        if target.sum() > 0 and sample.sum() > 0:
-            target = target / target.sum()
-            sample = sample / sample.sum()
-            y_centers = (y_edges[:-1] + y_edges[1:]) / 2
-            for lane_index, (lower, upper) in enumerate(((0, 20), (20, 40), (40, 60), (60, 80), (80, 100.001))):
-                if sample[lane_index] > 0:
-                    density[(y_centers >= lower) & (y_centers < upper), :] *= target[lane_index] / sample[lane_index]
     peak = float(density.max())
     normalized = density / peak if peak else density
     figure = go.Figure(go.Heatmap(
@@ -1963,7 +2016,7 @@ def render_v32_analysis_center() -> None:
                 "· 모든 역할에 동일한 6개 팩터 가중치 적용"
             )
             if spear_coverage < len(SPEAR_FACTOR_AXES):
-                st.caption(f"현재 산출 가능한 팩터 {spear_coverage}/{len(SPEAR_FACTOR_AXES)}개 기준의 잠정 점수입니다.")
+                st.caption(f"원천 데이터 확인 {spear_coverage}/{len(SPEAR_FACTOR_AXES)}개 · 나머지는 보수적 D(20점) 보정입니다.")
             identities = spatial_identity_badges(
                 tactical_ratio,
                 force_type_b=False,
@@ -2190,7 +2243,7 @@ def _render_role_overview(player, filters: dict[str, object], stats: DecisionMet
         )
         st.markdown(
             "<div style='text-align: center; color: #a6a6a6; font-size: 0.86rem;'>"
-            f"적용 롤: {getattr(rank, 'spear_role', role)} · 산출 팩터 {spear_coverage}/6개"
+            f"적용 롤: {getattr(rank, 'spear_role', role)} · 원천 데이터 {spear_coverage}/6개"
             "</div>",
             unsafe_allow_html=True,
         )
