@@ -236,12 +236,24 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
             marker={"color": color, "size": 6},
             hovertemplate="%{theta}: %{r:.0f}점<extra>%{fullData.name}</extra>",
         ))
-    is_dark = st.get_option("theme.base") == "dark"
     figure.update_layout(
         title=title, height=440, margin={"l": 55, "r": 55, "t": 55, "b": 35},
         paper_bgcolor="rgba(0,0,0,0)",
-        polar={"bgcolor": "rgba(0,0,0,0)", "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "gridcolor": "#606060", "color": "#BBBBBB"}},
-        font={"color": "#EEEEEE" if is_dark else "#222222"},
+        polar={
+            "bgcolor": "rgba(0,0,0,0)",
+            "radialaxis": {
+                "range": [0, 100], "tickvals": [0, 25, 50, 75, 100],
+                "gridcolor": "#64748B", "linecolor": "#94A3B8",
+                "tickfont": {"color": "#CBD5E1"},
+            },
+            "angularaxis": {
+                "gridcolor": "#64748B", "linecolor": "#94A3B8",
+                "tickfont": {"color": "#F8FAFC", "size": 13},
+            },
+        },
+        # ``theme.base`` is not guaranteed to be populated on Streamlit Cloud;
+        # use explicit high-contrast polar labels for this dark dashboard.
+        font={"color": "#F8FAFC"},
         showlegend=len(profiles) > 1,
         legend={"orientation": "h", "y": -0.08, "x": 0.5, "xanchor": "center"},
     )
@@ -249,12 +261,12 @@ def render_radar_chart(profiles: list[dict[str, object]], title: str) -> None:
 
 
 SPEAR_FACTOR_AXES = [
-    ("박스 밖 킥 순도", "spear_shot_quality_top_percent"),
+    ("박스 밖 킥 순도", "out_box_shot_quality_top_percent"),
     ("박스 타격 효율", "micro_zoning_finishing_top_percent"),
     ("위험 구역 파괴력", "danger_zone_progression_top_percent"),
     ("공중볼 장악력", "aerial_margin_per90_top_percent"),
     ("지상 경합 능력", "duel_margin_per90_top_percent"),
-    ("공간 장악력", "cca_area_top_percent"),
+    ("공간 장악 효율", "danger_zone_density_top_percent"),
 ]
 
 MESSI_FRAMEWORK = """
@@ -565,11 +577,13 @@ TWIN_SECTOR_MATRIX = {
 
 SPEAR_FACTOR_DETAILS = {
     "spear_shot_quality_top_percent": ("shot_quality_per90", "spear_shot_quality_rank", "progression_eligible"),
+    "out_box_shot_quality_top_percent": ("out_box_shot_quality", "out_box_shot_quality_rank", "progression_eligible"),
     "micro_zoning_finishing_top_percent": ("tactical:deep_box_zone_score", "micro_zoning_finishing_rank", "progression_eligible"),
     "danger_zone_progression_top_percent": ("tactical:danger_zone_density", "danger_zone_progression_rank", "progression_eligible"),
     "aerial_margin_per90_top_percent": ("aerial_margin_per90", "aerial_margin_per90_rank", "progression_eligible"),
     "duel_margin_per90_top_percent": ("duel_margin_per90", "duel_margin_per90_rank", "progression_eligible"),
     "cca_area_top_percent": ("tactical:cca_area_pct", "cca_area_rank", "progression_eligible"),
+    "danger_zone_density_top_percent": ("tactical:danger_zone_density", "danger_zone_density_rank", "progression_eligible"),
 }
 
 
@@ -792,9 +806,18 @@ def render_spear_radar(
         paper_bgcolor="rgba(0,0,0,0)",
         polar={
             "bgcolor": "rgba(0,0,0,0)",
-            "radialaxis": {"range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "visible": True},
-            "angularaxis": {"rotation": 90, "direction": "clockwise"},
+            "radialaxis": {
+                "range": [0, 100], "tickvals": [0, 25, 50, 75, 100], "visible": True,
+                "gridcolor": "#64748B", "linecolor": "#94A3B8",
+                "tickfont": {"color": "#CBD5E1"},
+            },
+            "angularaxis": {
+                "rotation": 90, "direction": "clockwise",
+                "gridcolor": "#64748B", "linecolor": "#94A3B8",
+                "tickfont": {"color": "#F8FAFC", "size": 13},
+            },
         },
+        font={"color": "#F8FAFC"},
         legend={"orientation": "h", "y": -0.12, "x": 0.5, "xanchor": "center"},
     )
     st.plotly_chart(
@@ -2171,7 +2194,12 @@ def _render_role_overview(player, filters: dict[str, object], stats: DecisionMet
             "</div>",
             unsafe_allow_html=True,
         )
-
+        st.markdown(
+            "<div style='text-align: center; color: #94A3B8; font-size: 0.82rem;'>"
+            "총점: 6개 섹터별 볼륨 50% + 비율 50%의 가중합"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     identities = spatial_identity_badges(tactical_ratio, force_type_b=False)
     for badge, text in identities:
         st.markdown(f"**[{badge}]** : {text}")
