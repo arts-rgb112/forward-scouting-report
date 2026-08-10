@@ -1,5 +1,4 @@
+-r requirements-api.txt
 streamlit
-pandas
-numpy
 plotly
 matplotlib
