@@ -151,6 +151,22 @@ class TournamentDiscoveryTests(unittest.TestCase):
             {"Eredivisie": 37, "Primeira Liga": 238},
         )
 
+    def test_catalog_omissions_use_season_validated_fallback_ids(self) -> None:
+        class FakeClient:
+            def get(self, path: str, key_scope: str) -> dict:
+                return {"leagues": []}
+
+        with patch(
+            "scripts.build_tactical_ratios.cached_tournament_discoveries",
+            return_value={},
+        ):
+            discovered = discover_tournaments(FakeClient())
+
+        self.assertEqual(
+            {item["name"]: item["id"] for item in discovered},
+            {"Eredivisie": 37, "Primeira Liga": 238},
+        )
+
 
 class SportsApiRetryTests(unittest.TestCase):
     def test_best_effort_request_can_be_limited_to_one_attempt(self) -> None:

@@ -76,6 +76,14 @@ UNAMBIGUOUS_DOMESTIC_TOURNAMENT_NAMES = {
     "primeira liga": "Primeira Liga",
     "liga portugal": "Primeira Liga",
 }
+# SportsAPI's all-leagues catalog omits these competitions for some valid API
+# keys.  Their provider entity IDs are stable, but they are only discovery
+# candidates: ``discover_season`` must still confirm the exact requested
+# season before any player or heatmap endpoint is called.
+CATALOG_FALLBACK_TOURNAMENTS = {
+    "Eredivisie": {"id": 37, "name": "Eredivisie"},
+    "Primeira Liga": {"id": 238, "name": "Primeira Liga"},
+}
 # The production dashboard covers seven domestic leagues and the three UEFA
 # competitions. IDs remain dynamically discovered; these are stable display
 # labels used only to validate source coverage.
@@ -248,10 +256,18 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
     recovered_names = [name for name in recovered if name not in matches]
     for name in recovered_names:
         matches[name] = recovered[name]
+    fallback_names = [name for name in CATALOG_FALLBACK_TOURNAMENTS if name not in matches]
+    for name in fallback_names:
+        matches[name] = CATALOG_FALLBACK_TOURNAMENTS[name]
     if not matches:
         root_keys = ",".join(sorted(payload.keys())) if isinstance(payload, dict) else type(payload).__name__
         print(f"No target leagues found. Root keys: {root_keys}")
-    source_note = f"; recovered from prior discovery: {', '.join(sorted(recovered_names))}" if recovered_names else ""
+    source_notes = []
+    if recovered_names:
+        source_notes.append(f"recovered from prior discovery: {', '.join(sorted(recovered_names))}")
+    if fallback_names:
+        source_notes.append(f"season-validated fallback IDs: {', '.join(sorted(fallback_names))}")
+    source_note = f"; {'; '.join(source_notes)}" if source_notes else ""
     print(f"Discovered target competitions: {', '.join(sorted(matches)) or 'none'}{source_note}")
     return [matches[name] for name in sorted(matches)]
 
