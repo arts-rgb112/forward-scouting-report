@@ -81,6 +81,17 @@ class TacticalCoverageAuditTests(unittest.TestCase):
         self.assertEqual(len(missing), 1)
         self.assertEqual(missing[0]["reason"], "missing_heatmap_points")
 
+    def test_maps_liga_portugal_cohort_label_to_tactical_name(self) -> None:
+        cohort = [{
+            "player_id": "61", "player_name": "Portugal player", "team_name": "A",
+            "league_name": "Liga Portugal", "season_name": "2025/2026",
+        }]
+
+        missing = missing_static_cohort_sessions([], cohort)
+
+        self.assertEqual(len(missing), 1)
+        self.assertEqual(missing[0]["competition_name"], "Primeira Liga")
+
 
 class RankedPlayerMappingTests(unittest.TestCase):
     def test_maps_unique_exact_normalized_name_before_position_filter(self) -> None:
