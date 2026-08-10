@@ -1,0 +1,76 @@
+import unittest
+
+from metrics import extract_multi_season_metrics
+from scripts.build_tactical_ratios import missing_static_cohort_sessions
+
+
+def _payload(league_name: str, league_id: int) -> dict:
+    return {
+        "base": {"primaryPosition": {"key": "F", "label": "Forward"}},
+        "season_records": [{
+            "season": "2025/2026",
+            "league_id": league_id,
+            "league_name": league_name,
+            "stats": {"items": [
+                {"title": "Goals", "value": 4},
+                {"title": "Expected goals (xG)", "value": 3.5},
+                {"title": "Expected goals on target (xGOT)", "value": 4.1},
+                {"title": "Minutes played", "value": 900},
+            ]},
+        }],
+    }
+
+
+class ExpandedLeagueParsingTests(unittest.TestCase):
+    def test_eredivisie_is_retained(self) -> None:
+        metrics = extract_multi_season_metrics(_payload("Eredivisie", 999))
+        self.assertIn("25/26_57", metrics)
+        self.assertEqual(metrics["25/26_57"].league_id, 57)
+
+    def test_primeira_liga_is_retained(self) -> None:
+        metrics = extract_multi_season_metrics(_payload("Primeira Liga", 999))
+        self.assertIn("25/26_61", metrics)
+        self.assertEqual(metrics["25/26_61"].league_id, 61)
+
+
+class TacticalCoverageAuditTests(unittest.TestCase):
+    def test_reports_only_missing_competition_season_sessions(self) -> None:
+        cohort = [
+            {
+                "player_id": "10", "player_name": "Covered", "team_name": "A",
+                "league_name": "Champions League", "season_name": "2025/2026",
+            },
+            {
+                "player_id": "11", "player_name": "Missing", "team_name": "B",
+                "league_name": "Premier League", "season_name": "2024/2025",
+            },
+        ]
+        output = [{
+            "fotmob_player_id": "10", "competition_name": "UEFA Champions League",
+            "season_name": "2025/2026", "heatmap_key": "10:42:1",
+        }]
+
+        missing = missing_static_cohort_sessions(output, cohort)
+
+        self.assertEqual(len(missing), 1)
+        self.assertEqual(missing[0]["fotmob_player_id"], "11")
+        self.assertEqual(missing[0]["competition_name"], "Premier League")
+
+    def test_reports_csv_session_without_json_points(self) -> None:
+        cohort = [{
+            "player_id": "10", "player_name": "No points", "team_name": "A",
+            "league_name": "Champions League", "season_name": "2025/2026",
+        }]
+        output = [{
+            "fotmob_player_id": "10", "competition_name": "UEFA Champions League",
+            "season_name": "2025/2026", "heatmap_key": "10:42:1",
+        }]
+
+        missing = missing_static_cohort_sessions(output, cohort, visual_points={})
+
+        self.assertEqual(len(missing), 1)
+        self.assertEqual(missing[0]["reason"], "missing_heatmap_points")
+
+
+if __name__ == "__main__":
+    unittest.main()
