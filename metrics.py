@@ -372,7 +372,7 @@ def find_stat_value(raw_data: Any, season: str, titles: set[str]) -> Optional[fl
 # raw FotMob records were fetched correctly but silently discarded below.
 TARGET_LEAGUES = [
     "premier league", "laliga", "bundesliga", "serie a", "ligue 1",
-    "eredivisie", "primeira liga",
+    "eredivisie", "primeira liga", "liga portugal",
     "champions league", "ucl", "europa league", "conference league",
 ]
 _FORWARD_POSITION_KEYS = {"f", "forward", "striker", "attacker", "centre-forward", "center-forward", "winger"}
@@ -445,7 +445,7 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
         elif "bundesliga" in lname_lower: league_id = 54
         elif "serie a" in lname_lower: league_id = 55
         elif "eredivisie" in lname_lower: league_id = 57
-        elif "primeira liga" in lname_lower: league_id = 61
+        elif "primeira liga" in lname_lower or "liga portugal" in lname_lower: league_id = 61
         elif "champions" in lname_lower: league_id = 42
         elif "europa league" in lname_lower and "conference" not in lname_lower: league_id = 73
         elif "conference league" in lname_lower: league_id = 108
