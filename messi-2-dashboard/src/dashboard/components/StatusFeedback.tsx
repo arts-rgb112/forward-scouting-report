@@ -1,0 +1,1 @@
+export function StatusFeedback({ message }: { message: string }) { return <div aria-live="polite" aria-atomic="true" className={message ? "fixed right-4 top-4 z-[70] max-w-sm rounded-lg border border-[#8cff68]/30 bg-[#111a15] px-4 py-3 text-xs text-[#caffb7] shadow-2xl" : "sr-only"}>{message}</div>; }

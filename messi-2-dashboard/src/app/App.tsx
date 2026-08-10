@@ -1,0 +1,2 @@
+import { useState } from "react"; import { PlayersResourceContainer } from "../dashboard/PlayersResourceContainer"; import { DashboardErrorBoundary } from "../dashboard/components/DashboardErrorBoundary";
+export default function App() { const [resetKey, setResetKey] = useState(0); return <DashboardErrorBoundary resetKey={resetKey} onReset={() => setResetKey((key) => key + 1)}><PlayersResourceContainer key={resetKey} /></DashboardErrorBoundary>; }
