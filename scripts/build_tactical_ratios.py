@@ -101,7 +101,7 @@ COHORT_COMPETITION_NAMES = {
     "Serie A": "Serie A",
     "Ligue 1": "Ligue 1",
     "Eredivisie": "Eredivisie",
-    "Primeira Liga": "Primeira Liga",
+    "Primeira Liga": "Liga Portugal",
     "UEFA Champions League": "Champions League",
     "UEFA Europa League": "Europa League",
     "UEFA Europa Conference League": "Europa Conference League",
