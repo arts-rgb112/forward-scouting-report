@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+
 import { parseMessiApiConfig, type MessiApiConfig } from "../api/env";
 import { fetchPlayerDetail } from "../api/leaderboardsApi";
+import { metricConfig, metricKeys } from "../dashboard/scoutingConfig";
 import type { DatasetRouteState, Player } from "../dashboard/types";
 
 function datasetStateFromUrl(config: MessiApiConfig): DatasetRouteState {
@@ -30,16 +32,21 @@ function PlayerDetail({ id }: { id: number }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!Number.isInteger(id) || id <= 0) { setError("Player not found"); return; }
+    if (!Number.isInteger(id) || id <= 0) {
+      setError("Player not found");
+      return;
+    }
     const controller = new AbortController();
     try {
       const config = parseMessiApiConfig(import.meta.env, import.meta.env.MODE);
       fetchPlayerDetail(config, id, datasetStateFromUrl(config), controller.signal)
         .then(setPlayer)
         .catch(() => setError("Player details are unavailable for this dataset."));
-    } catch { setError("Dashboard API configuration is unavailable."); }
+    } catch {
+      setError("Dashboard API configuration is unavailable.");
+    }
     return () => controller.abort();
   }, [id]);
 
-  return <main className="grid min-h-screen place-items-center bg-[#080b0c] p-6 text-zinc-100"><article className="w-full max-w-xl rounded-xl border border-white/10 bg-[#101415] p-7"><BackLink />{error ? <p role="alert" className="mt-5 text-amber-300">{error}</p> : !player ? <p className="mt-5 text-zinc-400">Loading player profile…</p> : <><h1 className="mt-5 text-3xl font-black">{player.name}</h1><p className="mt-2 text-zinc-400">{player.club.name} · {player.league.name} · {player.position}</p><div className="mt-5 grid grid-cols-2 gap-3 text-sm">{Object.entries(player.stats).map(([key, value]) => <div key={key} className="rounded bg-black/20 p-3"><span className="text-zinc-500">{key}</span><b className="float-right text-lime-300">{value}</b></div>)}</div></>}</article></main>;
+  return <main className="grid min-h-screen place-items-center bg-[#080b0c] p-6 text-zinc-100"><article className="w-full max-w-xl rounded-xl border border-white/10 bg-[#101415] p-7"><BackLink />{error ? <p role="alert" className="mt-5 text-amber-300">{error}</p> : !player ? <p className="mt-5 text-zinc-400">Loading player profile…</p> : <><h1 className="mt-5 text-3xl font-black">{player.name}</h1><p className="mt-2 text-zinc-400">{player.club.name} · {player.league.name} · {player.position}</p><div className="mt-5 grid grid-cols-2 gap-3 text-sm">{metricKeys.map((key) => <div key={key} className="rounded bg-black/20 p-3"><span className="text-zinc-500">{metricConfig[key].label}</span><b className="float-right text-lime-300">{player.stats[key]}</b></div>)}</div></>}</article></main>;
 }
