@@ -2,10 +2,18 @@ from fastapi.testclient import TestClient
 
 from api_server.main import app, cors_origins
 from api_server import service
+from api_server.profiles import age_on
 from api_server.service import dataset_generated_at, tier_from_rank
 
 
 client = TestClient(app)
+
+
+def test_age_is_calculated_as_of_the_reference_date():
+    from datetime import date
+
+    assert age_on(date(2000, 12, 31), date(2026, 8, 10)) == 25
+    assert age_on(date(2000, 8, 10), date(2026, 8, 10)) == 26
 
 
 def test_health_uses_2025_2026_real_cohort():
@@ -27,10 +35,14 @@ def test_players_implements_frontend_v1_contract_with_real_sector_scores():
     player = payload["data"][0]
     assert set(player) == {"id", "rank", "name", "position", "archetype", "age", "minutes", "tier", "score", "face", "nation", "league", "club", "stats"}
     assert player["archetype"] in {"Type A", "Type B"}
+    assert isinstance(player["age"], int)
+    assert str(player["face"]).startswith("https://images.fotmob.com/image_resources/playerimages/")
     assert player["nation"] is None
     assert set(player["tier"]) == {"code", "level", "label"}
     assert 1 <= player["tier"]["level"] <= 5
     assert set(player["league"]) == set(player["club"]) == {"id", "name", "icon"}
+    assert str(player["league"]["icon"]).startswith("https://images.fotmob.com/image_resources/logo/leaguelogo/")
+    assert str(player["club"]["icon"]).startswith("https://images.fotmob.com/image_resources/logo/teamlogo/")
     assert set(player["stats"]) == {"outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"}
     assert player["id"] > 0
 

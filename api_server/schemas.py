@@ -14,7 +14,7 @@ class AssetRef(BaseModel):
 
     id: int
     name: str = Field(min_length=1)
-    icon: HttpUrl | None = None
+    icon: HttpUrl
 
 
 class PlayerStats(BaseModel):
@@ -44,11 +44,11 @@ class PlayerResponse(BaseModel):
     name: str = Field(min_length=1)
     position: str = Field(min_length=1)
     archetype: Literal["Type A", "Type B"]
-    age: int | None = Field(default=None, ge=15, le=60)
+    age: int = Field(ge=15, le=60)
     minutes: int = Field(ge=0)
     tier: PlayerTier
     score: float = Field(ge=0, le=100)
-    face: HttpUrl | None = None
+    face: HttpUrl
     nation: AssetRef | None = None
     league: AssetRef
     club: AssetRef
