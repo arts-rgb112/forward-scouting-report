@@ -585,6 +585,39 @@ def resolve_sportsapi_id(client: SportsApiClient, player_name: str) -> str | Non
     return next(iter(matches)) if len(matches) == 1 else None
 
 
+def resolve_ranked_sportsapi_id(
+    players: dict[str, dict[str, Any]], player_name: str, team_name: str,
+) -> str | None:
+    """Resolve a cohort player from the current competition ranking roster.
+
+    The ranking response contains defenders and midfielders that the ordinary
+    attacking-position heatmap pass intentionally skips.  Those players may
+    still belong to the xG-qualified S.P.E.A.R. cohort.  Reuse their provider
+    ID before falling back to a separate search request.  An exact normalized
+    name must be unique; duplicate names additionally require one exact team
+    match, so namesakes are never guessed.
+    """
+    target_name = _normalise_name(player_name)
+    if not target_name:
+        return None
+    name_matches = [
+        (str(sports_id), player)
+        for sports_id, player in players.items()
+        if _normalise_name(str(player.get("name", ""))) == target_name
+    ]
+    if len(name_matches) == 1:
+        return name_matches[0][0]
+    target_team = _normalise_name(team_name)
+    if not target_team:
+        return None
+    team_matches = [
+        sports_id
+        for sports_id, player in name_matches
+        if _normalise_name(str(player.get("team_name", ""))) == target_team
+    ]
+    return team_matches[0] if len(team_matches) == 1 else None
+
+
 OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "cca_area_pct", "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio", "danger_zone_density", "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score", "sample_points", "generated_at"]
 MISSING_SESSION_FIELDS = [
     "fotmob_player_id", "player_name", "team_name", "competition_name",
@@ -857,6 +890,10 @@ def main() -> None:
                 continue
             known_ids = known_sports_ids.get(fotmob_id, set())
             sports_id = next(iter(known_ids)) if len(known_ids) == 1 else None
+            if not sports_id:
+                sports_id = resolve_ranked_sportsapi_id(
+                    players, candidate["name"], candidate["team_name"],
+                )
             if not sports_id:
                 sports_id = resolve_sportsapi_id(client, candidate["name"])
             if not sports_id:

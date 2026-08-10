@@ -1,7 +1,10 @@
 import unittest
 
 from metrics import extract_multi_season_metrics
-from scripts.build_tactical_ratios import missing_static_cohort_sessions
+from scripts.build_tactical_ratios import (
+    missing_static_cohort_sessions,
+    resolve_ranked_sportsapi_id,
+)
 
 
 def _payload(league_name: str, league_id: int) -> dict:
@@ -70,6 +73,41 @@ class TacticalCoverageAuditTests(unittest.TestCase):
 
         self.assertEqual(len(missing), 1)
         self.assertEqual(missing[0]["reason"], "missing_heatmap_points")
+
+
+class RankedPlayerMappingTests(unittest.TestCase):
+    def test_maps_unique_exact_normalized_name_before_position_filter(self) -> None:
+        players = {
+            "100": {"name": "Raphael Guerreiro", "team_name": "Bayern München"},
+        }
+
+        self.assertEqual(
+            resolve_ranked_sportsapi_id(
+                players, "Raphaël Guerreiro", "Bayern München",
+            ),
+            "100",
+        )
+
+    def test_uses_team_to_disambiguate_namesakes(self) -> None:
+        players = {
+            "100": {"name": "Luis Suárez", "team_name": "Atletico Madrid"},
+            "200": {"name": "Luis Suárez", "team_name": "Granada"},
+        }
+
+        self.assertEqual(
+            resolve_ranked_sportsapi_id(players, "Luis Suárez", "Granada"),
+            "200",
+        )
+
+    def test_refuses_ambiguous_namesake_without_team_match(self) -> None:
+        players = {
+            "100": {"name": "Luis Suárez", "team_name": "Atletico Madrid"},
+            "200": {"name": "Luis Suárez", "team_name": "Granada"},
+        }
+
+        self.assertIsNone(
+            resolve_ranked_sportsapi_id(players, "Luis Suárez", "Unknown"),
+        )
 
 
 if __name__ == "__main__":
