@@ -1,55 +1,22 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { MessiConfigError, type ConfigErrorCategory, parseMessiApiConfig, type MessiApiConfig } from "../api/env";
-import { MessiApiError, isAbortError } from "../api/errors";
+import { fetchLeaderboard, fetchLeaderboardOptions } from "../api/leaderboardsApi";
 import { fetchPlayers } from "../api/playersApi";
-import { ConfigErrorFallback } from "./components/ConfigErrorFallback";
-import { DashboardDataFallback } from "./components/DashboardDataFallback";
-import { DashboardLoading } from "./components/DashboardLoading";
-import MessiScoutingDashboard from "./MessiScoutingDashboard";
-import { playersResourceReducer, stablePayload } from "./playersResourceState";
-
+import { MessiApiError, isAbortError } from "../api/errors";
+import { ConfigErrorFallback } from "./components/ConfigErrorFallback"; import { DashboardDataFallback } from "./components/DashboardDataFallback"; import { DashboardLoading } from "./components/DashboardLoading";
+import MessiScoutingDashboard from "./MessiScoutingDashboard"; import { playersResourceReducer, stablePayload } from "./playersResourceState";
+import type { DatasetRouteState, LeaderboardOptions } from "./types";
 type ParsedConfig = { config?: MessiApiConfig; category?: ConfigErrorCategory };
-
+function routeFromUrl(config: MessiApiConfig): DatasetRouteState { const q = new URLSearchParams(window.location.search); return { season: q.get("season") ?? config.season, mode: q.get("mode") === "europe" ? "europe" : "league", scope: ([3, 5, 7].includes(Number(q.get("scope"))) ? Number(q.get("scope")) : config.scope) as 3 | 5 | 7, competition: (["all", "ucl", "uel", "uecl"].includes(q.get("competition") ?? "") ? q.get("competition") : "all") as DatasetRouteState["competition"] }; }
+function writeRoute(state: DatasetRouteState) { const q = new URLSearchParams({ season: state.season, mode: state.mode, scope: String(state.scope), competition: state.competition }); window.history.replaceState(null, "", `${window.location.pathname}?${q.toString()}`); }
 export function PlayersResourceContainer() {
-  const [state, dispatch] = useReducer(playersResourceReducer, { type: "idle" });
-  const request = useRef(0);
-  const controller = useRef<AbortController | null>(null);
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const parsed = useMemo((): ParsedConfig => {
-    try {
-      return { config: parseMessiApiConfig(import.meta.env, import.meta.env.MODE) };
-    } catch (error) {
-      return { category: error instanceof MessiConfigError ? error.category : "CONFIG_INVALID" };
-    }
-  }, []);
-
-  const load = useCallback(() => {
-    if (!parsed.config) return;
-    controller.current?.abort();
-    const abort = new AbortController();
-    controller.current = abort;
-    const requestId = ++request.current;
-    const previous = stablePayload(stateRef.current);
-    dispatch({ type: "start", requestId, previous });
-    fetchPlayers(parsed.config, abort.signal)
-      .then((payload) => dispatch({ type: "resolve", requestId, payload }))
-      .catch((error) => {
-        if (!isAbortError(error)) dispatch({ type: "reject", requestId, error: error instanceof MessiApiError ? error : new MessiApiError("network", "Request failed") });
-      });
-  }, [parsed.config]);
-
-  useEffect(() => {
-    if (!parsed.config) return;
-    load();
-    return () => controller.current?.abort();
-  }, [load, parsed.config]);
-
-  if (parsed.category) return <ConfigErrorFallback category={parsed.category} mode={import.meta.env.MODE} />;
-  if (state.type === "idle" || state.type === "loading") return <DashboardLoading />;
-  if (state.type === "error" && !state.previous) return <DashboardDataFallback error={state.error} onRetry={load} />;
-  const payload = state.type === "error" ? state.previous! : state.payload;
-  if (!payload.players.length) return <main className="grid min-h-screen place-items-center bg-[#080b0c] text-zinc-100"><section className="text-center"><h1 className="font-bold">No players in this dataset</h1><p className="mt-2 text-sm text-zinc-500">Season {payload.meta.season} · scope {payload.meta.scope}</p><button onClick={load} className="mt-5 min-h-11 rounded border border-white/10 px-4">Refresh</button></section></main>;
-  return <MessiScoutingDashboard players={payload.players} meta={payload.meta} refreshing={state.type === "refreshing"} onRefresh={load} refreshWarning={state.type === "error" ? <DashboardDataFallback error={state.error} hasPrevious onRetry={load} /> : undefined} />;
+ const [state, dispatch] = useReducer(playersResourceReducer, { type: "idle" }); const [options, setOptions] = useState<LeaderboardOptions>(); const request = useRef(0); const controller = useRef<AbortController | null>(null); const stateRef = useRef(state); stateRef.current = state;
+ const parsed = useMemo((): ParsedConfig => { try { return { config: parseMessiApiConfig(import.meta.env, import.meta.env.MODE) }; } catch (error) { return { category: error instanceof MessiConfigError ? error.category : "CONFIG_INVALID" }; } }, []);
+ const [dataset, setDataset] = useState<DatasetRouteState>(() => parsed.config ? routeFromUrl(parsed.config) : { season: "2025/2026", mode: "league", scope: 7, competition: "all" });
+ const load = useCallback((next = dataset) => { if (!parsed.config) return; controller.current?.abort(); const abort = new AbortController(); controller.current = abort; const requestId = ++request.current; dispatch({ type: "start", requestId, previous: stablePayload(stateRef.current) }); const requestPromise = options ? fetchLeaderboard(parsed.config, next, abort.signal) : fetchPlayers(parsed.config, abort.signal); requestPromise.then((payload) => dispatch({ type: "resolve", requestId, payload })).catch((error) => { if (!isAbortError(error)) dispatch({ type: "reject", requestId, error: error instanceof MessiApiError ? error : new MessiApiError("network", "Request failed") }); }); }, [dataset, options, parsed.config]);
+ useEffect(() => { if (!parsed.config) return; const abort = new AbortController(); fetchLeaderboardOptions(parsed.config, abort.signal).then((value) => { setOptions(value); setDataset((current) => { const season = value.seasons.includes(current.season) ? current.season : value.seasons[0] ?? current.season; const competition = value.competitions[current.competition]?.available ? current.competition : "all"; return { ...current, season, competition }; }); }).catch(() => setOptions(undefined)); return () => abort.abort(); }, [parsed.config]);
+ useEffect(() => { if (!parsed.config) return; writeRoute(dataset); load(dataset); return () => controller.current?.abort(); }, [dataset, load, parsed.config]);
+ if (parsed.category) return <ConfigErrorFallback category={parsed.category} mode={import.meta.env.MODE} />; if (state.type === "idle" || state.type === "loading") return <DashboardLoading />; if (state.type === "error" && !state.previous) return <DashboardDataFallback error={state.error} onRetry={() => load(dataset)} />;
+ const payload = state.type === "error" ? state.previous! : state.payload;
+ return <MessiScoutingDashboard players={payload.players} meta={payload.meta} refreshing={state.type === "refreshing"} onRefresh={() => load(dataset)} refreshWarning={state.type === "error" ? <DashboardDataFallback error={state.error} hasPrevious onRetry={() => load(dataset)} /> : undefined} dataset={dataset} options={options} onDatasetChange={setDataset} />;
 }
