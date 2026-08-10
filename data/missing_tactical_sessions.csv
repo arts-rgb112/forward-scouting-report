@@ -1,6 +1,9 @@
 fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 899291,Roberto Massimo,VfB Stuttgart,Bundesliga,2021/2022,missing_heatmap_session
 199560,Sebastian Andersson,1. FC Köln,Bundesliga,2021/2022,missing_heatmap_session
+592910,Dimitrios Limnios,FC Twente,Eredivisie,2021/2022,missing_heatmap_session
+1183148,Emanuel Emegha,Sparta Rotterdam,Eredivisie,2021/2022,missing_heatmap_session
+861933,Nikolai Baden,Vitesse,Eredivisie,2021/2022,missing_heatmap_session
 210282,Anthony Lozano,Cadiz,LaLiga,2021/2022,missing_heatmap_session
 1127224,Fer Niño,Mallorca,LaLiga,2021/2022,missing_heatmap_session
 202610,Fidel Chaves,Elche,LaLiga,2021/2022,missing_heatmap_session
@@ -24,6 +27,23 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 852071,Juan Hernández,Watford,Premier League,2021/2022,missing_heatmap_session
 732282,Trincão,Wolverhampton Wanderers,Premier League,2021/2022,missing_heatmap_session
 643230,Tyler Roberts,Leeds United,Premier League,2021/2022,missing_heatmap_session
+172875,Abel Issa Camara,,Primeira Liga,2021/2022,missing_heatmap_session
+919919,André,Arouca,Primeira Liga,2021/2022,missing_heatmap_session
+45244,Antunes,Pacos de Ferreira,Primeira Liga,2021/2022,missing_heatmap_session
+242904,Arsénio,Arouca,Primeira Liga,2021/2022,missing_heatmap_session
+637582,Daniel Anjos,Tondela,Primeira Liga,2021/2022,missing_heatmap_session
+453696,Denilson,Pacos de Ferreira,Primeira Liga,2021/2022,missing_heatmap_session
+848051,Juan Manuel Boselli,Tondela,Primeira Liga,2021/2022,missing_heatmap_session
+145020,Marcos Paulo,Vizela,Primeira Liga,2021/2022,missing_heatmap_session
+554283,Nuno Santos,Sporting CP,Primeira Liga,2021/2022,missing_heatmap_session
+867395,Nuno Santos,Pacos de Ferreira,Primeira Liga,2021/2022,missing_heatmap_session
+875133,Pote,Sporting CP,Primeira Liga,2021/2022,missing_heatmap_session
+672721,Pêpê,Famalicao,Primeira Liga,2021/2022,missing_heatmap_session
+749737,Renat Dadashov,Tondela,Primeira Liga,2021/2022,missing_heatmap_session
+952234,Uilton,Pacos de Ferreira,Primeira Liga,2021/2022,missing_heatmap_session
+1061249,Vitinha,FC Porto,Primeira Liga,2021/2022,missing_heatmap_session
+792080,Walterson,Moreirense,Primeira Liga,2021/2022,missing_heatmap_session
+758460,Yan,Moreirense,Primeira Liga,2021/2022,missing_heatmap_session
 822236,Dennis Tørset Johnsen,Venezia,Serie A,2021/2022,missing_heatmap_session
 526450,Emmanuel Quartsin Gyasi,Spezia,Serie A,2021/2022,missing_heatmap_session
 857269,Gleison Bremer,Torino,Serie A,2021/2022,missing_heatmap_session
@@ -40,6 +60,12 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 613714,Jordan Pefok,Union Berlin,Bundesliga,2022/2023,missing_heatmap_session
 1040889,Junior Dina Ebimbe,Eintracht Frankfurt,Bundesliga,2022/2023,missing_heatmap_session
 959404,Silas Katompa Mvumpa,VfB Stuttgart,Bundesliga,2022/2023,missing_heatmap_session
+1097467,Dirk Proper,NEC Nijmegen,Eredivisie,2022/2023,missing_heatmap_session
+213682,Iiass Bel Hassani,RKC Waalwijk,Eredivisie,2022/2023,missing_heatmap_session
+703044,Landry Dimata,NEC Nijmegen,Eredivisie,2022/2023,missing_heatmap_session
+1049004,Oliver Edvardsen,Go Ahead Eagles,Eredivisie,2022/2023,missing_heatmap_session
+839476,Othman Boussaid,FC Utrecht,Eredivisie,2022/2023,missing_heatmap_session
+774237,Willum Willumsson,Go Ahead Eagles,Eredivisie,2022/2023,missing_heatmap_session
 737444,Amath Ndiaye,Mallorca,LaLiga,2022/2023,missing_heatmap_session
 210282,Anthony Lozano,Cadiz,LaLiga,2022/2023,missing_heatmap_session
 202610,Fidel Chaves,Elche,LaLiga,2022/2023,missing_heatmap_session
@@ -64,6 +90,16 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 795179,Gabriel,Arsenal,Premier League,2022/2023,missing_heatmap_session
 212867,Heung-Min Son,Tottenham Hotspur,Premier League,2022/2023,missing_heatmap_session
 860975,Joseph Willock,Newcastle United,Premier League,2022/2023,missing_heatmap_session
+841352,Abdul-Aziz Yakubu,Rio Ave,Primeira Liga,2022/2023,missing_heatmap_session
+919919,André,Vitoria de Guimaraes,Primeira Liga,2022/2023,missing_heatmap_session
+1248736,Antony,Arouca,Primeira Liga,2022/2023,missing_heatmap_session
+689051,Arthur,Estoril,Primeira Liga,2022/2023,missing_heatmap_session
+816001,Carvalho,Gil Vicente,Primeira Liga,2022/2023,missing_heatmap_session
+848051,Juan Manuel Boselli,Gil Vicente,Primeira Liga,2022/2023,missing_heatmap_session
+320618,Mateus Uribe,FC Porto,Primeira Liga,2022/2023,missing_heatmap_session
+875133,Pote,Sporting CP,Primeira Liga,2022/2023,missing_heatmap_session
+732282,Trincão,Sporting CP,Primeira Liga,2022/2023,missing_heatmap_session
+737814,Xadas,Maritimo,Primeira Liga,2022/2023,missing_heatmap_session
 526450,Emmanuel Quartsin Gyasi,Spezia,Serie A,2022/2023,missing_heatmap_session
 178538,Filip Djuricic,Sampdoria,Serie A,2022/2023,missing_heatmap_session
 857269,Gleison Bremer,Juventus,Serie A,2022/2023,missing_heatmap_session
@@ -82,6 +118,12 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 613714,Jordan Pefok,Borussia Mönchengladbach,Bundesliga,2023/2024,missing_heatmap_session
 1040889,Junior Dina Ebimbe,Eintracht Frankfurt,Bundesliga,2023/2024,missing_heatmap_session
 959404,Silas Katompa Mvumpa,VfB Stuttgart,Bundesliga,2023/2024,missing_heatmap_session
+1097467,Dirk Proper,NEC Nijmegen,Eredivisie,2023/2024,missing_heatmap_session
+843767,Kornelius Hansen,Almere City FC,Eredivisie,2023/2024,missing_heatmap_session
+1049004,Oliver Edvardsen,Go Ahead Eagles,Eredivisie,2023/2024,missing_heatmap_session
+839476,Othman Boussaid,FC Utrecht,Eredivisie,2023/2024,missing_heatmap_session
+874482,Roberto González,NEC Nijmegen,Eredivisie,2023/2024,missing_heatmap_session
+774237,Willum Willumsson,Go Ahead Eagles,Eredivisie,2023/2024,missing_heatmap_session
 210282,Anthony Lozano,Getafe,LaLiga,2023/2024,missing_heatmap_session
 1055327,Antonio Sánchez,Mallorca,LaLiga,2023/2024,missing_heatmap_session
 891059,Christopher Ramos,Cadiz,LaLiga,2023/2024,missing_heatmap_session
@@ -106,6 +148,12 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 802245,Jacob Brown,Luton Town,Premier League,2023/2024,missing_heatmap_session
 976506,Mykhaylo Mudryk,Chelsea,Premier League,2023/2024,missing_heatmap_session
 1107280,Pape Sarr,Tottenham Hotspur,Premier League,2023/2024,missing_heatmap_session
+919919,André,Vitoria de Guimaraes,Primeira Liga,2023/2024,missing_heatmap_session
+783619,Elves,Farense,Primeira Liga,2023/2024,missing_heatmap_session
+694773,Jo,Chaves,Primeira Liga,2023/2024,missing_heatmap_session
+1116481,Madson,Moreirense,Primeira Liga,2023/2024,missing_heatmap_session
+875133,Pote,Sporting CP,Primeira Liga,2023/2024,missing_heatmap_session
+732282,Trincão,Sporting CP,Primeira Liga,2023/2024,missing_heatmap_session
 526450,Emmanuel Quartsin Gyasi,Empoli,Serie A,2023/2024,missing_heatmap_session
 108381,Milan Djuric,Hellas Verona,Serie A,2023/2024,missing_heatmap_session
 1124533,Kilian Sildillia,Freiburg,UEFA Europa League,2023/2024,missing_heatmap_session
@@ -113,6 +161,12 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 882163,Chukwubuike Adamu,Freiburg,Bundesliga,2024/2025,missing_heatmap_session
 844432,Jann-Fiete Arp,Holstein Kiel,Bundesliga,2024/2025,missing_heatmap_session
 613714,Jordan Pefok,Union Berlin,Bundesliga,2024/2025,missing_heatmap_session
+1286190,Anselmo MacNulty,PEC Zwolle,Eredivisie,2024/2025,missing_heatmap_session
+843767,Kornelius Hansen,Almere City FC,Eredivisie,2024/2025,missing_heatmap_session
+1015183,Mohammed Ihattaren,RKC Waalwijk,Eredivisie,2024/2025,missing_heatmap_session
+1049004,Oliver Edvardsen,Go Ahead Eagles,Eredivisie,2024/2025,missing_heatmap_session
+874482,Roberto González,NEC Nijmegen,Eredivisie,2024/2025,missing_heatmap_session
+1522438,Shiloh Zand,Heracles,Eredivisie,2024/2025,missing_heatmap_session
 1094778,Raúl García,Osasuna,LaLiga,2024/2025,missing_heatmap_session
 309334,Saúl,Sevilla,LaLiga,2024/2025,missing_heatmap_session
 564847,Viktor Tsigankov,Girona,LaLiga,2024/2025,missing_heatmap_session
@@ -128,6 +182,16 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 212867,Heung-Min Son,Tottenham Hotspur,Premier League,2024/2025,missing_heatmap_session
 866686,Matthew O'Riley,Brighton & Hove Albion,Premier League,2024/2025,missing_heatmap_session
 1107280,Pape Sarr,Tottenham Hotspur,Premier League,2024/2025,missing_heatmap_session
+1284404,Babatunde Akinsola,AVS Futebol SAD,Primeira Liga,2024/2025,missing_heatmap_session
+1075457,Chuchu Ramírez,Vitoria de Guimaraes,Primeira Liga,2024/2025,missing_heatmap_session
+1252093,Dudu Teodora,Nacional,Primeira Liga,2024/2025,missing_heatmap_session
+1287941,Gabri Martínez,Braga,Primeira Liga,2024/2025,missing_heatmap_session
+1459741,Isaac Aguiar,Nacional,Primeira Liga,2024/2025,missing_heatmap_session
+1395944,Kaio,Vitoria de Guimaraes,Primeira Liga,2024/2025,missing_heatmap_session
+1414859,Samuel Aghehowa,FC Porto,Primeira Liga,2024/2025,missing_heatmap_session
+1355837,Serginho,Santa Clara,Primeira Liga,2024/2025,missing_heatmap_session
+732282,Trincão,Sporting CP,Primeira Liga,2024/2025,missing_heatmap_session
+1044194,Vinícius,Santa Clara,Primeira Liga,2024/2025,missing_heatmap_session
 1316088,Benja Domínguez,Bologna,Serie A,2024/2025,missing_heatmap_session
 526450,Emmanuel Quartsin Gyasi,Empoli,Serie A,2024/2025,missing_heatmap_session
 980793,Khéphren Thuram-Ulien,Juventus,Serie A,2024/2025,missing_heatmap_session
@@ -146,6 +210,11 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 1119643,Jan Thielmann,1. FC Köln,Bundesliga,2025/2026,missing_heatmap_session
 1121170,Ransford Königsdörffer,Hamburger SV,Bundesliga,2025/2026,missing_heatmap_session
 1269497,Yannik Engelhardt,Borussia Mönchengladbach,Bundesliga,2025/2026,missing_heatmap_session
+937032,Brynjólfur Willumsson,FC Groningen,Eredivisie,2025/2026,missing_heatmap_session
+592910,Dimitrios Limnios,Fortuna Sittard,Eredivisie,2025/2026,missing_heatmap_session
+1124533,Kilian Sildillia,PSV Eindhoven,Eredivisie,2025/2026,missing_heatmap_session
+1015183,Mohammed Ihattaren,Fortuna Sittard,Eredivisie,2025/2026,missing_heatmap_session
+1383534,Weslley Pinto,AZ Alkmaar,Eredivisie,2025/2026,missing_heatmap_session
 1131957,Jon Olasagasti,Levante,LaLiga,2025/2026,missing_heatmap_session
 852071,Juan Hernández,Real Betis,LaLiga,2025/2026,missing_heatmap_session
 872396,Pathé Ciss,Rayo Vallecano,LaLiga,2025/2026,missing_heatmap_session
@@ -164,6 +233,22 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 1460534,Junior Kroupi,AFC Bournemouth,Premier League,2025/2026,missing_heatmap_session
 292313,Raul Jiménez,Fulham,Premier League,2025/2026,missing_heatmap_session
 1047676,Yéremi Pino,Crystal Palace,Premier League,2025/2026,missing_heatmap_session
+1284404,Babatunde Akinsola,AVS Futebol SAD,Primeira Liga,2025/2026,missing_heatmap_session
+1027396,Barbero,Arouca,Primeira Liga,2025/2026,missing_heatmap_session
+1075457,Chuchu Ramírez,Nacional,Primeira Liga,2025/2026,missing_heatmap_session
+1287941,Gabri Martínez,Braga,Primeira Liga,2025/2026,missing_heatmap_session
+1116734,Gabriel Veiga,FC Porto,Primeira Liga,2025/2026,missing_heatmap_session
+613714,Jordan Pefok,Tondela,Primeira Liga,2025/2026,missing_heatmap_session
+1130711,Lucas Figueiredo,Alverca,Primeira Liga,2025/2026,missing_heatmap_session
+792303,Luis Suárez,Sporting CP,Primeira Liga,2025/2026,missing_heatmap_session
+1284376,Marezi,Alverca,Primeira Liga,2025/2026,missing_heatmap_session
+1031656,Maxi Araújo,Sporting CP,Primeira Liga,2025/2026,missing_heatmap_session
+940443,Nabili Touaizi,Alverca,Primeira Liga,2025/2026,missing_heatmap_session
+1174640,Pedro Maranhão,Tondela,Primeira Liga,2025/2026,missing_heatmap_session
+875133,Pote,Sporting CP,Primeira Liga,2025/2026,missing_heatmap_session
+1414859,Samuel Aghehowa,FC Porto,Primeira Liga,2025/2026,missing_heatmap_session
+732282,Trincão,Sporting CP,Primeira Liga,2025/2026,missing_heatmap_session
+1044194,Vinícius,Santa Clara,Primeira Liga,2025/2026,missing_heatmap_session
 1355574,Giovane Nascimento,Hellas Verona,Serie A,2025/2026,missing_heatmap_session
 857269,Gleison Bremer,Juventus,Serie A,2025/2026,missing_heatmap_session
 1296413,Henrik Meister,Pisa,Serie A,2025/2026,missing_heatmap_session
