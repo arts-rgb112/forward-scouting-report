@@ -67,6 +67,15 @@ UEFA_TOURNAMENT_NAMES = {
     "uefa conference league": "UEFA Europa Conference League",
     "europa conference league": "UEFA Europa Conference League",
 }
+# These two domestic competition names are globally distinctive, while the
+# catalog's country label has varied (for example ``Netherlands`` versus
+# ``The Netherlands``).  Match the name without weakening the country guard
+# for ambiguous labels such as ``Premier League`` or ``Serie A``.
+UNAMBIGUOUS_DOMESTIC_TOURNAMENT_NAMES = {
+    "eredivisie": "Eredivisie",
+    "primeira liga": "Primeira Liga",
+    "liga portugal": "Primeira Liga",
+}
 # The production dashboard covers seven domestic leagues and the three UEFA
 # competitions. IDs remain dynamically discovered; these are stable display
 # labels used only to validate source coverage.
@@ -225,7 +234,11 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
             str(candidate.get("name", "")).strip().lower(),
             str(candidate.get("countryName", "")).strip().lower(),
         )
-        canonical_name = TARGET_TOURNAMENTS.get(key) or UEFA_TOURNAMENT_NAMES.get(key[0])
+        canonical_name = (
+            TARGET_TOURNAMENTS.get(key)
+            or UEFA_TOURNAMENT_NAMES.get(key[0])
+            or UNAMBIGUOUS_DOMESTIC_TOURNAMENT_NAMES.get(key[0])
+        )
         if identifier is not None and canonical_name:
             matches.setdefault(canonical_name, {"id": identifier, "name": canonical_name})
     recovered = cached_tournament_discoveries()
