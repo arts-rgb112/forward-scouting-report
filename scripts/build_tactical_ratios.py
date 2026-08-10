@@ -82,6 +82,21 @@ REQUIRED_HEATMAP_COMPETITIONS = (
     "UEFA Europa League",
     "UEFA Europa Conference League",
 )
+# Static M.E.S.S.I. snapshots use FotMob's competition labels.  The tactical
+# ETL uses SportsAPI's canonical display labels, so bridge the three UEFA
+# names before looking for cohort players that still need a heatmap session.
+COHORT_COMPETITION_NAMES = {
+    "Premier League": "Premier League",
+    "LaLiga": "LaLiga",
+    "Bundesliga": "Bundesliga",
+    "Serie A": "Serie A",
+    "Ligue 1": "Ligue 1",
+    "Eredivisie": "Eredivisie",
+    "Primeira Liga": "Primeira Liga",
+    "UEFA Champions League": "Champions League",
+    "UEFA Europa League": "Europa League",
+    "UEFA Europa Conference League": "Europa Conference League",
+}
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ACTIVITY_GRID_SIZE = 5.0
 MIN_CELL_OVERLAP = 3
@@ -503,6 +518,73 @@ def static_cohort_name_map(season_name: str) -> dict[str, str]:
         return {}
 
 
+def static_cohort_candidates(season_name: str, competition_name: str) -> list[dict[str, str]]:
+    """Return static M.E.S.S.I. players eligible for one competition/session.
+
+    ``top-players`` is a useful low-ticket bootstrap but is not a roster: it
+    omits legitimate cohort players such as Heung-Min Son.  This reader gives
+    the ETL an authoritative, bounded backfill source without widening the
+    dashboard's comparison population.
+    """
+    cohort_competition = COHORT_COMPETITION_NAMES.get(competition_name, competition_name)
+    path = DATA_DIR / "spear_cohort.csv"
+    if not path.exists():
+        return []
+    candidates: dict[str, dict[str, str]] = {}
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            for row in csv.DictReader(source):
+                fotmob_id = str(row.get("player_id", "")).strip()
+                if (
+                    row.get("season_name") != season_name
+                    or row.get("league_name") != cohort_competition
+                    or not fotmob_id
+                ):
+                    continue
+                candidates[fotmob_id] = {
+                    "fotmob_player_id": fotmob_id,
+                    "name": str(row.get("player_name", "")).strip(),
+                    "team_name": str(row.get("team_name", "")).strip(),
+                }
+    except OSError:
+        return []
+    return list(candidates.values())
+
+
+def resolve_sportsapi_id(client: SportsApiClient, player_name: str) -> str | None:
+    """Resolve one missing static player via the documented V2 search route.
+
+    Only exact transliterated-name matches are accepted.  Ambiguous or absent
+    search responses are deliberately left for the unmatched report instead of
+    risking a heatmap from a namesake.
+    """
+    target = _normalise_name(player_name)
+    if not target:
+        return None
+    try:
+        payload = client.get(f"search?q={quote(player_name)}", "player")
+    except (HTTPError, URLError, TimeoutError):
+        return None
+    matches: set[str] = set()
+    for item in walk_dicts(payload):
+        candidates: list[dict[str, Any]] = []
+        nested = item.get("player") if isinstance(item, dict) else None
+        if isinstance(nested, dict):
+            candidates.append(nested)
+        if isinstance(item, dict):
+            item_type = str(item.get("type") or item.get("entityType") or "").lower()
+            if item_type in {"player", "athlete"} or any(
+                key in item for key in ("position", "positionName", "positionCode")
+            ):
+                candidates.append(item)
+        for candidate in candidates:
+            identifier = candidate.get("id")
+            name = candidate.get("name")
+            if identifier is not None and name and _normalise_name(str(name)) == target:
+                matches.add(str(identifier))
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
 OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "cca_area_pct", "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio", "danger_zone_density", "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score", "sample_points", "generated_at"]
 
 
@@ -586,6 +668,17 @@ def main() -> None:
         visual_points = {}
     enrich_checkpoint_spatial_metrics(output, visual_points)
     completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output if str(row.get("heatmap_key", "")) in visual_points}
+    completed_fotmob = {
+        (str(row.get("fotmob_player_id", "")), str(row.get("tournament_id", "")), str(row.get("season_id", "")))
+        for row in output
+        if str(row.get("fotmob_player_id", "")) and str(row.get("heatmap_key", "")) in visual_points
+    }
+    known_sports_ids: dict[str, set[str]] = {}
+    for row in output:
+        fotmob_id = str(row.get("fotmob_player_id", "")).strip()
+        sports_id = str(row.get("sportsapi_player_id", "")).strip()
+        if fotmob_id and sports_id:
+            known_sports_ids.setdefault(fotmob_id, set()).add(sports_id)
     unmatched, auto_mapped = [], []
     discovered = {item["name"]: item for item in discover_tournaments(client)}
     requested_competitions = tuple(args.competitions or REQUIRED_HEATMAP_COMPETITIONS)
@@ -614,7 +707,7 @@ def main() -> None:
             print(f"Skipping {tournament['name']}: top-players unavailable ({exc.code if isinstance(exc, HTTPError) else 'network'}).")
             continue
         players = discover_players(ranking)
-        counts = {"top_players": len(players), "with_embedded_position": 0, "eligible_positions": 0, "heatmaps_with_ratio": 0, "mapped": 0, "unmatched": 0}
+        counts = {"top_players": len(players), "with_embedded_position": 0, "eligible_positions": 0, "heatmaps_with_ratio": 0, "mapped": 0, "unmatched": 0, "cohort_backfill_candidates": 0, "cohort_backfilled": 0}
         position_labels: Counter[str] = Counter()
         for sports_id, player in players.items():
             checkpoint_key = (sports_id, str(tournament["id"]), str(season_id))
@@ -660,7 +753,58 @@ def main() -> None:
                 **space,
                 "sample_points": samples, "generated_at": datetime.now(timezone.utc).isoformat(),
             })
+            completed_fotmob.add((str(fotmob_id), str(tournament["id"]), str(season_id)))
+            known_sports_ids.setdefault(str(fotmob_id), set()).add(str(sports_id))
             counts["mapped"] += 1
+
+        # Top-player rankings are not a complete roster.  Backfill only the
+        # static M.E.S.S.I. cohort members that still lack this exact
+        # tournament/season session.  This is deliberately idempotent: every
+        # successfully stored player is skipped on the next workflow run.
+        candidates = static_cohort_candidates(args.season_name, competition_name)
+        counts["cohort_backfill_candidates"] = len(candidates)
+        for candidate in candidates:
+            fotmob_id = candidate["fotmob_player_id"]
+            fotmob_checkpoint = (fotmob_id, str(tournament["id"]), str(season_id))
+            if fotmob_checkpoint in completed_fotmob:
+                continue
+            known_ids = known_sports_ids.get(fotmob_id, set())
+            sports_id = next(iter(known_ids)) if len(known_ids) == 1 else None
+            if not sports_id:
+                sports_id = resolve_sportsapi_id(client, candidate["name"])
+            if not sports_id:
+                unmatched.append({"sportsapi_player_id": "", "name": candidate["name"], "team_name": candidate["team_name"]})
+                counts["unmatched"] += 1
+                continue
+            checkpoint_key = (sports_id, str(tournament["id"]), str(season_id))
+            if checkpoint_key in completed:
+                continue
+            try:
+                heatmap = client.get(f"players/{sports_id}/tournament/{tournament['id']}/season/{season_id}/heatmap?type=overall", "player")
+                ratios = heat_ratio(heatmap)
+            except (HTTPError, URLError, TimeoutError, ValueError):
+                continue
+            if ratios is None:
+                continue
+            in_box, out_box_final, mid, samples = ratios
+            space = spatial_metrics(core_activity_points(heatmap))
+            heatmap_key = f"{fotmob_id}:{tournament['id']}:{season_id}"
+            visual_points[heatmap_key] = heatmap_visual_points(heatmap)
+            output.append({
+                "fotmob_player_id": fotmob_id, "sportsapi_player_id": sports_id,
+                "player_name": candidate["name"], "team_name": candidate["team_name"],
+                "competition_name": tournament["name"], "season_name": args.season_name,
+                "tournament_id": tournament["id"], "season_id": season_id, "heatmap_key": heatmap_key,
+                "activity_filter": ACTIVITY_FILTER_VERSION,
+                "in_box_ratio": in_box, "out_box_final_ratio": out_box_final,
+                "mid_third_ratio": mid, "final_third_ratio": in_box + out_box_final,
+                **space,
+                "sample_points": samples, "generated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            completed.add(checkpoint_key)
+            completed_fotmob.add(fotmob_checkpoint)
+            known_sports_ids.setdefault(fotmob_id, set()).add(sports_id)
+            counts["cohort_backfilled"] += 1
         # A successful league survives a later rate-limit/network failure.
         write_outputs(output, unmatched, auto_mapped, visual_points)
         print(f"{tournament['name']} pipeline counts: {counts}")
