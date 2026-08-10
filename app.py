@@ -32,6 +32,34 @@ DEFAULT_GA_MEASUREMENT_ID = "G-8ZFS0ZM3NS"
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="wide")
 
 
+# Community Cloud continues to own this established public URL. The current
+# production experience is the React/Vite dashboard served by Vercel, so move
+# visitors there before rendering the legacy Streamlit application.
+FRONTEND_DASHBOARD_URL = "https://forward-scouting-report-6dn7-tau.vercel.app"
+
+
+def render_frontend_handoff() -> None:
+    """Redirect legacy Streamlit visitors and retain an accessible fallback."""
+    destination = json.dumps(FRONTEND_DASHBOARD_URL)
+    if hasattr(st, "html"):
+        st.html(
+            f"""
+            <script>
+              window.location.replace({destination});
+            </script>
+            """,
+            unsafe_allow_javascript=True,
+        )
+
+    st.title("M.E.S.S.I. 2.0 Scouting Dashboard")
+    st.info("최신 React 대시보드로 이동합니다. 자동 이동이 차단되면 아래 버튼을 선택하세요.")
+    st.link_button("M.E.S.S.I. 2.0 대시보드 열기", FRONTEND_DASHBOARD_URL, type="primary")
+
+
+render_frontend_handoff()
+st.stop()
+
+
 def _ga_measurement_id() -> str:
     """Return a validated GA4 measurement ID without exposing any secret."""
     try:
