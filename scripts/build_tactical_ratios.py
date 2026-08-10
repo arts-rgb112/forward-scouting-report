@@ -586,6 +586,88 @@ def resolve_sportsapi_id(client: SportsApiClient, player_name: str) -> str | Non
 
 
 OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "cca_area_pct", "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio", "danger_zone_density", "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score", "sample_points", "generated_at"]
+MISSING_SESSION_FIELDS = [
+    "fotmob_player_id", "player_name", "team_name", "competition_name",
+    "season_name", "reason",
+]
+
+
+def missing_static_cohort_sessions(
+    output: list[dict[str, Any]], cohort_rows: list[dict[str, str]] | None = None,
+    visual_points: dict[str, list[list[float]]] | None = None,
+) -> list[dict[str, str]]:
+    """List every static comparison session without a stored heatmap.
+
+    The former unmatched report only described the last ETL invocation and
+    therefore hid missing players from other seasons.  This audit is rebuilt
+    from the authoritative S.P.E.A.R. snapshot on every checkpoint, so it
+    always describes the complete live-data gap.
+    """
+    if cohort_rows is None:
+        path = DATA_DIR / "spear_cohort.csv"
+        if not path.exists():
+            return []
+        try:
+            with path.open(encoding="utf-8", newline="") as source:
+                cohort_rows = list(csv.DictReader(source))
+        except OSError:
+            return []
+
+    session_rows = {
+        (
+            str(row.get("fotmob_player_id", "")).strip(),
+            str(row.get("competition_name", "")).strip(),
+            str(row.get("season_name", "")).strip(),
+        ): row
+        for row in output
+        if row.get("fotmob_player_id")
+    }
+    completed = {
+        key
+        for key, row in session_rows.items()
+        if row.get("heatmap_key")
+        and (
+            visual_points is None
+            or bool(visual_points.get(str(row.get("heatmap_key", ""))))
+        )
+    }
+    missing: list[dict[str, str]] = []
+    for row in cohort_rows:
+        competition_name = next(
+            (
+                tactical_name
+                for tactical_name, cohort_name in COHORT_COMPETITION_NAMES.items()
+                if cohort_name == str(row.get("league_name", "")).strip()
+            ),
+            str(row.get("league_name", "")).strip(),
+        )
+        key = (
+            str(row.get("player_id", "")).strip(),
+            competition_name,
+            str(row.get("season_name", "")).strip(),
+        )
+        if not key[0] or key in completed:
+            continue
+        reason = (
+            "missing_heatmap_points"
+            if key in session_rows
+            else "missing_heatmap_session"
+        )
+        missing.append({
+            "fotmob_player_id": key[0],
+            "player_name": str(row.get("player_name", "")).strip(),
+            "team_name": str(row.get("team_name", "")).strip(),
+            "competition_name": competition_name,
+            "season_name": key[2],
+            "reason": reason,
+        })
+    return sorted(
+        missing,
+        key=lambda row: (
+            row["season_name"], row["competition_name"], row["player_name"],
+            row["fotmob_player_id"],
+        ),
+    )
 
 
 def read_checkpoint(path: Path) -> list[dict[str, str]]:
@@ -628,6 +710,11 @@ def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]],
     with (DATA_DIR / "auto_matched_fotmob_players.csv").open("w", encoding="utf-8", newline="") as target:
         writer = csv.DictWriter(target, fieldnames=["sportsapi_player_id", "fotmob_player_id", "name", "team_name"], extrasaction="ignore")
         writer.writeheader(); writer.writerows(auto_mapped)
+    with (DATA_DIR / "missing_tactical_sessions.csv").open("w", encoding="utf-8", newline="") as target:
+        writer = csv.DictWriter(target, fieldnames=MISSING_SESSION_FIELDS)
+        writer.writeheader(); writer.writerows(
+            missing_static_cohort_sessions(output, visual_points=visual_points)
+        )
     with (DATA_DIR / "tactical_heatmap_points.json").open("w", encoding="utf-8") as target:
         json.dump(visual_points, target, ensure_ascii=False, separators=(",", ":"))
 

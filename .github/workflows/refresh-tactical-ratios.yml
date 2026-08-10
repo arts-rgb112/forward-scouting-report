@@ -71,7 +71,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/tactical_3zone_ratio.csv data/tactical_heatmap_points.json data/unmatched_sportsapi_players.csv data/auto_matched_fotmob_players.csv
+          git add data/tactical_3zone_ratio.csv data/tactical_heatmap_points.json data/unmatched_sportsapi_players.csv data/auto_matched_fotmob_players.csv data/missing_tactical_sessions.csv
           if git diff --cached --quiet; then
             echo "No generated data changes to commit."
             exit 0
