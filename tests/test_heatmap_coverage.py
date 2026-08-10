@@ -1,8 +1,10 @@
 import unittest
 from unittest.mock import patch
+from urllib.error import URLError
 
 from metrics import extract_multi_season_metrics
 from scripts.build_tactical_ratios import (
+    SportsApiClient,
     discover_tournaments,
     missing_static_cohort_sessions,
     resolve_ranked_sportsapi_id,
@@ -148,6 +150,25 @@ class TournamentDiscoveryTests(unittest.TestCase):
             {item["name"]: item["id"] for item in discovered},
             {"Eredivisie": 37, "Primeira Liga": 238},
         )
+
+
+class SportsApiRetryTests(unittest.TestCase):
+    def test_best_effort_request_can_be_limited_to_one_attempt(self) -> None:
+        client = SportsApiClient({"player": "secret"}, delay_seconds=0)
+        with (
+            patch(
+                "scripts.build_tactical_ratios.BASE_URLS",
+                ("https://sports.example",),
+            ),
+            patch(
+                "scripts.build_tactical_ratios.urlopen",
+                side_effect=URLError("offline"),
+            ) as request,
+        ):
+            with self.assertRaises(URLError):
+                client.get("search?q=player", "player", max_attempts=1)
+
+        self.assertEqual(request.call_count, 1)
 
 
 if __name__ == "__main__":

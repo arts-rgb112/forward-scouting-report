@@ -130,12 +130,12 @@ class SportsApiClient:
         self.api_keys = api_keys
         self.delay_seconds = delay_seconds
 
-    def get(self, path: str, key_scope: str) -> Any:
+    def get(self, path: str, key_scope: str, max_attempts: int = 6) -> Any:
         api_key = self.api_keys[key_scope]
         last_error: Exception | None = None
         for base_url in BASE_URLS:
             url = f"{base_url}/{path.lstrip('/')}"
-            for attempt in range(6):
+            for attempt in range(max(1, max_attempts)):
                 try:
                     request = Request(url, headers={
                         "x-api-key": api_key,
@@ -162,11 +162,14 @@ class SportsApiClient:
                             "Stopping without publishing partial tactical data; run the "
                             "workflow again after the quota resets."
                         ) from exc
-                    if exc.code not in (429, 500, 502, 503, 504) or attempt == 5:
+                    if (
+                        exc.code not in (429, 500, 502, 503, 504)
+                        or attempt == max(1, max_attempts) - 1
+                    ):
                         raise
                 except URLError as exc:
                     last_error = exc
-                    if attempt == 5:
+                    if attempt == max(1, max_attempts) - 1:
                         break
                 retry_after = 0.0
                 if isinstance(last_error, HTTPError):
@@ -575,7 +578,12 @@ def resolve_sportsapi_id(client: SportsApiClient, player_name: str) -> str | Non
     if not target:
         return None
     try:
-        payload = client.get(f"search?q={quote(player_name)}", "player")
+        # Search is a best-effort fallback after the competition roster.  A
+        # provider outage must not apply six exponential retries to every
+        # unresolved player; the next idempotent workflow run can try again.
+        payload = client.get(
+            f"search?q={quote(player_name)}", "player", max_attempts=1,
+        )
     except (HTTPError, URLError, TimeoutError):
         return None
     matches: set[str] = set()
