@@ -482,6 +482,9 @@ def get_spear_leaderboard(
             "player_id": player_id, "player_name": names.get(player_id, "Unknown"),
             "team_name": metric.team_name or "정보 미제공",
             "league_name": metric.league_name or "대회 정보 미제공",
+            "league_id": metric.league_id,
+            "team_id": metric.team_id,
+            "minutes_played": metric.minutes_played,
             # The strict score is intentionally independent from its relative
             # tier.  The latter is assigned only after every cohort score is
             # ranked below.
@@ -495,6 +498,15 @@ def get_spear_leaderboard(
             "aerial_tier": factor_tier(sector_scores["aerial"]),
             "ground_duel_tier": factor_tier(sector_scores["ground"]),
             "space_control_tier": factor_tier(sector_scores["space"]),
+            # Public API consumers need the real numeric sector values, not
+            # only their display tiers.  Keep these fields on the same 0–100
+            # percentile scale used to calculate the weighted M.E.S.S.I. score.
+            "outside_shot_score": round(sector_scores["outside_box"][player_id], 2),
+            "deep_box_score": round(sector_scores["box"][player_id], 2),
+            "danger_zone_score": round(sector_scores["danger"][player_id], 2),
+            "aerial_score": round(sector_scores["aerial"][player_id], 2),
+            "ground_duel_score": round(sector_scores["ground"][player_id], 2),
+            "space_control_score": round(sector_scores["space"][player_id], 2),
         })
     table = pd.DataFrame(records)
     if table.empty:

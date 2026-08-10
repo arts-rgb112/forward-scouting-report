@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: messi-api-staging
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-api.txt
+    startCommand: uvicorn api_server.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: MESSI_CORS_ORIGINS
+        value: http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173
+      - key: PYTHONUNBUFFERED
+        value: "1"
