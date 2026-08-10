@@ -1,4 +1,8 @@
--r requirements-api.txt
+# Streamlit Community Cloud installs this file for the dashboard only.
+# Keep FastAPI/Pydantic in requirements-api.txt so the dashboard does not
+# attempt to build the API's old Pydantic core on newer Python runtimes.
 streamlit
 plotly
 matplotlib
+pandas
+numpy
