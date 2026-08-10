@@ -1,6 +1,7 @@
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
-pydantic==2.11.7
+# 2.12.5 ships Python 3.14-compatible pydantic-core wheels.
+pydantic==2.12.5
 pandas
 numpy
 httpx
