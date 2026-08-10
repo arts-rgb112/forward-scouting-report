@@ -74,6 +74,62 @@ class PlayersEnvelope(BaseModel):
     meta: DatasetMeta
 
 
+LeaderboardMode = Literal["league", "europe"]
+CompetitionCode = Literal["all", "ucl", "uel", "uecl"]
+
+
+class LeaderboardScopeOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: Literal[3, 5, 7]
+    label: str = Field(min_length=1)
+    leagueIds: list[int]
+
+
+class CompetitionOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: CompetitionCode
+    label: str = Field(min_length=1)
+    available: bool
+    reason: str | None = None
+
+
+class LeaderboardOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    seasons: list[str]
+    scopes: list[LeaderboardScopeOption]
+    competitions: dict[CompetitionCode, CompetitionOption]
+
+
+class LeaderboardMeta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["2.0.0"] = "2.0.0"
+    season: str
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7] | None = None
+    competition: CompetitionCode | None = None
+    population: int = Field(ge=0)
+    returned: int = Field(ge=0)
+    generatedAt: datetime
+    source: Literal["messi-static-cohort"] = "messi-static-cohort"
+
+
+class LeaderboardEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: list[PlayerResponse]
+    meta: LeaderboardMeta
+
+
+class PlayerDetailEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: PlayerResponse
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     season: str

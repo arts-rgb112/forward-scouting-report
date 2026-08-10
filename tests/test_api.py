@@ -85,6 +85,37 @@ def test_unsupported_season_is_explicit_not_found():
     assert response.status_code == 404
 
 
+def test_v2_options_advertise_real_capabilities_and_unavailable_competitions():
+    response = client.get("/api/v2/leaderboard-options")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "2025/2026" in payload["seasons"]
+    assert {scope["value"] for scope in payload["scopes"]} == {3, 5, 7}
+    assert payload["competitions"]["ucl"]["available"] is True
+    assert payload["competitions"]["uecl"]["available"] is False
+    assert payload["competitions"]["uecl"]["reason"]
+
+
+def test_v2_europe_leaderboard_and_contextual_player_detail_contract():
+    response = client.get("/api/v2/leaderboards", params={"season": "2025/2026", "mode": "europe", "competition": "ucl", "limit": 3})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["meta"]["schemaVersion"] == "2.0.0"
+    assert payload["meta"]["mode"] == "europe"
+    assert payload["meta"]["competition"] == "ucl"
+    assert payload["meta"]["scope"] is None
+    assert payload["meta"]["returned"] == len(payload["data"]) == 3
+    player_id = payload["data"][0]["id"]
+    detail = client.get(f"/api/v2/players/{player_id}", params={"season": "2025/2026", "mode": "europe", "competition": "ucl"})
+    assert detail.status_code == 200
+    assert detail.json()["data"]["id"] == player_id
+
+
+def test_v2_unavailable_competition_is_not_silently_rendered_as_empty():
+    response = client.get("/api/v2/leaderboards", params={"season": "2025/2026", "mode": "europe", "competition": "uecl"})
+    assert response.status_code == 404
+
+
 def test_openapi_advertises_the_v1_response_contract():
     response = client.get("/openapi.json")
     assert response.status_code == 200
@@ -92,6 +123,9 @@ def test_openapi_advertises_the_v1_response_contract():
     assert {"position", "archetype", "tier"}.issubset(schema["PlayerResponse"]["properties"])
     assert schema["PlayerResponse"]["properties"]["id"]["exclusiveMinimum"] == 0
     assert schema["DatasetMeta"]["properties"]["schemaVersion"]["const"] == "1.0.0"
+    assert schema["LeaderboardMeta"]["properties"]["schemaVersion"]["const"] == "2.0.0"
+    paths = response.json()["paths"]
+    assert paths["/api/v2/leaderboards"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith("LeaderboardEnvelope")
 
 
 def test_tier_boundaries():
