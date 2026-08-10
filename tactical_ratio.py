@@ -96,6 +96,8 @@ def _normalise(value: object) -> str:
 def _same_competition(left: object, right: object) -> bool:
     aliases = {
         "laliga": "laliga", "laligaea": "laliga",
+        "primeiraliga": "ligaportugal",
+        "ligaportugal": "ligaportugal",
         "uefachampionsleague": "championsleague",
         "uefaeuropaleague": "europaleague",
         "uefaeuropaconferenceleague": "europaconferenceleague",

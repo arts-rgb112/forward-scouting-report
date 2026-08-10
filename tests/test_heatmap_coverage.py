@@ -9,6 +9,7 @@ from scripts.build_tactical_ratios import (
     missing_static_cohort_sessions,
     resolve_ranked_sportsapi_id,
 )
+from tactical_ratio import _same_competition
 
 
 def _payload(league_name: str, league_id: int) -> dict:
@@ -29,6 +30,10 @@ def _payload(league_name: str, league_id: int) -> dict:
 
 
 class ExpandedLeagueParsingTests(unittest.TestCase):
+    def test_liga_portugal_session_alias_matches_tactical_label(self) -> None:
+        self.assertTrue(_same_competition("Liga Portugal", "Primeira Liga"))
+        self.assertTrue(_same_competition("Primeira Liga", "Liga Portugal"))
+
     def test_eredivisie_is_retained(self) -> None:
         metrics = extract_multi_season_metrics(_payload("Eredivisie", 999))
         self.assertIn("25/26_57", metrics)
