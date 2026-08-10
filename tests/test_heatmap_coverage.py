@@ -37,6 +37,11 @@ class ExpandedLeagueParsingTests(unittest.TestCase):
         self.assertIn("25/26_61", metrics)
         self.assertEqual(metrics["25/26_61"].league_id, 61)
 
+    def test_liga_portugal_alias_is_retained(self) -> None:
+        metrics = extract_multi_season_metrics(_payload("Liga Portugal", 999))
+        self.assertIn("25/26_61", metrics)
+        self.assertEqual(metrics["25/26_61"].league_id, 61)
+
 
 class TacticalCoverageAuditTests(unittest.TestCase):
     def test_reports_only_missing_competition_season_sessions(self) -> None:
