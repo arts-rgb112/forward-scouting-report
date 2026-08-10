@@ -1,7 +1,9 @@
 import unittest
+from unittest.mock import patch
 
 from metrics import extract_multi_season_metrics
 from scripts.build_tactical_ratios import (
+    discover_tournaments,
     missing_static_cohort_sessions,
     resolve_ranked_sportsapi_id,
 )
@@ -107,6 +109,28 @@ class RankedPlayerMappingTests(unittest.TestCase):
 
         self.assertIsNone(
             resolve_ranked_sportsapi_id(players, "Luis Suárez", "Unknown"),
+        )
+
+
+class TournamentDiscoveryTests(unittest.TestCase):
+    def test_distinctive_expanded_leagues_ignore_country_label_drift(self) -> None:
+        class FakeClient:
+            def get(self, path: str, key_scope: str) -> dict:
+                self.request = (path, key_scope)
+                return {"leagues": [
+                    {"id": 37, "name": "Eredivisie", "countryName": "The Netherlands"},
+                    {"id": 238, "name": "Liga Portugal", "countryName": "Portuguese Republic"},
+                ]}
+
+        with patch(
+            "scripts.build_tactical_ratios.cached_tournament_discoveries",
+            return_value={},
+        ):
+            discovered = discover_tournaments(FakeClient())
+
+        self.assertEqual(
+            {item["name"]: item["id"] for item in discovered},
+            {"Eredivisie": 37, "Primeira Liga": 238},
         )
 
 
