@@ -37,7 +37,7 @@ export function ConfigErrorFallback({ category, mode }: { category: ConfigErrorC
     }
   }
 
-  return <main className="grid min-h-screen place-items-center bg-[#080b0c] p-4 text-zinc-100 sm:p-6">
+  return <main id="main-content" className="grid min-h-screen place-items-center bg-[#080b0c] p-4 text-zinc-100 sm:p-6">
     <section className="w-full max-w-2xl border border-amber-300/30 bg-[#101415] p-5 shadow-2xl shadow-black/30 sm:p-7">
       <div className="mb-5 border-l-2 border-amber-300 pl-3 text-xs font-bold tracking-[0.16em] text-amber-200">M.E.S.S.I. 2.0 · DEPLOYMENT CHECK</div>
       <div role="alert" aria-labelledby="config-error-heading">

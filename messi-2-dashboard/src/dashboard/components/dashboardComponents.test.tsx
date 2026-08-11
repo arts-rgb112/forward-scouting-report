@@ -6,8 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import MessiScoutingDashboard from "../MessiScoutingDashboard";
 import { sampleMeta, samplePlayers } from "../../test/fixtures/players";
 import { AssetImage } from "./AssetImage";
+import { DashboardLoading } from "./DashboardLoading";
 import { DashboardErrorBoundary } from "./DashboardErrorBoundary";
+import { DashboardToolbar } from "./DashboardToolbar";
 import { PlayerCardList } from "./PlayerCardList";
+import { PlayerTable } from "./PlayerTable";
 
 afterEach(() => {
   cleanup();
@@ -34,6 +37,31 @@ describe("dashboard contract UI", () => {
     expect(container.querySelectorAll("article [role='tooltip']")).toHaveLength(0);
     expect(screen.getByText("오프 더 볼")).toBeInTheDocument();
   });
+
+  it("keeps one visible, accessible set of table sort controls", () => {
+    const { container } = render(<PlayerTable players={samplePlayers} comparedIds={new Set()} watchedIds={new Set()} sort={{ key: "score", direction: "desc" }} onMetricSort={vi.fn()} onToggleCompare={vi.fn()} onToggleWatch={vi.fn()} />);
+    expect(container.querySelectorAll("thead button")).toHaveLength(6);
+    expect(container.querySelectorAll("[aria-hidden] button")).toHaveLength(0);
+    expect(container.querySelectorAll("button[aria-sort]")).toHaveLength(0);
+    expect(container.querySelectorAll("th[aria-sort]")).toHaveLength(6);
+  });
+
+  it("keeps loading skeletons free of focusable controls", () => {
+    const { container } = render(<DashboardLoading />);
+    expect(container.querySelectorAll("[aria-hidden] button, [aria-hidden] a, [aria-hidden] input, [aria-hidden] select")).toHaveLength(0);
+  });
+
+  it("communicates the active autocomplete option through combobox ARIA", () => {
+    const { container } = render(<DashboardToolbar query="" role="ALL" sort="score" watchOnly={false} watchCount={0} positions={["ALL"]} resultCount={2} hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={vi.fn()} onRoleChange={vi.fn()} onSortChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={vi.fn()} />);
+    const input = screen.getByRole("combobox", { name: "Search players" });
+    fireEvent.change(input, { target: { value: "Erling" } });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    const option = screen.getByRole("option", { name: /Erling Haaland/ });
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-activedescendant", option.id);
+    expect(option).toHaveAttribute("aria-selected", "true");
+    expect(container.querySelectorAll("[role='option'] a, [role='option'] button")).toHaveLength(0);
+  });
 });
 
 describe("render failure containment", () => {
@@ -45,6 +73,7 @@ describe("render failure containment", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     render(<DashboardErrorBoundary resetKey={0} onReset={retry}><Thrower /></DashboardErrorBoundary>);
     expect(screen.getByRole("alert")).toHaveTextContent("Dashboard rendering error");
+    expect(document.getElementById("main-content")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(retry).toHaveBeenCalledOnce();
     consoleError.mockRestore();
