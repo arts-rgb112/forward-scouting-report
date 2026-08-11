@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { datasetHref, positionFilterValues } from "../datasetRoute";
 import type { DatasetRouteState, Player, PositionFilterCapability, SortKey } from "../types";
+import { enabledLegacyHref, legacyDetailHref } from "../../navigation/legacyHandoff";
 import { Icon } from "./Icon";
 
 export type PositionFilter = { value: string; label: string };
@@ -31,6 +32,7 @@ type Props = {
   onDirectionChange?(value: "asc" | "desc"): void;
   direction?: "asc" | "desc";
   onWatchOnlyChange(value: boolean): void;
+  onOpenWatchlist?(): void;
   onReset(): void;
 };
 
@@ -56,7 +58,10 @@ export function DashboardToolbar(props: Props) {
   const candidates = needle.trim()
     ? props.players.filter((player) => `${player.name} ${player.club.name} ${player.league.name}`.toLocaleLowerCase().includes(needle.toLocaleLowerCase())).slice(0, 8)
     : [];
-  const choose = (player: Player) => { window.location.assign(datasetHref(`/players/${player.id}`, props.dataset)); };
+  const choose = (player: Player) => {
+    const legacy = enabledLegacyHref(legacyDetailHref(player.id, { name: player.name, clubName: player.club.name }, props.dataset) ?? "");
+    window.location.assign(legacy || datasetHref(`/players/${player.id}`, props.dataset));
+  };
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown" && candidates.length) {
       event.preventDefault(); setOpen(true); setActive((index) => Math.min(index + 1, candidates.length - 1));
@@ -103,7 +108,7 @@ export function DashboardToolbar(props: Props) {
       <select aria-label="Role" value={props.role} onChange={(event) => props.onRoleChange(event.target.value)} className="h-11 min-w-36 rounded-md border border-white/10 bg-[#111516] px-3 text-[11px] font-bold text-zinc-300"><option value="ALL">All roles</option><option value="Type A">Type A</option><option value="Type B">Type B</option></select>
       <select aria-label="Sort" value={props.sort} onChange={(event) => props.onSortChange(event.target.value as SortKey)} className="h-11 min-w-48 rounded-md border border-white/10 bg-[#111516] px-3 text-[11px] font-bold text-zinc-300"><option value="score">M.E.S.S.I. score</option><option value="name">Name</option><option value="age">Age</option></select>
       <select aria-label="Sort direction" value={props.direction ?? "desc"} onChange={(event) => props.onDirectionChange?.(event.target.value as "asc" | "desc")} className="h-11 min-w-28 rounded-md border border-white/10 bg-[#111516] px-3 text-[11px] font-bold text-zinc-300"><option value="desc">Descending</option><option value="asc">Ascending</option></select>
-      {props.watchAvailable !== false && <button type="button" onClick={() => props.onWatchOnlyChange(!props.watchOnly)} aria-pressed={props.watchOnly} className={`${action} border-white/10 bg-[#111516] text-zinc-400`}>Watchlist {props.watchCount}</button>}
+      <button type="button" onClick={props.onOpenWatchlist} className={`${action} border-white/10 bg-[#111516] text-zinc-300`}>Watchlist {props.watchCount}</button>
       {props.resultLabel && <b className="ml-1 text-[11px] text-zinc-300">{props.resultLabel}</b>}
       {props.hasFilters && <button type="button" onClick={props.onReset} className="ml-auto min-h-9 rounded px-2 text-[11px] font-bold text-[#a7ff5b]">Reset filters</button>}
     </div>

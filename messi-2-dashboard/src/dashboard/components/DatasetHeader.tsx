@@ -1,4 +1,5 @@
 import type { CompetitionCode, CompetitionOption, DatasetMeta, DatasetRouteState, LeaderboardOptions } from "../types";
+import { enabledLegacyHref, legacyAboutHref } from "../../navigation/legacyHandoff";
 
 type Props = {
   meta: DatasetMeta; visibleCount: number; refreshing: boolean; onRefresh(): void;
@@ -10,6 +11,7 @@ function withCurrentValue<T extends string | number>(values: readonly T[], curre
 }
 
 export function DatasetHeader({ meta, visibleCount, refreshing, onRefresh, state, options, onStateChange }: Props) {
+  const metricGuideHref = enabledLegacyHref(legacyAboutHref()) ?? "/about/messi";
   const update = (patch: Partial<DatasetRouteState>) => onStateChange({ ...state, ...patch });
   const seasons = withCurrentValue(options?.seasons ?? [], state.season);
   const scopes = options?.scopes ?? [];
@@ -27,7 +29,7 @@ export function DatasetHeader({ meta, visibleCount, refreshing, onRefresh, state
         <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-lime-300/30 bg-lime-300/10 font-black text-lime-300">M</div>
           <span className="text-[10px] font-bold uppercase tracking-[.28em] text-emerald-300">Forward Intelligence / 2.0</span>
-          <a href="/about/messi" className="text-xs text-zinc-400 hover:text-lime-300">Metric guide</a>
+          <a href={metricGuideHref} className="text-xs text-zinc-400 hover:text-lime-300">Metric guide</a>
         </div>
         <h1 className="text-2xl font-black sm:text-3xl">M.E.S.S.I. <span className="text-zinc-500">SCOUT INDEX</span></h1>
         <p className="mt-1 text-xs text-zinc-500">Six-sector forward evaluation · generated {new Date(meta.generatedAt).toLocaleString()}</p>

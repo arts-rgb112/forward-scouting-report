@@ -36,6 +36,19 @@ st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layou
 # production experience is the React/Vite dashboard served by Vercel, so move
 # visitors there before rendering the legacy Streamlit application.
 FRONTEND_DASHBOARD_URL = "https://forward-scouting-report-6dn7-tau.vercel.app"
+LEGACY_HANDOFF_PAGES = {"detail", "compare", "about"}
+
+
+def _requested_legacy_page() -> bool:
+    """Only direct, known legacy routes bypass the React handoff."""
+    try:
+        page = st.query_params.get("page", "")
+        # Keep this exact: the legacy router below does not canonicalize page
+        # values either. Variants such as COMPARE or compare%20 must continue
+        # to take the Vite handoff instead of silently rendering leaderboard.
+        return isinstance(page, str) and page in LEGACY_HANDOFF_PAGES
+    except Exception:
+        return False
 
 
 def render_frontend_handoff() -> None:
@@ -56,8 +69,9 @@ def render_frontend_handoff() -> None:
     st.link_button("M.E.S.S.I. 2.0 대시보드 열기", FRONTEND_DASHBOARD_URL, type="primary")
 
 
-render_frontend_handoff()
-st.stop()
+if not _requested_legacy_page():
+    render_frontend_handoff()
+    st.stop()
 
 
 def _ga_measurement_id() -> str:
