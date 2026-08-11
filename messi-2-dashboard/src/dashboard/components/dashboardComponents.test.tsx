@@ -77,7 +77,7 @@ describe("dashboard contract UI", () => {
   });
 
   it("communicates the active autocomplete option through combobox ARIA", () => {
-    const { container } = render(<DashboardToolbar query="" role="ALL" sort="score" watchOnly={false} watchCount={0} positions={["ALL"]} resultCount={2} hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={vi.fn()} onRoleChange={vi.fn()} onSortChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={vi.fn()} />);
+    const { container } = render(<DashboardToolbar query="" role="ALL" sort="score" watchOnly={false} watchCount={0} resultLabel="2 shown · 2 results" hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={vi.fn()} onRoleChange={vi.fn()} onSortChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={vi.fn()} />);
     const input = screen.getByRole("combobox", { name: "Search players" });
     fireEvent.change(input, { target: { value: "Erling" } });
     fireEvent.keyDown(input, { key: "ArrowDown" });
@@ -86,6 +86,13 @@ describe("dashboard contract UI", () => {
     expect(input).toHaveAttribute("aria-activedescendant", option.id);
     expect(option).toHaveAttribute("aria-selected", "true");
     expect(container.querySelectorAll("[role='option'] a, [role='option'] button")).toHaveLength(0);
+  });
+
+  it("shows the complete position chip layout without filtering a server page locally", () => {
+    render(<DashboardToolbar query="" role="ALL" position="ALL" positionCapability="unsupported" sort="score" watchOnly={false} watchCount={0} resultLabel="2 shown · 2 results" hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={vi.fn()} onRoleChange={vi.fn()} onPositionChange={vi.fn()} onSortChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "All positions" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Center Back" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Detailed position filters are unavailable from this server.");
   });
 });
 

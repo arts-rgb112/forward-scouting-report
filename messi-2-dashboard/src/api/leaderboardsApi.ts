@@ -4,7 +4,8 @@ import { adaptAnalysis, adaptPlayer } from "./adapter";
 import { comparisonEnvelopeSchema, leaderboardEnvelopeSchema, leaderboardPageEnvelopeSchema, playerDetailEnvelopeSchema, playerDtoSchema } from "./contracts";
 import type { MessiApiConfig } from "./env";
 import { MessiApiError } from "./errors";
-import type { DatasetRouteState, LeaderboardOptions, LeaderboardSearch, PlayerComparison, PlayerDetail, PlayersPayload } from "../dashboard/types";
+import { PAGE_SIZE } from "../dashboard/datasetRoute";
+import type { DatasetMeta, DatasetRouteState, LeaderboardOptions, LeaderboardSearch, PlayerComparison, PlayerDetail, PlayersPayload } from "../dashboard/types";
 
 const scopeSchema = z.union([z.literal(3), z.literal(5), z.literal(7)]);
 const competitionSchema = z.enum(["all", "ucl", "uel", "uecl"]);
@@ -28,6 +29,10 @@ function parseError(message: string, error: unknown): never {
   throw new MessiApiError("schema", message);
 }
 
+function normalizeLeaderboardMeta(meta: DatasetMeta): DatasetMeta {
+  return { ...meta, totalItems: meta.totalItems ?? meta.population };
+}
+
 export async function fetchLeaderboardOptions(config: MessiApiConfig, signal: AbortSignal): Promise<LeaderboardOptions> {
   try { return optionsSchema.parse(await getJson(new URL("/api/v2/leaderboard-options", config.baseUrl).toString(), signal)); }
   catch (error) { return parseError("Leaderboard options response was invalid", error); }
@@ -36,14 +41,19 @@ export async function fetchLeaderboardOptions(config: MessiApiConfig, signal: Ab
 /** Requests the documented v2.1 page contract. A valid v2.0 response is retained as a compatibility payload. */
 export async function fetchLeaderboard(config: MessiApiConfig, state: DatasetRouteState, search: LeaderboardSearch, signal: AbortSignal): Promise<PlayersPayload> {
   const url = new URL("/api/v2/leaderboards", config.baseUrl);
-  const params = new URLSearchParams({ ...contextParams(state), page: String(search.page), pageSize: String(search.pageSize), sort: search.sort, order: search.direction });
+  const params = new URLSearchParams({ ...contextParams(state), page: String(search.page), pageSize: String(PAGE_SIZE), sort: search.sort, order: search.direction });
   if (search.q) params.set("q", search.q);
   if (search.role !== "all") params.set("role", search.role);
+  if (search.position !== "ALL") params.set("position", search.position);
   url.search = params.toString();
   try {
     const json = await getJson(url.toString(), signal);
     const paged = leaderboardPageEnvelopeSchema.safeParse(json);
-    if (paged.success) return { players: paged.data.data.map(adaptPlayer), meta: paged.data.meta, serverPage: { page: paged.data.meta.page, pageSize: paged.data.meta.pageSize, totalPages: paged.data.meta.totalPages, hasNextPage: paged.data.meta.hasNextPage } };
+    if (paged.success) {
+      const data = paged.data.data.slice(0, PAGE_SIZE);
+      const meta = { ...normalizeLeaderboardMeta(paged.data.meta), returned: data.length };
+      return { players: data.map(adaptPlayer), meta, serverPage: { page: paged.data.meta.page, pageSize: PAGE_SIZE, totalPages: paged.data.meta.totalPages, hasNextPage: paged.data.meta.hasNextPage } };
+    }
     const legacy = leaderboardEnvelopeSchema.safeParse(json);
     if (legacy.success) return { players: legacy.data.data.map(adaptPlayer), meta: legacy.data.meta };
     throw paged.error;

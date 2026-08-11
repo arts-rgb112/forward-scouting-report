@@ -26,7 +26,8 @@ export function parsePlayersEnvelope(input: unknown, expected: { season: string;
 
 const scopeSchema = z.union([z.literal(3), z.literal(5), z.literal(7)]);
 const competitionSchema = z.enum(["all", "ucl", "uel", "uecl"]);
-const leaderboardMetaSchema = z.object({ schemaVersion: z.literal("2.0.0"), season: z.string().min(1), mode: z.enum(["league", "europe"]), scope: scopeSchema.nullable(), competition: competitionSchema.nullable(), population: z.number().int().nonnegative(), returned: z.number().int().nonnegative(), generatedAt: z.string().datetime({ offset: true }), source: z.literal("messi-static-cohort") }).strict();
+const appliedFiltersSchema = z.object({ position: z.string().min(1).nullable().optional() }).passthrough();
+const leaderboardMetaSchema = z.object({ schemaVersion: z.literal("2.0.0"), season: z.string().min(1), mode: z.enum(["league", "europe"]), scope: scopeSchema.nullable(), competition: competitionSchema.nullable(), population: z.number().int().nonnegative(), totalItems: z.number().int().nonnegative().optional(), returned: z.number().int().nonnegative(), generatedAt: z.string().datetime({ offset: true }), source: z.literal("messi-static-cohort"), applied: appliedFiltersSchema.optional() }).passthrough();
 const leaderboardPageMetaSchema = leaderboardMetaSchema.omit({ schemaVersion: true }).extend({ schemaVersion: z.literal("2.1.0"), page: z.number().int().positive(), pageSize: z.number().int().min(1).max(250), totalPages: z.number().int().nonnegative(), hasNextPage: z.boolean() }).strict();
 export const leaderboardEnvelopeSchema = z.object({ data: z.array(playerDtoSchema), meta: leaderboardMetaSchema }).strict();
 export const leaderboardPageEnvelopeSchema = z.object({ data: z.array(playerDtoSchema), meta: leaderboardPageMetaSchema }).strict().superRefine(({ data, meta }, ctx) => {
