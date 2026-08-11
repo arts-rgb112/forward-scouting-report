@@ -90,6 +90,27 @@ def test_cors_environment_is_an_exact_comma_separated_allowlist(monkeypatch):
     assert cors_origins() == ["https://dashboard.example.test", "https://preview.example.test"]
 
 
+def test_watchlist_post_cors_is_limited_to_the_fixed_production_origin():
+    origin = "https://forward-scouting-report-6dn7-tau.vercel.app"
+    allowed = client.options("/api/v2/watchlist/resolve", headers={
+        "Origin": origin,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "Content-Type",
+    })
+    assert allowed.status_code == 200
+    assert allowed.headers["access-control-allow-origin"] == origin
+    assert "POST" in allowed.headers["access-control-allow-methods"]
+    assert allowed.headers.get("access-control-allow-credentials") is None
+
+    preview = "https://forward-scouting-report-6dn7-pr-160-messiflick.vercel.app"
+    denied = client.options("/api/v2/watchlist/resolve", headers={
+        "Origin": preview,
+        "Access-Control-Request-Method": "POST",
+    })
+    assert denied.status_code == 403
+    assert "access-control-allow-origin" not in denied.headers
+
+
 def test_unsupported_season_is_explicit_not_found():
     response = client.get("/api/v1/players", params={"season": "2010/2011"})
     assert response.status_code == 404
@@ -119,9 +140,11 @@ def test_v2_europe_leaderboard_and_contextual_player_detail_contract():
     legacy_detail = client.get(f"/api/v2/players/{player_id}", params={"season": "2025/2026", "mode": "europe", "competition": "ucl"})
     assert legacy_detail.status_code == 200
     assert "analysis" not in legacy_detail.json()["data"]
+    assert "idNamespace" not in legacy_detail.json()["data"]
     detail = client.get(f"/api/v2/players/{player_id}", params={"season": "2025/2026", "mode": "europe", "competition": "ucl", "includeAnalysis": "true"})
     assert detail.status_code == 200
     assert detail.json()["data"]["id"] == player_id
+    assert detail.json()["data"]["idNamespace"] == "fotmob"
     analysis = detail.json()["data"]["analysis"]
     assert set(analysis) == {"score", "volumeRadar", "ratioRadar", "rawMetrics", "spatial"}
     assert len(analysis["volumeRadar"]["axes"]) == len(analysis["ratioRadar"]["axes"]) == 6
@@ -168,6 +191,50 @@ def test_detail_and_compare_are_available_for_league_ucl_and_uel_contexts():
         comparison = client.get("/api/v2/compare", params={"players": ",".join(map(str, player_ids)), "season": "2025/2026", **context})
         assert comparison.status_code == 200
         assert [row["id"] for row in comparison.json()["data"]] == player_ids
+        assert {row["idNamespace"] for row in comparison.json()["data"]} == {"fotmob"}
+
+
+def test_watchlist_resolve_keeps_order_and_isolates_invalid_contexts():
+    ucl_2526 = {player.id for player in service.build_v2_players("2025/2026", "europe", 7, "ucl")}
+    ucl_2425 = {player.id for player in service.build_v2_players("2024/2025", "europe", 7, "ucl")}
+    player_id = next(iter(ucl_2526 & ucl_2425))
+    origin = "https://forward-scouting-report-6dn7-tau.vercel.app"
+    response = client.post("/api/v2/watchlist/resolve", headers={"Origin": origin}, json={"entries": [
+        {
+            "key": f"fotmob:{player_id}|season:2025/2026|mode:europe|scope:null|competition:ucl", "player": {"idNamespace": "fotmob", "playerId": player_id},
+            "context": {"season": "2025/2026", "mode": "europe", "scope": None, "competition": "ucl"},
+        },
+        {
+            "key": "bad-context", "player": {"idNamespace": "fotmob", "playerId": player_id},
+            "context": {"season": "2025/2026", "mode": "league", "scope": None, "competition": None},
+        },
+        {
+            "key": f"fotmob:{player_id}|season:2024/2025|mode:europe|scope:null|competition:ucl", "player": {"idNamespace": "fotmob", "playerId": player_id},
+            "context": {"season": "2024/2025", "mode": "europe", "scope": None, "competition": "ucl"},
+        },
+    ]})
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+    results = response.json()["results"]
+    assert [item["key"] for item in results] == [
+        f"fotmob:{player_id}|season:2025/2026|mode:europe|scope:null|competition:ucl",
+        "bad-context",
+        f"fotmob:{player_id}|season:2024/2025|mode:europe|scope:null|competition:ucl",
+    ]
+    assert [item["status"] for item in results] == ["resolved", "invalid_context", "resolved"]
+    assert results[0]["player"]["idNamespace"] == "fotmob"
+    assert results[0]["player"]["playerId"] == player_id
+    assert results[0]["context"] != results[2]["context"]
+
+
+def test_watchlist_resolution_rejects_hostile_origins_and_large_bodies():
+    payload = {"entries": []}
+    hostile = client.post("/api/v2/watchlist/resolve", headers={"Origin": "https://attacker.invalid"}, json=payload)
+    assert hostile.status_code == 403
+    assert "access-control-allow-origin" not in hostile.headers
+    origin = "https://forward-scouting-report-6dn7-tau.vercel.app"
+    oversized = client.post("/api/v2/watchlist/resolve", headers={"Origin": origin, "Content-Type": "application/json"}, content=b"x" * (64 * 1024 + 1))
+    assert oversized.status_code == 413
 
 
 def test_openapi_advertises_the_v1_response_contract():
@@ -182,6 +249,7 @@ def test_openapi_advertises_the_v1_response_contract():
     leaderboard_schema = paths["/api/v2/leaderboards"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
     assert {item["$ref"].rsplit("/", 1)[-1] for item in leaderboard_schema["anyOf"]} == {"LeaderboardEnvelope", "LeaderboardPageEnvelope"}
     assert "/api/v2/compare" in paths
+    assert "/api/v2/watchlist/resolve" in paths
     assert "PlayerAnalysis" in schema and "LeaderboardPageMeta" in schema
 
 

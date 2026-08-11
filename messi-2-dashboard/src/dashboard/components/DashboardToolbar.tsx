@@ -33,12 +33,15 @@ type Props = {
   direction?: "asc" | "desc";
   onWatchOnlyChange(value: boolean): void;
   onOpenWatchlist?(): void;
+  viewMode?: "leaderboard" | "watchlist";
+  onViewModeChange?(mode: "leaderboard" | "watchlist"): void;
   onReset(): void;
 };
 
 const action = "inline-flex min-h-11 items-center justify-center rounded-md border px-3 text-[11px] font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#8cff68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#080b0c]";
 
 export function DashboardToolbar(props: Props) {
+  const watchlistMode = props.viewMode === "watchlist";
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -79,13 +82,13 @@ export function DashboardToolbar(props: Props) {
   const selectedPosition = positionSupported ? (props.position ?? "ALL") : "ALL";
 
   return <section aria-labelledby="player-search-heading" className="mb-5 space-y-3">
-    <h2 id="player-search-heading" className="sr-only">Player search and filters</h2>
+    <h2 id="player-search-heading" className="sr-only">{watchlistMode ? "Saved-context filters" : "Player search and filters"}</h2>
     <label className="relative mx-auto block w-full min-w-0">
-      <span className="sr-only">Search players</span>
+      <span className="sr-only">{watchlistMode ? "Search saved contexts" : "Search players"}</span>
       <Icon path="m21 21-4.35-4.35M19 11a8 8 0 1 1-16 0 0 1 16 0Z" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-      <input value={needle} onFocus={() => setOpen(true)} onChange={(event) => { setNeedle(event.target.value); setOpen(true); setActive(-1); }} onKeyDown={onKeyDown} role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls={listId} aria-expanded={open && candidates.length > 0} aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined} placeholder="Search player, club, or league" className="h-12 w-full rounded-md border border-white/10 bg-[#111516] pl-10 pr-20 text-sm outline-none placeholder:text-zinc-600 focus:border-[#8cff68]/50 focus:ring-2 focus:ring-[#8cff68]/10" />
+      <input value={needle} onFocus={() => setOpen(true)} onChange={(event) => { setNeedle(event.target.value); setOpen(true); setActive(-1); }} onKeyDown={onKeyDown} role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls={listId} aria-expanded={!watchlistMode && open && candidates.length > 0} aria-activedescendant={!watchlistMode && open && active >= 0 ? `${listId}-${active}` : undefined} placeholder={watchlistMode ? "Search saved player, club, or league" : "Search player, club, or league"} className="h-12 w-full rounded-md border border-white/10 bg-[#111516] pl-10 pr-20 text-sm outline-none placeholder:text-zinc-600 focus:border-[#8cff68]/50 focus:ring-2 focus:ring-[#8cff68]/10" />
       {needle && <button type="button" onClick={() => { setNeedle(""); props.onQueryChange(""); setActive(-1); }} className="absolute right-2 top-1/2 min-h-9 -translate-y-1/2 rounded px-2 text-[11px] text-zinc-400">Clear</button>}
-      {open && candidates.length > 0 && <ul id={listId} role="listbox" aria-label="Player suggestions" className="absolute z-50 mt-1 max-h-80 w-full overflow-auto rounded-md border border-white/10 bg-[#101415] p-1 shadow-2xl">
+      {!watchlistMode && open && candidates.length > 0 && <ul id={listId} role="listbox" aria-label="Player suggestions" className="absolute z-50 mt-1 max-h-80 w-full overflow-auto rounded-md border border-white/10 bg-[#101415] p-1 shadow-2xl">
         {candidates.map((player, index) => <li id={`${listId}-${index}`} role="option" aria-selected={index === active} key={player.id} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(player)} className={`flex min-h-11 w-full cursor-pointer items-center justify-between rounded px-3 text-left text-xs ${index === active ? "bg-lime-300/10 text-lime-200" : "hover:bg-white/5"}`}>
           <span className="font-bold">{player.name}</span><span className="text-zinc-500">{player.club.name} · {player.league.name} · {player.position}</span>
         </li>)}
@@ -108,7 +111,8 @@ export function DashboardToolbar(props: Props) {
       <select aria-label="Role" value={props.role} onChange={(event) => props.onRoleChange(event.target.value)} className="h-11 min-w-36 rounded-md border border-white/10 bg-[#111516] px-3 text-[11px] font-bold text-zinc-300"><option value="ALL">All roles</option><option value="Type A">Type A</option><option value="Type B">Type B</option></select>
       <select aria-label="Sort" value={props.sort} onChange={(event) => props.onSortChange(event.target.value as SortKey)} className="h-11 min-w-48 rounded-md border border-white/10 bg-[#111516] px-3 text-[11px] font-bold text-zinc-300"><option value="score">M.E.S.S.I. score</option><option value="name">Name</option><option value="age">Age</option></select>
       <select aria-label="Sort direction" value={props.direction ?? "desc"} onChange={(event) => props.onDirectionChange?.(event.target.value as "asc" | "desc")} className="h-11 min-w-28 rounded-md border border-white/10 bg-[#111516] px-3 text-[11px] font-bold text-zinc-300"><option value="desc">Descending</option><option value="asc">Ascending</option></select>
-      <button type="button" onClick={props.onOpenWatchlist} className={`${action} border-white/10 bg-[#111516] text-zinc-300`}>Watchlist {props.watchCount}</button>
+      <button type="button" onClick={() => props.onViewModeChange?.(watchlistMode ? "leaderboard" : "watchlist")} aria-pressed={watchlistMode} className={`${action} ${watchlistMode ? "border-[#8cff68]/45 bg-[#8cff68]/10 text-[#a7ff5b]" : "border-white/10 bg-[#111516] text-zinc-300"}`}>Watchlist {props.watchCount}</button>
+      <button type="button" onClick={props.onOpenWatchlist} className={`${action} border-white/10 bg-[#111516] text-zinc-300`}>Manage / Compare</button>
       {props.resultLabel && <b className="ml-1 text-[11px] text-zinc-300">{props.resultLabel}</b>}
       {props.hasFilters && <button type="button" onClick={props.onReset} className="ml-auto min-h-9 rounded px-2 text-[11px] font-bold text-[#a7ff5b]">Reset filters</button>}
     </div>

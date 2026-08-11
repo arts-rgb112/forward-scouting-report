@@ -4,13 +4,14 @@ import { enabledLegacyHref, legacyAboutHref } from "../../navigation/legacyHando
 type Props = {
   meta: DatasetMeta; visibleCount: number; refreshing: boolean; onRefresh(): void;
   state: DatasetRouteState; options?: LeaderboardOptions; onStateChange(next: DatasetRouteState): void;
+  watchlistMode?: boolean;
 };
 
 function withCurrentValue<T extends string | number>(values: readonly T[], current: T) {
   return values.some((value) => value === current) ? values : [current, ...values];
 }
 
-export function DatasetHeader({ meta, visibleCount, refreshing, onRefresh, state, options, onStateChange }: Props) {
+export function DatasetHeader({ meta, visibleCount, refreshing, onRefresh, state, options, onStateChange, watchlistMode = false }: Props) {
   const metricGuideHref = enabledLegacyHref(legacyAboutHref()) ?? "/about/messi";
   const update = (patch: Partial<DatasetRouteState>) => onStateChange({ ...state, ...patch });
   const seasons = withCurrentValue(options?.seasons ?? [], state.season);
@@ -43,35 +44,36 @@ export function DatasetHeader({ meta, visibleCount, refreshing, onRefresh, state
           </div>)}
         </div>
         <button onClick={onRefresh} disabled={refreshing} className="min-h-11 min-w-28 shrink-0 whitespace-nowrap rounded-lg border border-white/10 px-4 text-xs disabled:cursor-wait disabled:opacity-50 md:w-auto">
-          {refreshing ? "Refreshing…" : "Refresh"}
+          {refreshing ? (watchlistMode ? "Resolving…" : "Refreshing…") : (watchlistMode ? "Resolve saved contexts" : "Refresh")}
         </button>
       </section>
     </div>
 
     <section aria-label="Leaderboard dataset controls" aria-busy={refreshing} className="mt-4 rounded-lg border border-white/10 bg-[#101415] p-2">
-      {refreshing && <p role="status" aria-live="polite" className="sr-only">Refreshing leaderboard data. Dataset filters remain available.</p>}
+      {refreshing && <p role="status" aria-live="polite" className="sr-only">{watchlistMode ? "Resolving saved contexts." : "Refreshing leaderboard data. Dataset filters remain available."}</p>}
+      {watchlistMode && <p className="mb-2 px-1 text-[11px] text-zinc-500">Dataset controls are paused while viewing saved contexts; they do not change this local view.</p>}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <label className="min-w-0 text-[10px] text-zinc-500">
           Ranking type
-          <select value={state.mode} onChange={(e) => update({ mode: e.target.value as DatasetRouteState["mode"] })} className="mt-1 block min-h-10 w-full min-w-0 rounded border border-white/10 bg-[#080b0c] px-2 text-xs text-zinc-100">
+          <select disabled={watchlistMode} value={state.mode} onChange={(e) => update({ mode: e.target.value as DatasetRouteState["mode"] })} className="mt-1 block min-h-10 w-full min-w-0 rounded border border-white/10 bg-[#080b0c] px-2 text-xs text-zinc-100 disabled:opacity-50">
             <option value="league">League ranking</option>
             <option value="europe">European ranking</option>
           </select>
         </label>
         <label className="min-w-0 text-[10px] text-zinc-500">
           Season
-          <select value={state.season} onChange={(e) => update({ season: e.target.value })} className="mt-1 block min-h-10 w-full min-w-0 rounded border border-white/10 bg-[#080b0c] px-2 text-xs text-zinc-100">
+          <select disabled={watchlistMode} value={state.season} onChange={(e) => update({ season: e.target.value })} className="mt-1 block min-h-10 w-full min-w-0 rounded border border-white/10 bg-[#080b0c] px-2 text-xs text-zinc-100 disabled:opacity-50">
             {seasons.map((season) => <option key={season} value={season}>{season}</option>)}
           </select>
         </label>
         {state.mode === "league" ? <label className="min-w-0 text-[10px] text-zinc-500">
           League scope
-          <select value={state.scope} onChange={(e) => update({ scope: Number(e.target.value) as DatasetRouteState["scope"] })} className="mt-1 block min-h-10 w-full min-w-0 rounded border border-white/10 bg-[#080b0c] px-2 text-xs text-zinc-100">
+          <select disabled={watchlistMode} value={state.scope} onChange={(e) => update({ scope: Number(e.target.value) as DatasetRouteState["scope"] })} className="mt-1 block min-h-10 w-full min-w-0 rounded border border-white/10 bg-[#080b0c] px-2 text-xs text-zinc-100 disabled:opacity-50">
             {scopeValues.map((scope) => <option key={scope} value={scope}>{scopes.find((candidate) => candidate.value === scope)?.label ?? `${scope} major leagues`}</option>)}
           </select>
         </label> : <label className="min-w-0 text-[10px] text-zinc-500">
           Competition
-          <select value={state.competition} onChange={(e) => update({ competition: e.target.value as CompetitionCode })} className="mt-1 block min-h-10 w-full min-w-0 rounded border border-white/10 bg-[#080b0c] px-2 text-xs text-zinc-100">
+          <select disabled={watchlistMode} value={state.competition} onChange={(e) => update({ competition: e.target.value as CompetitionCode })} className="mt-1 block min-h-10 w-full min-w-0 rounded border border-white/10 bg-[#080b0c] px-2 text-xs text-zinc-100 disabled:opacity-50">
             {competitions.map((competition: CompetitionOption) => <option key={competition.code} value={competition.code} disabled={!competition.available}>{competition.label}{competition.available ? "" : " (unavailable)"}</option>)}
           </select>
           {state.competition !== "all" && activeCompetition?.reason && <span className="mt-1 block text-[10px] text-amber-300">{activeCompetition.reason}</span>}

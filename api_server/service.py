@@ -14,6 +14,7 @@ from .schemas import (
     PlayerComparisonEnvelope, PlayerDetailResponse, PlayerResponse,
     PlayersEnvelope, PlayerStats, PlayerTier, RadarAxis, RadarChart,
     RawMetrics, SpatialAnalysis,
+    WatchlistResolveResult, WatchlistResolvedContext, WatchlistResolvedPlayer,
 )
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
 
@@ -168,12 +169,14 @@ SORTABLE_FIELDS = {
 
 def filtered_v2_players(
     season: str, mode: str, scope: int, competition: str, *, role: str | None,
-    query: str | None, sort: str, order: str,
+    position: str | None, query: str | None, sort: str, order: str,
 ) -> tuple[PlayerResponse, ...]:
     """Apply only server-owned filter/sort rules to the verified cohort."""
     rows = build_v2_players(season, mode, scope, competition)
     if role:
         rows = tuple(player for player in rows if player.archetype == role)
+    if position:
+        rows = tuple(player for player in rows if player.position == position)
     if query:
         needle = query.casefold().strip()
         rows = tuple(
@@ -191,10 +194,10 @@ def filtered_v2_players(
 
 def leaderboard_v21_envelope(
     season: str, mode: str, scope: int, competition: str, *, page: int,
-    page_size: int, role: str | None, query: str | None, sort: str, order: str,
+    page_size: int, role: str | None, position: str | None, query: str | None, sort: str, order: str,
 ) -> LeaderboardPageEnvelope:
     rows = filtered_v2_players(
-        season, mode, scope, competition, role=role, query=query, sort=sort, order=order,
+        season, mode, scope, competition, role=role, position=position, query=query, sort=sort, order=order,
     )
     population = len(rows)
     total_pages = (population + page_size - 1) // page_size
@@ -365,6 +368,81 @@ def leaderboard_options() -> dict[str, object]:
 
 def find_v2_player(player_id: int, season: str, mode: str, scope: int, competition: str) -> PlayerResponse | None:
     return next((player for player in build_v2_players(season, mode, scope, competition) if player.id == player_id), None)
+
+
+def resolve_watchlist_entries(entries: list[dict[str, object]]) -> list[WatchlistResolveResult]:
+    """Resolve independently submitted browser watchlist entries from static data.
+
+    Watchlists remain entirely client-owned.  This function only validates a
+    context and returns a current snapshot for that single request.
+    """
+    resolved: list[WatchlistResolveResult] = []
+    valid_competitions = {"all", "ucl", "uel", "uecl"}
+
+    for entry in entries:
+        key = entry.get("key")
+        result_key = key if isinstance(key, str) and len(key) <= 500 else ""
+        player_ref = entry.get("player")
+        context_ref = entry.get("context")
+        if not isinstance(player_ref, dict) or not isinstance(context_ref, dict):
+            resolved.append(WatchlistResolveResult(key=result_key, status="invalid_context"))
+            continue
+
+        player_id = player_ref.get("playerId")
+        namespace = player_ref.get("idNamespace")
+        season = context_ref.get("season")
+        mode = context_ref.get("mode")
+        scope = context_ref.get("scope")
+        competition = context_ref.get("competition")
+        valid_player = isinstance(player_id, int) and not isinstance(player_id, bool) and player_id > 0
+        valid_common = (
+            namespace == "fotmob"
+            and valid_player
+            and isinstance(season, str)
+            and season in supported_seasons()
+            and mode in {"league", "europe"}
+        )
+        if not valid_common:
+            resolved.append(WatchlistResolveResult(key=result_key, status="invalid_context"))
+            continue
+
+        if mode == "league":
+            if scope not in {3, 5, 7} or competition not in {None, "all"}:
+                resolved.append(WatchlistResolveResult(key=result_key, status="invalid_context"))
+                continue
+            expected_key = f"fotmob:{player_id}|season:{season}|mode:league|scope:{scope}|competition:null"
+            if key != expected_key:
+                resolved.append(WatchlistResolveResult(key=result_key, status="invalid_context"))
+                continue
+            normalized_context = WatchlistResolvedContext(
+                season=season, mode="league", scope=scope, competition=None,
+            )
+            player = find_v2_player(player_id, season, "league", scope, "all")
+        else:
+            if scope is not None or competition not in valid_competitions:
+                resolved.append(WatchlistResolveResult(key=result_key, status="invalid_context"))
+                continue
+            expected_key = f"fotmob:{player_id}|season:{season}|mode:europe|scope:null|competition:{competition}"
+            if key != expected_key:
+                resolved.append(WatchlistResolveResult(key=result_key, status="invalid_context"))
+                continue
+            normalized_context = WatchlistResolvedContext(
+                season=season, mode="europe", scope=None, competition=competition,
+            )
+            player = find_v2_player(player_id, season, "europe", 7, competition)
+
+        if player is None:
+            resolved.append(WatchlistResolveResult(
+                key=result_key, status="unavailable", context=normalized_context,
+            ))
+            continue
+        resolved.append(WatchlistResolveResult(
+            key=result_key,
+            status="resolved",
+            context=normalized_context,
+            player=WatchlistResolvedPlayer(**player.model_dump(), playerId=player.id),
+        ))
+    return resolved
 
 
 @lru_cache(maxsize=1)

@@ -1058,7 +1058,7 @@ def render_head_to_head_cards(
 def render_head_to_head_profile_headers(
     left_name: str, left_rank, left_stats, left_ratio: dict[str, object] | None, left_season: str,
     right_name: str, right_rank, right_stats, right_ratio: dict[str, object] | None, right_season: str,
-    scope: int,
+    left_scope: int, right_scope: int,
 ) -> None:
     """Keep scores and spatial identities visible before the H2H radar.
 
@@ -1068,12 +1068,12 @@ def render_head_to_head_profile_headers(
     st.markdown("### 👑 M.E.S.S.I. 프로필 비교")
     left_col, right_col = st.columns(2)
 
-    def render_profile(column, name, rank, stats, ratio, season, color):
+    def render_profile(column, name, rank, stats, ratio, season, scope, color):
         score, tier, coverage = _spear_total(rank)
         score_text = "동기화 대기" if score is None else f"{score:.1f}/100"
         with column:
             with st.container(border=True):
-                st.markdown(f"#### {color} {name}")
+                st.markdown(f"#### {color} {html.escape(name)}")
                 st.metric("M.E.S.S.I. 점수", score_text, tier)
                 if stats is not None:
                     league_name = stats.league_name or "대회 정보 없음"
@@ -1101,8 +1101,8 @@ def render_head_to_head_profile_headers(
                         badge, text = identity
                         st.markdown(f"**[{badge}]** : {text}")
 
-    render_profile(left_col, left_name, left_rank, left_stats, left_ratio, left_season, "🟦")
-    render_profile(right_col, right_name, right_rank, right_stats, right_ratio, right_season, "🟥")
+    render_profile(left_col, left_name, left_rank, left_stats, left_ratio, left_season, left_scope, "🟦")
+    render_profile(right_col, right_name, right_rank, right_stats, right_ratio, right_season, right_scope, "🟥")
 
 
 def primary_spear_rank(player, selected_seasons: list[str], restrict_to_forwards: bool, minimum_final_third_ratio: int):
@@ -2208,6 +2208,114 @@ def _query_scope(default: int = 5) -> int:
         return default
 
 
+LEGACY_COMPARE_SEASONS = {"25/26", "24/25", "23/24", "22/23", "21/22"}
+LEGACY_EUROPE_COMPETITIONS = {"all": EUROPEAN_LEADERBOARD_ID, "ucl": 42, "uel": 73, "uecl": 108}
+
+
+def _positive_query_player_id(name: str) -> int | None:
+    """Only accept canonical positive decimal IDs from legacy handoff URLs."""
+    raw = _query_text(name).strip()
+    if not raw or not raw.isdecimal():
+        return None
+    value = int(raw)
+    return value if value > 0 else None
+
+
+def _contextual_static_candidate(
+    player_id: int, season: str, mode: str, scope: int | None, competition: str | None,
+) -> tuple[PlayerCandidate, DecisionMetrics] | None:
+    """Prove a URL player against its exact static season/competition cohort."""
+    if season not in LEGACY_COMPARE_SEASONS:
+        return None
+    if mode == "europe":
+        if scope is not None or competition not in LEGACY_EUROPE_COMPETITIONS:
+            return None
+        target, comparison_scope = LEGACY_EUROPE_COMPETITIONS[competition], 7
+    elif mode == "league":
+        if scope not in {3, 5, 7} or competition not in {None, "", "all"}:
+            return None
+        target, comparison_scope = 47, scope
+    else:
+        return None
+    frame = cached_spear_leaderboard(target, season, comparison_scope)
+    matches = frame[frame["player_id"].astype(str) == str(player_id)]
+    if matches.empty:
+        return None
+    row = matches.iloc[0]
+    expected_league_id = int(row["league_id"])
+    static = next((
+        metrics for _, metrics in _static_session_rows(str(player_id), season)
+        if metrics.league_id == expected_league_id
+    ), None)
+    if static is None:
+        return None
+    return PlayerCandidate(str(player_id), str(row["player_name"]), str(row.get("team_name") or "")), static
+
+
+def _legacy_detail_query_context() -> tuple[PlayerCandidate, DecisionMetrics, int] | None:
+    """Validate the additive detail context before trusting it over UI defaults."""
+    mode = _query_text("mode").strip()
+    if not mode:
+        return None
+    player_id = _positive_query_player_id("player")
+    season = _query_text("season").strip()
+    competition = _query_text("competition").strip() or None
+    raw_scope = _query_text("scope").strip()
+    if player_id is None or season not in LEGACY_COMPARE_SEASONS:
+        return None
+    if mode == "league":
+        try:
+            scope = int(raw_scope)
+        except ValueError:
+            return None
+        context = _contextual_static_candidate(player_id, season, mode, scope, competition)
+        return (context[0], context[1], scope) if context is not None else None
+    if mode == "europe" and raw_scope in {"", "null"} and competition in LEGACY_EUROPE_COMPETITIONS:
+        context = _contextual_static_candidate(player_id, season, mode, None, competition)
+        return (context[0], context[1], 7) if context is not None else None
+    return None
+
+
+def _legacy_compare_query_filters() -> tuple[dict[str, object] | None, str | None]:
+    """Read and validate the two independent legacy Compare URL contexts."""
+    left_raw, right_raw = _query_text("left_player"), _query_text("right_player")
+    if not left_raw and not right_raw:
+        return None, None
+    left_id, right_id = _positive_query_player_id("left_player"), _positive_query_player_id("right_player")
+    if left_id is None or right_id is None:
+        return None, "The Compare link has an invalid player ID. Please choose two players again."
+    contexts: dict[str, tuple[int, str, str, int | None, str | None]] = {}
+    for side, player_id in (("left", left_id), ("right", right_id)):
+        season, mode = _query_text(f"{side}_season").strip(), _query_text(f"{side}_mode").strip()
+        competition = _query_text(f"{side}_competition").strip() or None
+        raw_scope = _query_text(f"{side}_scope").strip()
+        if mode == "league":
+            try:
+                scope = int(raw_scope)
+            except ValueError:
+                return None, "A domestic-league Compare link requires a 3, 5, or 7 league scope."
+        else:
+            scope = None if raw_scope in {"", "null"} else -1
+        if season not in LEGACY_COMPARE_SEASONS or mode not in {"league", "europe"}:
+            return None, "This Compare link uses an unsupported season or mode."
+        contexts[side] = (player_id, season, mode, scope, competition)
+    left = _contextual_static_candidate(*contexts["left"])
+    right = _contextual_static_candidate(*contexts["right"])
+    if left is None or right is None:
+        return None, "One or both players are unavailable in the requested season and competition."
+    return {
+        "left_id": left[0].player_id, "left_name": left[0].name, "left_team": left[0].team_name or "",
+        "left_season": contexts["left"][1], "left_mode": contexts["left"][2],
+        "left_scope": contexts["left"][3] if contexts["left"][3] is not None else 7,
+        "left_competition": contexts["left"][4],
+        "right_id": right[0].player_id, "right_name": right[0].name, "right_team": right[0].team_name or "",
+        "right_season": contexts["right"][1], "right_mode": contexts["right"][2],
+        "right_scope": contexts["right"][3] if contexts["right"][3] is not None else 7,
+        "right_competition": contexts["right"][4],
+        "scope": 7, "auto_context": True,
+    }, None
+
+
 def _route(page: str, **params: object) -> None:
     """Replace the URL state atomically when moving between app surfaces."""
     # Updating individual query parameters creates intermediate browser
@@ -2470,8 +2578,9 @@ def render_player_detail_page() -> None:
     # was previously ignored here in favour of the old URL query parameter.
     # That left the control on (for example) 22/23 while the report continued
     # to calculate and label every panel with 23/24 data.
-    filters = {"season": detail_season, "scope": _query_scope()}
-    player = PlayerCandidate(player_id, _query_text("name", "선수"), _query_text("team", ""))
+    detail_context = _legacy_detail_query_context() if _query_text("season").strip() == detail_season else None
+    filters = {"season": detail_season, "scope": detail_context[2] if detail_context is not None else _query_scope()}
+    player = detail_context[0] if detail_context is not None else PlayerCandidate(player_id, _query_text("name", "선수"), _query_text("team", ""))
     player = _resolve_static_player(player, filters["season"])
     try:
         sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
@@ -2482,19 +2591,21 @@ def render_player_detail_page() -> None:
         # unavailable player must render a fallback notice, never a red page.
         sessions = {}
     session_rows = [(key, stats) for key, stats in sessions.items() if key.split("_", 1)[0] == filters["season"]]
-    using_static_snapshot = False
-    if not session_rows:
+    using_static_snapshot = detail_context is not None
+    selected_stats = detail_context[1] if detail_context is not None else None
+    if not session_rows and detail_context is None:
         session_rows = _static_session_rows(player.player_id, filters["season"])
         using_static_snapshot = bool(session_rows)
-    if not session_rows:
+    if not session_rows and detail_context is None:
         st.warning(f"{filters['season']} 시즌에 조회 가능한 대회 기록이 없습니다.")
         return
-    selected_index = st.selectbox(
-        "대회", range(len(session_rows)),
-        format_func=lambda index: session_rows[index][1].league_name or "대회 정보 없음",
-        key=f"detail_competition_{player.player_id}_{filters['season']}",
-    )
-    _, selected_stats = session_rows[selected_index]
+    if detail_context is None:
+        selected_index = st.selectbox(
+            "대회", range(len(session_rows)),
+            format_func=lambda index: session_rows[index][1].league_name or "대회 정보 없음",
+            key=f"detail_competition_{player.player_id}_{filters['season']}",
+        )
+        _, selected_stats = session_rows[selected_index]
     emit_ga_event_once(
         "player_report_open",
         f"{player.player_id}:{filters['season']}:{selected_stats.league_id}",
@@ -2534,6 +2645,15 @@ def render_head_to_head_page() -> None:
     st.caption("양쪽 선수의 시즌과 대회를 독립적으로 선택합니다. 백분위는 각자 선택한 대회의 동일 조건 모집단을 기준으로 계산됩니다.")
     if "h2h_filters" not in st.session_state:
         st.session_state.h2h_filters = None
+    if st.session_state.h2h_filters is None:
+        query_filters, query_error = _legacy_compare_query_filters()
+        if query_error:
+            st.warning(query_error)
+            st.link_button("Choose players again", "?page=compare")
+        elif query_filters:
+            # The query is transport only: names and teams were read from the
+            # verified static cohort, not from URL text.
+            st.session_state.h2h_filters = query_filters
     st.caption("선수명을 2자 이상 입력하면 후보 드롭다운에서 바로 선택할 수 있습니다.")
     with st.container(border=True):
         left_season_col, left_col, right_season_col, right_col, scope_col, action_col = st.columns([1, 2, 1, 2, 1, 1])
@@ -2593,61 +2713,76 @@ def render_head_to_head_page() -> None:
         filters = None
     if not filters:
         return
-    left_player = PlayerCandidate(filters["left_id"], filters["left_name"], filters.get("left_team") or None)
-    right_player = PlayerCandidate(filters["right_id"], filters["right_name"], filters.get("right_team") or None)
-    left_player = _resolve_static_player(left_player, str(filters["left_season"]))
-    right_player = _resolve_static_player(right_player, str(filters["right_season"]))
-    try:
-        left_sessions = extract_multi_season_metrics(cached_player_data(left_player.player_id))
-    except (FotMobError, TypeError, ValueError, KeyError) as exc:
-        left_sessions = {}
-        st.caption(f"A 선수의 현재 이력 API를 읽지 못해 정적 시즌 스냅샷을 확인합니다: {exc}")
-    try:
-        right_sessions = extract_multi_season_metrics(cached_player_data(right_player.player_id))
-    except (FotMobError, TypeError, ValueError, KeyError) as exc:
-        right_sessions = {}
-        st.caption(f"B 선수의 현재 이력 API를 읽지 못해 정적 시즌 스냅샷을 확인합니다: {exc}")
-    left_candidates = [
-        (key, stats) for key, stats in left_sessions.items()
-        if key.split("_", 1)[0] == filters["left_season"]
-    ]
-    right_candidates = [
-        (key, stats) for key, stats in right_sessions.items()
-        if key.split("_", 1)[0] == filters["right_season"]
-    ]
-    if not left_candidates:
-        left_candidates = _static_session_rows(left_player.player_id, filters["left_season"])
-    if not right_candidates:
-        right_candidates = _static_session_rows(right_player.player_id, filters["right_season"])
+    automatic_context = bool(filters.get("auto_context"))
+    if automatic_context:
+        left_contextual = _contextual_static_candidate(
+            int(filters["left_id"]), str(filters["left_season"]), str(filters["left_mode"]),
+            None if str(filters["left_mode"]) == "europe" else int(filters["left_scope"]), filters.get("left_competition"),
+        )
+        right_contextual = _contextual_static_candidate(
+            int(filters["right_id"]), str(filters["right_season"]), str(filters["right_mode"]),
+            None if str(filters["right_mode"]) == "europe" else int(filters["right_scope"]), filters.get("right_competition"),
+        )
+        if left_contextual is None or right_contextual is None:
+            st.warning("One or both selected contexts are no longer available. Please choose players again.")
+            st.link_button("Choose players again", "?page=compare")
+            return
+        left_player, left_stats = left_contextual
+        right_player, right_stats = right_contextual
+        left_candidates, right_candidates = [("url", left_stats)], [("url", right_stats)]
+        st.caption("Comparison context loaded from the Watchlist link.")
+    else:
+        left_player = PlayerCandidate(filters["left_id"], filters["left_name"], filters.get("left_team") or None)
+        right_player = PlayerCandidate(filters["right_id"], filters["right_name"], filters.get("right_team") or None)
+        left_player = _resolve_static_player(left_player, str(filters["left_season"]))
+        right_player = _resolve_static_player(right_player, str(filters["right_season"]))
+        try:
+            left_sessions = extract_multi_season_metrics(cached_player_data(left_player.player_id))
+        except (FotMobError, TypeError, ValueError, KeyError) as exc:
+            left_sessions = {}
+            st.caption(f"A 선수의 현재 이력 API를 읽지 못해 정적 시즌 스냅샷을 확인합니다: {exc}")
+        try:
+            right_sessions = extract_multi_season_metrics(cached_player_data(right_player.player_id))
+        except (FotMobError, TypeError, ValueError, KeyError) as exc:
+            right_sessions = {}
+            st.caption(f"B 선수의 현재 이력 API를 읽지 못해 정적 시즌 스냅샷을 확인합니다: {exc}")
+        left_candidates = [(key, stats) for key, stats in left_sessions.items() if key.split("_", 1)[0] == filters["left_season"]]
+        right_candidates = [(key, stats) for key, stats in right_sessions.items() if key.split("_", 1)[0] == filters["right_season"]]
+        if not left_candidates:
+            left_candidates = _static_session_rows(left_player.player_id, filters["left_season"])
+        if not right_candidates:
+            right_candidates = _static_session_rows(right_player.player_id, filters["right_season"])
     if not left_candidates or not right_candidates:
         missing = "A 선수" if not left_candidates else "B 선수"
         missing_season = filters["left_season"] if not left_candidates else filters["right_season"]
         st.warning(f"{missing}의 {missing_season} 시즌 대회 세션을 찾지 못했습니다.")
         return
-    left_selector, right_selector = st.columns(2)
-    with left_selector:
-        left_index = st.selectbox(
-            "A 선수 대회", range(len(left_candidates)), key="h2h_left_competition",
-            format_func=lambda index: left_candidates[index][1].league_name or "대회 정보 없음",
-        )
-    with right_selector:
-        right_index = st.selectbox(
-            "B 선수 대회", range(len(right_candidates)), key="h2h_right_competition",
-            format_func=lambda index: right_candidates[index][1].league_name or "대회 정보 없음",
-        )
-    _, left_stats = left_candidates[left_index]
-    _, right_stats = right_candidates[right_index]
+    if not automatic_context:
+        left_selector, right_selector = st.columns(2)
+        with left_selector:
+            left_index = st.selectbox(
+                "A 선수 대회", range(len(left_candidates)), key="h2h_left_competition",
+                format_func=lambda index: left_candidates[index][1].league_name or "대회 정보 없음",
+            )
+        with right_selector:
+            right_index = st.selectbox(
+                "B 선수 대회", range(len(right_candidates)), key="h2h_right_competition",
+                format_func=lambda index: right_candidates[index][1].league_name or "대회 정보 없음",
+            )
+        _, left_stats = left_candidates[left_index]
+        _, right_stats = right_candidates[right_index]
     left_season = str(filters["left_season"])
     right_season = str(filters["right_season"])
-    scope = int(filters["scope"])
-    left_rank = cached_percentiles(left_player.player_id, left_season, left_stats, 1.0, True, 0, scope)
-    right_rank = cached_percentiles(right_player.player_id, right_season, right_stats, 1.0, True, 0, scope)
+    left_scope = int(filters.get("left_scope", filters["scope"]))
+    right_scope = int(filters.get("right_scope", filters["scope"]))
+    left_rank = cached_percentiles(left_player.player_id, left_season, left_stats, 1.0, True, 0, left_scope)
+    right_rank = cached_percentiles(right_player.player_id, right_season, right_stats, 1.0, True, 0, right_scope)
     left_ratio = get_tactical_ratio_for_session(left_player.player_id, left_stats.league_name or "", left_season)
     right_ratio = get_tactical_ratio_for_session(right_player.player_id, right_stats.league_name or "", right_season)
     render_head_to_head_profile_headers(
         left_player.name, left_rank, left_stats, left_ratio, left_season,
         right_player.name, right_rank, right_stats, right_ratio, right_season,
-        scope,
+        left_scope, right_scope,
     )
     render_spear_head_to_head(left_player.name, left_rank, right_player.name, right_rank)
     render_head_to_head_cards(left_player.name, left_rank, left_stats, left_ratio, right_player.name, right_rank, right_stats, right_ratio)
