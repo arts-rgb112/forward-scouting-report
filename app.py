@@ -19,7 +19,7 @@ from rankings import (
     get_top_leagues_shot_quality,
 )
 from spear_cohort import load_spear_cohort
-from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
+from tactical_ratio import cca_core_region, get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
 
 
 _UNIFIED_BAR_COUNTER = itertools.count()
@@ -36,6 +36,7 @@ st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layou
 # production experience is the React/Vite dashboard served by Vercel, so move
 # visitors there before rendering the legacy Streamlit application.
 FRONTEND_DASHBOARD_URL = "https://forward-scouting-report-6dn7-tau.vercel.app"
+LEGACY_APP_URL = "https://forward-scouting-report-fd4zfq2gjrr5ladifytpcq.streamlit.app"
 LEGACY_HANDOFF_PAGES = {"detail", "compare", "about"}
 
 
@@ -1136,6 +1137,7 @@ def render_season_heatmap(
     tactical_ratio: dict[str, object] | None = None,
 ) -> None:
     points = get_heatmap_points(player_id, heatmap_key)
+    cca_core, cca_hull = cca_core_region(points)
     st.markdown("#### 📍 시즌 활동 히트맵")
     st.caption(
         "저장된 시즌 좌표를 기반으로 활동 밀도를 표시합니다. 공격 방향은 화면 왼쪽→오른쪽이며, "
@@ -1178,12 +1180,26 @@ def render_season_heatmap(
         figure.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=line, fillcolor=fill, layer="below")
     figure.add_shape(type="line", x0=50, y0=0, x1=50, y1=100, line=line)
     figure.add_shape(type="circle", x0=43, y0=43, x1=57, y1=57, line=line)
+    if len(cca_hull) >= 3:
+        outline_x = [point[0] for point in cca_hull] + [cca_hull[0][0]]
+        outline_y = [point[1] for point in cca_hull] + [cca_hull[0][1]]
+        figure.add_trace(go.Scatter(
+            x=outline_x, y=outline_y, mode="lines", hoverinfo="skip",
+            line={"color": "#38BDF8", "width": 2.2, "dash": "dash"},
+            fill="toself", fillcolor="rgba(56,189,248,0.13)",
+        ))
     # SportsAPI Y=0 is the player's right touchline. Plotly's ordinary axis
     # places that coordinate at the bottom, which matches the conventional
     # viewer perspective for left-to-right attacking: right wing below, left
     # wing above. Keep raw coordinates and only use that display orientation.
     figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [0, 100], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True, "constrain": "domain"}, showlegend=False)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+    if cca_core and cca_hull:
+        st.caption(
+            f"청록 점선은 CCA 핵심 반복 활동 영역입니다. 전체 {len(points)}개 좌표에서 반복 활동만 남긴 뒤, "
+            f"가장 밀집한 셀로 {len(cca_core)}개(핵심 50% 이상)를 포함하도록 계산합니다. "
+            "히트맵 색상은 전체 저장 좌표를 부드럽게 표시하므로 점선보다 넓게 보일 수 있습니다."
+        )
 
 
 def lane_summary(ratio: dict[str, object] | None) -> tuple[str, str] | None:
@@ -1269,14 +1285,14 @@ def activity_coverage_identity(rank) -> tuple[str, str] | None:
         return None
     coverage_score = max(0.0, min(100.0, 100.0 - float(cca_top_percent)))
     if coverage_score >= 65.0:
-        badge = "🏃 활동 반경 넓은 전방위형"
-        text = "반복 활동 셀의 코어 커버리지가 비교군 평균보다 넓습니다"
+        badge = "🏃 CCA 핵심 활동 반경 넓은 전방위형"
+        text = "가장 자주 반복된 활동 구역의 범위가 비교군 평균보다 넓습니다"
     elif coverage_score <= 35.0:
-        badge = "🏃 활동 반경 좁은 고립형"
-        text = "특정 구역에 머무르는 정적인 반복 동선이 확인됩니다"
+        badge = "🏃 CCA 핵심 활동 반경 집중형"
+        text = "가장 자주 반복된 활동이 일부 핵심 구역에 집중됩니다. 전체 히트맵 범위와는 다를 수 있습니다"
     else:
-        badge = "🏃 활동 반경 균형형"
-        text = "반복 활동 구역의 코어 커버리지가 비교군 중간권입니다"
+        badge = "🏃 CCA 핵심 활동 반경 균형형"
+        text = "가장 자주 반복된 활동 구역의 범위가 비교군 중간권입니다"
     return f"{badge} · 백분위 {coverage_score:.0f}", text
 
 
@@ -1354,18 +1370,10 @@ def render_lane_analysis(player_name: str, ratio: dict[str, object], rank=None) 
     if profile:
         badge, text = profile
         st.markdown(f"**[{badge}]** : {text}")
-    cca_top_percent = getattr(rank, "cca_area_top_percent", None) if rank else None
-    if cca_top_percent is not None:
-        coverage_score = max(0.0, min(100.0, 100.0 - float(cca_top_percent)))
-        if coverage_score >= 65.0:
-            coverage_badge, coverage_text = "🏃 활동 반경 넓은 전방위형", "반복 활동 셀의 코어 커버리지가 비교군 평균보다 넓습니다"
-        elif coverage_score <= 35.0:
-            coverage_badge, coverage_text = "🏃 활동 반경 좁은 고립형", "특정 구역에 머무르는 정적인 반복 동선이 확인됩니다"
-        else:
-            coverage_badge, coverage_text = "🏃 활동 반경 균형형", "반복 활동 구역의 코어 커버리지가 비교군 중간권입니다"
-        st.markdown(
-            f"**[{coverage_badge} · 백분위 {coverage_score:.0f}]** : {coverage_text}"
-        )
+    coverage_identity = activity_coverage_identity(rank)
+    if coverage_identity:
+        coverage_badge, coverage_text = coverage_identity
+        st.markdown(f"**[{coverage_badge}]** : {coverage_text}")
 
 
 def render_activity_ratio(
@@ -1746,7 +1754,7 @@ def render_spear_leaderboard(
     def detail_url(row: pd.Series) -> str:
         player_name = str(row["player_name"])
         return (
-            f"?page=detail&player={quote(str(row['player_id']))}"
+            f"{LEGACY_APP_URL}/?page=detail&player={quote(str(row['player_id']))}"
             f"&name={quote(player_name)}&team={quote(str(row['team_name']))}"
             f"&season={quote(season)}&scope={comparison_scope}&label={player_name}"
         )

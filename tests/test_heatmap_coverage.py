@@ -9,7 +9,7 @@ from scripts.build_tactical_ratios import (
     missing_static_cohort_sessions,
     resolve_ranked_sportsapi_id,
 )
-from tactical_ratio import _same_competition
+from tactical_ratio import _same_competition, cca_core_region
 
 
 def _payload(league_name: str, league_id: int) -> dict:
@@ -33,6 +33,21 @@ class ExpandedLeagueParsingTests(unittest.TestCase):
     def test_liga_portugal_session_alias_matches_tactical_label(self) -> None:
         self.assertTrue(_same_competition("Liga Portugal", "Primeira Liga"))
         self.assertTrue(_same_competition("Primeira Liga", "Liga Portugal"))
+
+
+class CcaOverlayTests(unittest.TestCase):
+    def test_cca_overlay_uses_the_densest_repeated_cells_not_all_visual_points(self) -> None:
+        # Four points in one cell and three in a second cell form the earliest
+        # core that reaches at least 50% of the seven repeated observations.
+        points = [
+            [11, 11], [12, 13], [13, 12], [14, 14],
+            [31, 31], [32, 32], [33, 33],
+            [90, 90],  # A one-off visual point must not enter CCA.
+        ]
+        core, hull = cca_core_region(points)
+        self.assertEqual(len(core), 4)
+        self.assertEqual(set(core), {(11.0, 11.0), (12.0, 13.0), (13.0, 12.0), (14.0, 14.0)})
+        self.assertGreaterEqual(len(hull), 3)
 
     def test_eredivisie_is_retained(self) -> None:
         metrics = extract_multi_season_metrics(_payload("Eredivisie", 999))
