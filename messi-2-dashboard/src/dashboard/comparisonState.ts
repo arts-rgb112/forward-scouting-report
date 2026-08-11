@@ -1,4 +1,4 @@
-export const MAX_COMPARISON_PLAYERS = 4;
+export const MAX_COMPARISON_PLAYERS = 2;
 
 export type ComparisonState = { ids: number[]; open: boolean };
 export type ComparisonAction =
