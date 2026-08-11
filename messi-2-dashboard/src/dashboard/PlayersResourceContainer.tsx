@@ -20,7 +20,8 @@ function apiError(error: unknown) { return error instanceof MessiApiError ? erro
 export function PlayersResourceContainer() {
   const [state, dispatch] = useReducer(playersResourceReducer, { type: "idle" });
   const [options, setOptions] = useState<LeaderboardOptions>();
-  const request = useRef(0); const controller = useRef<AbortController | null>(null); const stateRef = useRef(state); stateRef.current = state;
+  const [optionsResolved, setOptionsResolved] = useState(false);
+  const request = useRef(0); const optionsRequest = useRef(0); const controller = useRef<AbortController | null>(null); const optionsController = useRef<AbortController | null>(null); const optionsTimer = useRef<number | undefined>(undefined); const stateRef = useRef(state); stateRef.current = state;
   const parsed = useMemo((): ParsedConfig => { try { return { config: parseMessiApiConfig(import.meta.env, import.meta.env.MODE) }; } catch (error) { return { category: error instanceof MessiConfigError ? error.category : "CONFIG_INVALID" }; } }, []);
   const [dataset, setDataset] = useState<DatasetRouteState>(() => parsed.config ? routeFromUrl(parsed.config) : { season: "2025/2026", mode: "league", scope: 7, competition: "all" });
   const [page, setPage] = useState(() => pageFromSearch(window.location.search));
@@ -46,17 +47,42 @@ export function PlayersResourceContainer() {
     if (!parsed.config) return;
     controller.current?.abort(); const abort = new AbortController(); controller.current = abort; const requestId = ++request.current;
     dispatch({ type: "start", requestId, previous: stablePayload(stateRef.current) });
-    try { dispatch({ type: "resolve", requestId, payload: options ? await fetchLeaderboard(parsed.config, next, abort.signal) : await fetchPlayers(parsed.config, abort.signal) }); }
+    try {
+      // v1 has no Europe/competition context. Never let it stand in for a
+      // Europe URL, where its row count could incorrectly normalize `page`.
+      if (!options && next.mode === "europe") throw new MessiApiError("network", "European leaderboard options are unavailable");
+      dispatch({ type: "resolve", requestId, payload: options ? await fetchLeaderboard(parsed.config, next, abort.signal) : await fetchPlayers(parsed.config, abort.signal) });
+    }
     catch (error) {
       if (isAbortError(error)) return;
-      if (options) try { const fallback = await fetchPlayers(parsed.config, abort.signal); if (!abort.signal.aborted) dispatch({ type: "resolve", requestId, payload: fallback }); return; } catch (fallbackError) { if (isAbortError(fallbackError)) return; dispatch({ type: "reject", requestId, error: apiError(fallbackError) }); return; }
+      if (options && next.mode === "league") try { const fallback = await fetchPlayers(parsed.config, abort.signal); if (!abort.signal.aborted) dispatch({ type: "resolve", requestId, payload: fallback }); return; } catch (fallbackError) { if (isAbortError(fallbackError)) return; dispatch({ type: "reject", requestId, error: apiError(fallbackError) }); return; }
       dispatch({ type: "reject", requestId, error: apiError(error) });
     }
   }, [dataset, options, parsed.config]);
-  useEffect(() => {
-    if (!parsed.config) return;
+
+  const probeOptions = useCallback(() => {
+    if (!parsed.config) return () => undefined;
+    optionsController.current?.abort();
+    if (optionsTimer.current !== undefined) window.clearTimeout(optionsTimer.current);
+    setOptions(undefined);
+    setOptionsResolved(false);
     const abort = new AbortController();
+    optionsController.current = abort;
+    const requestId = ++optionsRequest.current;
+    const timer = window.setTimeout(() => {
+      if (!abort.signal.aborted && optionsRequest.current === requestId) {
+        // The v2 capability probe is slow: retain the requested URL context, but
+        // permit the established v1 fallback flow instead of leaving a permanent skeleton.
+        setOptions(undefined);
+        setOptionsResolved(true);
+      }
+    }, 8_000);
+    optionsTimer.current = timer;
+    const isCurrent = () => !abort.signal.aborted && optionsRequest.current === requestId;
     fetchLeaderboardOptions(parsed.config, abort.signal).then((value) => {
+      if (!isCurrent()) return;
+      window.clearTimeout(timer);
+      optionsTimer.current = undefined;
       setOptions(value);
       const current = datasetRef.current;
       const next = { ...current, season: value.seasons.includes(current.season) ? current.season : value.seasons[0] ?? current.season, competition: value.competitions[current.competition]?.available ? current.competition : "all" };
@@ -64,13 +90,29 @@ export function PlayersResourceContainer() {
         setDataset(next);
         setPage(1);
       }
-    }).catch(() => setOptions(undefined));
-    return () => abort.abort();
+      setOptionsResolved(true);
+    }).catch(() => {
+      if (!isCurrent()) return;
+      window.clearTimeout(timer);
+      optionsTimer.current = undefined;
+      setOptions(undefined);
+      setOptionsResolved(true);
+    });
+    return () => {
+      if (optionsRequest.current !== requestId) return;
+      window.clearTimeout(timer);
+      optionsTimer.current = undefined;
+      abort.abort();
+    };
   }, [parsed.config]);
-  useEffect(() => { if (!parsed.config) return; void load(dataset); return () => controller.current?.abort(); }, [dataset, load, parsed.config]);
+  useEffect(() => probeOptions(), [probeOptions]);
+  // Do not render a v1 fallback payload for a context URL before v2 options have settled:
+  // it could incorrectly normalize a valid URL-backed page using the wrong dataset.
+  useEffect(() => { if (!parsed.config || !optionsResolved) return; void load(dataset); return () => controller.current?.abort(); }, [dataset, load, optionsResolved, parsed.config]);
   if (parsed.category) return <ConfigErrorFallback category={parsed.category} mode={import.meta.env.MODE} />;
   if (state.type === "idle" || state.type === "loading") return <DashboardLoading />;
-  if (state.type === "error" && !state.previous) return <DashboardDataFallback error={state.error} onRetry={() => void load(dataset)} />;
+  const retry = () => { if (dataset.mode === "europe") probeOptions(); else void load(dataset); };
+  if (state.type === "error" && !state.previous) return <DashboardDataFallback error={state.error} onRetry={retry} />;
   const payload = state.type === "error" ? state.previous! : state.payload;
-  return <MessiScoutingDashboard players={payload.players} meta={payload.meta} refreshing={state.type === "refreshing"} onRefresh={() => void load(dataset)} refreshWarning={state.type === "error" ? <DashboardDataFallback error={state.error} hasPrevious onRetry={() => void load(dataset)} /> : undefined} dataset={dataset} options={options} page={page} onDatasetChange={(next) => writeRoute(next, 1)} onPageChange={(next, replace) => writeRoute(dataset, next, replace)} />;
+  return <MessiScoutingDashboard players={payload.players} meta={payload.meta} refreshing={state.type === "refreshing"} onRefresh={() => void load(dataset)} refreshWarning={state.type === "error" ? <DashboardDataFallback error={state.error} hasPrevious onRetry={retry} /> : undefined} dataset={dataset} options={options} page={page} onDatasetChange={(next) => writeRoute(next, 1)} onPageChange={(next, replace) => writeRoute(dataset, next, replace)} />;
 }
