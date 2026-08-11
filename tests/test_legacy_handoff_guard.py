@@ -40,3 +40,10 @@ def test_streamlit_leaderboard_detail_links_bypass_the_legacy_share_redirector()
     detail_url = source.split("def detail_url(row: pd.Series) -> str:", 1)[1].split('display["선수"]', 1)[0]
     assert "LEGACY_APP_URL" in detail_url
     assert 'f"?page=detail' not in detail_url
+
+
+def test_streamlit_root_handoff_never_embeds_the_vercel_app_in_an_iframe() -> None:
+    source = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
+    handoff = source.split("def render_frontend_handoff() -> None:", 1)[1].split("if not _requested_legacy_page", 1)[0]
+    assert "st.link_button" in handoff
+    assert "window.location.replace" not in handoff
