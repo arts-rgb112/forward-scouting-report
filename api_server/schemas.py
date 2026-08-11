@@ -235,6 +235,10 @@ class PlayerAnalysis(BaseModel):
 
 
 class PlayerDetailResponse(PlayerResponse):
+    # This is deliberately detail-only.  The deployed v2.0 dashboard parses
+    # the default player response strictly, so adding it to PlayerResponse
+    # itself would be a breaking change for existing clients.
+    idNamespace: Literal["fotmob"] = "fotmob"
     analysis: PlayerAnalysis
 
 
@@ -271,6 +275,47 @@ class PlayerComparisonEnvelope(BaseModel):
 
     data: list[PlayerDetailResponse] = Field(min_length=2, max_length=4)
     meta: CompareMeta
+
+
+class WatchlistResolvedPlayer(PlayerResponse):
+    """A context-resolved player with the stable external ID namespace."""
+
+    idNamespace: Literal["fotmob"] = "fotmob"
+    playerId: int = Field(gt=0)
+
+
+class WatchlistResolvedContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    season: str
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7] | None = None
+    competition: CompetitionCode | None = None
+
+
+class WatchlistResolveResult(BaseModel):
+    """One result per submitted entry; failures never abort sibling entries."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(max_length=500)
+    status: Literal["resolved", "unavailable", "invalid_context"]
+    player: WatchlistResolvedPlayer | None = None
+    context: WatchlistResolvedContext | None = None
+
+
+class WatchlistResolveRequest(BaseModel):
+    """Keep entries permissive at the transport layer for isolated errors."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[dict[str, object]] = Field(min_length=1, max_length=100)
+
+
+class WatchlistResolveEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    results: list[WatchlistResolveResult] = Field(max_length=100)
 
 
 class HealthResponse(BaseModel):

@@ -41,3 +41,13 @@ const rawMetricsSchema = z.object({ goals: z.number().finite().nullable(), xg: z
 const analysisSchema = z.object({ score: z.object({ value: score, rank: z.number().int().positive().nullable(), topPercent: score.nullable(), population: z.number().int().nonnegative(), archetype: z.enum(["Type A", "Type B"]) }).strict(), volumeRadar: radarSchema.extend({ kind: z.literal("volume") }), ratioRadar: radarSchema.extend({ kind: z.literal("ratio") }), rawMetrics: rawMetricsSchema, spatial: z.object({ available: z.boolean(), source: z.literal("messi-static-cohort"), heatmapPointCount: z.number().int().nonnegative(), heatmapPoints: z.array(z.object({ x: score, y: score }).strict()), inBoxRatio: score.nullable(), outBoxFinalRatio: score.nullable(), midThirdRatio: score.nullable(), finalThirdRatio: score.nullable(), ccaAreaPct: score.nullable(), laneRatios: z.array(z.number().finite()).max(5), dangerZoneDensity: score.nullable(), deepBoxZoneScore: score.nullable() }).strict() }).strict();
 export const playerDetailEnvelopeSchema = z.object({ data: playerDtoSchema.extend({ analysis: analysisSchema.optional() }) }).strict();
 export const comparisonEnvelopeSchema = z.object({ data: z.array(playerDtoSchema.extend({ analysis: analysisSchema })).min(2).max(4), meta: z.object({ season: z.string().min(1), mode: z.enum(["league", "europe"]), scope: scopeSchema.nullable(), competition: competitionSchema.nullable(), population: z.number().int().nonnegative(), generatedAt: z.string().datetime({ offset: true }), source: z.literal("messi-static-cohort") }).strict() }).strict();
+
+/** The resolver is deliberately contextual: one person may have several valid rows. */
+export const watchlistResolveResultSchema = z.object({
+  key: z.string().max(500),
+  status: z.enum(["resolved", "unavailable", "invalid_context"]),
+  player: playerDtoSchema.extend({ idNamespace: z.literal("fotmob"), playerId: z.number().int().positive() }).nullable(),
+  context: z.object({ season: z.string(), mode: z.enum(["league", "europe"]), scope: scopeSchema.nullable(), competition: competitionSchema.nullable() }).nullable(),
+}).strict();
+export const watchlistResolveEnvelopeSchema = z.object({ results: z.array(watchlistResolveResultSchema).max(100) }).strict();
+export type WatchlistResolveResultDto = z.infer<typeof watchlistResolveResultSchema>;

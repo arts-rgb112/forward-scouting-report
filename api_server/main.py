@@ -3,17 +3,19 @@ from __future__ import annotations
 import os
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .schemas import (
     HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
     PlayerComparisonEnvelope, PlayerDetailEnvelope, PlayerEnvelope, PlayersEnvelope,
+    WatchlistResolveEnvelope, WatchlistResolveRequest,
 )
 from .service import (
     build_players, build_player_detail, compare_players, find_v2_player, leaderboard_options,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
-    supported_seasons,
+    resolve_watchlist_entries, supported_seasons,
 )
 
 
@@ -22,8 +24,11 @@ DEFAULT_ORIGINS = (
     "http://127.0.0.1:5173",
     "http://localhost:4173",
     "http://127.0.0.1:4173",
+    "https://forward-scouting-report-6dn7-tau.vercel.app",
 )
 VERCEL_PREVIEW_ORIGIN_REGEX = r"^https://forward-scouting-report-6dn7-[a-z0-9-]+-messiflick\.vercel\.app$"
+WATCHLIST_ALLOWED_ORIGIN = "https://forward-scouting-report-6dn7-tau.vercel.app"
+WATCHLIST_MAX_BODY_BYTES = 64 * 1024
 
 
 def cors_origins() -> list[str]:
@@ -49,10 +54,28 @@ app.add_middleware(
     allow_origins=cors_origins(),
     allow_origin_regex=cors_origin_regex(),
     allow_credentials=False,
-    allow_methods=["GET", "OPTIONS"],
-    allow_headers=["Accept", "Content-Type"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
     max_age=600,
 )
+
+
+@app.middleware("http")
+async def guard_watchlist_resolution(request: Request, call_next):
+    """Bound the stateless resolver and give POST access only to production."""
+    if request.url.path != "/api/v2/watchlist/resolve":
+        return await call_next(request)
+    if request.headers.get("origin") != WATCHLIST_ALLOWED_ORIGIN:
+        return JSONResponse(status_code=403, content={"detail": "Origin is not allowed for watchlist resolution"})
+    content_length = request.headers.get("content-length")
+    try:
+        if content_length is not None and int(content_length) > WATCHLIST_MAX_BODY_BYTES:
+            return JSONResponse(status_code=413, content={"detail": "Request body is too large"})
+    except ValueError:
+        return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length"})
+    if len(await request.body()) > WATCHLIST_MAX_BODY_BYTES:
+        return JSONResponse(status_code=413, content={"detail": "Request body is too large"})
+    return await call_next(request)
 
 
 @app.get("/", tags=["system"])
@@ -106,15 +129,16 @@ def list_leaderboards(
     sort: Literal["rank", "score", "name", "minutes", "age", "outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"] = Query(default="rank"),
     order: Literal["asc", "desc"] = Query(default="asc"),
     role: Literal["Type A", "Type B"] | None = Query(default=None),
+    position: str | None = Query(default=None, min_length=1, max_length=100),
     q: str | None = Query(default=None, min_length=1, max_length=100),
 ) -> LeaderboardEnvelope | LeaderboardPageEnvelope:
     if season not in supported_seasons():
         raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
-    uses_pagination = page is not None or pageSize is not None or role is not None or q is not None or sort != "rank" or order != "asc"
+    uses_pagination = page is not None or pageSize is not None or role is not None or position is not None or q is not None or sort != "rank" or order != "asc"
     if uses_pagination:
         envelope = leaderboard_v21_envelope(
             season, mode, int(scope), competition, page=page or 1, page_size=pageSize or 50,
-            role=role, query=q, sort=sort, order=order,
+            role=role, position=position, query=q, sort=sort, order=order,
         )
     else:
         envelope = LeaderboardEnvelope.model_validate(leaderboard_v2_envelope(season, mode, int(scope), competition, limit))
@@ -169,3 +193,12 @@ def compare_player_details(
     if comparison is None:
         raise HTTPException(status_code=404, detail="One or more players are not in the selected leaderboard")
     return comparison
+
+
+@app.post(
+    "/api/v2/watchlist/resolve", response_model=WatchlistResolveEnvelope,
+    tags=["watchlist"],
+)
+def resolve_watchlist(request: WatchlistResolveRequest) -> WatchlistResolveEnvelope:
+    """Validate up to 100 client-owned contextual watchlist entries."""
+    return WatchlistResolveEnvelope(results=resolve_watchlist_entries(request.entries))
