@@ -11,8 +11,9 @@ import { PlayerCardList } from "./components/PlayerCardList";
 import { PlayerTable } from "./components/PlayerTable";
 import { ScoreLegend } from "./components/ScoreLegend";
 import { StatusFeedback } from "./components/StatusFeedback";
-import { derivePositions, filterAndSortPlayers } from "./playerQuery";
-import type { DatasetMeta, DatasetRouteState, LeaderboardOptions, LeaderboardSearch, Player, ServerPageMeta, SortKey, SortState } from "./types";
+import { filterAndSortPlayers } from "./playerQuery";
+import { PAGE_SIZE } from "./datasetRoute";
+import type { DatasetMeta, DatasetRouteState, LeaderboardOptions, LeaderboardSearch, Player, PositionFilterCapability, ServerPageMeta, SortKey, SortState } from "./types";
 import { readWatchlist, writeWatchlist } from "./watchlistStorage";
 
 export type MessiScoutingDashboardProps = {
@@ -28,6 +29,7 @@ export type MessiScoutingDashboardProps = {
   onPageChange?(page: number, replace?: boolean): void;
   serverPage?: ServerPageMeta;
   search?: LeaderboardSearch;
+  positionCapability?: PositionFilterCapability;
   onSearchChange?(next: LeaderboardSearch, replace?: boolean): void;
 };
 
@@ -35,7 +37,7 @@ export default function MessiScoutingDashboard({
   players, meta, refreshing, onRefresh, refreshWarning,
   dataset = { season: meta.season, mode: "league", scope: (meta.scope ?? 7) as 3 | 5 | 7, competition: "all" },
   options, onDatasetChange = () => undefined, page = 1, onPageChange = () => undefined,
-  serverPage, search, onSearchChange = () => undefined,
+  serverPage, search, positionCapability = "unknown", onSearchChange = () => undefined,
 }: MessiScoutingDashboardProps) {
   const validIds = useMemo(() => new Set(players.map((player) => player.id)), [players]);
   const [localQuery, setLocalQuery] = useState("");
@@ -58,8 +60,8 @@ export default function MessiScoutingDashboard({
   const serverDriven = Boolean(serverPage && search);
   const query = serverDriven ? search!.q : localQuery;
   const role = serverDriven ? (search!.role === "all" ? "ALL" : search!.role) : localRole;
+  const position = serverDriven ? search!.position : "ALL";
   const sort: SortState = serverDriven ? { key: search!.sort, direction: search!.direction } : localSort;
-  const positions = useMemo(() => derivePositions(players), [players]);
   // A v2.1 response is already globally searched, sorted, and sliced by the
   // server. Applying client-side filtering or slicing would corrupt its ranks.
   const displayed = useMemo(
@@ -76,7 +78,8 @@ export default function MessiScoutingDashboard({
   useEffect(() => { if (page !== safePage) onPageChange(safePage, true); }, [onPageChange, page, safePage]);
   useEffect(() => {
     if (previousPage.current !== safePage) {
-      leaderboardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const leaderboard = leaderboardRef.current;
+      if (typeof leaderboard?.scrollIntoView === "function") leaderboard.scrollIntoView({ behavior: "smooth", block: "start" });
       resultsSummaryRef.current?.focus({ preventScroll: true });
     }
     previousPage.current = safePage;
@@ -94,9 +97,9 @@ export default function MessiScoutingDashboard({
     if (!search) return;
     onSearchChange({ ...search, ...patch, page: patch.page ?? 1 }, replace);
   };
-  const hasFilters = Boolean(query || role !== "ALL" || (!serverDriven && watchOnly) || sort.key !== "score" || sort.direction !== "desc");
+  const hasFilters = Boolean(query || role !== "ALL" || position !== "ALL" || (!serverDriven && watchOnly) || sort.key !== "score" || sort.direction !== "desc");
   const resetFilters = () => {
-    if (serverDriven) updateServerSearch({ q: "", role: "all", sort: "score", direction: "desc", page: 1 });
+    if (serverDriven) updateServerSearch({ q: "", role: "all", position: "ALL", sort: "score", direction: "desc", page: 1 });
     else { setLocalQuery(""); setLocalRole("ALL"); setLocalSort({ key: "score", direction: "desc" }); setWatchOnly(false); onPageChange(1); }
   };
   const changeQuery = (value: string) => {
@@ -106,6 +109,10 @@ export default function MessiScoutingDashboard({
   const changeRole = (value: string) => {
     if (serverDriven) updateServerSearch({ role: value === "Type A" || value === "Type B" ? value : "all", page: 1 });
     else { setLocalRole(value); onPageChange(1); }
+  };
+  const changePosition = (value: string) => {
+    if (!serverDriven || (value !== "ALL" && positionCapability !== "supported")) return;
+    updateServerSearch({ position: value, page: 1 });
   };
   const changeSort = (next: SortState) => {
     if (serverDriven) updateServerSearch({ sort: next.key, direction: next.direction, page: 1 });
@@ -120,27 +127,32 @@ export default function MessiScoutingDashboard({
     dispatchComparison({ type: "toggle", id: player.id });
   };
   const setMetricSort = (key: SortKey) => changeSort({ key, direction: sort.key === key ? (sort.direction === "desc" ? "asc" : "desc") : "desc" });
-  const totalItems = serverDriven ? meta.population : displayed.length;
-  const activePageSize = serverDriven ? serverPage!.pageSize : 50;
-  const start = totalItems && displayed.length ? (safePage - 1) * activePageSize + 1 : 0;
-  const end = Math.min(safePage * activePageSize, totalItems);
+  const totalItems = serverDriven ? (meta.totalItems ?? meta.population) : displayed.length;
+  const activePageSize = PAGE_SIZE;
+  // During a request the previous server page remains on screen. Describe that
+  // page honestly while making the destination page explicit in the live text.
+  const shownPage = serverDriven && refreshing ? serverPage!.page : safePage;
+  const start = totalItems && displayed.length ? (shownPage - 1) * activePageSize + 1 : 0;
+  const end = displayed.length ? start + displayed.length - 1 : 0;
+  const rangeLabel = displayed.length ? `${start}–${end} of ${totalItems}` : "0 of 0";
+  const pendingLabel = refreshing && serverDriven ? `Loading page ${safePage} · currently showing ${rangeLabel}` : `${rangeLabel} players`;
 
   return <main id="main-content" className={`min-h-screen bg-[#080b0c] text-zinc-100 ${comparison.ids.length ? "pb-52" : ""}`}>
     <StatusFeedback message={feedback} />
     <div className="mx-auto max-w-[1580px] px-3 py-5 sm:px-6 lg:px-8">
       <DatasetHeader meta={meta} visibleCount={displayed.length} refreshing={refreshing} onRefresh={onRefresh} state={dataset} options={options} onStateChange={onDatasetChange} />
       {refreshWarning}
-      <DashboardToolbar query={query} role={role} sort={sort.key} watchOnly={watchOnly} watchCount={watchlistIds.length} watchAvailable={!serverDriven} positions={serverDriven ? ["ALL", "Type A", "Type B"] : positions} resultCount={totalItems} hasFilters={hasFilters} players={players} dataset={dataset} onQueryChange={changeQuery} onRoleChange={changeRole} onSortChange={(key) => changeSort({ key, direction: key === "name" || key === "age" ? "asc" : "desc" })} onWatchOnlyChange={setWatchOnly} onReset={resetFilters} />
+      <DashboardToolbar query={query} role={role} position={position} positionCapability={serverDriven ? positionCapability : "unsupported"} sort={sort.key} direction={sort.direction} watchOnly={watchOnly} watchCount={watchlistIds.length} watchAvailable={!serverDriven} resultLabel={displayed.length ? `${displayed.length} shown · ${totalItems} results` : "0 shown · 0 results"} hasFilters={hasFilters} players={players} dataset={dataset} onQueryChange={changeQuery} onRoleChange={changeRole} onPositionChange={changePosition} onSortChange={(key) => changeSort({ key, direction: key === "name" || key === "age" ? "asc" : "desc" })} onDirectionChange={(direction) => changeSort({ key: sort.key, direction })} onWatchOnlyChange={setWatchOnly} onReset={resetFilters} />
       <ScoreLegend />
       <section ref={leaderboardRef} aria-label="Leaderboard results" className="scroll-mt-4">
-        <p ref={resultsSummaryRef} tabIndex={-1} aria-live="polite" className="mb-3 text-xs font-bold text-zinc-400">{displayed.length ? `${start}–${end} / ${totalItems} players` : "0 / 0 players"}</p>
+        <p ref={resultsSummaryRef} tabIndex={-1} aria-live="polite" className="mb-3 text-xs font-bold text-zinc-400">{pendingLabel}</p>
         {displayed.length ? <>
           <PlayerCardList players={pagePlayers} dataset={dataset} comparedIds={comparedIds} watchedIds={watchedIds} onToggleCompare={toggleCompare} onToggleWatch={toggleWatch} />
           <PlayerTable players={pagePlayers} dataset={dataset} comparedIds={comparedIds} watchedIds={watchedIds} sort={sort} onMetricSort={setMetricSort} onToggleCompare={toggleCompare} onToggleWatch={toggleWatch} />
-          <LeaderboardPagination page={safePage} total={totalItems} pageSize={activePageSize} onPageChange={onPageChange} />
+          <LeaderboardPagination page={safePage} total={totalItems} pageSize={activePageSize} pending={refreshing && serverDriven} onPageChange={onPageChange} />
         </> : <EmptyState onReset={resetFilters} />}
       </section>
-      <DatasetFooter meta={meta} visibleCount={totalItems} />
+      <DatasetFooter meta={meta} resultRange={rangeLabel} />
     </div>
     <CompareTray players={comparedPlayers} dataset={dataset} onRemove={(id) => dispatchComparison({ type: "remove", id })} onClear={() => dispatchComparison({ type: "clear" })} />
   </main>;

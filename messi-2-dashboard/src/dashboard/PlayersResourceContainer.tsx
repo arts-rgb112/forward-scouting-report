@@ -3,19 +3,22 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { MessiConfigError, type ConfigErrorCategory, parseMessiApiConfig, type MessiApiConfig } from "../api/env";
 import { MessiApiError, isAbortError } from "../api/errors";
 import { fetchLeaderboard, fetchLeaderboardOptions } from "../api/leaderboardsApi";
-import { fetchPlayers } from "../api/playersApi";
-import { datasetFromSearch, defaultLeaderboardSearch, leaderboardHref, leaderboardSearchFromSearch } from "./datasetRoute";
+import { datasetFromSearch, leaderboardHref, leaderboardSearchFromSearch } from "./datasetRoute";
 import { ConfigErrorFallback } from "./components/ConfigErrorFallback";
 import { DashboardDataFallback } from "./components/DashboardDataFallback";
 import { DashboardLoading } from "./components/DashboardLoading";
 import MessiScoutingDashboard from "./MessiScoutingDashboard";
 import { playersResourceReducer, stablePayload } from "./playersResourceState";
-import type { DatasetRouteState, LeaderboardOptions, LeaderboardSearch } from "./types";
+import type { DatasetMeta, DatasetRouteState, LeaderboardOptions, LeaderboardSearch, PositionFilterCapability } from "./types";
 
 type ParsedConfig = { config?: MessiApiConfig; category?: ConfigErrorCategory };
 const fallbackRoute = (config: MessiApiConfig): DatasetRouteState => ({ season: config.season, mode: "league", scope: config.scope as 3 | 5 | 7, competition: "all" });
 function routeFromUrl(config: MessiApiConfig) { return datasetFromSearch(window.location.search, fallbackRoute(config)); }
 function apiError(error: unknown) { return error instanceof MessiApiError ? error : new MessiApiError("network", "Request failed"); }
+export function positionWasApplied(meta: DatasetMeta, requested: string) {
+  if (!meta.applied || !Object.hasOwn(meta.applied, "position")) return false;
+  return requested === "ALL" ? meta.applied.position === null || meta.applied.position === "ALL" : meta.applied.position === requested;
+}
 
 export function PlayersResourceContainer() {
   const [state, dispatch] = useReducer(playersResourceReducer, { type: "idle" });
@@ -25,6 +28,7 @@ export function PlayersResourceContainer() {
   const parsed = useMemo((): ParsedConfig => { try { return { config: parseMessiApiConfig(import.meta.env, import.meta.env.MODE) }; } catch (error) { return { category: error instanceof MessiConfigError ? error.category : "CONFIG_INVALID" }; } }, []);
   const [dataset, setDataset] = useState<DatasetRouteState>(() => parsed.config ? routeFromUrl(parsed.config) : { season: "2025/2026", mode: "league", scope: 7, competition: "all" });
   const [search, setSearch] = useState<LeaderboardSearch>(() => leaderboardSearchFromSearch(window.location.search));
+  const [positionCapability, setPositionCapability] = useState<PositionFilterCapability>("unknown");
   const datasetRef = useRef(dataset); datasetRef.current = dataset;
 
   const writeRoute = useCallback((next: DatasetRouteState, nextSearch: LeaderboardSearch, replace = false) => {
@@ -36,6 +40,12 @@ export function PlayersResourceContainer() {
     const canonical = leaderboardHref(dataset, search);
     if (`${window.location.pathname}${window.location.search}` !== canonical) window.history.replaceState(null, "", canonical);
   }, [dataset, search, parsed.config]);
+  // Shared URLs may carry a once-valid position. Do not advertise or forward it
+  // before this server has explicitly echoed that it applied position filtering.
+  useEffect(() => {
+    if (positionCapability === "supported" || search.position === "ALL") return;
+    writeRoute(dataset, { ...search, position: "ALL", page: 1 }, true);
+  }, [dataset, positionCapability, search, writeRoute]);
   useEffect(() => {
     if (!parsed.config) return;
     const onPopState = () => { setDataset(routeFromUrl(parsed.config!)); setSearch(leaderboardSearchFromSearch(window.location.search)); };
@@ -48,17 +58,26 @@ export function PlayersResourceContainer() {
     controller.current?.abort(); const abort = new AbortController(); controller.current = abort; const requestId = ++request.current;
     dispatch({ type: "start", requestId, previous: stablePayload(stateRef.current) });
     try {
-      // v1 has no Europe/competition context. Never let it stand in for a
-      // Europe URL, where its row count could incorrectly normalize `page`.
-      if (!options && next.mode === "europe") throw new MessiApiError("network", "European leaderboard options are unavailable");
-      dispatch({ type: "resolve", requestId, payload: options ? await fetchLeaderboard(parsed.config, next, nextSearch, abort.signal) : await fetchPlayers(parsed.config, abort.signal) });
+      const requestSearch = positionCapability === "supported" ? nextSearch : { ...nextSearch, position: "ALL", page: nextSearch.position === "ALL" ? nextSearch.page : 1 };
+      const payload = await fetchLeaderboard(parsed.config, next, requestSearch, abort.signal);
+      if (payload.serverPage && positionCapability !== "unsupported") {
+        const proven = positionWasApplied(payload.meta, requestSearch.position);
+        setPositionCapability(proven ? "supported" : "unsupported");
+        // A supposedly supported filter that is not echoed exactly is unsafe:
+        // discard it and refetch the unfiltered first page instead of rendering
+        // results that could be mislabeled as position-filtered.
+        if (requestSearch.position !== "ALL" && !proven) {
+          writeRoute(next, { ...nextSearch, position: "ALL", page: 1 }, true);
+          return;
+        }
+      }
+      dispatch({ type: "resolve", requestId, payload });
     }
     catch (error) {
       if (isAbortError(error)) return;
-      if (options && next.mode === "league") try { const fallback = await fetchPlayers(parsed.config, abort.signal); if (!abort.signal.aborted) dispatch({ type: "resolve", requestId, payload: fallback }); return; } catch (fallbackError) { if (isAbortError(fallbackError)) return; dispatch({ type: "reject", requestId, error: apiError(fallbackError) }); return; }
       dispatch({ type: "reject", requestId, error: apiError(error) });
     }
-  }, [dataset, options, parsed.config, search]);
+  }, [dataset, options, parsed.config, positionCapability, search, writeRoute]);
 
   const probeOptions = useCallback(() => {
     if (!parsed.config) return () => undefined;
@@ -117,5 +136,5 @@ export function PlayersResourceContainer() {
   const page = payload.serverPage?.page ?? search.page;
   const normalizedPage = payload.serverPage && payload.serverPage.totalPages > 0 ? Math.min(page, payload.serverPage.totalPages) : 1;
   if (payload.serverPage && normalizedPage !== search.page) window.setTimeout(() => writeRoute(dataset, { ...search, page: normalizedPage }, true), 0);
-  return <MessiScoutingDashboard players={payload.players} meta={payload.meta} serverPage={payload.serverPage} search={search} page={search.page} onPageChange={(next: number, replace?: boolean) => writeRoute(dataset, { ...search, page: next }, replace)} refreshing={state.type === "refreshing"} onRefresh={() => void load(dataset, search)} refreshWarning={state.type === "error" ? <DashboardDataFallback error={state.error} hasPrevious onRetry={retry} /> : undefined} dataset={dataset} options={options} onDatasetChange={(next) => writeRoute(next, { ...search, page: 1 })} onSearchChange={(next: LeaderboardSearch, replace?: boolean) => writeRoute(dataset, next, replace)} />;
+  return <MessiScoutingDashboard players={payload.players} meta={payload.meta} serverPage={payload.serverPage} search={search} positionCapability={positionCapability} page={search.page} onPageChange={(next: number, replace?: boolean) => writeRoute(dataset, { ...search, page: next }, replace)} refreshing={state.type === "refreshing"} onRefresh={() => void load(dataset, search)} refreshWarning={state.type === "error" ? <DashboardDataFallback error={state.error} hasPrevious onRetry={retry} /> : undefined} dataset={dataset} options={options} onDatasetChange={(next) => { setPositionCapability("unknown"); writeRoute(next, { ...search, page: 1 }); }} onSearchChange={(next: LeaderboardSearch, replace?: boolean) => writeRoute(dataset, next, replace)} />;
 }
