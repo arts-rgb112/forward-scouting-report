@@ -9,8 +9,10 @@ import { AssetImage } from "./AssetImage";
 import { DashboardLoading } from "./DashboardLoading";
 import { DashboardErrorBoundary } from "./DashboardErrorBoundary";
 import { DashboardToolbar } from "./DashboardToolbar";
+import { DatasetHeader } from "./DatasetHeader";
 import { PlayerCardList } from "./PlayerCardList";
 import { PlayerTable } from "./PlayerTable";
+import type { LeaderboardOptions } from "../types";
 
 afterEach(() => {
   cleanup();
@@ -25,6 +27,29 @@ describe("asset nullability", () => {
 });
 
 describe("dashboard contract UI", () => {
+  it("keeps dataset filters interactive while a refresh is in progress", () => {
+    const onStateChange = vi.fn();
+    const options: LeaderboardOptions = {
+      seasons: ["2024/2025"],
+      scopes: [{ value: 3, label: "3 major leagues", leagueIds: [1, 2, 3] }],
+      competitions: {
+        all: { code: "all", label: "All competitions", available: true, reason: null },
+        ucl: { code: "ucl", label: "Champions League", available: true, reason: null },
+        uel: { code: "uel", label: "Europa League", available: true, reason: null },
+        uecl: { code: "uecl", label: "Conference League", available: true, reason: null },
+      },
+    };
+    render(<DatasetHeader meta={sampleMeta} visibleCount={50} refreshing onRefresh={vi.fn()} state={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} options={options} onStateChange={onStateChange} />);
+    expect(screen.getByLabelText("Ranking type")).toBeEnabled();
+    expect(screen.getByLabelText("Season")).toBeEnabled();
+    expect(screen.getByLabelText("League scope")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    expect(screen.getByRole("option", { name: "2025/2026" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "7 major leagues" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("League scope"), { target: { value: "3" } });
+    expect(onStateChange).toHaveBeenCalledWith({ season: "2025/2026", mode: "league", scope: 3, competition: "all" });
+  });
+
   it("uses server ranks and all six user-facing metrics", () => {
     render(<MessiScoutingDashboard players={samplePlayers} meta={sampleMeta} refreshing={false} onRefresh={vi.fn()} />);
     expect(screen.getAllByText("02").length).toBeGreaterThan(0);
