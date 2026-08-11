@@ -116,7 +116,10 @@ def test_v2_europe_leaderboard_and_contextual_player_detail_contract():
     assert payload["meta"]["scope"] is None
     assert payload["meta"]["returned"] == len(payload["data"]) == 3
     player_id = payload["data"][0]["id"]
-    detail = client.get(f"/api/v2/players/{player_id}", params={"season": "2025/2026", "mode": "europe", "competition": "ucl"})
+    legacy_detail = client.get(f"/api/v2/players/{player_id}", params={"season": "2025/2026", "mode": "europe", "competition": "ucl"})
+    assert legacy_detail.status_code == 200
+    assert "analysis" not in legacy_detail.json()["data"]
+    detail = client.get(f"/api/v2/players/{player_id}", params={"season": "2025/2026", "mode": "europe", "competition": "ucl", "includeAnalysis": "true"})
     assert detail.status_code == 200
     assert detail.json()["data"]["id"] == player_id
     analysis = detail.json()["data"]["analysis"]
@@ -159,7 +162,7 @@ def test_detail_and_compare_are_available_for_league_ucl_and_uel_contexts():
         leaderboard = client.get("/api/v2/leaderboards", params={"season": "2025/2026", "limit": 2, **context})
         assert leaderboard.status_code == 200
         player_ids = [row["id"] for row in leaderboard.json()["data"]]
-        detail = client.get(f"/api/v2/players/{player_ids[0]}", params={"season": "2025/2026", **context})
+        detail = client.get(f"/api/v2/players/{player_ids[0]}", params={"season": "2025/2026", "includeAnalysis": "true", **context})
         assert detail.status_code == 200
         assert detail.json()["data"]["analysis"]["spatial"]["source"] == "messi-static-cohort"
         comparison = client.get("/api/v2/compare", params={"players": ",".join(map(str, player_ids)), "season": "2025/2026", **context})

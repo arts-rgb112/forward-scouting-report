@@ -238,7 +238,17 @@ class PlayerDetailResponse(PlayerResponse):
     analysis: PlayerAnalysis
 
 
+class PlayerEnvelope(BaseModel):
+    """Original v2 player detail envelope, retained for deployed v2.0 clients."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data: PlayerResponse
+
+
 class PlayerDetailEnvelope(BaseModel):
+    """Opt-in detail envelope with server-computed Streamlit analysis data."""
+
     model_config = ConfigDict(extra="forbid")
 
     data: PlayerDetailResponse

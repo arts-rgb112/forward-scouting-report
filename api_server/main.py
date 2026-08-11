@@ -8,10 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .schemas import (
     HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
-    PlayerComparisonEnvelope, PlayerDetailEnvelope, PlayersEnvelope,
+    PlayerComparisonEnvelope, PlayerDetailEnvelope, PlayerEnvelope, PlayersEnvelope,
 )
 from .service import (
-    build_players, build_player_detail, compare_players, leaderboard_options,
+    build_players, build_player_detail, compare_players, find_v2_player, leaderboard_options,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     supported_seasons,
 )
@@ -124,16 +124,25 @@ def list_leaderboards(
     return envelope
 
 
-@app.get("/api/v2/players/{player_id}", response_model=PlayerDetailEnvelope, tags=["players"])
+@app.get(
+    "/api/v2/players/{player_id}", response_model=PlayerEnvelope | PlayerDetailEnvelope,
+    tags=["players"],
+)
 def get_player(
     player_id: int,
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
     mode: Literal["league", "europe"] = Query(default="league"),
     scope: Literal["3", "5", "7"] = Query(default="7"),
     competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
-) -> PlayerDetailEnvelope:
+    includeAnalysis: bool = Query(default=False, description="Return server-computed radar, spatial, and raw metric analysis."),
+) -> PlayerEnvelope | PlayerDetailEnvelope:
     if season not in supported_seasons():
         raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    if not includeAnalysis:
+        player = find_v2_player(player_id, season, mode, int(scope), competition)
+        if player is None:
+            raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+        return PlayerEnvelope(data=player)
     player = build_player_detail(player_id, season, mode, int(scope), competition)
     if player is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
