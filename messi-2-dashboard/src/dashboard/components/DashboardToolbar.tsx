@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { datasetHref, positionFilterValues } from "../datasetRoute";
 import type { DatasetRouteState, Player, PositionFilterCapability, SortKey } from "../types";
@@ -41,12 +41,17 @@ export function DashboardToolbar(props: Props) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [needle, setNeedle] = useState(props.query);
+  const onQueryChangeRef = useRef(props.onQueryChange);
+  onQueryChangeRef.current = props.onQueryChange;
 
   useEffect(() => { setNeedle(props.query); }, [props.query]);
   useEffect(() => {
-    const timer = window.setTimeout(() => props.onQueryChange(needle), 180);
+    if (needle === props.query) return;
+    const timer = window.setTimeout(() => {
+      if (needle !== props.query) onQueryChangeRef.current(needle);
+    }, 180);
     return () => window.clearTimeout(timer);
-  }, [needle, props.onQueryChange]);
+  }, [needle, props.query]);
 
   const candidates = needle.trim()
     ? props.players.filter((player) => `${player.name} ${player.club.name} ${player.league.name}`.toLocaleLowerCase().includes(needle.toLocaleLowerCase())).slice(0, 8)

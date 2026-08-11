@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { comparisonReducer, MAX_COMPARISON_PLAYERS } from "./comparisonState";
 import { CompareTray } from "./components/CompareTray";
@@ -93,31 +93,31 @@ export default function MessiScoutingDashboard({
     try { sessionStorage.setItem("messi-comparison-selection", JSON.stringify(comparedPlayers.map(({ id, name }) => ({ id, name })))); } catch { /* optional */ }
   }, [comparedPlayers]);
 
-  const updateServerSearch = (patch: Partial<LeaderboardSearch>, replace = false) => {
+  const updateServerSearch = useCallback((patch: Partial<LeaderboardSearch>, replace = false) => {
     if (!search) return;
     onSearchChange({ ...search, ...patch, page: patch.page ?? 1 }, replace);
-  };
+  }, [onSearchChange, search]);
   const hasFilters = Boolean(query || role !== "ALL" || position !== "ALL" || (!serverDriven && watchOnly) || sort.key !== "score" || sort.direction !== "desc");
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     if (serverDriven) updateServerSearch({ q: "", role: "all", position: "ALL", sort: "score", direction: "desc", page: 1 });
     else { setLocalQuery(""); setLocalRole("ALL"); setLocalSort({ key: "score", direction: "desc" }); setWatchOnly(false); onPageChange(1); }
-  };
-  const changeQuery = (value: string) => {
+  }, [onPageChange, serverDriven, updateServerSearch]);
+  const changeQuery = useCallback((value: string) => {
     if (serverDriven) updateServerSearch({ q: value, page: 1 }, true);
     else { setLocalQuery(value); onPageChange(1); }
-  };
-  const changeRole = (value: string) => {
+  }, [onPageChange, serverDriven, updateServerSearch]);
+  const changeRole = useCallback((value: string) => {
     if (serverDriven) updateServerSearch({ role: value === "Type A" || value === "Type B" ? value : "all", page: 1 });
     else { setLocalRole(value); onPageChange(1); }
-  };
-  const changePosition = (value: string) => {
+  }, [onPageChange, serverDriven, updateServerSearch]);
+  const changePosition = useCallback((value: string) => {
     if (!serverDriven || (value !== "ALL" && positionCapability !== "supported")) return;
     updateServerSearch({ position: value, page: 1 });
-  };
-  const changeSort = (next: SortState) => {
+  }, [positionCapability, serverDriven, updateServerSearch]);
+  const changeSort = useCallback((next: SortState) => {
     if (serverDriven) updateServerSearch({ sort: next.key, direction: next.direction, page: 1 });
     else { setLocalSort(next); onPageChange(1); }
-  };
+  }, [onPageChange, serverDriven, updateServerSearch]);
   const toggleWatch = (player: Player) => {
     setWatchlistIds((ids) => watchedIds.has(player.id) ? ids.filter((id) => id !== player.id) : [...ids, player.id]);
     if (!serverDriven) onPageChange(1);
@@ -135,7 +135,7 @@ export default function MessiScoutingDashboard({
   const start = totalItems && displayed.length ? (shownPage - 1) * activePageSize + 1 : 0;
   const end = displayed.length ? start + displayed.length - 1 : 0;
   const rangeLabel = displayed.length ? `${start}–${end} of ${totalItems}` : "0 of 0";
-  const pendingLabel = refreshing && serverDriven ? `Loading page ${safePage} · currently showing ${rangeLabel}` : `${rangeLabel} players`;
+  const loadingStatus = refreshing && serverDriven ? `Loading page ${safePage}.` : "";
 
   return <main id="main-content" className={`min-h-screen bg-[#080b0c] text-zinc-100 ${comparison.ids.length ? "pb-52" : ""}`}>
     <StatusFeedback message={feedback} />
@@ -145,7 +145,8 @@ export default function MessiScoutingDashboard({
       <DashboardToolbar query={query} role={role} position={position} positionCapability={serverDriven ? positionCapability : "unsupported"} sort={sort.key} direction={sort.direction} watchOnly={watchOnly} watchCount={watchlistIds.length} watchAvailable={!serverDriven} resultLabel={displayed.length ? `${displayed.length} shown · ${totalItems} results` : "0 shown · 0 results"} hasFilters={hasFilters} players={players} dataset={dataset} onQueryChange={changeQuery} onRoleChange={changeRole} onPositionChange={changePosition} onSortChange={(key) => changeSort({ key, direction: key === "name" || key === "age" ? "asc" : "desc" })} onDirectionChange={(direction) => changeSort({ key: sort.key, direction })} onWatchOnlyChange={setWatchOnly} onReset={resetFilters} />
       <ScoreLegend />
       <section ref={leaderboardRef} aria-label="Leaderboard results" className="scroll-mt-4">
-        <p ref={resultsSummaryRef} tabIndex={-1} aria-live="polite" className="mb-3 text-xs font-bold text-zinc-400">{pendingLabel}</p>
+        <p ref={resultsSummaryRef} tabIndex={-1} className="mb-1 text-xs font-bold text-zinc-400">{rangeLabel} players</p>
+        <p role="status" aria-live="polite" className="mb-3 min-h-5 text-xs text-zinc-500">{loadingStatus}</p>
         {displayed.length ? <>
           <PlayerCardList players={pagePlayers} dataset={dataset} comparedIds={comparedIds} watchedIds={watchedIds} onToggleCompare={toggleCompare} onToggleWatch={toggleWatch} />
           <PlayerTable players={pagePlayers} dataset={dataset} comparedIds={comparedIds} watchedIds={watchedIds} sort={sort} onMetricSort={setMetricSort} onToggleCompare={toggleCompare} onToggleWatch={toggleWatch} />
