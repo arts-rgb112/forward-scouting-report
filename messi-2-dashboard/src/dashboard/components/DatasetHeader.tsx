@@ -40,7 +40,7 @@ export function DatasetHeader({ meta, visibleCount, refreshing, onRefresh, state
             <div className="whitespace-nowrap font-mono text-sm font-black tabular-nums text-lime-300">{String(value)}</div>
           </div>)}
         </div>
-        <button onClick={onRefresh} disabled={refreshing} className="min-h-11 shrink-0 whitespace-nowrap rounded-lg border border-white/10 px-4 text-xs disabled:cursor-wait disabled:opacity-50 md:w-auto">
+        <button onClick={onRefresh} disabled={refreshing} className="min-h-11 min-w-28 shrink-0 whitespace-nowrap rounded-lg border border-white/10 px-4 text-xs disabled:cursor-wait disabled:opacity-50 md:w-auto">
           {refreshing ? "Refreshing…" : "Refresh"}
         </button>
       </section>

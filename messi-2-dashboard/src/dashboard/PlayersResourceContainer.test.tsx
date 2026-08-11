@@ -56,6 +56,29 @@ describe("PlayersResourceContainer request lifecycle", () => {
 });
 
 describe("PlayersResourceContainer URL-backed pages", () => {
+  it("keeps the requested page while its retained previous page is refreshing", async () => {
+    const calls: Array<{ signal: AbortSignal; request: Deferred }> = [];
+    transport.fetchLeaderboard.mockImplementation((_config, _dataset, _search, signal: AbortSignal) => {
+      const request = deferred(); calls.push({ signal, request }); return request.promise;
+    });
+    render(<PlayersResourceContainer />);
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await act(async () => {
+      calls[0].request.resolve({ players: [{ ...samplePlayers[0], name: "Page 1 player" }], meta: { ...sampleMeta, population: 250, totalItems: 250, returned: 1 }, serverPage: { page: 1, pageSize: 50, totalPages: 5, hasNextPage: true } });
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Page 5" }));
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(window.location.search).toContain("page=5");
+    expect(calls[1].signal.aborted).toBe(false);
+    expect(screen.getAllByText("Page 1 player")).not.toHaveLength(0);
+    await act(async () => {
+      calls[1].request.resolve({ players: [{ ...samplePlayers[0], name: "Page 5 player" }], meta: { ...sampleMeta, population: 250, totalItems: 250, returned: 1 }, serverPage: { page: 5, pageSize: 50, totalPages: 5, hasNextPage: false } });
+    });
+    expect(await screen.findAllByText("Page 5 player")).not.toHaveLength(0);
+    expect(screen.getByText("201–201 of 250 players")).toBeInTheDocument();
+    expect(window.location.search).toContain("page=5");
+  });
+
   it("preserves a direct page=2 URL through an initial failure and retry", async () => {
     const players = Array.from({ length: 51 }, (_, index) => ({ ...samplePlayers[index % samplePlayers.length], id: index + 1, rank: index + 1, name: `Player ${index + 1}` }));
     const payload = { players: [players[50]], meta: { ...sampleMeta, population: 51, returned: 1, schemaVersion: "2.1.0" as const, mode: "europe" as const, scope: null, competition: "ucl" as const }, serverPage: { page: 2, pageSize: 50, totalPages: 2, hasNextPage: false } };

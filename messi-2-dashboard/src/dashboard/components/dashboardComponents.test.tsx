@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import MessiScoutingDashboard from "../MessiScoutingDashboard";
@@ -27,6 +27,22 @@ describe("asset nullability", () => {
 });
 
 describe("dashboard contract UI", () => {
+  it("does not debounce an unchanged query when the parent callback is recreated", () => {
+    vi.useFakeTimers();
+    const first = vi.fn();
+    const props = { query: "", role: "ALL", sort: "score" as const, watchOnly: false, watchCount: 0, resultLabel: "", hasFilters: false, players: samplePlayers, dataset: { season: "2025/2026", mode: "league" as const, scope: 7 as const, competition: "all" as const }, onRoleChange: vi.fn(), onSortChange: vi.fn(), onWatchOnlyChange: vi.fn(), onReset: vi.fn() };
+    const view = render(<DashboardToolbar {...props} onQueryChange={first} />);
+    view.rerender(<DashboardToolbar {...props} onQueryChange={vi.fn()} />);
+    act(() => { vi.advanceTimersByTime(181); });
+    expect(first).not.toHaveBeenCalled();
+    const changed = vi.fn();
+    view.rerender(<DashboardToolbar {...props} onQueryChange={changed} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Search players" }), { target: { value: "Erling" } });
+    act(() => { vi.advanceTimersByTime(181); });
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenCalledWith("Erling");
+  });
+
   it("keeps dataset filters interactive while a refresh is in progress", () => {
     const onStateChange = vi.fn();
     const options: LeaderboardOptions = {
