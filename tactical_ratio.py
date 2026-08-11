@@ -6,6 +6,7 @@ import csv
 import functools
 import json
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
@@ -21,6 +22,71 @@ SPATIAL_FIELDS = (
     "danger_zone_density",
     "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score",
 )
+CCA_GRID_SIZE = 5.0
+CCA_MIN_CELL_OVERLAP = 3
+CCA_CORE_COVERAGE_SHARE = 0.50
+
+
+def _convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Return a stable outline for the CCA visual overlay."""
+    unique = sorted(set(points))
+    if len(unique) < 3:
+        return unique
+
+    def cross(origin: tuple[float, float], left: tuple[float, float], right: tuple[float, float]) -> float:
+        return (left[0] - origin[0]) * (right[1] - origin[1]) - (left[1] - origin[1]) * (right[0] - origin[0])
+
+    lower: list[tuple[float, float]] = []
+    for point in unique:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
+            lower.pop()
+        lower.append(point)
+    upper: list[tuple[float, float]] = []
+    for point in reversed(unique):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
+            upper.pop()
+        upper.append(point)
+    return lower[:-1] + upper[:-1]
+
+
+def cca_core_region(points: list[list[float]]) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
+    """Return the same repeated-point CCA core and outline used by the ETL.
+
+    The retained core contains at least 50% of repeated activity, selected from
+    the densest 5×5m cells.  Its hull is visual-only: it makes the CCA number
+    explainable alongside the broader, smoothed heatmap.
+    """
+    valid: list[tuple[float, float]] = []
+    for point in points:
+        if not isinstance(point, (list, tuple)) or len(point) != 2:
+            continue
+        try:
+            x, y = float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            continue
+        if 0 <= x <= 100 and 0 <= y <= 100:
+            valid.append((x, y))
+    all_cell_counts = Counter((int(x // CCA_GRID_SIZE), int(y // CCA_GRID_SIZE)) for x, y in valid)
+    repeated = [
+        point for point in valid
+        if all_cell_counts[(int(point[0] // CCA_GRID_SIZE), int(point[1] // CCA_GRID_SIZE))] >= CCA_MIN_CELL_OVERLAP
+    ]
+    if not repeated:
+        return [], []
+    repeated_cell_counts = Counter((int(x // CCA_GRID_SIZE), int(y // CCA_GRID_SIZE)) for x, y in repeated)
+    target = len(repeated) * CCA_CORE_COVERAGE_SHARE
+    selected_cells: set[tuple[int, int]] = set()
+    selected_count = 0
+    for cell, count in sorted(repeated_cell_counts.items(), key=lambda item: (-item[1], item[0])):
+        selected_cells.add(cell)
+        selected_count += count
+        if selected_count >= target:
+            break
+    core = [
+        point for point in repeated
+        if (int(point[0] // CCA_GRID_SIZE), int(point[1] // CCA_GRID_SIZE)) in selected_cells
+    ]
+    return core, _convex_hull(core)
 
 
 def _micro_zone_metrics(points: list[list[float]]) -> dict[str, float] | None:
