@@ -4,10 +4,17 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
-from rankings import COMPARISON_SCOPES, EUROPEAN_COMPETITION_IDS, EUROPEAN_LEADERBOARD_ID, get_spear_leaderboard
+from rankings import COMPARISON_SCOPES, EUROPEAN_LEADERBOARD_ID, calculate_league_percentiles, get_spear_leaderboard
 from spear_cohort import load_spear_cohort
+from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
 
-from .schemas import AssetRef, DatasetMeta, PlayerResponse, PlayersEnvelope, PlayerStats, PlayerTier
+from .schemas import (
+    AssetRef, CompareMeta, DatasetMeta, HeatmapPoint, LeaderboardEnvelope,
+    LeaderboardPageEnvelope, MessiScoreAnalysis, PlayerAnalysis,
+    PlayerComparisonEnvelope, PlayerDetailResponse, PlayerResponse,
+    PlayersEnvelope, PlayerStats, PlayerTier, RadarAxis, RadarChart,
+    RawMetrics, SpatialAnalysis,
+)
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
 
 
@@ -142,6 +149,209 @@ def leaderboard_v2_envelope(season: str, mode: str, scope: int, competition: str
             "generatedAt": dataset_generated_at().isoformat().replace("+00:00", "Z"), "source": "messi-static-cohort",
         },
     }
+
+
+SORTABLE_FIELDS = {
+    "rank": lambda player: player.rank,
+    "score": lambda player: player.score,
+    "name": lambda player: player.name.casefold(),
+    "minutes": lambda player: player.minutes,
+    "age": lambda player: player.age,
+    "outsideShot": lambda player: player.stats.outsideShot,
+    "boxThreat": lambda player: player.stats.boxThreat,
+    "dangerZone": lambda player: player.stats.dangerZone,
+    "aerial": lambda player: player.stats.aerial,
+    "groundDuel": lambda player: player.stats.groundDuel,
+    "spaceControl": lambda player: player.stats.spaceControl,
+}
+
+
+def filtered_v2_players(
+    season: str, mode: str, scope: int, competition: str, *, role: str | None,
+    query: str | None, sort: str, order: str,
+) -> tuple[PlayerResponse, ...]:
+    """Apply only server-owned filter/sort rules to the verified cohort."""
+    rows = build_v2_players(season, mode, scope, competition)
+    if role:
+        rows = tuple(player for player in rows if player.archetype == role)
+    if query:
+        needle = query.casefold().strip()
+        rows = tuple(
+            player for player in rows
+            if needle in player.name.casefold()
+            or needle in player.club.name.casefold()
+            or needle in player.league.name.casefold()
+        )
+    key = SORTABLE_FIELDS[sort]
+    # Ranking is naturally ascending; all other fields default to the caller's
+    # explicit order. A stable rank tie-breaker makes pagination deterministic.
+    reverse = order == "desc"
+    return tuple(sorted(rows, key=lambda player: (key(player), player.rank), reverse=reverse))
+
+
+def leaderboard_v21_envelope(
+    season: str, mode: str, scope: int, competition: str, *, page: int,
+    page_size: int, role: str | None, query: str | None, sort: str, order: str,
+) -> LeaderboardPageEnvelope:
+    rows = filtered_v2_players(
+        season, mode, scope, competition, role=role, query=query, sort=sort, order=order,
+    )
+    population = len(rows)
+    total_pages = (population + page_size - 1) // page_size
+    start = (page - 1) * page_size
+    selected = list(rows[start:start + page_size]) if page <= max(total_pages, 1) else []
+    return LeaderboardPageEnvelope.model_validate({
+        "data": selected,
+        "meta": {
+            "schemaVersion": "2.1.0", "season": season, "mode": mode,
+            "scope": scope if mode == "league" else None,
+            "competition": competition if mode == "europe" else None,
+            "population": population, "returned": len(selected),
+            "page": page, "pageSize": page_size, "totalPages": total_pages,
+            "hasNextPage": page < total_pages,
+            "generatedAt": dataset_generated_at(), "source": "messi-static-cohort",
+        },
+    })
+
+
+VOLUME_RADAR_AXES = (
+    ("outsideShot", "Outside-box shot volume", "outside_box_shots_attempts_top_percent", "out_box_shots", "outside_box_shots_attempts_rank"),
+    ("boxThreat", "Box shot volume", "box_shots_volume_top_percent", "in_box_shots", "box_shots_volume_rank"),
+    ("dangerZone", "Dribble attempt volume", "dribble_attempts_volume_top_percent", "dribble_attempts", "dribble_attempts_volume_rank"),
+    ("aerial", "Aerial duel volume", "aerial_duel_attempts_volume_top_percent", "aerial_duel_attempts", "aerial_duel_attempts_volume_rank"),
+    ("groundDuel", "Ground duel volume", "ground_duel_attempts_volume_top_percent", "ground_duel_attempts", "ground_duel_attempts_volume_rank"),
+    ("spaceControl", "Central activity area", "cca_area_top_percent", "tactical:cca_area_pct", "cca_area_rank"),
+)
+RATIO_RADAR_AXES = (
+    ("outsideShot", "Outside-box shot quality", "spear_shot_quality_top_percent", "shot_quality_per90", "spear_shot_quality_rank"),
+    ("boxThreat", "Deep-box finishing", "micro_zoning_finishing_top_percent", "tactical:deep_box_zone_score", "micro_zoning_finishing_rank"),
+    ("dangerZone", "Danger-zone progression", "danger_zone_progression_top_percent", "tactical:danger_zone_density", "danger_zone_progression_rank"),
+    ("aerial", "Aerial duel margin", "aerial_margin_per90_top_percent", "aerial_margin_per90", "aerial_margin_per90_rank"),
+    ("groundDuel", "Ground duel margin", "duel_margin_per90_top_percent", "duel_margin_per90", "duel_margin_per90_rank"),
+    ("spaceControl", "Space-control efficiency", "danger_zone_density_top_percent", "tactical:danger_zone_density", "danger_zone_density_rank"),
+)
+
+
+def _radar_score(percentile: float | None, imputed: bool) -> float:
+    if imputed:
+        return 20.0
+    if percentile is None:
+        return 50.0
+    return round(max(0.0, min(100.0, 100.0 - float(percentile))), 2)
+
+
+def _radar_tier(score: float) -> str:
+    if score >= 95:
+        return "S"
+    if score >= 85:
+        return "A"
+    if score >= 65:
+        return "B"
+    if score >= 35:
+        return "C"
+    return "D"
+
+
+def _raw_value(metrics: object, tactical: dict[str, object] | None, attr: str) -> float | None:
+    value = tactical.get(attr.removeprefix("tactical:")) if attr.startswith("tactical:") and tactical else getattr(metrics, attr, None)
+    return round(float(value), 4) if value is not None else None
+
+
+def _radar(kind: str, axes: tuple[tuple[str, str, str, str, str], ...], rank: object, metrics: object, tactical: dict[str, object] | None) -> RadarChart:
+    imputed_attrs = set(getattr(rank, f"spear_imputed_{kind}_attrs", ()))
+    population = int(getattr(rank, "spear_volume_eligible" if kind == "volume" else "progression_eligible", 0) or 0)
+    return RadarChart(kind=kind, axes=[
+        RadarAxis(
+            id=axis_id, label=label,
+            score=_radar_score(getattr(rank, percentile_attr, None), percentile_attr in imputed_attrs),
+            percentile=getattr(rank, percentile_attr, None),
+            rank=getattr(rank, rank_attr, None), population=population,
+            rawValue=_raw_value(metrics, tactical, raw_attr),
+            tier=_radar_tier(_radar_score(getattr(rank, percentile_attr, None), percentile_attr in imputed_attrs)),
+            imputed=percentile_attr in imputed_attrs,
+        )
+        for axis_id, label, percentile_attr, raw_attr, rank_attr in axes
+    ])
+
+
+def _raw_metrics(metrics: object) -> RawMetrics:
+    field_map = {
+        "goals": "goals", "xg": "xg", "xgot": "xgot", "minutesPlayed": "minutes_played",
+        "dribblesSucceeded": "dribbles_succeeded", "dribblesSuccessRate": "dribbles_success_rate",
+        "dispossessed": "dispossessed", "foulsWon": "fouls_won", "penaltiesAwarded": "penalties_awarded",
+        "duelsWon": "duels_won", "duelsWonPercentage": "duels_won_percentage",
+        "aerialDuelsWon": "aerial_duels_won", "aerialDuelsWonPercentage": "aerial_duels_won_percentage",
+        "inBoxGoals": "in_box_goals", "inBoxXg": "in_box_xg", "inBoxXgot": "in_box_xgot", "inBoxShots": "in_box_shots",
+        "outBoxGoals": "out_box_goals", "outBoxXg": "out_box_xg", "outBoxXgot": "out_box_xgot", "outBoxShots": "out_box_shots",
+    }
+    return RawMetrics(**{key: round(float(value), 4) if (value := getattr(metrics, attr, None)) is not None else None for key, attr in field_map.items()})
+
+
+def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> SpatialAnalysis:
+    points = get_heatmap_points(player_id, str(tactical.get("heatmap_key")) if tactical and tactical.get("heatmap_key") else None)
+    valid_points: list[HeatmapPoint] = []
+    for point in points:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        try:
+            x, y = float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            continue
+        if 0 <= x <= 100 and 0 <= y <= 100:
+            valid_points.append(HeatmapPoint(x=x, y=y))
+    def value(name: str) -> float | None:
+        raw = tactical.get(name) if tactical else None
+        return round(float(raw), 4) if raw is not None else None
+    return SpatialAnalysis(
+        available=bool(tactical), heatmapPointCount=len(valid_points), heatmapPoints=valid_points,
+        inBoxRatio=value("in_box_ratio"), outBoxFinalRatio=value("out_box_final_ratio"),
+        midThirdRatio=value("mid_third_ratio"), finalThirdRatio=value("final_third_ratio"),
+        ccaAreaPct=value("cca_area_pct"), laneRatios=[value(f"lane_{index}_ratio") or 0.0 for index in range(1, 6)] if tactical else [],
+        dangerZoneDensity=value("danger_zone_density"), deepBoxZoneScore=value("deep_box_zone_score"),
+    )
+
+
+@lru_cache(maxsize=512)
+def build_player_detail(player_id: int, season: str, mode: str, scope: int, competition: str) -> PlayerDetailResponse | None:
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    cohort = load_spear_cohort().get((player.league.id, season), {})
+    source = cohort.get(str(player_id))
+    if source is None:
+        return None
+    _, metrics = source
+    tactical = get_tactical_ratio_for_session(player_id, metrics.league_name or player.league.name, season)
+    rank = calculate_league_percentiles(
+        str(player_id), season, metrics, minimum_xg=1.0, restrict_to_forwards=True,
+        minimum_final_third_ratio=0, comparison_scope=scope,
+    )
+    analysis = PlayerAnalysis(
+        score=MessiScoreAnalysis(
+            value=round(float(rank.spear_score if rank.spear_score is not None else player.score), 2),
+            rank=rank.spear_score_rank or player.rank, topPercent=rank.spear_score_top_percent,
+            population=rank.spear_score_eligible, archetype=player.archetype,
+        ),
+        volumeRadar=_radar("volume", VOLUME_RADAR_AXES, rank, metrics, tactical),
+        ratioRadar=_radar("ratio", RATIO_RADAR_AXES, rank, metrics, tactical),
+        rawMetrics=_raw_metrics(metrics), spatial=_spatial_analysis(player_id, tactical),
+    )
+    return PlayerDetailResponse(**player.model_dump(), analysis=analysis)
+
+
+def compare_players(player_ids: tuple[int, ...], season: str, mode: str, scope: int, competition: str) -> PlayerComparisonEnvelope | None:
+    details = [build_player_detail(player_id, season, mode, scope, competition) for player_id in player_ids]
+    if any(detail is None for detail in details):
+        return None
+    rows = build_v2_players(season, mode, scope, competition)
+    return PlayerComparisonEnvelope(
+        data=[detail for detail in details if detail is not None],
+        meta=CompareMeta(
+            season=season, mode=mode, scope=scope if mode == "league" else None,
+            competition=competition if mode == "europe" else None, population=len(rows),
+            generatedAt=dataset_generated_at(),
+        ),
+    )
 
 
 def leaderboard_options() -> dict[str, object]:

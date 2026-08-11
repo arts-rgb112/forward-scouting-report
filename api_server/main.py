@@ -6,10 +6,14 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from .schemas import HealthResponse, LeaderboardEnvelope, LeaderboardOptions, PlayerDetailEnvelope, PlayersEnvelope
+from .schemas import (
+    HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
+    PlayerComparisonEnvelope, PlayerDetailEnvelope, PlayersEnvelope,
+)
 from .service import (
-    build_players, find_v2_player, leaderboard_options, leaderboard_v2_envelope,
-    players_envelope, supported_seasons,
+    build_players, build_player_detail, compare_players, leaderboard_options,
+    leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
+    supported_seasons,
 )
 
 
@@ -19,12 +23,18 @@ DEFAULT_ORIGINS = (
     "http://localhost:4173",
     "http://127.0.0.1:4173",
 )
+VERCEL_PREVIEW_ORIGIN_REGEX = r"^https://forward-scouting-report-6dn7-[a-z0-9-]+-messiflick\.vercel\.app$"
 
 
 def cors_origins() -> list[str]:
     """Use an exact comma-separated allowlist; deployment origins are configured externally."""
     configured = os.getenv("MESSI_CORS_ORIGINS", "")
     return [item.strip().rstrip("/") for item in configured.split(",") if item.strip()] or list(DEFAULT_ORIGINS)
+
+
+def cors_origin_regex() -> str:
+    """Allow only immutable preview hostnames for this exact Vercel project."""
+    return VERCEL_PREVIEW_ORIGIN_REGEX
 
 
 app = FastAPI(
@@ -37,6 +47,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins(),
+    allow_origin_regex=cors_origin_regex(),
     allow_credentials=False,
     allow_methods=["GET", "OPTIONS"],
     allow_headers=["Accept", "Content-Type"],
@@ -79,7 +90,10 @@ def list_leaderboard_options() -> LeaderboardOptions:
     return LeaderboardOptions.model_validate(leaderboard_options())
 
 
-@app.get("/api/v2/leaderboards", response_model=LeaderboardEnvelope, tags=["leaderboards"])
+@app.get(
+    "/api/v2/leaderboards", response_model=LeaderboardEnvelope | LeaderboardPageEnvelope,
+    tags=["leaderboards"],
+)
 def list_leaderboards(
     response: Response,
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
@@ -87,14 +101,27 @@ def list_leaderboards(
     scope: Literal["3", "5", "7"] = Query(default="7"),
     competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
     limit: int = Query(default=1000, ge=1, le=1000),
-) -> LeaderboardEnvelope:
+    page: int | None = Query(default=None, ge=1),
+    pageSize: int | None = Query(default=None, ge=1, le=250),
+    sort: Literal["rank", "score", "name", "minutes", "age", "outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"] = Query(default="rank"),
+    order: Literal["asc", "desc"] = Query(default="asc"),
+    role: Literal["Type A", "Type B"] | None = Query(default=None),
+    q: str | None = Query(default=None, min_length=1, max_length=100),
+) -> LeaderboardEnvelope | LeaderboardPageEnvelope:
     if season not in supported_seasons():
         raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
-    envelope = leaderboard_v2_envelope(season, mode, int(scope), competition, limit)
-    if mode == "europe" and not envelope["meta"]["population"]:
+    uses_pagination = page is not None or pageSize is not None or role is not None or q is not None or sort != "rank" or order != "asc"
+    if uses_pagination:
+        envelope = leaderboard_v21_envelope(
+            season, mode, int(scope), competition, page=page or 1, page_size=pageSize or 50,
+            role=role, query=q, sort=sort, order=order,
+        )
+    else:
+        envelope = LeaderboardEnvelope.model_validate(leaderboard_v2_envelope(season, mode, int(scope), competition, limit))
+    if mode == "europe" and not envelope.meta.population:
         raise HTTPException(status_code=404, detail="This competition is unavailable for the selected season")
     response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
-    return LeaderboardEnvelope.model_validate(envelope)
+    return envelope
 
 
 @app.get("/api/v2/players/{player_id}", response_model=PlayerDetailEnvelope, tags=["players"])
@@ -107,7 +134,29 @@ def get_player(
 ) -> PlayerDetailEnvelope:
     if season not in supported_seasons():
         raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
-    player = find_v2_player(player_id, season, mode, int(scope), competition)
+    player = build_player_detail(player_id, season, mode, int(scope), competition)
     if player is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     return PlayerDetailEnvelope(data=player)
+
+
+@app.get("/api/v2/compare", response_model=PlayerComparisonEnvelope, tags=["players"])
+def compare_player_details(
+    players: str = Query(description="Comma-separated list of two to four player IDs."),
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7"] = Query(default="7"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+) -> PlayerComparisonEnvelope:
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    try:
+        player_ids = tuple(int(value) for value in players.split(",") if value.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="players must contain numeric player IDs") from exc
+    if len(player_ids) < 2 or len(player_ids) > 4 or len(set(player_ids)) != len(player_ids) or any(player_id <= 0 for player_id in player_ids):
+        raise HTTPException(status_code=422, detail="players must contain two to four distinct positive IDs")
+    comparison = compare_players(player_ids, season, mode, int(scope), competition)
+    if comparison is None:
+        raise HTTPException(status_code=404, detail="One or more players are not in the selected leaderboard")
+    return comparison

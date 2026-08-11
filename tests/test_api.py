@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from api_server.main import app, cors_origins
+from api_server.main import app, cors_origin_regex, cors_origins
 from api_server import service
 from api_server.profiles import age_on
 from api_server.service import dataset_generated_at, tier_from_rank
@@ -75,6 +75,16 @@ def test_cors_preflight_denies_hostile_origin():
     assert "access-control-allow-origin" not in response.headers
 
 
+def test_cors_preflight_allows_immutable_vercel_preview_domain_only():
+    preview = "https://forward-scouting-report-6dn7-pr-158-messiflick.vercel.app"
+    response = client.options("/api/v2/leaderboards", headers={"Origin": preview, "Access-Control-Request-Method": "GET"})
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == preview
+    assert cors_origin_regex().startswith("^https://forward-scouting-report-6dn7-")
+    hostile = client.options("/api/v2/leaderboards", headers={"Origin": "https://forward-scouting-report-6dn7-pr-158-attacker.vercel.app", "Access-Control-Request-Method": "GET"})
+    assert hostile.status_code == 400
+
+
 def test_cors_environment_is_an_exact_comma_separated_allowlist(monkeypatch):
     monkeypatch.setenv("MESSI_CORS_ORIGINS", "https://dashboard.example.test/, https://preview.example.test")
     assert cors_origins() == ["https://dashboard.example.test", "https://preview.example.test"]
@@ -109,11 +119,52 @@ def test_v2_europe_leaderboard_and_contextual_player_detail_contract():
     detail = client.get(f"/api/v2/players/{player_id}", params={"season": "2025/2026", "mode": "europe", "competition": "ucl"})
     assert detail.status_code == 200
     assert detail.json()["data"]["id"] == player_id
+    analysis = detail.json()["data"]["analysis"]
+    assert set(analysis) == {"score", "volumeRadar", "ratioRadar", "rawMetrics", "spatial"}
+    assert len(analysis["volumeRadar"]["axes"]) == len(analysis["ratioRadar"]["axes"]) == 6
+    assert all(0 <= axis["score"] <= 100 for axis in analysis["ratioRadar"]["axes"])
 
 
 def test_v2_unavailable_competition_is_not_silently_rendered_as_empty():
     response = client.get("/api/v2/leaderboards", params={"season": "2025/2026", "mode": "europe", "competition": "uecl"})
     assert response.status_code == 404
+
+
+def test_v21_server_pagination_filters_and_sorts_without_changing_v20_contract():
+    legacy = client.get("/api/v2/leaderboards", params={"season": "2025/2026", "limit": 2})
+    assert legacy.status_code == 200
+    assert legacy.json()["meta"]["schemaVersion"] == "2.0.0"
+    response = client.get("/api/v2/leaderboards", params={
+        "season": "2025/2026", "page": 2, "pageSize": 7,
+        "sort": "score", "order": "desc", "role": "Type A", "q": "a",
+    })
+    assert response.status_code == 200
+    payload = response.json()
+    meta = payload["meta"]
+    assert meta["schemaVersion"] == "2.1.0"
+    assert {"page", "pageSize", "totalPages", "hasNextPage"}.issubset(meta)
+    assert meta["page"] == 2 and meta["pageSize"] == 7
+    assert meta["returned"] == len(payload["data"]) <= 7
+    assert all(player["archetype"] == "Type A" for player in payload["data"])
+    assert [player["score"] for player in payload["data"]] == sorted((player["score"] for player in payload["data"]), reverse=True)
+
+
+def test_detail_and_compare_are_available_for_league_ucl_and_uel_contexts():
+    contexts = (
+        {"mode": "league", "scope": 7, "competition": "all"},
+        {"mode": "europe", "scope": 7, "competition": "ucl"},
+        {"mode": "europe", "scope": 7, "competition": "uel"},
+    )
+    for context in contexts:
+        leaderboard = client.get("/api/v2/leaderboards", params={"season": "2025/2026", "limit": 2, **context})
+        assert leaderboard.status_code == 200
+        player_ids = [row["id"] for row in leaderboard.json()["data"]]
+        detail = client.get(f"/api/v2/players/{player_ids[0]}", params={"season": "2025/2026", **context})
+        assert detail.status_code == 200
+        assert detail.json()["data"]["analysis"]["spatial"]["source"] == "messi-static-cohort"
+        comparison = client.get("/api/v2/compare", params={"players": ",".join(map(str, player_ids)), "season": "2025/2026", **context})
+        assert comparison.status_code == 200
+        assert [row["id"] for row in comparison.json()["data"]] == player_ids
 
 
 def test_openapi_advertises_the_v1_response_contract():
@@ -125,7 +176,10 @@ def test_openapi_advertises_the_v1_response_contract():
     assert schema["DatasetMeta"]["properties"]["schemaVersion"]["const"] == "1.0.0"
     assert schema["LeaderboardMeta"]["properties"]["schemaVersion"]["const"] == "2.0.0"
     paths = response.json()["paths"]
-    assert paths["/api/v2/leaderboards"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith("LeaderboardEnvelope")
+    leaderboard_schema = paths["/api/v2/leaderboards"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert {item["$ref"].rsplit("/", 1)[-1] for item in leaderboard_schema["anyOf"]} == {"LeaderboardEnvelope", "LeaderboardPageEnvelope"}
+    assert "/api/v2/compare" in paths
+    assert "PlayerAnalysis" in schema and "LeaderboardPageMeta" in schema
 
 
 def test_tier_boundaries():
