@@ -53,20 +53,17 @@ def _requested_legacy_page() -> bool:
 
 
 def render_frontend_handoff() -> None:
-    """Redirect legacy Streamlit visitors and retain an accessible fallback."""
-    destination = json.dumps(FRONTEND_DASHBOARD_URL)
-    if hasattr(st, "html"):
-        st.html(
-            f"""
-            <script>
-              window.location.replace({destination});
-            </script>
-            """,
-            unsafe_allow_javascript=True,
-        )
+    """Offer a top-level Vercel handoff without nesting it in Streamlit.
 
+    Streamlit executes injected HTML in an iframe.  An automatic JavaScript
+    redirect therefore embeds the React app inside that iframe instead of
+    replacing the browser page; clicking a link back to Streamlit can recurse
+    through share.streamlit.io.  A normal user-activated external link avoids
+    that redirect loop while direct ``?page=detail|compare|about`` URLs keep
+    rendering the legacy surfaces in place.
+    """
     st.title("M.E.S.S.I. 2.0 Scouting Dashboard")
-    st.info("최신 React 대시보드로 이동합니다. 자동 이동이 차단되면 아래 버튼을 선택하세요.")
+    st.info("최신 대시보드는 아래 버튼으로 새 탭에서 엽니다. 선수 상세·비교·스탯 링크는 이 Streamlit 앱에서 직접 열립니다.")
     st.link_button("M.E.S.S.I. 2.0 대시보드 열기", FRONTEND_DASHBOARD_URL, type="primary")
 
 
