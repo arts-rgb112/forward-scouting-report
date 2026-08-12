@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from api_server.main import app, cors_origin_regex, cors_origins
 from api_server import service
-from api_server.profiles import age_on
+from api_server.profiles import age_on, player_age
 from api_server.service import dataset_generated_at, tier_from_rank
 
 
@@ -14,6 +14,12 @@ def test_age_is_calculated_as_of_the_reference_date():
 
     assert age_on(date(2000, 12, 31), date(2026, 8, 10)) == 25
     assert age_on(date(2000, 8, 10), date(2026, 8, 10)) == 26
+
+
+def test_placeholder_birth_date_is_not_exposed_as_an_invalid_age():
+    # Regression: Daniel Mosquera's provider placeholder 0001-01-01 once
+    # produced age 2025 and made every 2024/2025 leaderboard request fail.
+    assert player_age(1130732) is None
 
 
 def test_health_uses_2025_2026_real_cohort():
@@ -125,6 +131,21 @@ def test_v2_options_advertise_real_capabilities_and_unavailable_competitions():
     assert payload["competitions"]["ucl"]["available"] is True
     assert payload["competitions"]["uecl"]["available"] is False
     assert payload["competitions"]["uecl"]["reason"]
+
+
+def test_2024_2025_leaderboards_are_servable_for_both_v1_and_v21():
+    v1 = client.get("/api/v1/players", params={"season": "2024/2025", "scope": 7, "limit": 50})
+    assert v1.status_code == 200
+    assert v1.json()["meta"]["returned"] == len(v1.json()["data"])
+    assert all(15 <= player["age"] <= 60 for player in v1.json()["data"])
+
+    v21 = client.get("/api/v2/leaderboards", params={
+        "season": "2024/2025", "mode": "league", "scope": 7, "competition": "all",
+        "page": 1, "pageSize": 50, "sort": "score", "order": "desc",
+    })
+    assert v21.status_code == 200
+    assert v21.json()["meta"]["season"] == "2024/2025"
+    assert v21.json()["meta"]["returned"] == len(v21.json()["data"])
 
 
 def test_v2_europe_leaderboard_and_contextual_player_detail_contract():
