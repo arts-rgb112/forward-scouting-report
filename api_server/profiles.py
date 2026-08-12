@@ -10,6 +10,11 @@ from pathlib import Path
 
 PROFILE_PATH = Path(__file__).resolve().parents[1] / "data" / "player_profiles.csv"
 FOTMOB_IMAGE_BASE = "https://images.fotmob.com/image_resources"
+# The public API contract exposes an adult player's age.  Provider profile
+# placeholders such as 0001-01-01 must never turn a whole season request into
+# a validation error.
+MIN_PLAYER_AGE = 15
+MAX_PLAYER_AGE = 60
 
 
 def player_face_url(player_id: int) -> str:
@@ -29,13 +34,18 @@ def load_birth_dates() -> dict[int, date]:
     """Load FotMob birth dates captured with the static cohort snapshot."""
     try:
         with PROFILE_PATH.open(encoding="utf-8", newline="") as source:
-            rows = csv.DictReader(source)
-            return {
-                int(row["player_id"]): datetime.strptime(row["birth_date"], "%Y-%m-%d").date()
-                for row in rows
-                if row.get("player_id") and row.get("birth_date")
-            }
-    except (OSError, ValueError, KeyError):
+            birth_dates: dict[int, date] = {}
+            for row in csv.DictReader(source):
+                try:
+                    player_id = int(row.get("player_id", ""))
+                    birth_date = datetime.strptime(row.get("birth_date", ""), "%Y-%m-%d").date()
+                except (TypeError, ValueError):
+                    # Preserve every valid profile if one provider row is
+                    # malformed; a later API layer will omit only that row.
+                    continue
+                birth_dates[player_id] = birth_date
+            return birth_dates
+    except OSError:
         return {}
 
 
@@ -47,4 +57,7 @@ def age_on(birth_date: date, reference_date: date) -> int:
 
 def player_age(player_id: int, reference_date: date | None = None) -> int | None:
     birth_date = load_birth_dates().get(player_id)
-    return age_on(birth_date, reference_date or date.today()) if birth_date else None
+    if not birth_date:
+        return None
+    age = age_on(birth_date, reference_date or date.today())
+    return age if MIN_PLAYER_AGE <= age <= MAX_PLAYER_AGE else None
