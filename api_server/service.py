@@ -9,7 +9,7 @@ from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
 
 from .schemas import (
-    AssetRef, CompareMeta, DatasetMeta, HeatmapPoint, LeaderboardEnvelope,
+    AssetRef, CompareMeta, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, LeaderboardEnvelope,
     LeaderboardPageEnvelope, MessiScoreAnalysis, PlayerAnalysis,
     PlayerComparisonEnvelope, PlayerDetailResponse, PlayerResponse,
     PlayersEnvelope, PlayerStats, PlayerTier, RadarAxis, RadarChart,
@@ -345,6 +345,27 @@ def build_player_detail(player_id: int, season: str, mode: str, scope: int, comp
         rawMetrics=_raw_metrics(metrics), spatial=_spatial_analysis(player_id, tactical),
     )
     return PlayerDetailResponse(**player.model_dump(), analysis=analysis)
+
+
+def build_duel_spatial_analysis(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> DuelSpatialAnalysis | None:
+    """Expose an honest opt-in contract until verified duel events are loaded.
+
+    No repository dataset currently contains duel type + outcome + coordinate
+    tuples.  In particular, activity heatmap points are not substituted here.
+    Existing M.E.S.S.I. duel sectors therefore remain unchanged.
+    """
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    return DuelSpatialAnalysis(
+        playerId=player_id, season=season, mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+        available=False, appliedToMessiRating=False,
+        reason="event_coordinates_unavailable", cohortPopulation=0,
+    )
 
 
 def compare_players(player_ids: tuple[int, ...], season: str, mode: str, scope: int, competition: str) -> PlayerComparisonEnvelope | None:
