@@ -10,6 +10,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Optional
 
+from positional_grid import POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS
+
 
 DATA_DIR = Path(__file__).with_name("data")
 THREE_ZONE_DATA_PATH = DATA_DIR / "tactical_3zone_ratio.csv"
@@ -21,6 +23,8 @@ SPATIAL_FIELDS = (
     "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio",
     "danger_zone_density",
     "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score",
+    *POSITIONAL_DEPTH_FIELDS,
+    *POSITIONAL_CELL_FIELDS,
 )
 CCA_GRID_SIZE = 5.0
 CCA_MIN_CELL_OVERLAP = 3

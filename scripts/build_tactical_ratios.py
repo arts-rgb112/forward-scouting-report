@@ -27,6 +27,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from positional_grid import POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics
+
 
 # Prefer the canonical path-based endpoint. Some accounts are still rolling
 # onto that host, so a 403 safely falls back to the permanent V2 subdomain.
@@ -117,7 +119,7 @@ COHORT_COMPETITION_NAMES = {
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ACTIVITY_GRID_SIZE = 5.0
 MIN_CELL_OVERLAP = 3
-ACTIVITY_FILTER_VERSION = "cluster-v1"
+ACTIVITY_FILTER_VERSION = "cluster-v2-positional-grid"
 CORE_COVERAGE_SHARE = 0.50
 PITCH_AREA = 100.0 * 100.0
 GOLD_ZONE_WEIGHT = 1.50
@@ -381,13 +383,20 @@ def _convex_hull_area(points: list[tuple[float, float]]) -> float:
     )) / 2.0
 
 
-def spatial_metrics(points: list[tuple[float, float]]) -> dict[str, float]:
+def spatial_metrics(
+    points: list[tuple[float, float]], *, positional_points: list[tuple[float, float]] | None = None,
+) -> dict[str, float]:
     """Derive S.P.E.A.R. 2.0 spatial features from repeated activity points.
 
     Heatmap coordinates represent activity, not shots.  The micro-zone values
     therefore measure *where a player operates inside the box* and are later
     combined with FotMob's shot-derived finishing metric; they do not pretend
     to be shot-location percentages on their own.
+
+    ``points`` is the repeat-activity sample used by CCA and the established
+    S.P.E.A.R. ratios.  The positional grid may use the complete saved visual
+    sample instead, so the reported 6 x 5 occupation matches the heatmap that
+    the user sees rather than only its CCA core.
     """
     empty = {
         "cca_area_pct": 0.0,
@@ -396,6 +405,7 @@ def spatial_metrics(points: list[tuple[float, float]]) -> dict[str, float]:
         "danger_zone_density": 0.0,
         "box_six_yard_ratio": 0.0, "box_penalty_spot_ratio": 0.0,
         "box_wide_ratio": 0.0, "deep_box_zone_score": 0.0,
+        **positional_grid_metrics(()),
     }
     if not points:
         return empty
@@ -418,14 +428,14 @@ def spatial_metrics(points: list[tuple[float, float]]) -> dict[str, float]:
     empty["cca_area_pct"] = round(min(100.0, _convex_hull_area(core_points) / PITCH_AREA * 100.0), 2)
 
     total = float(len(points))
-    lane_counts = [0, 0, 0, 0, 0]
-    # Provider attacking orientation: y=0 is the player's right touchline
-    # (screen top in the app), and y=100 is the left touchline. Keep the raw
-    # Lane 1..5 keys stable; the UI owns the human-readable flank labels.
-    for _, y in points:
-        lane_counts[min(4, int(y // 20.0))] += 1
-    for index, count in enumerate(lane_counts, start=1):
-        empty[f"lane_{index}_ratio"] = round(count / total * 100.0, 2)
+    # Keep the legacy lane fields, but now use the actual non-uniform five
+    # lanes drawn in the positional-grid pitch rather than arbitrary 20% bins.
+    grid = positional_grid_metrics(positional_points if positional_points is not None else points)
+    for index in range(1, 6):
+        empty[f"lane_{index}_ratio"] = round(sum(
+            grid[f"grid_d{depth}_l{index}_ratio"] for depth in range(1, 7)
+        ), 2)
+    empty.update(grid)
 
     # Zone 14 and the two advanced half-spaces are the dangerous central
     # channels.  This remains an activity-density signal, not a progression
@@ -655,7 +665,7 @@ def resolve_ranked_sportsapi_id(
     return team_matches[0] if len(team_matches) == 1 else None
 
 
-OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "cca_area_pct", "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio", "danger_zone_density", "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score", "sample_points", "generated_at"]
+OUTPUT_FIELDS = ["fotmob_player_id", "sportsapi_player_id", "player_name", "team_name", "competition_name", "season_name", "tournament_id", "season_id", "heatmap_key", "activity_filter", "in_box_ratio", "out_box_final_ratio", "mid_third_ratio", "final_third_ratio", "cca_area_pct", "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio", *POSITIONAL_DEPTH_FIELDS, *POSITIONAL_CELL_FIELDS, "danger_zone_density", "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score", "sample_points", "generated_at"]
 MISSING_SESSION_FIELDS = [
     "fotmob_player_id", "player_name", "team_name", "competition_name",
     "season_name", "reason",
@@ -758,7 +768,8 @@ def enrich_checkpoint_spatial_metrics(
     which preserves the same spatial distribution without consuming tickets.
     """
     for row in rows:
-        if row.get("cca_area_pct") not in (None, ""):
+        row["activity_filter"] = ACTIVITY_FILTER_VERSION
+        if row.get("grid_d1_l1_ratio") not in (None, ""):
             continue
         raw_points = visual_points.get(str(row.get("heatmap_key", "")), [])
         points = [
@@ -767,7 +778,7 @@ def enrich_checkpoint_spatial_metrics(
             if isinstance(point, list) and len(point) == 2
             and as_number(point[0]) is not None and as_number(point[1]) is not None
         ]
-        row.update(spatial_metrics(points))
+        row.update(spatial_metrics(core_activity_points(points), positional_points=points))
 
 
 def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]], auto_mapped: list[dict[str, Any]], visual_points: dict[str, list[list[float]]]) -> None:
@@ -896,9 +907,10 @@ def main() -> None:
             if sports_id not in id_map:
                 auto_mapped.append({"sportsapi_player_id": sports_id, "fotmob_player_id": fotmob_id, **player})
             in_box, out_box_final, mid, samples = ratios
-            space = spatial_metrics(core_activity_points(heatmap))
             heatmap_key = f"{fotmob_id}:{tournament['id']}:{season_id}"
-            visual_points[heatmap_key] = heatmap_visual_points(heatmap)
+            visual = heatmap_visual_points(heatmap)
+            space = spatial_metrics(core_activity_points(heatmap), positional_points=visual)
+            visual_points[heatmap_key] = visual
             output.append({
                 "fotmob_player_id": fotmob_id, "sportsapi_player_id": sports_id,
                 "player_name": player["name"], "team_name": player["team_name"],
@@ -948,9 +960,10 @@ def main() -> None:
             if ratios is None:
                 continue
             in_box, out_box_final, mid, samples = ratios
-            space = spatial_metrics(core_activity_points(heatmap))
             heatmap_key = f"{fotmob_id}:{tournament['id']}:{season_id}"
-            visual_points[heatmap_key] = heatmap_visual_points(heatmap)
+            visual = heatmap_visual_points(heatmap)
+            space = spatial_metrics(core_activity_points(heatmap), positional_points=visual)
+            visual_points[heatmap_key] = visual
             output.append({
                 "fotmob_player_id": fotmob_id, "sportsapi_player_id": sports_id,
                 "player_name": candidate["name"], "team_name": candidate["team_name"],

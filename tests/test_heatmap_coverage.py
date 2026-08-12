@@ -8,6 +8,13 @@ from scripts.build_tactical_ratios import (
     discover_tournaments,
     missing_static_cohort_sessions,
     resolve_ranked_sportsapi_id,
+    spatial_metrics,
+)
+from positional_grid import (
+    POSITIONAL_CELL_FIELDS,
+    POSITIONAL_DEPTH_FIELDS,
+    POSITIONAL_LANE_BOUNDARIES,
+    positional_grid_metrics,
 )
 from tactical_ratio import _same_competition, cca_core_region
 
@@ -36,6 +43,34 @@ class ExpandedLeagueParsingTests(unittest.TestCase):
 
 
 class CcaOverlayTests(unittest.TestCase):
+    def test_positional_grid_uses_the_supplied_non_uniform_five_lanes(self) -> None:
+        # The supplied pitch has wide outer lanes and narrower central lanes;
+        # this must not regress to arbitrary 20-percent y bins.
+        self.assertEqual(POSITIONAL_LANE_BOUNDARIES, (0.0, 21.82, 37.0, 63.0, 78.18, 100.0))
+        points = [(1, 1), (20, 21.81), (20, 21.82), (40, 37), (99, 99)]
+
+        metrics = positional_grid_metrics(points)
+
+        self.assertEqual(metrics["grid_d1_l1_ratio"], 20.0)
+        self.assertEqual(metrics["grid_d2_l1_ratio"], 20.0)
+        self.assertEqual(metrics["grid_d2_l2_ratio"], 20.0)
+        self.assertEqual(metrics["grid_d3_l3_ratio"], 20.0)
+        self.assertEqual(metrics["grid_d6_l5_ratio"], 20.0)
+        self.assertAlmostEqual(sum(metrics[field] for field in POSITIONAL_DEPTH_FIELDS), 100.0)
+        self.assertAlmostEqual(sum(metrics[field] for field in POSITIONAL_CELL_FIELDS), 100.0)
+
+    def test_grid_occupancy_uses_all_saved_points_while_cca_remains_repeat_only(self) -> None:
+        # CCA intentionally discards one-off noise; positional occupancy must
+        # still describe the full heatmap shown to users.
+        core_points = [(10, 10)] * 4
+        all_points = [*core_points, (90, 90)]
+
+        metrics = spatial_metrics(core_points, positional_points=all_points)
+
+        self.assertEqual(metrics["grid_d1_l1_ratio"], 80.0)
+        self.assertEqual(metrics["grid_d6_l5_ratio"], 20.0)
+        self.assertEqual(sum(metrics[f"lane_{lane}_ratio"] for lane in range(1, 6)), 100.0)
+
     def test_cca_overlay_uses_the_densest_repeated_cells_not_all_visual_points(self) -> None:
         # Four points in one cell and three in a second cell form the earliest
         # core that reaches at least 50% of the seven repeated observations.

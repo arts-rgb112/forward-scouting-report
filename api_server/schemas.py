@@ -207,6 +207,16 @@ class HeatmapPoint(BaseModel):
     y: float = Field(ge=0, le=100)
 
 
+class PositionalGridCell(BaseModel):
+    """One 6-depth × 5-lane tactical-grid occupancy value."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    depth: int = Field(ge=1, le=6)
+    lane: int = Field(ge=1, le=5)
+    occupancyPct: float = Field(ge=0, le=100)
+
+
 class SpatialAnalysis(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -220,6 +230,8 @@ class SpatialAnalysis(BaseModel):
     finalThirdRatio: float | None = Field(default=None, ge=0, le=100)
     ccaAreaPct: float | None = Field(default=None, ge=0, le=100)
     laneRatios: list[float] = Field(default_factory=list, max_length=5)
+    depthRatios: list[float] = Field(default_factory=list, max_length=6)
+    positionalGrid: list[PositionalGridCell] = Field(default_factory=list, max_length=30)
     dangerZoneDensity: float | None = Field(default=None, ge=0, le=100)
     deepBoxZoneScore: float | None = Field(default=None, ge=0, le=100)
 
