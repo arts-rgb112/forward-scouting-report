@@ -1,4 +1,7 @@
 import unittest
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 
@@ -43,6 +46,15 @@ class ExpandedLeagueParsingTests(unittest.TestCase):
 
 
 class CcaOverlayTests(unittest.TestCase):
+    def test_etl_script_can_import_the_root_positional_grid_when_run_as_a_script(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [sys.executable, "scripts/build_tactical_ratios.py", "--help"],
+            cwd=root, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--season-name", result.stdout)
+
     def test_positional_grid_uses_the_supplied_non_uniform_five_lanes(self) -> None:
         # The supplied pitch has wide outer lanes and narrower central lanes;
         # this must not regress to arbitrary 20-percent y bins.

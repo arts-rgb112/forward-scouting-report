@@ -27,6 +27,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+ROOT = Path(__file__).resolve().parents[1]
+# ``python scripts/build_tactical_ratios.py`` sets sys.path to ``scripts``;
+# make the repository-level positional-grid contract available before importing
+# it.  This is required for the GitHub Actions refresh command as well.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from positional_grid import POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics
 
 
@@ -125,10 +132,7 @@ PITCH_AREA = 100.0 * 100.0
 GOLD_ZONE_WEIGHT = 1.50
 SILVER_ZONE_WEIGHT = 1.00
 BRONZE_ZONE_WEIGHT = 0.50
-ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 
 class SportsApiQuotaExceeded(RuntimeError):
