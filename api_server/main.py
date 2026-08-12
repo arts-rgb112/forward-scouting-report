@@ -8,7 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .schemas import (
-    DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
+    AgeBand, DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
+    LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDetailEnvelope, PlayerEnvelope, PlayersEnvelope,
     WatchlistResolveEnvelope, WatchlistResolveRequest,
 )
@@ -126,19 +127,26 @@ def list_leaderboards(
     limit: int = Query(default=1000, ge=1, le=1000),
     page: int | None = Query(default=None, ge=1),
     pageSize: int | None = Query(default=None, ge=1, le=250),
-    sort: Literal["rank", "score", "name", "minutes", "age", "outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"] = Query(default="rank"),
-    order: Literal["asc", "desc"] = Query(default="asc"),
+    sort: LeaderboardSort = Query(default="rank"),
+    order: SortOrder = Query(default="asc"),
     role: Literal["Type A", "Type B"] | None = Query(default=None),
     position: str | None = Query(default=None, min_length=1, max_length=100),
+    ageBand: AgeBand = Query(default="all"),
+    minutesBand: MinutesBand = Query(default="all"),
     q: str | None = Query(default=None, min_length=1, max_length=100),
 ) -> LeaderboardEnvelope | LeaderboardPageEnvelope:
     if season not in supported_seasons():
         raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
-    uses_pagination = page is not None or pageSize is not None or role is not None or position is not None or q is not None or sort != "rank" or order != "asc"
+    uses_pagination = (
+        page is not None or pageSize is not None or role is not None or position is not None
+        or ageBand != "all" or minutesBand != "all" or q is not None
+        or sort != "rank" or order != "asc"
+    )
     if uses_pagination:
         envelope = leaderboard_v21_envelope(
             season, mode, int(scope), competition, page=page or 1, page_size=pageSize or 50,
-            role=role, position=position, query=q, sort=sort, order=order,
+            role=role, position=position, age_band=ageBand,
+            minutes_band=minutesBand, query=q, sort=sort, order=order,
         )
     else:
         envelope = LeaderboardEnvelope.model_validate(leaderboard_v2_envelope(season, mode, int(scope), competition, limit))

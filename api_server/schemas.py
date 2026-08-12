@@ -44,7 +44,7 @@ class PlayerResponse(BaseModel):
     name: str = Field(min_length=1)
     position: str = Field(min_length=1)
     archetype: Literal["Type A", "Type B"]
-    age: int = Field(ge=15, le=60)
+    age: int | None = Field(default=None, ge=15, le=60)
     minutes: int = Field(ge=0)
     tier: PlayerTier
     score: float = Field(ge=0, le=100)
@@ -76,6 +76,16 @@ class PlayersEnvelope(BaseModel):
 
 LeaderboardMode = Literal["league", "europe"]
 CompetitionCode = Literal["all", "ucl", "uel", "uecl"]
+AgeBand = Literal["all", "u23", "u25", "26-30", "31-plus"]
+MinutesBand = Literal[
+    "all", "200-499", "500-999", "1000-1499", "1500-1999",
+    "2000-2999", "3000-plus",
+]
+LeaderboardSort = Literal[
+    "rank", "score", "name", "minutes", "age", "outsideShot", "boxThreat",
+    "dangerZone", "aerial", "groundDuel", "spaceControl",
+]
+SortOrder = Literal["asc", "desc"]
 
 
 class LeaderboardScopeOption(BaseModel):
@@ -101,6 +111,20 @@ class LeaderboardOptions(BaseModel):
     seasons: list[str]
     scopes: list[LeaderboardScopeOption]
     competitions: dict[CompetitionCode, CompetitionOption]
+
+
+class LeaderboardAppliedFilters(BaseModel):
+    """Canonical predicates and ordering actually applied by the server."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["Type A", "Type B"] | None = None
+    position: str | None = None
+    q: str | None = None
+    ageBand: AgeBand = "all"
+    minutesBand: MinutesBand = "all"
+    sort: LeaderboardSort = "rank"
+    order: SortOrder = "asc"
 
 
 class LeaderboardMeta(BaseModel):
@@ -130,8 +154,10 @@ class LeaderboardPageMeta(LeaderboardMeta):
     schemaVersion: Literal["2.1.0"] = "2.1.0"
     page: int = Field(ge=1)
     pageSize: int = Field(ge=1, le=250)
+    totalItems: int = Field(ge=0)
     totalPages: int = Field(ge=0)
     hasNextPage: bool
+    applied: LeaderboardAppliedFilters
 
 
 class LeaderboardPageEnvelope(BaseModel):

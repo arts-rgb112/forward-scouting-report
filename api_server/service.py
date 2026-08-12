@@ -9,8 +9,9 @@ from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
 
 from .schemas import (
-    AssetRef, CompareMeta, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, LeaderboardEnvelope,
+    AgeBand, AssetRef, CompareMeta, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
     LeaderboardPageEnvelope, MessiScoreAnalysis, PlayerAnalysis,
+    LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDetailResponse, PlayerResponse,
     PlayersEnvelope, PlayerStats, PlayerTier, RadarAxis, RadarChart,
     PositionalGridCell, RawMetrics, SpatialAnalysis,
@@ -122,7 +123,11 @@ def leaderboard_target(mode: str, scope: int, competition: str) -> int:
 def build_v2_players(season: str, mode: str, scope: int, competition: str) -> tuple[PlayerResponse, ...]:
     """Return only rows backed by the static snapshot; no synthetic competition data."""
     target = leaderboard_target(mode, scope, competition)
-    return _players_from_frame(get_spear_leaderboard(target, season, scope))
+    # v2 explicitly represents a missing verified birth date as ``age: null``.
+    # Legacy v1 remains strict and continues to omit incomplete profiles.
+    return _players_from_frame(
+        get_spear_leaderboard(target, season, scope), require_complete_profiles=False,
+    )
 
 
 def available_competitions(season: str) -> dict[str, dict[str, object]]:
@@ -167,37 +172,115 @@ SORTABLE_FIELDS = {
 }
 
 
-def filtered_v2_players(
-    season: str, mode: str, scope: int, competition: str, *, role: str | None,
-    position: str | None, query: str | None, sort: str, order: str,
+AGE_BAND_BOUNDS: dict[AgeBand, tuple[int | None, int | None] | None] = {
+    "all": None,
+    "u23": (None, 22),
+    "u25": (23, 25),
+    "26-30": (26, 30),
+    "31-plus": (31, None),
+}
+MINUTES_BAND_BOUNDS: dict[MinutesBand, tuple[int | None, int | None] | None] = {
+    "all": None,
+    "200-499": (200, 499),
+    "500-999": (500, 999),
+    "1000-1499": (1000, 1499),
+    "1500-1999": (1500, 1999),
+    "2000-2999": (2000, 2999),
+    "3000-plus": (3000, None),
+}
+
+
+def _in_band(value: int | None, bounds: tuple[int | None, int | None] | None) -> bool:
+    if bounds is None:
+        return True
+    if value is None:
+        return False
+    lower, upper = bounds
+    return (lower is None or value >= lower) and (upper is None or value <= upper)
+
+
+def matches_age_band(age: int | None, band: AgeBand) -> bool:
+    return _in_band(age, AGE_BAND_BOUNDS[band])
+
+
+def matches_minutes_band(minutes: int, band: MinutesBand) -> bool:
+    return _in_band(minutes, MINUTES_BAND_BOUNDS[band])
+
+
+def canonical_leaderboard_filters(
+    *, role: str | None, position: str | None, age_band: AgeBand,
+    minutes_band: MinutesBand, query: str | None, sort: LeaderboardSort,
+    order: SortOrder,
+) -> LeaderboardAppliedFilters:
+    return LeaderboardAppliedFilters(
+        role=role,
+        position=(position.strip() or None) if position is not None else None,
+        q=(query.strip() or None) if query is not None else None,
+        ageBand=age_band,
+        minutesBand=minutes_band,
+        sort=sort,
+        order=order,
+    )
+
+
+def _apply_leaderboard_filters(
+    rows: tuple[PlayerResponse, ...], applied: LeaderboardAppliedFilters,
 ) -> tuple[PlayerResponse, ...]:
-    """Apply only server-owned filter/sort rules to the verified cohort."""
-    rows = build_v2_players(season, mode, scope, competition)
-    if role:
-        rows = tuple(player for player in rows if player.archetype == role)
-    if position:
-        rows = tuple(player for player in rows if player.position == position)
-    if query:
-        needle = query.casefold().strip()
+    if applied.role:
+        rows = tuple(player for player in rows if player.archetype == applied.role)
+    if applied.position:
+        rows = tuple(player for player in rows if player.position == applied.position)
+    rows = tuple(player for player in rows if matches_age_band(player.age, applied.ageBand))
+    rows = tuple(player for player in rows if matches_minutes_band(player.minutes, applied.minutesBand))
+    if applied.q:
+        needle = applied.q.casefold()
         rows = tuple(
             player for player in rows
             if needle in player.name.casefold()
             or needle in player.club.name.casefold()
             or needle in player.league.name.casefold()
         )
-    key = SORTABLE_FIELDS[sort]
-    # Ranking is naturally ascending; all other fields default to the caller's
-    # explicit order. A stable rank tie-breaker makes pagination deterministic.
-    reverse = order == "desc"
-    return tuple(sorted(rows, key=lambda player: (key(player), player.rank), reverse=reverse))
+
+    # Establish the invariant tie order first. Python's stable sort preserves
+    # rank ASC, id ASC for equal primary values even when the primary is DESC.
+    rows = tuple(sorted(rows, key=lambda player: (player.rank, player.id)))
+    key = SORTABLE_FIELDS[applied.sort]
+    reverse = applied.order == "desc"
+    if applied.sort == "age":
+        known = tuple(player for player in rows if player.age is not None)
+        missing = tuple(player for player in rows if player.age is None)
+        return tuple(sorted(known, key=key, reverse=reverse)) + missing
+    return tuple(sorted(rows, key=key, reverse=reverse))
+
+
+def filtered_v2_players(
+    season: str, mode: str, scope: int, competition: str, *, role: str | None,
+    position: str | None, age_band: AgeBand = "all",
+    minutes_band: MinutesBand = "all", query: str | None,
+    sort: LeaderboardSort, order: SortOrder,
+) -> tuple[PlayerResponse, ...]:
+    """Apply only server-owned filter/sort rules to the verified cohort."""
+    applied = canonical_leaderboard_filters(
+        role=role, position=position, age_band=age_band,
+        minutes_band=minutes_band, query=query, sort=sort, order=order,
+    )
+    return _apply_leaderboard_filters(
+        build_v2_players(season, mode, scope, competition), applied,
+    )
 
 
 def leaderboard_v21_envelope(
     season: str, mode: str, scope: int, competition: str, *, page: int,
-    page_size: int, role: str | None, position: str | None, query: str | None, sort: str, order: str,
+    page_size: int, role: str | None, position: str | None,
+    age_band: AgeBand = "all", minutes_band: MinutesBand = "all",
+    query: str | None, sort: LeaderboardSort, order: SortOrder,
 ) -> LeaderboardPageEnvelope:
-    rows = filtered_v2_players(
-        season, mode, scope, competition, role=role, position=position, query=query, sort=sort, order=order,
+    applied = canonical_leaderboard_filters(
+        role=role, position=position, age_band=age_band,
+        minutes_band=minutes_band, query=query, sort=sort, order=order,
+    )
+    rows = _apply_leaderboard_filters(
+        build_v2_players(season, mode, scope, competition), applied,
     )
     population = len(rows)
     total_pages = (population + page_size - 1) // page_size
@@ -210,8 +293,10 @@ def leaderboard_v21_envelope(
             "scope": scope if mode == "league" else None,
             "competition": competition if mode == "europe" else None,
             "population": population, "returned": len(selected),
-            "page": page, "pageSize": page_size, "totalPages": total_pages,
+            "page": page, "pageSize": page_size, "totalItems": population,
+            "totalPages": total_pages,
             "hasNextPage": page < total_pages,
+            "applied": applied,
             "generatedAt": dataset_generated_at(), "source": "messi-static-cohort",
         },
     })
