@@ -16,6 +16,22 @@ describe("Watchlist V2 storage", () => {
     expect(removeWatchlistEntry({ version: 2, entries: [current, otherSeason], unresolvedLegacyIds: [], migration: { legacyKey: "messi-2-watchlist", migratedAt: null }, selectedEntryKeys: [current.key] }, current.key)).toMatchObject({ entries: [otherSeason], selectedEntryKeys: [] });
   });
 
+  it("copies a complete immutable profile snapshot from the player", () => {
+    const player = { ...samplePlayers[0], tier: { ...samplePlayers[0].tier }, stats: { ...samplePlayers[0].stats } };
+    const entry = entryFromPlayer(player, league, "2026-01-01T00:00:00.000Z");
+    expect(entry.snapshot).toMatchObject({ profile: "complete", archetype: "Type A", age: 25, minutes: 1900, tier: player.tier, stats: player.stats });
+    expect(entry.snapshot.stats).not.toBe(player.stats);
+    expect(entry.snapshot.tier).not.toBe(player.tier);
+    player.stats.aerial = 1;
+    expect(entry.snapshot.stats?.aerial).toBe(91);
+  });
+
+  it("keeps summary-only V2 records as legacy partial entries", () => {
+    const raw = { version: 2, entries: [{ version: 2, key: "old", namespace: "fotmob", playerId: 1, snapshot: { name: "Saved", position: "CF", clubName: "Club", score: 90 }, context: league, savedAt: "2026-01-01T00:00:00.000Z" }], unresolvedLegacyIds: [], migration: { legacyKey: "messi-2-watchlist", migratedAt: null }, selectedEntryKeys: [] };
+    const parsed = parseWatchlist(JSON.stringify(raw));
+    expect(parsed?.entries[0].snapshot).toMatchObject({ profile: "legacy-partial", name: "Saved", score: 90 });
+  });
+
   it("migrates only currently provable old IDs and leaves the old value untouched", () => {
     const migrated = migrateLegacyWatchlist("[1,2,99,2]", [samplePlayers[0]], league, "2026-01-01T00:00:00.000Z");
     expect(migrated.entries.map((entry) => entry.playerId)).toEqual([1]);

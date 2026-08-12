@@ -1,5 +1,6 @@
 import { adaptPlayer } from "./adapter";
 import { watchlistResolveEnvelopeSchema } from "./contracts";
+import type { WatchlistResolveResultDto } from "./contracts";
 import type { MessiApiConfig } from "./env";
 import { MessiApiError } from "./errors";
 import type { Player } from "../dashboard/types";
@@ -10,6 +11,26 @@ const CHUNK_SIZE = 100;
 
 function payload(entry: WatchlistEntry) {
   return { key: entry.key, player: { idNamespace: entry.namespace, playerId: entry.playerId }, context: entry.context };
+}
+
+function exactContext(result: WatchlistResolveResultDto, entry: WatchlistEntry): boolean {
+  const context = result.context;
+  return context !== null
+    && context.season === entry.context.season
+    && context.mode === entry.context.mode
+    && context.scope === entry.context.scope
+    && context.competition === entry.context.competition;
+}
+
+function exactResolvedEntry(result: WatchlistResolveResultDto, entry: WatchlistEntry): boolean {
+  const player = result.player;
+  return result.status === "resolved"
+    && result.key === entry.key
+    && player !== null
+    && player.idNamespace === entry.namespace
+    && player.id === entry.playerId
+    && player.playerId === entry.playerId
+    && exactContext(result, entry);
 }
 
 async function resolveChunk(config: MessiApiConfig, entries: readonly WatchlistEntry[], signal?: AbortSignal): Promise<ResolvedWatchlistEntry[]> {
@@ -28,12 +49,27 @@ async function resolveChunk(config: MessiApiConfig, entries: readonly WatchlistE
   try { json = await response.json(); } catch { throw new MessiApiError("schema", "Watchlist resolver response was not valid JSON"); }
   const parsed = watchlistResolveEnvelopeSchema.safeParse(json);
   if (!parsed.success) throw new MessiApiError("schema", "Watchlist resolver response was invalid");
-  const requested = new Set(entries.map((entry) => entry.key));
-  return parsed.data.results.filter((result) => requested.has(result.key)).map((result) => ({
-    key: result.key, status: result.status,
-    // A malformed "resolved" result is never permitted to manufacture a row.
-    player: result.status === "resolved" && result.player ? adaptPlayer(result.player) : undefined,
-  }));
+  const requestedCounts = new Map<string, number>();
+  const resultsByKey = new Map<string, WatchlistResolveResultDto>();
+  const resultCounts = new Map<string, number>();
+  for (const entry of entries) requestedCounts.set(entry.key, (requestedCounts.get(entry.key) ?? 0) + 1);
+  for (const result of parsed.data.results) {
+    resultCounts.set(result.key, (resultCounts.get(result.key) ?? 0) + 1);
+    resultsByKey.set(result.key, result);
+  }
+
+  // A response is trusted only when it is a one-to-one match with this exact saved entry.
+  // Any missing, duplicate, or identity-mismatched response deliberately falls back to the
+  // complete browser-owned snapshot instead of presenting a different current profile.
+  return entries.map((entry) => {
+    const result = resultsByKey.get(entry.key);
+    if (requestedCounts.get(entry.key) !== 1 || resultCounts.get(entry.key) !== 1 || !result) {
+      return { key: entry.key, status: "unavailable" };
+    }
+    if (result.status !== "resolved") return { key: entry.key, status: result.status };
+    if (!exactResolvedEntry(result, entry)) return { key: entry.key, status: "unavailable" };
+    return { key: entry.key, status: "resolved", player: adaptPlayer(result.player!) };
+  });
 }
 
 /** Resolves only browser-owned V2 entries. The server's 100-entry hard limit is honored per request. */

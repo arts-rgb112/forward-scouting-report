@@ -1,9 +1,17 @@
 import type { ResolvedWatchlistEntry } from "../api/watchlistResolveApi";
-import type { DatasetRouteState, SortState, Player } from "./types";
-import type { WatchlistEntry } from "./watchlistStorage";
+import type { DatasetRouteState, MetricKey, SortState, Player, Tier } from "./types";
+import type { WatchlistEntry, WatchlistSnapshot } from "./watchlistStorage";
 
 export const WATCHLIST_PAGE_SIZE = 50;
-export type WatchlistRow = { key: string; entry: WatchlistEntry; player?: Player; status?: ResolvedWatchlistEntry["status"] };
+export type WatchlistProfile = {
+  name: string; position: string; clubName: string; leagueName?: string; face?: string | null;
+  archetype?: Player["archetype"]; age?: number | null; minutes?: number; score?: number; tier?: Tier;
+  stats?: Partial<Record<MetricKey, number>>;
+};
+export type WatchlistRow = {
+  key: string; entry: WatchlistEntry; player?: Player; profile: WatchlistProfile;
+  source: "current" | "snapshot" | "legacy-partial"; status?: ResolvedWatchlistEntry["status"];
+};
 export type WatchlistFilters = { query: string; role: string; position: string; sort: SortState };
 
 export function datasetStateFromWatchlistEntry(entry: WatchlistEntry): DatasetRouteState {
@@ -18,10 +26,28 @@ export function watchlistContextLabel(entry: WatchlistEntry): string {
     : `${entry.context.season} · Europe · ${(entry.context.competition ?? "all").toUpperCase()}`;
 }
 
+function profileFromSnapshot(snapshot: WatchlistSnapshot): WatchlistProfile {
+  return {
+    name: snapshot.name, position: snapshot.position, clubName: snapshot.clubName, leagueName: snapshot.leagueName,
+    face: snapshot.face, archetype: snapshot.archetype, age: snapshot.age, minutes: snapshot.minutes,
+    score: snapshot.score, tier: snapshot.tier, stats: snapshot.stats,
+  };
+}
+function profileFromPlayer(player: Player): WatchlistProfile {
+  return {
+    name: player.name, position: player.position, clubName: player.club.name, leagueName: player.league.name,
+    face: player.face, archetype: player.archetype, age: player.age, minutes: player.minutes,
+    score: player.score, tier: player.tier, stats: player.stats,
+  };
+}
+
 export function watchlistRows(entries: readonly WatchlistEntry[], resolved: Readonly<Record<string, ResolvedWatchlistEntry>>): WatchlistRow[] {
   return entries.map((entry) => {
     const current = resolved[entry.key];
-    return { key: entry.key, entry, player: current?.player, status: current?.status };
+    // Only an exact-key, well-formed resolved player is current server data. Every other
+    // response state falls back to the immutable browser-owned snapshot.
+    if (current?.status === "resolved" && current.player) return { key: entry.key, entry, player: current.player, profile: profileFromPlayer(current.player), source: "current", status: current.status };
+    return { key: entry.key, entry, profile: profileFromSnapshot(entry.snapshot), source: entry.snapshot.profile === "complete" ? "snapshot" : "legacy-partial", status: current?.status };
   });
 }
 
@@ -37,20 +63,21 @@ const compareNullable = (left: number | null | undefined, right: number | null |
 export function filterAndSortWatchlistRows(rows: readonly WatchlistRow[], filters: WatchlistFilters): WatchlistRow[] {
   const needle = filters.query.trim().toLocaleLowerCase();
   const filtered = rows.filter((row) => {
-    const player = row.player;
-    const searchable = [player?.name ?? row.entry.snapshot.name, player?.club.name ?? row.entry.snapshot.clubName, player?.league.name ?? row.entry.snapshot.leagueName, player?.position ?? row.entry.snapshot.position].map(text).join(" ");
+    const profile = row.profile;
+    const searchable = [profile.name, profile.clubName, profile.leagueName, profile.position].map(text).join(" ");
     if (needle && !searchable.includes(needle)) return false;
-    if (filters.role !== "ALL" && player?.archetype !== filters.role) return false;
-    return filters.position === "ALL" || (player?.position ?? row.entry.snapshot.position) === filters.position;
+    if (filters.role !== "ALL" && profile.archetype !== filters.role) return false;
+    return filters.position === "ALL" || profile.position === filters.position;
   });
-  return [...filtered].sort((left, right) => {
-    const a = left.player; const b = right.player;
-    if (filters.sort.key === "name") return (a?.name ?? left.entry.snapshot.name).localeCompare(b?.name ?? right.entry.snapshot.name) * (filters.sort.direction === "asc" ? 1 : -1);
-    if (filters.sort.key === "age") return compareNullable(a?.age, b?.age, filters.sort.direction);
-    const aValue = filters.sort.key === "score" ? (a?.score ?? left.entry.snapshot.score) : a?.stats[filters.sort.key];
-    const bValue = filters.sort.key === "score" ? (b?.score ?? right.entry.snapshot.score) : b?.stats[filters.sort.key];
-    return compareNullable(aValue, bValue, filters.sort.direction);
-  });
+  // Array.sort is stable in supported browsers; preserve the incoming storage order on ties.
+  return filtered.map((row, index) => ({ row, index })).sort((left, right) => {
+    const a = left.row.profile; const b = right.row.profile;
+    let comparison: number;
+    if (filters.sort.key === "name") comparison = a.name.localeCompare(b.name) * (filters.sort.direction === "asc" ? 1 : -1);
+    else if (filters.sort.key === "age") comparison = compareNullable(a.age, b.age, filters.sort.direction);
+    else comparison = compareNullable(filters.sort.key === "score" ? a.score : a.stats?.[filters.sort.key], filters.sort.key === "score" ? b.score : b.stats?.[filters.sort.key], filters.sort.direction);
+    return comparison || left.index - right.index;
+  }).map(({ row }) => row);
 }
 
 export function watchlistPage(rows: readonly WatchlistRow[], page: number) {
