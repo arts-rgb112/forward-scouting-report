@@ -4,6 +4,8 @@ export const tierCodes = ["diamond", "platinum", "gold", "silver", "bronze", "ir
 export type TierCode = (typeof tierCodes)[number];
 export type SortKey = "score" | "name" | "age" | MetricKey;
 export type SortState = { key: SortKey; direction: "asc" | "desc" };
+export type AgeBand = "all" | "u23" | "23-25" | "26-30" | "31-plus";
+export type MinutesBand = "all" | "200-499" | "500-999" | "1000-1499" | "1500-1999" | "2000-2999" | "3000-plus";
 export type DatasetMode = "league" | "europe";
 export type CompetitionCode = "all" | "ucl" | "uel" | "uecl";
 export type DatasetRouteState = { season: string; mode: DatasetMode; scope: 3 | 5 | 7; competition: CompetitionCode };
@@ -21,11 +23,11 @@ export type DatasetMeta = {
   /** `totalItems` is the paged v2 total; `population` remains the v2.0-compatible name. */
   totalItems?: number; returned: number; generatedAt: string; source: "messi-static-cohort"; mode?: DatasetMode; competition?: CompetitionCode | null;
   /** Server-owned filter echo. It may gain fields without requiring a client release. */
-  applied?: { position?: string | null; [key: string]: unknown };
+  applied?: { position?: string | null; ageBand?: AgeBand | null; minutesBand?: MinutesBand | null; [key: string]: unknown };
 };
 export type ServerPageMeta = { page: number; pageSize: number; totalPages: number; hasNextPage: boolean };
 export type PlayersPayload = { players: Player[]; meta: DatasetMeta; serverPage?: ServerPageMeta };
-export type LeaderboardSearch = { page: number; pageSize: number; q: string; role: "all" | "Type A" | "Type B"; position: string; sort: SortKey; direction: "asc" | "desc" };
+export type LeaderboardSearch = { page: number; pageSize: number; q: string; role: "all" | "Type A" | "Type B"; position: string; ageBand: AgeBand; minutesBand: MinutesBand; sort: SortKey; direction: "asc" | "desc" };
 export type PositionFilterCapability = "unknown" | "supported" | "unsupported";
 export type RadarAxis = { id: string; label: string; score: number; percentile: number | null; rank: number | null; population: number; rawValue: number | null; tier: "S" | "A" | "B" | "C" | "D"; imputed: boolean };
 export type PlayerAnalysis = { score: { value: number; rank: number | null; topPercent: number | null; population: number; archetype: "Type A" | "Type B" }; volumeRadar: { kind: "volume"; axes: RadarAxis[] }; ratioRadar: { kind: "ratio"; axes: RadarAxis[] }; rawMetrics: Record<string, number | null>; spatial: { available: boolean; heatmapPointCount: number; inBoxRatio: number | null; outBoxFinalRatio: number | null; midThirdRatio: number | null; finalThirdRatio: number | null; ccaAreaPct: number | null; laneRatios: number[]; dangerZoneDensity: number | null; deepBoxZoneScore: number | null } };

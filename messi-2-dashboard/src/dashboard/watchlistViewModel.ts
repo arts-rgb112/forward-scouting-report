@@ -1,5 +1,5 @@
 import type { ResolvedWatchlistEntry } from "../api/watchlistResolveApi";
-import type { DatasetRouteState, MetricKey, SortState, Player, Tier } from "./types";
+import type { AgeBand, DatasetRouteState, MetricKey, MinutesBand, SortState, Player, Tier } from "./types";
 import type { WatchlistEntry, WatchlistSnapshot } from "./watchlistStorage";
 
 export const WATCHLIST_PAGE_SIZE = 50;
@@ -12,7 +12,7 @@ export type WatchlistRow = {
   key: string; entry: WatchlistEntry; player?: Player; profile: WatchlistProfile;
   source: "current" | "snapshot" | "legacy-partial"; status?: ResolvedWatchlistEntry["status"];
 };
-export type WatchlistFilters = { query: string; role: string; position: string; sort: SortState };
+export type WatchlistFilters = { query: string; role: string; position: string; ageBand?: AgeBand; minutesBand?: MinutesBand; sort: SortState };
 
 export function datasetStateFromWatchlistEntry(entry: WatchlistEntry): DatasetRouteState {
   return entry.context.mode === "league"
@@ -58,16 +58,37 @@ const compareNullable = (left: number | null | undefined, right: number | null |
   if (right == null) return -1;
   return direction === "asc" ? left - right : right - left;
 };
+function matchesAgeBand(age: number | null | undefined, band: AgeBand) {
+  if (band === "all") return true;
+  if (age == null) return false;
+  if (band === "u23") return age <= 22;
+  if (band === "23-25") return age >= 23 && age <= 25;
+  if (band === "26-30") return age >= 26 && age <= 30;
+  return age >= 31;
+}
+function matchesMinutesBand(minutes: number | undefined, band: MinutesBand) {
+  if (band === "all") return true;
+  if (minutes == null) return false;
+  if (band === "200-499") return minutes >= 200 && minutes <= 499;
+  if (band === "500-999") return minutes >= 500 && minutes <= 999;
+  if (band === "1000-1499") return minutes >= 1000 && minutes <= 1499;
+  if (band === "1500-1999") return minutes >= 1500 && minutes <= 1999;
+  if (band === "2000-2999") return minutes >= 2000 && minutes <= 2999;
+  return minutes >= 3000;
+}
 
 /** Local-only filtering: roles are archetypes, while position comes from the saved/current context row. */
 export function filterAndSortWatchlistRows(rows: readonly WatchlistRow[], filters: WatchlistFilters): WatchlistRow[] {
+  const ageBand = filters.ageBand ?? "all";
+  const minutesBand = filters.minutesBand ?? "all";
   const needle = filters.query.trim().toLocaleLowerCase();
   const filtered = rows.filter((row) => {
     const profile = row.profile;
     const searchable = [profile.name, profile.clubName, profile.leagueName, profile.position].map(text).join(" ");
     if (needle && !searchable.includes(needle)) return false;
     if (filters.role !== "ALL" && profile.archetype !== filters.role) return false;
-    return filters.position === "ALL" || profile.position === filters.position;
+    if (filters.position !== "ALL" && profile.position !== filters.position) return false;
+    return matchesAgeBand(profile.age, ageBand) && matchesMinutesBand(profile.minutes, minutesBand);
   });
   // Array.sort is stable in supported browsers; preserve the incoming storage order on ties.
   return filtered.map((row, index) => ({ row, index })).sort((left, right) => {
