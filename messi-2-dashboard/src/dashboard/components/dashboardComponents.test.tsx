@@ -12,6 +12,7 @@ import { DashboardToolbar } from "./DashboardToolbar";
 import { DatasetHeader } from "./DatasetHeader";
 import { PlayerCardList } from "./PlayerCardList";
 import { PlayerTable } from "./PlayerTable";
+import { ScoreLegend } from "./ScoreLegend";
 import type { LeaderboardOptions } from "../types";
 
 afterEach(() => {
@@ -27,6 +28,13 @@ describe("asset nullability", () => {
 });
 
 describe("dashboard contract UI", () => {
+  it("shows only six ability score ranges in the legend", () => {
+    render(<ScoreLegend />);
+    expect(screen.getByLabelText("Ability score legend")).toHaveTextContent("90–100");
+    expect(screen.getAllByLabelText(/Ability score range/)).toHaveLength(6);
+    expect(screen.queryByText("Diamond")).not.toBeInTheDocument();
+    expect(screen.queryByText("Iron")).not.toBeInTheDocument();
+  });
   it("does not debounce an unchanged query when the parent callback is recreated", () => {
     vi.useFakeTimers();
     const first = vi.fn();
@@ -81,10 +89,11 @@ describe("dashboard contract UI", () => {
 
   it("keeps one visible, accessible set of table sort controls", () => {
     const { container } = render(<PlayerTable players={samplePlayers} comparedIds={new Set()} watchedIds={new Set()} sort={{ key: "score", direction: "desc" }} onMetricSort={vi.fn()} onToggleCompare={vi.fn()} onToggleWatch={vi.fn()} />);
-    expect(container.querySelectorAll("thead button")).toHaveLength(6);
+    expect(container.querySelectorAll("thead button")).toHaveLength(7);
     expect(container.querySelectorAll("[aria-hidden] button")).toHaveLength(0);
     expect(container.querySelectorAll("button[aria-sort]")).toHaveLength(0);
-    expect(container.querySelectorAll("th[aria-sort]")).toHaveLength(6);
+    expect(container.querySelectorAll("th[aria-sort]")).toHaveLength(7);
+    expect(screen.getByRole("button", { name: "Sort by M.E.S.S.I. score descending" })).toBeInTheDocument();
   });
 
   it("keeps loading skeletons free of focusable controls", () => {
@@ -104,11 +113,26 @@ describe("dashboard contract UI", () => {
     expect(container.querySelectorAll("[role='option'] a, [role='option'] button")).toHaveLength(0);
   });
 
-  it("shows the complete position chip layout without filtering a server page locally", () => {
+  it("exposes M.E.S.S.I. score sorting through the header with exact aria-sort", () => {
+    const sort = vi.fn();
+    const view = render(<PlayerTable players={samplePlayers} sort={{ key: "score", direction: "desc" }} onMetricSort={sort} onToggleWatch={vi.fn()} />);
+    const scoreHeader = screen.getByRole("columnheader", { name: /M.E.S.S.I./ });
+    expect(scoreHeader).toHaveAttribute("aria-sort", "descending");
+    fireEvent.click(screen.getByRole("button", { name: "Sort by M.E.S.S.I. score descending" }));
+    expect(sort).toHaveBeenCalledWith("score");
+    view.rerender(<PlayerTable players={samplePlayers} sort={{ key: "score", direction: "asc" }} onMetricSort={sort} onToggleWatch={vi.fn()} />);
+    expect(screen.getByRole("columnheader", { name: /M.E.S.S.I./ })).toHaveAttribute("aria-sort", "ascending");
+  });
+
+  it("uses gated compact selects without toolbar sorting controls", () => {
     render(<DashboardToolbar query="" role="ALL" position="ALL" positionCapability="unsupported" sort="score" watchOnly={false} watchCount={0} resultLabel="2 shown · 2 results" hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={vi.fn()} onRoleChange={vi.fn()} onPositionChange={vi.fn()} onSortChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "All positions" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Center Back" })).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent("Detailed position filters are unavailable from this server.");
+    expect(screen.getByLabelText("Position")).toBeInTheDocument();
+    expect(screen.getByLabelText("Age")).toBeInTheDocument();
+    expect(screen.getByLabelText("Minutes played")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Center Back" })).toBeDisabled();
+    expect(screen.queryByLabelText("Sort")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Sort direction")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Position filters are unavailable from this server.");
   });
 });
 

@@ -45,6 +45,8 @@ export async function fetchLeaderboard(config: MessiApiConfig, state: DatasetRou
   if (search.q) params.set("q", search.q);
   if (search.role !== "all") params.set("role", search.role);
   if (search.position !== "ALL") params.set("position", search.position);
+  if (search.ageBand !== "all") params.set("ageBand", search.ageBand);
+  if (search.minutesBand !== "all") params.set("minutesBand", search.minutesBand);
   url.search = params.toString();
   try {
     const json = await getJson(url.toString(), signal);

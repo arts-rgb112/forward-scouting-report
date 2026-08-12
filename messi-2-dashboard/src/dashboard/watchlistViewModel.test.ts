@@ -40,4 +40,13 @@ describe("watchlist view model", () => {
     const sorted = filterAndSortWatchlistRows(watchlistRows([noAge, saved], {}), { query: "", role: "ALL", position: "ALL", sort: { key: "age", direction: "desc" } });
     expect(sorted.map((row) => row.key)).toEqual([saved.key, noAge.key]);
   });
+
+  it("filters resolved and complete snapshot age/minutes locally while excluding partial data", () => {
+    const younger = entryFromPlayer({ ...samplePlayers[0], age: 22, minutes: 1200 }, league);
+    const older = entryFromPlayer({ ...samplePlayers[1], age: 31, minutes: 3000 }, league);
+    const partial = { ...younger, key: "legacy", snapshot: { name: "Old", position: "CF", clubName: "Club", profile: "legacy-partial" as const } };
+    const rows = watchlistRows([younger, older, partial], {});
+    expect(filterAndSortWatchlistRows(rows, { query: "", role: "ALL", position: "ALL", ageBand: "u23", minutesBand: "1000-1499", sort: { key: "score", direction: "desc" } }).map((row) => row.key)).toEqual([younger.key]);
+    expect(filterAndSortWatchlistRows(rows, { query: "", role: "ALL", position: "ALL", ageBand: "all", minutesBand: "all", sort: { key: "score", direction: "desc" } })).toHaveLength(3);
+  });
 });

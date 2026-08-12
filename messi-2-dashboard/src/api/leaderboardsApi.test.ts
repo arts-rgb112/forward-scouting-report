@@ -11,7 +11,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("leaderboard API pagination", () => {
   it("always sends pageSize=50 even when a stale caller supplies 250", async () => {
     const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(payload), { headers: { "Content-Type": "application/json" } }));
-    const result = await fetchLeaderboard(config, { season: "2025/2026", mode: "league", scope: 7, competition: "all" }, { page: 1, pageSize: 250, q: "", role: "all", position: "ALL", sort: "score", direction: "desc" }, new AbortController().signal);
+    const result = await fetchLeaderboard(config, { season: "2025/2026", mode: "league", scope: 7, competition: "all" }, { page: 1, pageSize: 250, q: "", role: "all", position: "ALL", ageBand: "all", minutesBand: "all", sort: "score", direction: "desc" }, new AbortController().signal);
     expect(new URL(String(request.mock.calls[0][0])).searchParams.get("pageSize")).toBe("50");
     expect(result.players).toHaveLength(1);
     expect(result.serverPage?.pageSize).toBe(50);

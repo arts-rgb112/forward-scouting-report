@@ -21,4 +21,9 @@ describe("dataset route serialization", () => {
     expect(search.pageSize).toBe(PAGE_SIZE);
     expect(leaderboardHref(fallback, { ...search, pageSize: 250 })).toContain("pageSize=50");
   });
+
+  it("normalizes all age/minutes bands out of the URL and retains valid non-default bands", () => {
+    expect(leaderboardSearchFromSearch("?ageBand=u23&minutesBand=1000-1499")).toMatchObject({ ageBand: "u23", minutesBand: "1000-1499" });
+    expect(leaderboardHref(fallback, { ...leaderboardSearchFromSearch(""), ageBand: "all", minutesBand: "all" })).not.toMatch(/ageBand|minutesBand/);
+  });
 });

@@ -19,6 +19,11 @@ export function positionWasApplied(meta: DatasetMeta, requested: string) {
   if (!meta.applied || !Object.hasOwn(meta.applied, "position")) return false;
   return requested === "ALL" ? meta.applied.position === null || meta.applied.position === "ALL" : meta.applied.position === requested;
 }
+export function bandWasApplied(meta: DatasetMeta, key: "ageBand" | "minutesBand", requested: string) {
+  if (!meta.applied || !Object.hasOwn(meta.applied, key)) return false;
+  const applied = meta.applied[key];
+  return requested === "all" ? applied === null || applied === "all" : applied === requested;
+}
 
 export function PlayersResourceContainer() {
   const [state, dispatch] = useReducer(playersResourceReducer, { type: "idle" });
@@ -30,9 +35,13 @@ export function PlayersResourceContainer() {
   const [dataset, setDataset] = useState<DatasetRouteState>(() => parsed.config ? routeFromUrl(parsed.config) : { season: "2025/2026", mode: "league", scope: 7, competition: "all" });
   const [search, setSearch] = useState<LeaderboardSearch>(() => leaderboardSearchFromSearch(window.location.search));
   const [positionCapability, setPositionCapability] = useState<PositionFilterCapability>("unknown");
+  const [ageCapability, setAgeCapability] = useState<PositionFilterCapability>("unknown");
+  const [minutesCapability, setMinutesCapability] = useState<PositionFilterCapability>("unknown");
   const datasetRef = useRef(dataset); datasetRef.current = dataset;
   const searchRef = useRef(search); searchRef.current = search;
   const positionCapabilityRef = useRef(positionCapability); positionCapabilityRef.current = positionCapability;
+  const ageCapabilityRef = useRef(ageCapability); ageCapabilityRef.current = ageCapability;
+  const minutesCapabilityRef = useRef(minutesCapability); minutesCapabilityRef.current = minutesCapability;
   const routeKey = leaderboardHref(dataset, search);
 
   const writeRoute = useCallback((next: DatasetRouteState, nextSearch: LeaderboardSearch, replace = false) => {
@@ -54,6 +63,14 @@ export function PlayersResourceContainer() {
     writeRoute(dataset, { ...search, position: "ALL", page: 1 }, true);
   }, [dataset, positionCapability, search, writeRoute]);
   useEffect(() => {
+    if (ageCapability === "supported" || search.ageBand === "all") return;
+    writeRoute(dataset, { ...search, ageBand: "all", page: 1 }, true);
+  }, [ageCapability, dataset, search, writeRoute]);
+  useEffect(() => {
+    if (minutesCapability === "supported" || search.minutesBand === "all") return;
+    writeRoute(dataset, { ...search, minutesBand: "all", page: 1 }, true);
+  }, [dataset, minutesCapability, search, writeRoute]);
+  useEffect(() => {
     if (!parsed.config) return;
     const onPopState = () => {
       const next = routeFromUrl(parsed.config!);
@@ -73,7 +90,13 @@ export function PlayersResourceContainer() {
     controller.current?.abort(); const abort = new AbortController(); controller.current = abort; const requestId = ++request.current;
     dispatch({ type: "start", requestId, previous: stablePayload(stateRef.current) });
     try {
-      const requestSearch = positionCapabilityRef.current === "supported" ? nextSearch : { ...nextSearch, position: "ALL", page: nextSearch.position === "ALL" ? nextSearch.page : 1 };
+      const requestSearch = {
+        ...nextSearch,
+        position: positionCapabilityRef.current === "supported" ? nextSearch.position : "ALL",
+        ageBand: ageCapabilityRef.current === "supported" ? nextSearch.ageBand : "all",
+        minutesBand: minutesCapabilityRef.current === "supported" ? nextSearch.minutesBand : "all",
+        page: nextSearch.position !== "ALL" && positionCapabilityRef.current !== "supported" || nextSearch.ageBand !== "all" && ageCapabilityRef.current !== "supported" || nextSearch.minutesBand !== "all" && minutesCapabilityRef.current !== "supported" ? 1 : nextSearch.page,
+      };
       const payload = await fetchLeaderboard(parsed.config, next, requestSearch, abort.signal);
       if (request.current !== requestId || abort.signal.aborted) return;
       if (payload.serverPage && positionCapabilityRef.current !== "unsupported") {
@@ -87,6 +110,8 @@ export function PlayersResourceContainer() {
           return;
         }
       }
+      if (payload.serverPage && ageCapabilityRef.current !== "unsupported") setAgeCapability(bandWasApplied(payload.meta, "ageBand", requestSearch.ageBand) ? "supported" : "unsupported");
+      if (payload.serverPage && minutesCapabilityRef.current !== "unsupported") setMinutesCapability(bandWasApplied(payload.meta, "minutesBand", requestSearch.minutesBand) ? "supported" : "unsupported");
       setResolvedRouteKey(requestRouteKey);
       dispatch({ type: "resolve", requestId, payload });
     }
@@ -162,6 +187,7 @@ export function PlayersResourceContainer() {
   const handleRefresh = useCallback(() => { void load(); }, [load]);
   const handleDatasetChange = useCallback((next: DatasetRouteState) => {
     setPositionCapability("unknown");
+    setAgeCapability("unknown"); setMinutesCapability("unknown");
     writeRoute(next, { ...searchRef.current, page: 1 });
   }, [writeRoute]);
   const handleSearchChange = useCallback((next: LeaderboardSearch, replace?: boolean) => {
@@ -172,5 +198,5 @@ export function PlayersResourceContainer() {
   const retry = () => { if (dataset.mode === "europe") probeOptions(); else void load(); };
   if (state.type === "error" && !state.previous) return <DashboardDataFallback error={state.error} onRetry={retry} />;
   const payload = state.type === "error" ? state.previous! : state.payload;
-  return <MessiScoutingDashboard players={payload.players} meta={payload.meta} serverPage={payload.serverPage} search={search} positionCapability={positionCapability} page={search.page} onPageChange={handlePageChange} refreshing={state.type === "refreshing"} onRefresh={handleRefresh} refreshWarning={state.type === "error" ? <DashboardDataFallback error={state.error} hasPrevious onRetry={retry} /> : undefined} dataset={dataset} options={options} onDatasetChange={handleDatasetChange} onSearchChange={handleSearchChange} apiConfig={parsed.config} />;
+  return <MessiScoutingDashboard players={payload.players} meta={payload.meta} serverPage={payload.serverPage} search={search} positionCapability={positionCapability} ageCapability={ageCapability} minutesCapability={minutesCapability} page={search.page} onPageChange={handlePageChange} refreshing={state.type === "refreshing"} onRefresh={handleRefresh} refreshWarning={state.type === "error" ? <DashboardDataFallback error={state.error} hasPrevious onRetry={retry} /> : undefined} dataset={dataset} options={options} onDatasetChange={handleDatasetChange} onSearchChange={handleSearchChange} apiConfig={parsed.config} />;
 }

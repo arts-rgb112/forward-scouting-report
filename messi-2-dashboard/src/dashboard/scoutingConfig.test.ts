@@ -2,6 +2,6 @@ import { describe, expect, it } from "vitest";
 import { getScoreBand } from "./scoutingConfig";
 
 describe("getScoreBand", () => {
-  it.each([[100, "엘리트"], [90, "엘리트"], [89, "우수"], [80, "우수"], [79, "보통"], [70, "보통"], [69, "보완"], [0, "보완"]] as const)("maps %s to %s", (score, label) => expect(getScoreBand(score).label).toBe(label));
-  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])("handles invalid %s defensively", (score) => expect(getScoreBand(score).label).toBe("보완"));
+  it.each([[100, "90–100"], [90, "90–100"], [89, "80–89"], [80, "80–89"], [79, "70–79"], [70, "70–79"], [69, "60–69"], [60, "60–69"], [59, "50–59"], [50, "50–59"], [49, "0–49"], [0, "0–49"]] as const)("maps %s to %s", (score, rangeLabel) => expect(getScoreBand(score).rangeLabel).toBe(rangeLabel));
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])("uses the stone fallback for invalid %s", (score) => expect(getScoreBand(score).rangeLabel).toBe("0–49"));
 });

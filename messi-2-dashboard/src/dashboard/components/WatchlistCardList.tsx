@@ -1,4 +1,5 @@
 import { metricConfig, metricKeys } from "../scoutingConfig";
+import type { SortState } from "../types";
 import type { WatchlistRow } from "../watchlistViewModel";
 import { datasetStateFromWatchlistEntry, watchlistContextLabel } from "../watchlistViewModel";
 import { enabledLegacyHref, legacyDetailHref } from "../../navigation/legacyHandoff";
@@ -6,7 +7,7 @@ import { datasetHref } from "../datasetRoute";
 import { MetricScore } from "./MetricScore";
 import { TierBadge } from "./TierBadge";
 
-type Props = { rows: readonly WatchlistRow[]; onRemove(key: string): void; onRetry(): void };
+type Props = { rows: readonly WatchlistRow[]; onRemove(key: string): void; onRetry(): void; sort?: SortState; onScoreSort?(): void };
 
 function profileHref(row: WatchlistRow) {
   const state = datasetStateFromWatchlistEntry(row.entry);
@@ -18,8 +19,9 @@ function sourceBadge(row: WatchlistRow) {
   return <span className="rounded border border-white/15 px-2 py-1 text-[9px] font-bold text-zinc-400">이전 형식 저장</span>;
 }
 
-export function WatchlistCardList({ rows, onRemove, onRetry }: Props) {
-  return <section className="space-y-2 md:hidden" aria-label="Saved player contexts">{rows.map((row) => {
+export function WatchlistCardList({ rows, onRemove, onRetry, sort = { key: "score", direction: "desc" }, onScoreSort }: Props) {
+  const scoreOrder = sort.key === "score" && sort.direction === "asc" ? "ascending" : "descending";
+  return <section className="space-y-2 md:hidden" aria-label="Saved player contexts"><button type="button" onClick={onScoreSort} aria-label={`Sort by M.E.S.S.I. score ${scoreOrder}`} className="min-h-11 rounded border border-white/10 bg-[#0d1112] px-3 text-xs font-bold text-zinc-300">M.E.S.S.I. score {scoreOrder === "ascending" ? "↑" : "↓"}</button>{rows.map((row) => {
     const profile = row.profile;
     if (row.source === "legacy-partial") return <article key={row.key} className="rounded-lg border border-amber-300/20 bg-[#0d1112] p-3"><a href={profileHref(row)} className="block truncate font-bold hover:text-lime-300">{profile.name}</a><p className="mt-1 text-xs text-zinc-400">이전 형식으로 저장되어 지표·나이·출전 시간이 없습니다.</p><p className="mt-1 text-[10px] text-zinc-500">{watchlistContextLabel(row.entry)}</p><div className="mt-3 grid grid-cols-3 gap-2"><button type="button" onClick={onRetry} className="min-h-11 rounded border border-white/10 text-xs">Retry Resolve</button><a href={profileHref(row)} className="inline-flex min-h-11 items-center justify-center rounded border border-white/10 text-xs">Detail</a><button type="button" onClick={() => onRemove(row.key)} className="min-h-11 rounded border border-white/10 text-xs">Remove</button></div></article>;
     const snapshot = row.source === "snapshot";
