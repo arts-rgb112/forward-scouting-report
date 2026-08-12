@@ -1,4 +1,4 @@
-import type { DatasetRouteState, Player } from "./types";
+import type { DatasetRouteState, MetricKey, Player, Tier } from "./types";
 
 /** The former ID-only key is deliberately read-only: never overwrite it. */
 export const LEGACY_WATCHLIST_KEY = "messi-2-watchlist";
@@ -10,12 +10,28 @@ export type WatchContext = {
   scope: 3 | 5 | 7 | null;
   competition: "all" | "ucl" | "uel" | "uecl" | null;
 };
+export type WatchlistSnapshot = {
+  /** Summary-only V2 entries remain usable, but are deliberately not presented as full profiles. */
+  profile?: "complete" | "legacy-partial";
+  name: string;
+  position: string;
+  clubName: string;
+  leagueName?: string;
+  face?: string | null;
+  score?: number;
+  tierLabel?: string;
+  archetype?: Player["archetype"];
+  age?: number | null;
+  minutes?: number;
+  tier?: Tier;
+  stats?: Partial<Record<MetricKey, number>>;
+};
 export type WatchlistEntry = {
   version: 2;
   key: string;
   namespace: "fotmob";
   playerId: number;
-  snapshot: { name: string; position: string; clubName: string; leagueName?: string; face?: string | null; score?: number; tierLabel?: string };
+  snapshot: WatchlistSnapshot;
   context: WatchContext;
   savedAt: string;
 };
@@ -34,10 +50,46 @@ const validContext = (value: unknown): value is WatchContext => {
   const context = value as Record<string, unknown>;
   return typeof context.season === "string" && (context.mode === "league" || context.mode === "europe") && (context.scope === null || validScope(context.scope)) && validCompetition(context.competition);
 };
+const metricNames: readonly MetricKey[] = ["outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"];
+const validTier = (value: unknown): value is Tier => {
+  if (!value || typeof value !== "object") return false;
+  const tier = value as Record<string, unknown>;
+  return typeof tier.code === "string" && typeof tier.level === "number" && typeof tier.label === "string";
+};
+const validCompleteSnapshot = (snapshot: Record<string, unknown>): boolean =>
+  (snapshot.profile === "complete" || snapshot.profile === undefined)
+  && (snapshot.archetype === "Type A" || snapshot.archetype === "Type B")
+  && (typeof snapshot.age === "number" || snapshot.age === null)
+  && typeof snapshot.minutes === "number"
+  && typeof snapshot.score === "number"
+  && validTier(snapshot.tier)
+  && Boolean(snapshot.stats && typeof snapshot.stats === "object" && metricNames.every((key) => typeof (snapshot.stats as Record<string, unknown>)[key] === "number"));
+const normalizeSnapshot = (value: unknown): WatchlistSnapshot | null => {
+  if (!value || typeof value !== "object") return null;
+  const snapshot = value as Record<string, unknown>;
+  if (typeof snapshot.name !== "string" || typeof snapshot.position !== "string" || typeof snapshot.clubName !== "string") return null;
+  const complete = validCompleteSnapshot(snapshot);
+  const stats = snapshot.stats && typeof snapshot.stats === "object"
+    ? Object.fromEntries(metricNames.filter((key) => typeof (snapshot.stats as Record<string, unknown>)[key] === "number").map((key) => [key, (snapshot.stats as Record<string, number>)[key]]))
+    : undefined;
+  return {
+    profile: complete ? "complete" : "legacy-partial",
+    name: snapshot.name, position: snapshot.position, clubName: snapshot.clubName,
+    ...(typeof snapshot.leagueName === "string" ? { leagueName: snapshot.leagueName } : {}),
+    ...(typeof snapshot.face === "string" || snapshot.face === null ? { face: snapshot.face } : {}),
+    ...(typeof snapshot.score === "number" ? { score: snapshot.score } : {}),
+    ...(typeof snapshot.tierLabel === "string" ? { tierLabel: snapshot.tierLabel } : {}),
+    ...(snapshot.archetype === "Type A" || snapshot.archetype === "Type B" ? { archetype: snapshot.archetype } : {}),
+    ...(typeof snapshot.age === "number" || snapshot.age === null ? { age: snapshot.age } : {}),
+    ...(typeof snapshot.minutes === "number" ? { minutes: snapshot.minutes } : {}),
+    ...(validTier(snapshot.tier) ? { tier: { ...snapshot.tier } } : {}),
+    ...(stats ? { stats } : {}),
+  };
+};
 const validEntry = (value: unknown): value is WatchlistEntry => {
   if (!value || typeof value !== "object") return false;
   const entry = value as Record<string, unknown>;
-  return entry.version === 2 && entry.namespace === "fotmob" && Number.isSafeInteger(entry.playerId) && typeof entry.key === "string" && typeof entry.savedAt === "string" && validContext(entry.context) && Boolean(entry.snapshot && typeof entry.snapshot === "object");
+  return entry.version === 2 && entry.namespace === "fotmob" && Number.isSafeInteger(entry.playerId) && typeof entry.key === "string" && typeof entry.savedAt === "string" && validContext(entry.context) && Boolean(normalizeSnapshot(entry.snapshot));
 };
 
 export function contextFromDataset(dataset: DatasetRouteState): WatchContext {
@@ -51,7 +103,16 @@ export function watchlistKey(playerId: number, context: WatchContext): string {
 }
 
 export function entryFromPlayer(player: Player, context: WatchContext, savedAt = new Date().toISOString()): WatchlistEntry {
-  return { version: 2, key: watchlistKey(player.id, context), namespace: "fotmob", playerId: player.id, snapshot: { name: player.name, position: player.position, clubName: player.club.name, leagueName: player.league.name, face: player.face, score: player.score, tierLabel: player.tier.label }, context, savedAt };
+  return {
+    version: 2, key: watchlistKey(player.id, context), namespace: "fotmob", playerId: player.id,
+    // Copy every nested value so later player-state changes cannot mutate the stored context.
+    snapshot: {
+      profile: "complete", name: player.name, position: player.position, archetype: player.archetype,
+      age: player.age, minutes: player.minutes, score: player.score, tier: { ...player.tier }, tierLabel: player.tier.label,
+      face: player.face, clubName: player.club.name, leagueName: player.league.name, stats: { ...player.stats },
+    },
+    context: { ...context }, savedAt,
+  };
 }
 
 export function emptyWatchlist(): WatchlistEnvelope {
@@ -82,7 +143,10 @@ export function parseWatchlist(raw: string | null): WatchlistEnvelope | null {
     if (!value || typeof value !== "object") return null;
     const candidate = value as Partial<WatchlistEnvelope>;
     if (candidate.version !== 2 || !Array.isArray(candidate.entries) || !Array.isArray(candidate.unresolvedLegacyIds)) return null;
-    const entries = [...new Map(candidate.entries.filter(validEntry).map((entry) => [entry.key, entry])).values()];
+    const entries = [...new Map(candidate.entries.filter(validEntry).map((entry) => {
+      const snapshot = normalizeSnapshot(entry.snapshot);
+      return [entry.key, { ...entry, context: { ...entry.context }, snapshot: snapshot! } satisfies WatchlistEntry];
+    })).values()];
     const entryKeys = new Set(entries.map((entry) => entry.key));
     return { version: 2, entries, unresolvedLegacyIds: [...new Set(candidate.unresolvedLegacyIds.filter((id): id is number => Number.isSafeInteger(id) && id > 0))], migration: candidate.migration?.legacyKey === LEGACY_WATCHLIST_KEY ? { legacyKey: LEGACY_WATCHLIST_KEY, migratedAt: typeof candidate.migration.migratedAt === "string" ? candidate.migration.migratedAt : null } : { legacyKey: LEGACY_WATCHLIST_KEY, migratedAt: null }, selectedEntryKeys: Array.isArray(candidate.selectedEntryKeys) ? [...new Set(candidate.selectedEntryKeys.filter((key): key is string => typeof key === "string" && entryKeys.has(key)))].slice(0, 2) : [] };
   } catch { return null; }
