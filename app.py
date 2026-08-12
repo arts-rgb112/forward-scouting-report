@@ -2,10 +2,12 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
+import base64
 import math
 import itertools
 import html
 import json
+from pathlib import Path
 from urllib.parse import quote
 
 from fotmob_client import FotMobError, PlayerCandidate, fetch_player_multi_season_data, search_players
@@ -28,6 +30,17 @@ _UNIFIED_BAR_COUNTER = itertools.count()
 # with the Google tag.  A Streamlit secret can override this default later
 # (for example, when messi.kr uses a separate production data stream).
 DEFAULT_GA_MEASUREMENT_ID = "G-8ZFS0ZM3NS"
+POSITIONAL_GRID_PITCH_PATH = Path(__file__).with_name("assets") / "positional-grid-pitch.webp"
+
+
+@st.cache_data(show_spinner=False)
+def positional_grid_pitch_uri() -> str | None:
+    """Load the supplied pitch design as an in-chart image, not a web URL."""
+    try:
+        encoded = base64.b64encode(POSITIONAL_GRID_PITCH_PATH.read_bytes()).decode("ascii")
+    except OSError:
+        return None
+    return f"data:image/webp;base64,{encoded}"
 
 st.set_page_config(page_title="Striker Decision Quality", page_icon="⚽", layout="wide")
 
@@ -1137,8 +1150,8 @@ def render_season_heatmap(
     cca_core, cca_hull = cca_core_region(points)
     st.markdown("#### 📍 시즌 활동 히트맵")
     st.caption(
-        "저장된 시즌 좌표를 기반으로 활동 밀도를 표시합니다. 공격 방향은 화면 왼쪽→오른쪽이며, "
-        "화면 아래는 우측 레인(Lane 1), 위는 좌측 레인(Lane 5)입니다. 5-Lane 막대와 같은 좌표 기준을 사용합니다."
+        "저장된 시즌 좌표를 6-depth × 5-lane 포지셔널 그리드에 표시합니다. 공격 방향은 화면 왼쪽→오른쪽이며, "
+        "화면 아래는 우측 레인(Lane 1), 위는 좌측 레인(Lane 5)입니다. 격자선과 공간 지표는 같은 구역 기준을 사용합니다."
     )
     if not points:
         st.caption("정적 히트맵 좌표 데이터가 아직 생성되지 않았습니다.")
@@ -1156,7 +1169,19 @@ def render_season_heatmap(
         )
     peak = float(density.max())
     normalized = density / peak if peak else density
-    figure = go.Figure(go.Heatmap(
+    figure = go.Figure()
+    pitch_uri = positional_grid_pitch_uri()
+    if pitch_uri:
+        # The asset has a small dark margin around the pitch and goal frames.
+        # These calibrated extents make its outer touchlines land exactly on
+        # the provider's x/y=0..100 coordinate system instead of stretching
+        # the activity coordinates to the bitmap canvas.
+        figure.add_layout_image(dict(
+            source=pitch_uri, x=-10.52, y=105.0, sizex=121.17, sizey=110.0,
+            xref="x", yref="y", xanchor="left", yanchor="top",
+            sizing="stretch", opacity=1.0, layer="below",
+        ))
+    figure.add_trace(go.Heatmap(
         z=normalized,
         x=((x_edges[:-1] + x_edges[1:]) / 2).tolist(),
         y=((y_edges[:-1] + y_edges[1:]) / 2).tolist(),
@@ -1171,12 +1196,6 @@ def render_season_heatmap(
         ],
         hovertemplate="활동 밀도 %{z:.0%}<extra></extra>",
     ))
-    line = {"color": "rgba(12,34,28,0.92)", "width": 1.3}
-    for x0, y0, x1, y1 in ((0, 0, 100, 100), (83, 21.1, 100, 78.9), (0, 21.1, 17, 78.9)):
-        fill = "#4d704c" if (x0, y0, x1, y1) == (0, 0, 100, 100) else "rgba(34,197,94,0.06)" if x0 == 83 else "rgba(0,0,0,0)"
-        figure.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=line, fillcolor=fill, layer="below")
-    figure.add_shape(type="line", x0=50, y0=0, x1=50, y1=100, line=line)
-    figure.add_shape(type="circle", x0=43, y0=43, x1=57, y1=57, line=line)
     if len(cca_hull) >= 3:
         outline_x = [point[0] for point in cca_hull] + [cca_hull[0][0]]
         outline_y = [point[1] for point in cca_hull] + [cca_hull[0][1]]
@@ -1185,12 +1204,23 @@ def render_season_heatmap(
             line={"color": "#38BDF8", "width": 2.2, "dash": "dash"},
             fill="toself", fillcolor="rgba(56,189,248,0.13)",
         ))
-    # SportsAPI Y=0 is the player's right touchline. Plotly's ordinary axis
-    # places that coordinate at the bottom, which matches the conventional
-    # viewer perspective for left-to-right attacking: right wing below, left
-    # wing above. Keep raw coordinates and only use that display orientation.
-    figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [0, 100], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.68, "fixedrange": True, "constrain": "domain"}, showlegend=False)
+    # The supplied pitch is 1.41:1 inside its touchlines.  Use that aspect
+    # instead of distorting its positional lines to the former generic pitch.
+    figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [-4, 104], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.709, "fixedrange": True, "constrain": "domain"}, showlegend=False)
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
+    if tactical_ratio:
+        zones = sorted(
+            (
+                (float(tactical_ratio.get(f"grid_d{depth}_l{lane}_ratio") or 0.0), depth, lane)
+                for depth in range(1, 7) for lane in range(1, 6)
+            ), reverse=True,
+        )[:3]
+        zone_text = " · ".join(
+            f"Depth {depth} × Lane {lane}: {value:.0f}%"
+            for value, depth, lane in zones if value > 0
+        )
+        if zone_text:
+            st.caption(f"주요 활동 구역(저장된 전체 시즌 좌표 기준): {zone_text}")
     if cca_core and cca_hull:
         st.caption(
             f"청록 점선은 CCA 핵심 반복 활동 영역입니다. 전체 {len(points)}개 좌표에서 반복 활동만 남긴 뒤, "

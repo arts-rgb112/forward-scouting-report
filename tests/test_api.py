@@ -149,6 +149,12 @@ def test_v2_europe_leaderboard_and_contextual_player_detail_contract():
     assert set(analysis) == {"score", "volumeRadar", "ratioRadar", "rawMetrics", "spatial"}
     assert len(analysis["volumeRadar"]["axes"]) == len(analysis["ratioRadar"]["axes"]) == 6
     assert all(0 <= axis["score"] <= 100 for axis in analysis["ratioRadar"]["axes"])
+    spatial = analysis["spatial"]
+    assert len(spatial["depthRatios"]) == 6
+    assert len(spatial["positionalGrid"]) == 30
+    assert {(cell["depth"], cell["lane"]) for cell in spatial["positionalGrid"]} == {
+        (depth, lane) for depth in range(1, 7) for lane in range(1, 6)
+    }
 
 
 def test_v2_unavailable_competition_is_not_silently_rendered_as_empty():

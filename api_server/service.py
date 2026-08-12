@@ -13,7 +13,7 @@ from .schemas import (
     LeaderboardPageEnvelope, MessiScoreAnalysis, PlayerAnalysis,
     PlayerComparisonEnvelope, PlayerDetailResponse, PlayerResponse,
     PlayersEnvelope, PlayerStats, PlayerTier, RadarAxis, RadarChart,
-    RawMetrics, SpatialAnalysis,
+    PositionalGridCell, RawMetrics, SpatialAnalysis,
     WatchlistResolveResult, WatchlistResolvedContext, WatchlistResolvedPlayer,
 )
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
@@ -310,6 +310,11 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
         inBoxRatio=value("in_box_ratio"), outBoxFinalRatio=value("out_box_final_ratio"),
         midThirdRatio=value("mid_third_ratio"), finalThirdRatio=value("final_third_ratio"),
         ccaAreaPct=value("cca_area_pct"), laneRatios=[value(f"lane_{index}_ratio") or 0.0 for index in range(1, 6)] if tactical else [],
+        depthRatios=[value(f"depth_{index}_ratio") or 0.0 for index in range(1, 7)] if tactical else [],
+        positionalGrid=[
+            PositionalGridCell(depth=depth, lane=lane, occupancyPct=value(f"grid_d{depth}_l{lane}_ratio") or 0.0)
+            for depth in range(1, 7) for lane in range(1, 6)
+        ] if tactical else [],
         dangerZoneDensity=value("danger_zone_density"), deepBoxZoneScore=value("deep_box_zone_score"),
     )
 

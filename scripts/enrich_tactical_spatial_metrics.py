@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.build_tactical_ratios import OUTPUT_FIELDS, core_activity_points, spatial_metrics
+from scripts.build_tactical_ratios import ACTIVITY_FILTER_VERSION, OUTPUT_FIELDS, core_activity_points, spatial_metrics
 
 
 CSV_PATH = ROOT / "data" / "tactical_3zone_ratio.csv"
@@ -30,12 +30,15 @@ def main() -> None:
     enriched = 0
     for row in rows:
         points = points_by_key.get(row.get("heatmap_key", ""), [])
-        if not isinstance(points, list) or not points:
-            continue
-        metrics = spatial_metrics(core_activity_points(points))
+        valid_points = points if isinstance(points, list) else []
+        metrics = spatial_metrics(
+            core_activity_points(valid_points), positional_points=valid_points,
+        )
         for field, value in metrics.items():
             row[field] = f"{value:.4f}"
-        enriched += 1
+        row["activity_filter"] = ACTIVITY_FILTER_VERSION
+        if valid_points:
+            enriched += 1
     fieldnames = list(dict.fromkeys([*OUTPUT_FIELDS, *(key for row in rows for key in row)]))
     with CSV_PATH.open("w", encoding="utf-8", newline="") as destination:
         writer = csv.DictWriter(destination, fieldnames=fieldnames, lineterminator="\n")
