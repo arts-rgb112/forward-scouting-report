@@ -8,12 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .schemas import (
-    HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
+    DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
     PlayerComparisonEnvelope, PlayerDetailEnvelope, PlayerEnvelope, PlayersEnvelope,
     WatchlistResolveEnvelope, WatchlistResolveRequest,
 )
 from .service import (
-    build_players, build_player_detail, compare_players, find_v2_player, leaderboard_options,
+    build_duel_spatial_analysis, build_players, build_player_detail, compare_players, find_v2_player, leaderboard_options,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_entries, supported_seasons,
 )
@@ -171,6 +171,27 @@ def get_player(
     if player is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     return PlayerDetailEnvelope(data=player)
+
+
+@app.get(
+    "/api/v2/players/{player_id}/duel-spatial",
+    response_model=DuelSpatialEnvelope,
+    tags=["players"],
+)
+def get_player_duel_spatial(
+    player_id: int,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7"] = Query(default="7"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+) -> DuelSpatialEnvelope:
+    """Return spatial-duel data only when complete event coordinates exist."""
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    analysis = build_duel_spatial_analysis(player_id, season, mode, int(scope), competition)
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+    return DuelSpatialEnvelope(data=analysis)
 
 
 @app.get("/api/v2/compare", response_model=PlayerComparisonEnvelope, tags=["players"])

@@ -270,6 +270,37 @@ class PlayerDetailEnvelope(BaseModel):
     data: PlayerDetailResponse
 
 
+class DuelSpatialAnalysis(BaseModel):
+    """Opt-in contract; kept outside strict PlayerAnalysis for v2 compatibility."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    season: str
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7] | None = None
+    competition: CompetitionCode | None = None
+    available: bool
+    appliedToMessiRating: bool
+    reason: Literal["event_coordinates_unavailable", "incomplete_event_coverage"] | None = None
+    gridVersion: Literal["positional-6x5-v1"] = "positional-6x5-v1"
+    coordinateSystem: Literal["0-100-attacking-left-to-right"] = "0-100-attacking-left-to-right"
+    groundWeightedWinsPer90: float | None = Field(default=None, ge=0)
+    aerialWeightedWinsPer90: float | None = Field(default=None, ge=0)
+    groundSpatialScore: float | None = Field(default=None, ge=0, le=100)
+    aerialSpatialScore: float | None = Field(default=None, ge=0, le=100)
+    groundBoxDuelsWon: int | None = Field(default=None, ge=0)
+    aerialBoxDuelsWon: int | None = Field(default=None, ge=0)
+    boxDuelsWon: int | None = Field(default=None, ge=0)
+    cohortPopulation: int = Field(default=0, ge=0)
+
+
+class DuelSpatialEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: DuelSpatialAnalysis
+
+
 class CompareMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
