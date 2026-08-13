@@ -508,6 +508,16 @@ def read_fotmob_map(path: Path) -> dict[str, str]:
         return {row["sportsapi_player_id"].strip(): row["fotmob_player_id"].strip() for row in csv.DictReader(source) if row.get("sportsapi_player_id") and row.get("fotmob_player_id")}
 
 
+def reverse_fotmob_map(id_map: dict[str, str]) -> dict[str, set[str]]:
+    """Index verified mappings in the direction used by cohort backfills."""
+    reversed_map: dict[str, set[str]] = {}
+    for sportsapi_id, fotmob_id in id_map.items():
+        sportsapi_id, fotmob_id = sportsapi_id.strip(), fotmob_id.strip()
+        if sportsapi_id and fotmob_id:
+            reversed_map.setdefault(fotmob_id, set()).add(sportsapi_id)
+    return reversed_map
+
+
 def _normalise_name(value: str) -> str:
     """Compare names across providers without losing accented letters.
 
@@ -679,6 +689,7 @@ MISSING_SESSION_FIELDS = [
 def missing_static_cohort_sessions(
     output: list[dict[str, Any]], cohort_rows: list[dict[str, str]] | None = None,
     visual_points: dict[str, list[list[float]]] | None = None,
+    failure_reasons: dict[tuple[str, str, str], str] | None = None,
 ) -> list[dict[str, str]]:
     """List every static comparison session without a stored heatmap.
 
@@ -732,10 +743,8 @@ def missing_static_cohort_sessions(
         )
         if not key[0] or key in completed:
             continue
-        reason = (
-            "missing_heatmap_points"
-            if key in session_rows
-            else "missing_heatmap_session"
+        reason = (failure_reasons or {}).get(key) or (
+            "missing_heatmap_points" if key in session_rows else "missing_heatmap_session"
         )
         missing.append({
             "fotmob_player_id": key[0],
@@ -752,6 +761,38 @@ def missing_static_cohort_sessions(
             row["fotmob_player_id"],
         ),
     )
+
+
+def missing_session_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(row.get("fotmob_player_id", "")).strip(),
+        str(row.get("competition_name", "")).strip(),
+        str(row.get("season_name", "")).strip(),
+    )
+
+
+def read_missing_failure_reasons(path: Path) -> dict[tuple[str, str, str], str]:
+    if not path.exists():
+        return {}
+
+
+def tactical_coverage_regressions(
+    current_missing_keys: set[tuple[str, str, str]],
+    baseline_missing_keys: set[tuple[str, str, str]] | None,
+) -> set[tuple[str, str, str]]:
+    """Return newly missing sessions; resolved baseline gaps are allowed."""
+    if baseline_missing_keys is None:
+        return set()
+    return current_missing_keys - baseline_missing_keys
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            return {
+                missing_session_key(row): str(row.get("reason", "")).strip()
+                for row in csv.DictReader(source)
+                if all(missing_session_key(row)) and row.get("reason")
+            }
+    except OSError:
+        return {}
 
 
 def read_checkpoint(path: Path) -> list[dict[str, str]]:
@@ -785,7 +826,24 @@ def enrich_checkpoint_spatial_metrics(
         row.update(spatial_metrics(core_activity_points(points), positional_points=points))
 
 
-def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]], auto_mapped: list[dict[str, Any]], visual_points: dict[str, list[list[float]]]) -> None:
+def write_outputs(
+    output: list[dict[str, Any]], unmatched: list[dict[str, Any]],
+    auto_mapped: list[dict[str, Any]], visual_points: dict[str, list[list[float]]],
+    *, failure_reasons: dict[tuple[str, str, str], str] | None = None,
+    baseline_missing_keys: set[tuple[str, str, str]] | None = None,
+) -> None:
+    missing = missing_static_cohort_sessions(
+        output, visual_points=visual_points, failure_reasons=failure_reasons,
+    )
+    current_missing_keys = {missing_session_key(row) for row in missing}
+    regressions = tactical_coverage_regressions(
+        current_missing_keys, baseline_missing_keys,
+    )
+    if regressions:
+        examples = ", ".join("/".join(key) for key in sorted(regressions)[:5])
+        raise RuntimeError(
+            f"Tactical coverage regressed by {len(regressions)} session(s): {examples}"
+        )
     with (DATA_DIR / "tactical_3zone_ratio.csv").open("w", encoding="utf-8", newline="") as target:
         writer = csv.DictWriter(target, fieldnames=OUTPUT_FIELDS)
         writer.writeheader(); writer.writerows(output)
@@ -797,9 +855,7 @@ def write_outputs(output: list[dict[str, Any]], unmatched: list[dict[str, Any]],
         writer.writeheader(); writer.writerows(auto_mapped)
     with (DATA_DIR / "missing_tactical_sessions.csv").open("w", encoding="utf-8", newline="") as target:
         writer = csv.DictWriter(target, fieldnames=MISSING_SESSION_FIELDS)
-        writer.writeheader(); writer.writerows(
-            missing_static_cohort_sessions(output, visual_points=visual_points)
-        )
+        writer.writeheader(); writer.writerows(missing)
     with (DATA_DIR / "tactical_heatmap_points.json").open("w", encoding="utf-8") as target:
         json.dump(visual_points, target, ensure_ascii=False, separators=(",", ":"))
 
@@ -839,13 +895,16 @@ def main() -> None:
         output = []
         visual_points = {}
     enrich_checkpoint_spatial_metrics(output, visual_points)
+    baseline_missing = missing_static_cohort_sessions(output, visual_points=visual_points)
+    baseline_missing_keys = {missing_session_key(row) for row in baseline_missing}
+    failure_reasons = read_missing_failure_reasons(DATA_DIR / "missing_tactical_sessions.csv")
     completed = {(row["sportsapi_player_id"], row["tournament_id"], row["season_id"]) for row in output if str(row.get("heatmap_key", "")) in visual_points}
     completed_fotmob = {
         (str(row.get("fotmob_player_id", "")), str(row.get("tournament_id", "")), str(row.get("season_id", "")))
         for row in output
         if str(row.get("fotmob_player_id", "")) and str(row.get("heatmap_key", "")) in visual_points
     }
-    known_sports_ids: dict[str, set[str]] = {}
+    known_sports_ids = reverse_fotmob_map(id_map)
     for row in output:
         fotmob_id = str(row.get("fotmob_player_id", "")).strip()
         sports_id = str(row.get("sportsapi_player_id", "")).strip()
@@ -928,6 +987,7 @@ def main() -> None:
             })
             completed_fotmob.add((str(fotmob_id), str(tournament["id"]), str(season_id)))
             known_sports_ids.setdefault(str(fotmob_id), set()).add(str(sports_id))
+            failure_reasons.pop((str(fotmob_id), competition_name, args.season_name), None)
             counts["mapped"] += 1
 
         # Top-player rankings are not a complete roster.  Backfill only the
@@ -950,6 +1010,7 @@ def main() -> None:
             if not sports_id:
                 sports_id = resolve_sportsapi_id(client, candidate["name"])
             if not sports_id:
+                failure_reasons[(fotmob_id, competition_name, args.season_name)] = "sportsapi_id_unresolved"
                 unmatched.append({"sportsapi_player_id": "", "name": candidate["name"], "team_name": candidate["team_name"]})
                 counts["unmatched"] += 1
                 continue
@@ -960,8 +1021,10 @@ def main() -> None:
                 heatmap = client.get(f"players/{sports_id}/tournament/{tournament['id']}/season/{season_id}/heatmap?type=overall", "player")
                 ratios = heat_ratio(heatmap)
             except (HTTPError, URLError, TimeoutError, ValueError):
+                failure_reasons[(fotmob_id, competition_name, args.season_name)] = "heatmap_request_failed"
                 continue
             if ratios is None:
+                failure_reasons[(fotmob_id, competition_name, args.season_name)] = "provider_heatmap_empty"
                 continue
             in_box, out_box_final, mid, samples = ratios
             heatmap_key = f"{fotmob_id}:{tournament['id']}:{season_id}"
@@ -982,13 +1045,22 @@ def main() -> None:
             completed.add(checkpoint_key)
             completed_fotmob.add(fotmob_checkpoint)
             known_sports_ids.setdefault(fotmob_id, set()).add(sports_id)
+            failure_reasons.pop((fotmob_id, competition_name, args.season_name), None)
             counts["cohort_backfilled"] += 1
         # A successful league survives a later rate-limit/network failure.
-        write_outputs(output, unmatched, auto_mapped, visual_points)
+        write_outputs(
+            output, unmatched, auto_mapped, visual_points,
+            failure_reasons=failure_reasons,
+            baseline_missing_keys=baseline_missing_keys,
+        )
         print(f"{tournament['name']} pipeline counts: {counts}")
         # Bounded, non-identifying diagnostics for API position-code mapping.
         print(f"{tournament['name']} position labels: {position_labels.most_common(12)}")
-    write_outputs(output, unmatched, auto_mapped, visual_points)
+    write_outputs(
+        output, unmatched, auto_mapped, visual_points,
+        failure_reasons=failure_reasons,
+        baseline_missing_keys=baseline_missing_keys,
+    )
     print(f"Wrote {len(output)} matched ratios ({len(auto_mapped)} auto-mapped) and {len(unmatched)} unmatched players.")
 
 

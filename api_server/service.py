@@ -10,12 +10,13 @@ from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
 
 from .schemas import (
     AgeBand, AssetRef, CompareMeta, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
-    LeaderboardPageEnvelope, MessiScoreAnalysis, PlayerAnalysis,
+    LeaderboardPageEnvelope, MessiDataQuality, MessiScoreAnalysis, PlayerAnalysis,
     LeaderboardSort, MinutesBand, SortOrder,
-    PlayerComparisonEnvelope, PlayerDetailResponse, PlayerResponse,
+    PlayerComparisonEnvelope, PlayerDataQuality, PlayerDetailResponse, PlayerResponse,
     PlayersEnvelope, PlayerStats, PlayerTier, RadarAxis, RadarChart,
     PositionalGridCell, RawMetrics, SpatialAnalysis,
-    WatchlistResolveResult, WatchlistResolvedContext, WatchlistResolvedPlayer,
+    WatchlistDataQualityResult, WatchlistResolveResult, WatchlistResolvedContext,
+    WatchlistResolvedPlayer,
 )
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
 
@@ -404,6 +405,94 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
     )
 
 
+MESSI_SECTOR_WEIGHTS = {
+    "boxThreat": 0.30,
+    "outsideShot": 0.20,
+    "dangerZone": 0.15,
+    "spaceControl": 0.15,
+    "aerial": 0.10,
+    "groundDuel": 0.10,
+}
+
+
+def _messi_data_quality(metrics: object, tactical: dict[str, object] | None) -> MessiDataQuality:
+    """Mirror the score engine's volume/ratio availability without rescoring."""
+    available = {
+        "outsideShot.volume": getattr(metrics, "out_box_shots", None) is not None,
+        "outsideShot.ratio": getattr(metrics, "out_box_shot_quality", None) is not None,
+        "boxThreat.volume": getattr(metrics, "in_box_shots", None) is not None,
+        "boxThreat.ratio": tactical is not None and getattr(metrics, "in_box_finishing_per90", None) is not None,
+        "dangerZone.volume": getattr(metrics, "dribble_attempts", None) is not None,
+        "dangerZone.ratio": (
+            tactical is not None
+            and tactical.get("danger_zone_density") is not None
+            and getattr(metrics, "dribble_margin_per90", None) is not None
+        ),
+        "aerial.volume": getattr(metrics, "aerial_duel_attempts", None) is not None,
+        "aerial.ratio": getattr(metrics, "aerial_margin_per90", None) is not None,
+        "groundDuel.volume": getattr(metrics, "ground_duel_attempts", None) is not None,
+        "groundDuel.ratio": getattr(metrics, "duel_margin_per90", None) is not None,
+        "spaceControl.volume": tactical is not None and tactical.get("cca_area_pct") is not None,
+        "spaceControl.ratio": tactical is not None and tactical.get("danger_zone_density") is not None,
+    }
+    imputed_components = [component for component, present in available.items() if not present]
+    imputed_metrics = [
+        metric for metric in MESSI_SECTOR_WEIGHTS
+        if any(component.startswith(f"{metric}.") for component in imputed_components)
+    ]
+    missing_weight = sum(
+        MESSI_SECTOR_WEIGHTS[component.split(".", 1)[0]] * 0.5
+        for component in imputed_components
+    )
+    spatial_available = tactical is not None
+    raw_missing = any(
+        not present for component, present in available.items()
+        if not component.startswith("spaceControl.")
+        and component not in {"boxThreat.ratio", "dangerZone.ratio"}
+    )
+    if not imputed_components:
+        reason = "complete"
+    elif not spatial_available and raw_missing:
+        reason = "mixed_source_missing"
+    elif not spatial_available:
+        reason = "spatial_session_missing"
+    else:
+        reason = "source_metric_missing"
+    return MessiDataQuality(
+        spatialAvailable=spatial_available,
+        messiScoreComplete=not imputed_components,
+        reason=reason,
+        imputedMetrics=imputed_metrics,
+        imputedComponents=imputed_components,
+        observedWeightPct=round(max(0.0, 1.0 - missing_weight) * 100.0, 1),
+    )
+
+
+@lru_cache(maxsize=512)
+def build_player_data_quality(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> PlayerDataQuality | None:
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    cohort = load_spear_cohort().get((player.league.id, season), {})
+    source = cohort.get(str(player_id))
+    if source is None:
+        return None
+    _, metrics = source
+    tactical = get_tactical_ratio_for_session(
+        player_id, metrics.league_name or player.league.name, season,
+    )
+    return PlayerDataQuality(
+        playerId=player_id,
+        season=season,
+        mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+        dataQuality=_messi_data_quality(metrics, tactical),
+    )
+
+
 @lru_cache(maxsize=512)
 def build_player_detail(player_id: int, season: str, mode: str, scope: int, competition: str) -> PlayerDetailResponse | None:
     player = find_v2_player(player_id, season, mode, scope, competition)
@@ -554,6 +643,37 @@ def resolve_watchlist_entries(entries: list[dict[str, object]]) -> list[Watchlis
             player=WatchlistResolvedPlayer(**player.model_dump(), playerId=player.id),
         ))
     return resolved
+
+
+def resolve_watchlist_data_quality(
+    entries: list[dict[str, object]],
+) -> list[WatchlistDataQualityResult]:
+    """Batch the non-breaking data-quality companion contract for Watchlists."""
+    results: list[WatchlistDataQualityResult] = []
+    for resolved in resolve_watchlist_entries(entries):
+        if resolved.status != "resolved" or resolved.player is None or resolved.context is None:
+            results.append(WatchlistDataQualityResult(
+                key=resolved.key,
+                status=resolved.status,
+                context=resolved.context,
+            ))
+            continue
+        context = resolved.context
+        quality = build_player_data_quality(
+            resolved.player.playerId,
+            context.season,
+            context.mode,
+            context.scope or 7,
+            context.competition or "all",
+        )
+        results.append(WatchlistDataQualityResult(
+            key=resolved.key,
+            status="resolved" if quality is not None else "unavailable",
+            playerId=resolved.player.playerId,
+            context=context,
+            dataQuality=quality.dataQuality if quality is not None else None,
+        ))
+    return results
 
 
 @lru_cache(maxsize=1)

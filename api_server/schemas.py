@@ -276,6 +276,48 @@ class SpatialAnalysis(BaseModel):
     deepBoxZoneScore: float | None = Field(default=None, ge=0, le=100)
 
 
+MessiMetricCode = Literal[
+    "outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel",
+    "spaceControl",
+]
+MessiDataQualityReason = Literal[
+    "complete", "spatial_session_missing", "source_metric_missing",
+    "mixed_source_missing",
+]
+
+
+class MessiDataQuality(BaseModel):
+    """Explain which parts of a M.E.S.S.I. score use the 20-point floor."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    qualityVersion: Literal["messi-quality-v1"] = "messi-quality-v1"
+    spatialAvailable: bool
+    messiScoreComplete: bool
+    reason: MessiDataQualityReason
+    imputedMetrics: list[MessiMetricCode] = Field(max_length=6)
+    imputedComponents: list[str] = Field(max_length=12)
+    observedWeightPct: float = Field(ge=0, le=100)
+    fallbackComponentScore: Literal[20] = 20
+
+
+class PlayerDataQuality(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    season: str
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7] | None = None
+    competition: CompetitionCode | None = None
+    dataQuality: MessiDataQuality
+
+
+class PlayerDataQualityEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: PlayerDataQuality
+
+
 class PlayerAnalysis(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -400,6 +442,22 @@ class WatchlistResolveEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     results: list[WatchlistResolveResult] = Field(max_length=100)
+
+
+class WatchlistDataQualityResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(max_length=500)
+    status: Literal["resolved", "unavailable", "invalid_context"]
+    playerId: int | None = Field(default=None, gt=0)
+    context: WatchlistResolvedContext | None = None
+    dataQuality: MessiDataQuality | None = None
+
+
+class WatchlistDataQualityEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    results: list[WatchlistDataQualityResult] = Field(max_length=100)
 
 
 class HealthResponse(BaseModel):

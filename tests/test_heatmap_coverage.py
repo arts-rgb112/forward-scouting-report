@@ -10,8 +10,11 @@ from scripts.build_tactical_ratios import (
     SportsApiClient,
     discover_tournaments,
     missing_static_cohort_sessions,
+    read_fotmob_map,
+    reverse_fotmob_map,
     resolve_ranked_sportsapi_id,
     spatial_metrics,
+    tactical_coverage_regressions,
 )
 from positional_grid import (
     POSITIONAL_CELL_FIELDS,
@@ -113,6 +116,13 @@ class CcaOverlayTests(unittest.TestCase):
 
 
 class TacticalCoverageAuditTests(unittest.TestCase):
+    def test_verified_son_mapping_is_available_in_both_directions(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        mapping = read_fotmob_map(root / "data" / "fotmob_player_map.csv")
+
+        self.assertEqual(mapping["111505"], "212867")
+        self.assertEqual(reverse_fotmob_map(mapping)["212867"], {"111505"})
+
     def test_reports_only_missing_competition_season_sessions(self) -> None:
         cohort = [
             {
@@ -160,6 +170,29 @@ class TacticalCoverageAuditTests(unittest.TestCase):
 
         self.assertEqual(len(missing), 1)
         self.assertEqual(missing[0]["competition_name"], "Primeira Liga")
+
+    def test_preserves_specific_failure_reason_for_a_missing_session(self) -> None:
+        cohort = [{
+            "player_id": "212867", "player_name": "Heung-Min Son",
+            "team_name": "Tottenham Hotspur", "league_name": "Premier League",
+            "season_name": "2023/2024",
+        }]
+        key = ("212867", "Premier League", "2023/2024")
+
+        missing = missing_static_cohort_sessions(
+            [], cohort, failure_reasons={key: "provider_heatmap_empty"},
+        )
+
+        self.assertEqual(missing[0]["reason"], "provider_heatmap_empty")
+
+    def test_completeness_gate_allows_repairs_but_rejects_new_gaps(self) -> None:
+        baseline = {("1", "Premier League", "2024/2025")}
+        self.assertEqual(tactical_coverage_regressions(set(), baseline), set())
+        regression = ("2", "LaLiga", "2024/2025")
+        self.assertEqual(
+            tactical_coverage_regressions({*baseline, regression}, baseline),
+            {regression},
+        )
 
 
 class RankedPlayerMappingTests(unittest.TestCase):

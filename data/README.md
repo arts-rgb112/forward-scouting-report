@@ -13,6 +13,13 @@ static S.P.E.A.R. cohort but still has no stored tactical heatmap. Unlike the
 per-run unmatched report, it is rebuilt across every cached season whenever
 the tactical ETL checkpoints data.
 
+Verified cross-provider IDs belong in `fotmob_player_map.csv`. The ETL indexes
+that file in both directions: SportsAPI-to-FotMob for ranking rows and
+FotMob-to-SportsAPI for static-cohort backfills. Missing-session reasons now
+distinguish unresolved provider IDs, failed heatmap requests, empty provider
+heatmaps, and stored rows without points. Every checkpoint also rejects newly
+missing sessions relative to the run's starting snapshot.
+
 The dashboard accepts an empty file. At a final-third slider value of `0%`,
 players without an ETL row remain visible for backwards compatibility. At any
 higher value, they are excluded until their Heat Ratio has been loaded.
