@@ -6,7 +6,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
-TierCode = Literal["diamond", "platinum", "gold", "silver", "bronze", "iron"]
+# Crystal v2 keeps the established percentile bands, but gives each band its
+# new display identity.  The version is carried with every tier so a client
+# never has to infer whether (for example) ``platinum`` is legacy or Crystal.
+TierCode = Literal["diamond", "emerald", "platinum", "gold", "silver", "bronze"]
+TierTaxonomyVersion = Literal["crystal-v2"]
 
 
 class AssetRef(BaseModel):
@@ -29,11 +33,20 @@ class PlayerStats(BaseModel):
 
 
 class PlayerTier(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [{
+                "code": "emerald", "label": "Emerald", "level": 2,
+                "taxonomyVersion": "crystal-v2",
+            }],
+        },
+    )
 
     code: TierCode
     level: int = Field(ge=1, le=5)
     label: str = Field(min_length=1)
+    taxonomyVersion: TierTaxonomyVersion = "crystal-v2"
 
 
 class PlayerResponse(BaseModel):
@@ -139,6 +152,7 @@ class LeaderboardMeta(BaseModel):
     returned: int = Field(ge=0)
     generatedAt: datetime
     source: Literal["messi-static-cohort"] = "messi-static-cohort"
+    tierTaxonomyVersion: TierTaxonomyVersion = "crystal-v2"
 
 
 class LeaderboardEnvelope(BaseModel):
@@ -337,6 +351,7 @@ class CompareMeta(BaseModel):
     population: int = Field(ge=0)
     generatedAt: datetime
     source: Literal["messi-static-cohort"] = "messi-static-cohort"
+    tierTaxonomyVersion: TierTaxonomyVersion = "crystal-v2"
 
 
 class PlayerComparisonEnvelope(BaseModel):

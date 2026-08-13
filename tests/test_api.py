@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from api_server.main import app, cors_origin_regex, cors_origins
@@ -44,7 +47,8 @@ def test_players_implements_frontend_v1_contract_with_real_sector_scores():
     assert isinstance(player["age"], int)
     assert str(player["face"]).startswith("https://images.fotmob.com/image_resources/playerimages/")
     assert player["nation"] is None
-    assert set(player["tier"]) == {"code", "level", "label"}
+    assert set(player["tier"]) == {"code", "level", "label", "taxonomyVersion"}
+    assert player["tier"]["taxonomyVersion"] == "crystal-v2"
     assert 1 <= player["tier"]["level"] <= 5
     assert set(player["league"]) == set(player["club"]) == {"id", "name", "icon"}
     assert str(player["league"]["icon"]).startswith("https://images.fotmob.com/image_resources/logo/leaguelogo/")
@@ -219,6 +223,8 @@ def test_detail_and_compare_are_available_for_league_ucl_and_uel_contexts():
         assert comparison.status_code == 200
         assert [row["id"] for row in comparison.json()["data"]] == player_ids
         assert {row["idNamespace"] for row in comparison.json()["data"]} == {"fotmob"}
+        assert comparison.json()["meta"]["tierTaxonomyVersion"] == "crystal-v2"
+        assert {row["tier"]["taxonomyVersion"] for row in comparison.json()["data"]} == {"crystal-v2"}
 
 
 def test_watchlist_resolve_keeps_order_and_isolates_invalid_contexts():
@@ -251,6 +257,7 @@ def test_watchlist_resolve_keeps_order_and_isolates_invalid_contexts():
     assert [item["status"] for item in results] == ["resolved", "invalid_context", "resolved"]
     assert results[0]["player"]["idNamespace"] == "fotmob"
     assert results[0]["player"]["playerId"] == player_id
+    assert results[0]["player"]["tier"]["taxonomyVersion"] == "crystal-v2"
     assert results[0]["context"] != results[2]["context"]
 
 
@@ -272,6 +279,11 @@ def test_openapi_advertises_the_v1_response_contract():
     assert schema["PlayerResponse"]["properties"]["id"]["exclusiveMinimum"] == 0
     assert schema["DatasetMeta"]["properties"]["schemaVersion"]["const"] == "1.0.0"
     assert schema["LeaderboardMeta"]["properties"]["schemaVersion"]["const"] == "2.0.0"
+    assert schema["PlayerTier"]["properties"]["code"]["enum"] == ["diamond", "emerald", "platinum", "gold", "silver", "bronze"]
+    assert schema["PlayerTier"]["properties"]["taxonomyVersion"]["const"] == "crystal-v2"
+    assert schema["LeaderboardMeta"]["properties"]["tierTaxonomyVersion"]["const"] == "crystal-v2"
+    assert schema["CompareMeta"]["properties"]["tierTaxonomyVersion"]["const"] == "crystal-v2"
+    assert schema["PlayerTier"]["examples"][0]["taxonomyVersion"] == "crystal-v2"
     paths = response.json()["paths"]
     leaderboard_schema = paths["/api/v2/leaderboards"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
     assert {item["$ref"].rsplit("/", 1)[-1] for item in leaderboard_schema["anyOf"]} == {"LeaderboardEnvelope", "LeaderboardPageEnvelope"}
@@ -280,7 +292,42 @@ def test_openapi_advertises_the_v1_response_contract():
     assert "PlayerAnalysis" in schema and "LeaderboardPageMeta" in schema
 
 
-def test_tier_boundaries():
-    assert tier_from_rank(1, 100).model_dump() == {"code": "diamond", "level": 1, "label": "Diamond"}
-    assert tier_from_rank(13, 100).code == "gold"
-    assert tier_from_rank(98, 100).code == "iron"
+def test_crystal_v2_tier_preserves_percentile_positions_and_level_math():
+    # These ranks hit the same pre-existing percentile bands; only the
+    # taxonomy names have changed.
+    assert tier_from_rank(1, 100).model_dump() == {
+        "code": "diamond", "level": 1, "label": "Diamond", "taxonomyVersion": "crystal-v2",
+    }
+    assert tier_from_rank(6, 100).model_dump() == {
+        "code": "emerald", "level": 1, "label": "Emerald", "taxonomyVersion": "crystal-v2",
+    }
+    assert tier_from_rank(13, 100).model_dump() == {
+        "code": "platinum", "level": 1, "label": "Platinum", "taxonomyVersion": "crystal-v2",
+    }
+    assert tier_from_rank(98, 100).model_dump() == {
+        "code": "bronze", "level": 2, "label": "Bronze", "taxonomyVersion": "crystal-v2",
+    }
+
+
+def test_v2_tier_version_is_consistent_across_leaderboard_and_player_detail():
+    leaderboard = client.get("/api/v2/leaderboards", params={"season": "2025/2026", "limit": 2})
+    assert leaderboard.status_code == 200
+    payload = leaderboard.json()
+    assert payload["meta"]["tierTaxonomyVersion"] == "crystal-v2"
+    assert {player["tier"]["taxonomyVersion"] for player in payload["data"]} == {"crystal-v2"}
+
+    player_id = payload["data"][0]["id"]
+    detail = client.get(f"/api/v2/players/{player_id}", params={"season": "2025/2026", "includeAnalysis": "true"})
+    assert detail.status_code == 200
+    assert detail.json()["data"]["tier"]["taxonomyVersion"] == "crystal-v2"
+
+
+def test_versionless_legacy_v1_tier_fixture_is_preserved_for_client_fallbacks():
+    fixture = Path(__file__).parent / "fixtures" / "legacy-v1-tier.json"
+    legacy = json.loads(fixture.read_text(encoding="utf-8"))
+    assert legacy == {
+        "code": "platinum",
+        "label": "Platinum",
+        "level": 2,
+    }
+    assert "taxonomyVersion" not in legacy

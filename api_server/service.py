@@ -22,16 +22,16 @@ from .profiles import league_logo_url, player_age, player_face_url, team_logo_ur
 
 TIER_BANDS = (
     ("diamond", "Diamond", 0.0, 4.0),
-    ("platinum", "Platinum", 4.0, 11.0),
-    ("gold", "Gold", 11.0, 40.0),
-    ("silver", "Silver", 40.0, 77.0),
-    ("bronze", "Bronze", 77.0, 96.0),
-    ("iron", "Iron", 96.0, 100.0),
+    ("emerald", "Emerald", 4.0, 11.0),
+    ("platinum", "Platinum", 11.0, 40.0),
+    ("gold", "Gold", 40.0, 77.0),
+    ("silver", "Silver", 77.0, 96.0),
+    ("bronze", "Bronze", 96.0, 100.0),
 )
 
 
 def tier_from_rank(rank: int, population: int) -> PlayerTier:
-    """Map the existing M.E.S.S.I. percentile bands to the v1 API tier object."""
+    """Map the unchanged M.E.S.S.I. percentile bands to Crystal v2 tiers."""
     percentile = min(100.0, max(0.0, ((rank - 1) / max(population, 1)) * 100.0))
     for index, (code, label, start, end) in enumerate(TIER_BANDS):
         if percentile <= end or index == len(TIER_BANDS) - 1:
