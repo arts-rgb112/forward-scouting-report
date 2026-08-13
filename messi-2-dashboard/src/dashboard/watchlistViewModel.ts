@@ -30,7 +30,7 @@ function profileFromSnapshot(snapshot: WatchlistSnapshot): WatchlistProfile {
   return {
     name: snapshot.name, position: snapshot.position, clubName: snapshot.clubName, leagueName: snapshot.leagueName,
     face: snapshot.face, archetype: snapshot.archetype, age: snapshot.age, minutes: snapshot.minutes,
-    score: snapshot.score, tier: snapshot.tier, stats: snapshot.stats,
+    score: snapshot.score, tier: snapshot.tier ? { ...snapshot.tier, ...(snapshot.tier.taxonomyVersion ?? snapshot.tierTaxonomyVersion ? { taxonomyVersion: snapshot.tier.taxonomyVersion ?? snapshot.tierTaxonomyVersion } : {}) } : undefined, stats: snapshot.stats,
   };
 }
 function profileFromPlayer(player: Player): WatchlistProfile {

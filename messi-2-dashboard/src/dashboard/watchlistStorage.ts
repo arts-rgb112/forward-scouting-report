@@ -24,6 +24,8 @@ export type WatchlistSnapshot = {
   age?: number | null;
   minutes?: number;
   tier?: Tier;
+  /** Written only when the source response explicitly declares a taxonomy version. */
+  tierTaxonomyVersion?: string;
   stats?: Partial<Record<MetricKey, number>>;
 };
 export type WatchlistEntry = {
@@ -83,6 +85,7 @@ const normalizeSnapshot = (value: unknown): WatchlistSnapshot | null => {
     ...(typeof snapshot.age === "number" || snapshot.age === null ? { age: snapshot.age } : {}),
     ...(typeof snapshot.minutes === "number" ? { minutes: snapshot.minutes } : {}),
     ...(validTier(snapshot.tier) ? { tier: { ...snapshot.tier } } : {}),
+    ...(typeof snapshot.tierTaxonomyVersion === "string" ? { tierTaxonomyVersion: snapshot.tierTaxonomyVersion } : {}),
     ...(stats ? { stats } : {}),
   };
 };
@@ -109,6 +112,7 @@ export function entryFromPlayer(player: Player, context: WatchContext, savedAt =
     snapshot: {
       profile: "complete", name: player.name, position: player.position, archetype: player.archetype,
       age: player.age, minutes: player.minutes, score: player.score, tier: { ...player.tier }, tierLabel: player.tier.label,
+      ...(player.tier.taxonomyVersion ? { tierTaxonomyVersion: player.tier.taxonomyVersion } : {}),
       face: player.face, clubName: player.club.name, leagueName: player.league.name, stats: { ...player.stats },
     },
     context: { ...context }, savedAt,

@@ -26,6 +26,17 @@ describe("Watchlist V2 storage", () => {
     expect(entry.snapshot.stats?.aerial).toBe(91);
   });
 
+  it("persists an explicit source taxonomy without inventing one for the current legacy API", () => {
+    const legacy = entryFromPlayer(samplePlayers[0], league);
+    expect(legacy.snapshot.tierTaxonomyVersion).toBeUndefined();
+    const crystalPlayer = { ...samplePlayers[0], tier: { ...samplePlayers[0].tier, code: "emerald", label: "Emerald", taxonomyVersion: "crystal-v2" } };
+    const crystal = entryFromPlayer(crystalPlayer, league);
+    expect(crystal.snapshot).toMatchObject({ tier: crystalPlayer.tier, tierTaxonomyVersion: "crystal-v2" });
+    const parsed = parseWatchlist(JSON.stringify({ version: 2, entries: [legacy], unresolvedLegacyIds: [], migration: { legacyKey: "messi-2-watchlist", migratedAt: null }, selectedEntryKeys: [] }));
+    expect(parsed?.entries[0].snapshot.tier).toEqual(legacy.snapshot.tier);
+    expect(parsed?.entries[0].snapshot.tierTaxonomyVersion).toBeUndefined();
+  });
+
   it("keeps summary-only V2 records as legacy partial entries", () => {
     const raw = { version: 2, entries: [{ version: 2, key: "old", namespace: "fotmob", playerId: 1, snapshot: { name: "Saved", position: "CF", clubName: "Club", score: 90 }, context: league, savedAt: "2026-01-01T00:00:00.000Z" }], unresolvedLegacyIds: [], migration: { legacyKey: "messi-2-watchlist", migratedAt: null }, selectedEntryKeys: [] };
     const parsed = parseWatchlist(JSON.stringify(raw));
