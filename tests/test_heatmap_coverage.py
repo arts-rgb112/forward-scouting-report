@@ -242,6 +242,18 @@ class RankedPlayerMappingTests(unittest.TestCase):
             "100",
         )
 
+    def test_maps_unique_name_with_given_and_family_order_reversed(self) -> None:
+        players = {
+            "111505": {"name": "Son Heung-min", "team_name": ""},
+        }
+
+        self.assertEqual(
+            resolve_ranked_sportsapi_id(
+                players, "Heung-Min Son", "Tottenham Hotspur",
+            ),
+            "111505",
+        )
+
     def test_uses_team_to_disambiguate_namesakes(self) -> None:
         players = {
             "100": {"name": "Luis Suárez", "team_name": "Atletico Madrid"},
