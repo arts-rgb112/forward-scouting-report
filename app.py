@@ -2625,20 +2625,25 @@ def render_player_detail_page() -> None:
     filters = {"season": detail_season, "scope": detail_context[2] if detail_context is not None else _query_scope()}
     player = detail_context[0] if detail_context is not None else PlayerCandidate(player_id, _query_text("name", "선수"), _query_text("team", ""))
     player = _resolve_static_player(player, filters["season"])
-    try:
-        sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
-    except (FotMobError, TypeError, ValueError, KeyError):
-        # An archived cohort may still contain this player/season even after
-        # the mutable player-history response has been removed upstream. The
-        # extra structural exceptions are an upstream-response safety net: an
-        # unavailable player must render a fallback notice, never a red page.
-        sessions = {}
-    session_rows = [(key, stats) for key, stats in sessions.items() if key.split("_", 1)[0] == filters["season"]]
     using_static_snapshot = detail_context is not None
     selected_stats = detail_context[1] if detail_context is not None else None
-    if not session_rows and detail_context is None:
-        session_rows = _static_session_rows(player.player_id, filters["season"])
-        using_static_snapshot = bool(session_rows)
+    session_rows: list[tuple[str, DecisionMetrics]] = []
+    if detail_context is None:
+        try:
+            sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
+        except (FotMobError, TypeError, ValueError, KeyError):
+            # An archived cohort may still contain this player/season even after
+            # the mutable player-history response has been removed upstream. The
+            # extra structural exceptions are an upstream-response safety net: an
+            # unavailable player must render a fallback notice, never a red page.
+            sessions = {}
+        session_rows = [
+            (key, stats) for key, stats in sessions.items()
+            if key.split("_", 1)[0] == filters["season"]
+        ]
+        if not session_rows:
+            session_rows = _static_session_rows(player.player_id, filters["season"])
+            using_static_snapshot = bool(session_rows)
     if not session_rows and detail_context is None:
         st.warning(f"{filters['season']} 시즌에 조회 가능한 대회 기록이 없습니다.")
         return
