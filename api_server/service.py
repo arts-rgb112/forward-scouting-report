@@ -4,7 +4,10 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
-from rankings import COMPARISON_SCOPES, EUROPEAN_LEADERBOARD_ID, calculate_league_percentiles, get_spear_leaderboard
+from rankings import (
+    COMPARISON_SCOPES, EUROPEAN_LEADERBOARD_ID, calculate_league_percentiles,
+    get_spear_leaderboard, get_tactical_matrix,
+)
 from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
 
@@ -15,6 +18,7 @@ from .schemas import (
     PlayerComparisonEnvelope, PlayerDataQuality, PlayerDetailResponse, PlayerResponse,
     PlayersEnvelope, PlayerStats, PlayerTier, RadarAxis, RadarChart,
     PositionalGridCell, RawMetrics, SpatialAnalysis,
+    TacticalQuadrantAnalysis, TacticalQuadrantPoint,
     WatchlistDataQualityResult, WatchlistResolveResult, WatchlistResolvedContext,
     WatchlistResolvedPlayer,
 )
@@ -539,6 +543,91 @@ def build_duel_spatial_analysis(
         competition=competition if mode == "europe" else None,
         available=False, appliedToMessiRating=False,
         reason="event_coordinates_unavailable", cohortPopulation=0,
+    )
+
+
+@lru_cache(maxsize=512)
+def build_tactical_quadrant_analysis(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> TacticalQuadrantAnalysis | None:
+    """Return the legacy quadrant as a stable, server-computed API contract.
+
+    The cohort and both axes deliberately reuse ``get_tactical_matrix`` so the
+    chart cannot drift away from the percentile population used in the detail
+    report.  This is a companion endpoint to avoid breaking older strict
+    clients that already consume ``PlayerAnalysis``.
+    """
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    cohort = load_spear_cohort().get((player.league.id, season), {})
+    source = cohort.get(str(player_id))
+    if source is None:
+        return None
+    _, metrics = source
+    matrix = get_tactical_matrix(
+        player.league.id, season, True, 0, scope,
+    )
+    rows = matrix.to_dict(orient="records") if not matrix.empty else []
+    selected_key = str(player_id)
+    if not any(str(row.get("player_id")) == selected_key for row in rows):
+        net_progression = getattr(metrics, "net_progression_per90", None)
+        finishing = getattr(metrics, "in_box_finishing", None)
+        if net_progression is not None and finishing is not None:
+            rows.append({
+                "player_id": selected_key,
+                "player_name": player.name,
+                "team_name": metrics.team_name or player.club.name,
+                "net_progression_per90": net_progression,
+                "in_box_xgot_minus_xg": finishing,
+            })
+
+    points = [
+        TacticalQuadrantPoint(
+            playerId=int(row["player_id"]),
+            playerName=str(row.get("player_name") or "Unknown player"),
+            teamName=str(row.get("team_name") or ""),
+            netProgressionPer90=float(row["net_progression_per90"]),
+            inBoxXgotMinusXg=float(row["in_box_xgot_minus_xg"]),
+            selected=str(row["player_id"]) == selected_key,
+        )
+        for row in rows
+        if row.get("net_progression_per90") is not None
+        and row.get("in_box_xgot_minus_xg") is not None
+    ]
+    selected = next((point for point in points if point.selected), None)
+    if not points:
+        reason = "cohort_unavailable"
+    elif selected is None:
+        reason = "axis_metric_missing"
+    else:
+        reason = "complete"
+    x_values = [point.netProgressionPer90 for point in points]
+    y_values = [point.inBoxXgotMinusXg for point in points]
+    x_values.sort()
+    y_values.sort()
+
+    def median(values: list[float]) -> float | None:
+        if not values:
+            return None
+        middle = len(values) // 2
+        if len(values) % 2:
+            return round(values[middle], 4)
+        return round((values[middle - 1] + values[middle]) / 2.0, 4)
+
+    return TacticalQuadrantAnalysis(
+        playerId=player_id,
+        season=season,
+        mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+        available=reason == "complete",
+        reason=reason,
+        cohortPopulation=len(points),
+        xMedian=median(x_values),
+        yMedian=median(y_values),
+        selectedPoint=selected,
+        points=points,
     )
 
 

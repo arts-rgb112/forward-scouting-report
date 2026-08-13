@@ -1,11 +1,11 @@
 import { z } from "zod";
 
 import { adaptAnalysis, adaptPlayer } from "./adapter";
-import { comparisonEnvelopeSchema, leaderboardEnvelopeSchema, leaderboardPageEnvelopeSchema, playerDetailEnvelopeSchema, playerDtoSchema } from "./contracts";
+import { comparisonEnvelopeSchema, leaderboardEnvelopeSchema, leaderboardPageEnvelopeSchema, playerDetailEnvelopeSchema, playerDtoSchema, tacticalQuadrantEnvelopeSchema } from "./contracts";
 import type { MessiApiConfig } from "./env";
 import { MessiApiError } from "./errors";
 import { PAGE_SIZE } from "../dashboard/datasetRoute";
-import type { DatasetMeta, DatasetRouteState, LeaderboardOptions, LeaderboardSearch, PlayerComparison, PlayerDetail, PlayersPayload } from "../dashboard/types";
+import type { DatasetMeta, DatasetRouteState, LeaderboardOptions, LeaderboardSearch, PlayerComparison, PlayerDetail, PlayersPayload, TacticalQuadrant } from "../dashboard/types";
 
 const scopeSchema = z.union([z.literal(3), z.literal(5), z.literal(7)]);
 const competitionSchema = z.enum(["all", "ucl", "uel", "uecl"]);
@@ -77,6 +77,18 @@ export async function fetchPlayerDetail(config: MessiApiConfig, id: number, stat
     const parsed = playerDetailEnvelopeSchema.parse(await getJson(url.toString(), signal));
     return { player: adaptPlayer(parsed.data, parsed.tierTaxonomyVersion), analysis: parsed.data.analysis ? adaptAnalysis(parsed.data.analysis) : undefined };
   } catch (error) { return parseError("Player detail response was invalid", error); }
+}
+
+export async function fetchTacticalQuadrant(config: MessiApiConfig, id: number, state: DatasetRouteState, signal: AbortSignal): Promise<TacticalQuadrant> {
+  const url = new URL(`/api/v2/players/${id}/tactical-quadrant`, config.baseUrl);
+  url.search = new URLSearchParams(contextParams(state)).toString();
+  try {
+    const parsed = tacticalQuadrantEnvelopeSchema.parse(await getJson(url.toString(), signal)).data;
+    const expectedScope = state.mode === "league" ? state.scope : null;
+    const expectedCompetition = state.mode === "europe" ? state.competition : null;
+    if (parsed.playerId !== id || parsed.season !== state.season || parsed.mode !== state.mode || parsed.scope !== expectedScope || parsed.competition !== expectedCompetition) throw new MessiApiError("schema", "Tactical quadrant response identity did not match request");
+    return parsed;
+  } catch (error) { return parseError("Tactical quadrant response was invalid", error); }
 }
 
 export async function fetchComparison(config: MessiApiConfig, ids: readonly number[], state: DatasetRouteState, signal: AbortSignal): Promise<PlayerComparison> {
