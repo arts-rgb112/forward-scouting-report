@@ -24,6 +24,8 @@ from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
 from positional_grid import POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES
 from true_core import true_core_zones_from_points
+from continuous_core import continuous_core_from_points
+from shotmap import get_shotmap_points
 
 
 _UNIFIED_BAR_COUNTER = itertools.count()
@@ -1149,7 +1151,9 @@ def render_season_heatmap(
     tactical_ratio: dict[str, object] | None = None,
 ) -> None:
     points = get_heatmap_points(player_id, heatmap_key)
+    shots = get_shotmap_points(heatmap_key)
     true_core = true_core_zones_from_points(points)
+    continuous_core = continuous_core_from_points(points)
     st.markdown("#### 📍 시즌 활동 히트맵")
     st.caption(
         "저장된 시즌 좌표를 6-depth × 5-lane 포지셔널 그리드에 표시합니다. 공격 방향은 화면 왼쪽→오른쪽이며, "
@@ -1160,17 +1164,11 @@ def render_season_heatmap(
         return
     x = [point[0] for point in points if isinstance(point, list) and len(point) == 2]
     y = [point[1] for point in points if isinstance(point, list) and len(point) == 2]
-    # Smooth a fixed grid so repeatedly visited zones visibly intensify instead
-    # of rendering as indistinguishable overlapping dots.
-    density, y_edges, x_edges = np.histogram2d(y, x, bins=(22, 32), range=((0, 100), (0, 100)))
-    kernel = np.array([1, 4, 6, 4, 1], dtype=float) / 16.0
-    for axis in (0, 1):
-        density = np.apply_along_axis(
-            lambda row: np.convolve(np.pad(row, 2, mode="edge"), kernel, mode="valid"),
-            axis, density,
-        )
-    peak = float(density.max())
-    normalized = density / peak if peak else density
+    # The visible heatmap and CCA boundary share one density raster.  This is
+    # essential: the boundary must describe the colour field the user sees.
+    normalized = continuous_core["normalizedDensity"]
+    x_edges = continuous_core["xEdges"]
+    y_edges = continuous_core["yEdges"]
     figure = go.Figure()
     pitch_uri = positional_grid_pitch_uri()
     if pitch_uri:
@@ -1198,23 +1196,56 @@ def render_season_heatmap(
         ],
         hovertemplate="활동 밀도 %{z:.0%}<extra></extra>",
     ))
-    # True Core is rendered as the exact selected 30-zone cells. Disconnected
-    # cells stay disconnected; no hull may bridge empty or low-density space.
-    for zone in true_core["zones"]:
-        depth, lane = int(zone["depth"]), int(zone["lane"])
-        figure.add_shape(
-            type="rect",
-            x0=POSITIONAL_DEPTH_BOUNDARIES[depth - 1],
-            x1=POSITIONAL_DEPTH_BOUNDARIES[depth],
-            y0=POSITIONAL_LANE_BOUNDARIES[lane - 1],
-            y1=POSITIONAL_LANE_BOUNDARIES[lane],
-            line={"color": "#38BDF8", "width": 2.0},
-            fillcolor="rgba(56,189,248,0.16)",
-            layer="above",
-        )
+    # Draw only the continuous 50% highest-density boundary. Disconnected
+    # activity islands remain separate and no tactical cell is filled merely
+    # because one small part of it was busy.
+    threshold = float(continuous_core["thresholdOfPeak"])
+    if threshold > 0.0:
+        figure.add_trace(go.Contour(
+            z=normalized,
+            x=((x_edges[:-1] + x_edges[1:]) / 2).tolist(),
+            y=((y_edges[:-1] + y_edges[1:]) / 2).tolist(),
+            autocontour=False,
+            contours={
+                "start": threshold, "end": threshold,
+                "size": 1.0, "coloring": "none", "showlabels": False,
+            },
+            line={"color": "#C044FF", "width": 3.0},
+            showscale=False,
+            hoverinfo="skip",
+        ))
+    # Shot events use their source coordinates; never infer them from activity
+    # points.  Small open markers keep the underlying activity density visible.
+    shot_styles = {
+        "goal": ("#F8FAFC", "star", 12),
+        "on_target": ("#22D3EE", "circle", 9),
+        "off_target": ("#FB923C", "x", 9),
+        "blocked": ("#A3A3A3", "diamond-open", 8),
+    }
+    for outcome, (color, symbol, size) in shot_styles.items():
+        selected = [shot for shot in shots if shot.get("outcome") == outcome]
+        if not selected:
+            continue
+        figure.add_trace(go.Scatter(
+            x=[float(shot["x"]) for shot in selected],
+            y=[float(shot["y"]) for shot in selected],
+            mode="markers", name={
+                "goal": "골", "on_target": "유효슈팅",
+                "off_target": "빗나간 슈팅", "blocked": "차단된 슈팅",
+            }[outcome],
+            marker={
+                "color": color, "symbol": symbol, "size": size,
+                "line": {"color": "#111827", "width": 1.2},
+            },
+            customdata=[[shot.get("xg"), shot.get("xgot")] for shot in selected],
+            hovertemplate=(
+                "%{fullData.name}<br>xG %{customdata[0]:.2f}"
+                "<br>xGOT %{customdata[1]:.2f}<extra></extra>"
+            ),
+        ))
     # The supplied pitch is 1.41:1 inside its touchlines.  Use that aspect
     # instead of distorting its positional lines to the former generic pitch.
-    figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [-4, 104], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.709, "fixedrange": True, "constrain": "domain"}, showlegend=False)
+    figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [-4, 104], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.709, "fixedrange": True, "constrain": "domain"}, showlegend=bool(shots), legend={"orientation": "h", "y": 1.02, "x": 0.5, "xanchor": "center", "yanchor": "bottom"})
     st.plotly_chart(figure, use_container_width=True, config={"displayModeBar": False})
     if tactical_ratio:
         zones = sorted(
@@ -1231,10 +1262,13 @@ def render_season_heatmap(
             st.caption(f"주요 활동 구역(저장된 전체 시즌 좌표 기준): {zone_text}")
     if true_core["zones"]:
         st.caption(
-            f"청록 구역은 전체 {len(points)}개 좌표를 30-zone에 배치한 뒤 활동 비중이 높은 순서로 "
-            f"누적 {float(true_core['achievedDensityPct']):.1f}%를 구성한 {int(true_core['zoneCount'])}개 True Core Zone입니다. "
-            f"실제 피치 면적 합은 {float(true_core['coreAreaPct']):.1f}%이며, 0%·저밀도 구역은 포함하지 않습니다."
+            f"보라색 경계는 전체 {len(points)}개 좌표의 연속 밀도 중 상위 활동량 "
+            f"{float(continuous_core['achievedDensityPct']):.1f}%를 담는 CCA 핵심 반경입니다. "
+            f"실제 고밀도 면적은 피치의 {float(continuous_core['coreAreaPct']):.1f}%입니다. "
+            f"30-zone은 전술 구역 해석에만 사용하며 CCA 면적에는 사각형 전체를 포함하지 않습니다."
         )
+    if not shots:
+        st.caption("슈팅 좌표 스냅샷이 적재되지 않은 세션은 활동 히트맵만 표시합니다.")
 
 
 def lane_summary(ratio: dict[str, object] | None) -> tuple[str, str] | None:

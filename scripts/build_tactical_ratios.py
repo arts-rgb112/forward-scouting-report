@@ -36,6 +36,7 @@ if str(ROOT) not in sys.path:
 
 from positional_grid import POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics
 from true_core import true_core_zones_from_points
+from continuous_core import continuous_core_summary
 
 
 # Prefer the canonical path-based endpoint. Some accounts are still rolling
@@ -127,7 +128,7 @@ COHORT_COMPETITION_NAMES = {
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ACTIVITY_GRID_SIZE = 5.0
 MIN_CELL_OVERLAP = 3
-ACTIVITY_FILTER_VERSION = "true-core-30zone-v1"
+ACTIVITY_FILTER_VERSION = "continuous-hdr-50-v1"
 GOLD_ZONE_WEIGHT = 1.50
 SILVER_ZONE_WEIGHT = 1.00
 BRONZE_ZONE_WEIGHT = 0.50
@@ -387,10 +388,10 @@ def spatial_metrics(
     # lanes drawn in the positional-grid pitch rather than arbitrary 20% bins.
     grid_points = positional_points if positional_points is not None else points
     grid = positional_grid_metrics(grid_points)
-    # CCA v3: select only positive 30-zone cells until their cumulative
-    # density reaches 50%. The width is the sum of those real grid-cell areas;
-    # no empty space between disconnected cells is counted.
-    empty["cca_area_pct"] = round(float(true_core_zones_from_points(grid_points)["coreAreaPct"]), 2)
+    # CCA v4: use the continuous 50% highest-density raster area.  The 30-zone
+    # grid remains available for tactical interpretation, but a partially
+    # occupied tactical cell no longer contributes its whole rectangle.
+    empty["cca_area_pct"] = round(float(continuous_core_summary(grid_points)["coreAreaPct"]), 2)
     for index in range(1, 6):
         empty[f"lane_{index}_ratio"] = round(sum(
             grid[f"grid_d{depth}_l{index}_ratio"] for depth in range(1, 7)

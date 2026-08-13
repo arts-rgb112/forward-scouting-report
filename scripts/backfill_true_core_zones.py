@@ -1,4 +1,4 @@
-"""Backfill the persisted CCA width with the 30-zone True Core definition."""
+"""Backfill persisted CCA with the continuous 50% HDR definition."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from true_core import true_core_zones_from_points
+from continuous_core import continuous_core_summary
 
 
 DATA_DIR = ROOT / "data"
 RATIOS_PATH = DATA_DIR / "tactical_3zone_ratio.csv"
 POINTS_PATH = DATA_DIR / "tactical_heatmap_points.json"
-DEFINITION_VERSION = "true-core-30zone-v1"
+DEFINITION_VERSION = "continuous-hdr-50-v1"
 
 
 def backfill() -> tuple[int, int, int]:
@@ -41,9 +41,9 @@ def backfill() -> tuple[int, int, int]:
             duplicates += 1
             continue
         seen_keys.add(heatmap_key)
-        core = true_core_zones_from_points(points_by_key[heatmap_key])
-        if not core["zoneCount"]:
-            raise RuntimeError(f"empty True Core for {heatmap_key}")
+        core = continuous_core_summary(points_by_key[heatmap_key])
+        if not float(core["coreAreaPct"]):
+            raise RuntimeError(f"empty continuous core for {heatmap_key}")
         row["cca_area_pct"] = f"{float(core['coreAreaPct']):.2f}"
         row["activity_filter"] = DEFINITION_VERSION
         output.append(row)

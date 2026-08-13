@@ -247,6 +247,16 @@ class HeatmapPoint(BaseModel):
     y: float = Field(ge=0, le=100)
 
 
+class ShotmapPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = Field(ge=0, le=100)
+    y: float = Field(ge=0, le=100)
+    outcome: Literal["goal", "on_target", "off_target", "blocked"]
+    xg: float | None = Field(default=None, ge=0)
+    xgot: float | None = Field(default=None, ge=0)
+
+
 class PositionalGridCell(BaseModel):
     """One 6-depth × 5-lane tactical-grid occupancy value."""
 
@@ -286,6 +296,22 @@ class TrueCoreAnalysis(BaseModel):
     zones: list[TrueCoreZone] = Field(max_length=30)
 
 
+class ContinuousCoreAnalysis(BaseModel):
+    """Continuous 50% highest-density region used as the CCA area."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    available: bool
+    definitionVersion: Literal["continuous-hdr-50-v1"] = "continuous-hdr-50-v1"
+    targetDensityPct: Literal[50] = 50
+    achievedDensityPct: float = Field(ge=0, le=100)
+    coreAreaPct: float = Field(ge=0, le=100)
+    densityThreshold: float = Field(ge=0)
+    thresholdOfPeak: float = Field(ge=0, le=1)
+    gridColumns: Literal[32] = 32
+    gridRows: Literal[22] = 22
+
+
 class SpatialAnalysis(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -293,6 +319,8 @@ class SpatialAnalysis(BaseModel):
     source: Literal["messi-static-cohort"] = "messi-static-cohort"
     heatmapPointCount: int = Field(ge=0)
     heatmapPoints: list[HeatmapPoint]
+    shotmapPointCount: int = Field(ge=0)
+    shotmapPoints: list[ShotmapPoint]
     inBoxRatio: float | None = Field(default=None, ge=0, le=100)
     outBoxFinalRatio: float | None = Field(default=None, ge=0, le=100)
     midThirdRatio: float | None = Field(default=None, ge=0, le=100)
@@ -302,6 +330,7 @@ class SpatialAnalysis(BaseModel):
     depthRatios: list[float] = Field(default_factory=list, max_length=6)
     positionalGrid: list[PositionalGridCell] = Field(default_factory=list, max_length=30)
     trueCore: TrueCoreAnalysis
+    continuousCore: ContinuousCoreAnalysis
     dangerZoneDensity: float | None = Field(default=None, ge=0, le=100)
     deepBoxZoneScore: float | None = Field(default=None, ge=0, le=100)
 

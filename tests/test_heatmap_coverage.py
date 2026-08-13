@@ -27,8 +27,10 @@ from positional_grid import (
     positional_grid_metrics,
 )
 from true_core import true_core_zones, true_core_zones_from_points
+from continuous_core import continuous_core_from_points, continuous_core_summary
 from tactical_ratio import _same_competition
 from scripts.backfill_true_core_zones import DEFINITION_VERSION
+from scripts.build_shotmap_points import normalize_shotmap, shot_outcome
 
 
 def _payload(league_name: str, league_id: int) -> dict:
@@ -75,7 +77,39 @@ class CcaOverlayTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_true_core_backfill_has_an_explicit_definition_version(self) -> None:
-        self.assertEqual(DEFINITION_VERSION, "true-core-30zone-v1")
+        self.assertEqual(DEFINITION_VERSION, "continuous-hdr-50-v1")
+
+    def test_continuous_core_uses_only_high_density_raster_area(self) -> None:
+        points = [(25, 50)] * 80 + [(75, 50)] * 80 + [(50, 10)] * 20
+
+        core = continuous_core_from_points(points)
+        zone_core = true_core_zones_from_points(points)
+
+        self.assertEqual(core["definitionVersion"], "continuous-hdr-50-v1")
+        self.assertGreaterEqual(core["achievedDensityPct"], 50.0)
+        self.assertGreater(core["coreAreaPct"], 0.0)
+        self.assertLess(core["coreAreaPct"], zone_core["coreAreaPct"])
+        self.assertEqual(core["coreMask"].shape, (22, 32))
+
+    def test_continuous_core_summary_is_json_safe_and_empty_safe(self) -> None:
+        summary = continuous_core_summary([])
+        self.assertEqual(summary["coreAreaPct"], 0.0)
+        self.assertEqual(summary["gridColumns"], 32)
+        self.assertEqual(summary["gridRows"], 22)
+        self.assertNotIn("density", summary)
+
+    def test_shotmap_snapshot_keeps_only_source_coordinates(self) -> None:
+        raw = [
+            {"x": 91, "y": 50, "eventType": "Goal", "expectedGoals": 0.4},
+            {"x": 80, "y": 40, "eventType": "AttemptSaved", "expectedGoalsOnTarget": 0.2},
+            {"x": 70, "y": 30, "eventType": "Blocked"},
+            {"x": 120, "y": 40, "eventType": "Miss"},
+        ]
+        shots = normalize_shotmap(raw)
+        self.assertEqual([shot["outcome"] for shot in shots], ["goal", "on_target", "blocked"])
+        self.assertEqual(shots[0]["xg"], 0.4)
+        self.assertIsNone(shots[0]["xgot"])
+        self.assertEqual(shot_outcome({"eventType": "Miss"}), "off_target")
     def test_etl_script_can_import_the_root_positional_grid_when_run_as_a_script(self) -> None:
         root = Path(__file__).resolve().parents[1]
         result = subprocess.run(
