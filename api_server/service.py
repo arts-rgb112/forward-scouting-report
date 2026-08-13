@@ -10,7 +10,7 @@ from rankings import (
 )
 from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
-from shotmap import get_shotmap_points, has_shotmap_snapshot
+from shotmap_store_v2 import get_shotmap_points, has_shotmap_snapshot
 
 from .schemas import (
     AgeBand, AssetRef, CompareMeta, ContinuousCoreAnalysis, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, ShotmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,

@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from shotmap import load_shotmap_points
+from shotmap_store_v2 import load_shotmap_points
 
 
 RATIOS_PATH = ROOT / "data" / "tactical_3zone_ratio.csv"
