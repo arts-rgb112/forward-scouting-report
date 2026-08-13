@@ -25,7 +25,7 @@ from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_
 from positional_grid import POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES
 from true_core import true_core_zones_from_points
 from continuous_core import continuous_core_from_points
-from shotmap import get_shotmap_points
+from shotmap import get_shotmap_points, has_shotmap_snapshot
 
 
 _UNIFIED_BAR_COUNTER = itertools.count()
@@ -1161,6 +1161,7 @@ def render_season_heatmap(
 ) -> None:
     points = get_heatmap_points(player_id, heatmap_key)
     shots = get_shotmap_points(heatmap_key)
+    shotmap_snapshotted = has_shotmap_snapshot(heatmap_key)
     true_core = true_core_zones_from_points(points)
     continuous_core = continuous_core_from_points(points)
     st.markdown("#### 📍 시즌 활동 히트맵")
@@ -1276,7 +1277,9 @@ def render_season_heatmap(
             f"실제 고밀도 면적은 피치의 {float(continuous_core['coreAreaPct']):.1f}%입니다. "
             f"30-zone은 전술 구역 해석에만 사용하며 CCA 면적에는 사각형 전체를 포함하지 않습니다."
         )
-    if not shots:
+    if shotmap_snapshotted and not shots:
+        st.caption("이 대회·시즌에는 기록된 슈팅이 없습니다.")
+    elif not shotmap_snapshotted:
         st.caption("슈팅 좌표 스냅샷이 적재되지 않은 세션은 활동 히트맵만 표시합니다.")
 
 

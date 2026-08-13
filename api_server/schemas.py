@@ -321,6 +321,7 @@ class SpatialAnalysis(BaseModel):
     heatmapPoints: list[HeatmapPoint]
     shotmapPointCount: int = Field(ge=0)
     shotmapPoints: list[ShotmapPoint]
+    shotmapSnapshotAvailable: bool
     inBoxRatio: float | None = Field(default=None, ge=0, le=100)
     outBoxFinalRatio: float | None = Field(default=None, ge=0, le=100)
     midThirdRatio: float | None = Field(default=None, ge=0, le=100)

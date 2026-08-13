@@ -100,13 +100,15 @@ class CcaOverlayTests(unittest.TestCase):
 
     def test_shotmap_snapshot_keeps_only_source_coordinates(self) -> None:
         raw = [
-            {"x": 91, "y": 50, "eventType": "Goal", "expectedGoals": 0.4},
-            {"x": 80, "y": 40, "eventType": "AttemptSaved", "expectedGoalsOnTarget": 0.2},
-            {"x": 70, "y": 30, "eventType": "Blocked"},
+            {"x": 103.95, "y": 34, "eventType": "Goal", "expectedGoals": 0.4},
+            {"x": 80, "y": 40, "eventType": "AttemptSaved", "isOnTarget": True, "expectedGoalsOnTarget": 0.2},
+            {"x": 70, "y": 30, "eventType": "AttemptSaved", "isBlocked": True},
             {"x": 120, "y": 40, "eventType": "Miss"},
         ]
         shots = normalize_shotmap(raw)
         self.assertEqual([shot["outcome"] for shot in shots], ["goal", "on_target", "blocked"])
+        self.assertAlmostEqual(shots[0]["x"], 99.0, places=2)
+        self.assertEqual(shots[0]["y"], 50.0)
         self.assertEqual(shots[0]["xg"], 0.4)
         self.assertIsNone(shots[0]["xgot"])
         self.assertEqual(shot_outcome({"eventType": "Miss"}), "off_target")

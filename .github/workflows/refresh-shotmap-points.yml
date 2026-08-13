@@ -25,11 +25,13 @@ jobs:
         run: pip install -r requirements.txt
       - name: Snapshot exact FotMob shot coordinates
         run: python scripts/build_shotmap_points.py --season-name "${{ inputs.season_name }}"
+      - name: Audit all tactical sessions
+        run: python scripts/audit_shotmap_coverage.py
       - name: Commit shotmap snapshot
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/tactical_shotmap_points.json
+          git add data/tactical_shotmap_points*.json
           if git diff --cached --quiet; then
             echo "No shotmap changes to commit."
             exit 0
