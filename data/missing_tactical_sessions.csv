@@ -1,8 +1,6 @@
 fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 899291,Roberto Massimo,VfB Stuttgart,Bundesliga,2021/2022,sportsapi_id_unresolved
 199560,Sebastian Andersson,1. FC Köln,Bundesliga,2021/2022,sportsapi_id_unresolved
-592910,Dimitrios Limnios,FC Twente,Eredivisie,2021/2022,sportsapi_id_unresolved
-1183148,Emanuel Emegha,Sparta Rotterdam,Eredivisie,2021/2022,sportsapi_id_unresolved
 861933,Nikolai Baden,Vitesse,Eredivisie,2021/2022,sportsapi_id_unresolved
 210282,Anthony Lozano,Cadiz,LaLiga,2021/2022,sportsapi_id_unresolved
 1127224,Fer Niño,Mallorca,LaLiga,2021/2022,sportsapi_id_unresolved
@@ -10,21 +8,12 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 40636,Luis Suárez,Atletico Madrid,LaLiga,2021/2022,missing_heatmap_session
 643668,Mamadou Loum Ndiaye,Deportivo Alaves,LaLiga,2021/2022,sportsapi_id_unresolved
 687700,Maxi Gómez,Valencia,LaLiga,2021/2022,sportsapi_id_unresolved
-1047676,Yéremi Pino,Villarreal,LaLiga,2021/2022,sportsapi_id_unresolved
 1042107,Álex Cantero,Levante,LaLiga,2021/2022,sportsapi_id_unresolved
-1095445,Arnaud Kalimuendo-Muinga,Lens,Ligue 1,2021/2022,sportsapi_id_unresolved
-1230848,Bamba Dieng,Marseille,Ligue 1,2021/2022,sportsapi_id_unresolved
 1138769,David Da Costa,Lens,Ligue 1,2021/2022,heatmap_request_failed
 601145,Habibou Mouhamadou Diallo,Strasbourg,Ligue 1,2021/2022,sportsapi_id_unresolved
-980793,Khéphren Thuram-Ulien,Nice,Ligue 1,2021/2022,sportsapi_id_unresolved
-1107280,Pape Sarr,Metz,Ligue 1,2021/2022,sportsapi_id_unresolved
-433677,Ui-Jo Hwang,Bordeaux,Ligue 1,2021/2022,sportsapi_id_unresolved
-860920,Edward Nketiah,Arsenal,Premier League,2021/2022,sportsapi_id_unresolved
 795179,Gabriel,Arsenal,Premier League,2021/2022,sportsapi_id_unresolved
-860975,Joseph Willock,Newcastle United,Premier League,2021/2022,sportsapi_id_unresolved
 848011,Joshua Sargent,Norwich City,Premier League,2021/2022,sportsapi_id_unresolved
 852071,Juan Hernández,Watford,Premier League,2021/2022,sportsapi_id_unresolved
-732282,Trincão,Wolverhampton Wanderers,Premier League,2021/2022,sportsapi_id_unresolved
 643230,Tyler Roberts,Leeds United,Premier League,2021/2022,sportsapi_id_unresolved
 172875,Abel Issa Camara,,Primeira Liga,2021/2022,sportsapi_id_unresolved
 919919,André,Arouca,Primeira Liga,2021/2022,heatmap_request_failed
@@ -39,7 +28,6 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 672721,Pêpê,Famalicao,Primeira Liga,2021/2022,sportsapi_id_unresolved
 749737,Renat Dadashov,Tondela,Primeira Liga,2021/2022,sportsapi_id_unresolved
 952234,Uilton,Pacos de Ferreira,Primeira Liga,2021/2022,sportsapi_id_unresolved
-1061249,Vitinha,FC Porto,Primeira Liga,2021/2022,sportsapi_id_unresolved
 792080,Walterson,Moreirense,Primeira Liga,2021/2022,sportsapi_id_unresolved
 758460,Yan,Moreirense,Primeira Liga,2021/2022,sportsapi_id_unresolved
 822236,Dennis Tørset Johnsen,Venezia,Serie A,2021/2022,sportsapi_id_unresolved
@@ -48,45 +36,31 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 875672,Hamed Traorè,Sassuolo,Serie A,2021/2022,sportsapi_id_unresolved
 203739,João Pedro,Cagliari,Serie A,2021/2022,sportsapi_id_unresolved
 109338,Marco Davide Faraoni,Hellas Verona,Serie A,2021/2022,sportsapi_id_unresolved
-108381,Milan Djuric,Salernitana,Serie A,2021/2022,sportsapi_id_unresolved
-459658,Ruslan Malinovsky,Atalanta,Serie A,2021/2022,sportsapi_id_unresolved
 613714,Jordan Pefok,Young Boys,UEFA Champions League,2021/2022,sportsapi_id_unresolved
 694060,Meschack Elia,Young Boys,UEFA Champions League,2021/2022,sportsapi_id_unresolved
-564847,Viktor Tsigankov,Dynamo Kyiv,UEFA Champions League,2021/2022,sportsapi_id_unresolved
 176989,Yaroslav Rakitskiy,Zenit St. Petersburg,UEFA Champions League,2021/2022,sportsapi_id_unresolved
-540073,Gian-Luca Waldschmidt,Wolfsburg,Bundesliga,2022/2023,sportsapi_id_unresolved
 613714,Jordan Pefok,Union Berlin,Bundesliga,2022/2023,sportsapi_id_unresolved
 1040889,Junior Dina Ebimbe,Eintracht Frankfurt,Bundesliga,2022/2023,sportsapi_id_unresolved
 959404,Silas Katompa Mvumpa,VfB Stuttgart,Bundesliga,2022/2023,sportsapi_id_unresolved
 1097467,Dirk Proper,NEC Nijmegen,Eredivisie,2022/2023,sportsapi_id_unresolved
 213682,Iiass Bel Hassani,RKC Waalwijk,Eredivisie,2022/2023,sportsapi_id_unresolved
 703044,Landry Dimata,NEC Nijmegen,Eredivisie,2022/2023,sportsapi_id_unresolved
-1049004,Oliver Edvardsen,Go Ahead Eagles,Eredivisie,2022/2023,sportsapi_id_unresolved
 839476,Othman Boussaid,FC Utrecht,Eredivisie,2022/2023,sportsapi_id_unresolved
 774237,Willum Willumsson,Go Ahead Eagles,Eredivisie,2022/2023,sportsapi_id_unresolved
 737444,Amath Ndiaye,Mallorca,LaLiga,2022/2023,sportsapi_id_unresolved
 210282,Anthony Lozano,Cadiz,LaLiga,2022/2023,sportsapi_id_unresolved
 202610,Fidel Chaves,Elche,LaLiga,2022/2023,sportsapi_id_unresolved
-1116734,Gabriel Veiga,Celta Vigo,LaLiga,2022/2023,sportsapi_id_unresolved
 474589,José Giménez,Atletico Madrid,LaLiga,2022/2023,heatmap_request_failed
 1052993,Nico Melamed,Espanyol,LaLiga,2022/2023,sportsapi_id_unresolved
-872396,Pathé Ciss,Rayo Vallecano,LaLiga,2022/2023,sportsapi_id_unresolved
 309334,Saúl,Atletico Madrid,LaLiga,2022/2023,sportsapi_id_unresolved
-1047676,Yéremi Pino,Villarreal,LaLiga,2022/2023,sportsapi_id_unresolved
-1095445,Arnaud Kalimuendo-Muinga,Rennes,Ligue 1,2022/2023,sportsapi_id_unresolved
-1230848,Bamba Dieng,Marseille,Ligue 1,2022/2023,sportsapi_id_unresolved
 208929,Brecht Dejaeghere,Toulouse,Ligue 1,2022/2023,sportsapi_id_unresolved
 1138769,David Da Costa,Lens,Ligue 1,2022/2023,heatmap_request_failed
 601145,Habibou Mouhamadou Diallo,Strasbourg,Ligue 1,2022/2023,sportsapi_id_unresolved
-980793,Khéphren Thuram-Ulien,Nice,Ligue 1,2022/2023,sportsapi_id_unresolved
 1092903,Muhammed Cham,Clermont Foot,Ligue 1,2022/2023,heatmap_request_failed
-459658,Ruslan Malinovsky,Marseille,Ligue 1,2022/2023,sportsapi_id_unresolved
 179823,Ryad Nouri,AC Ajaccio,Ligue 1,2022/2023,sportsapi_id_unresolved
 262550,Bobby Reid,Fulham,Premier League,2022/2023,sportsapi_id_unresolved
 188058,Daniel Burn,Newcastle United,Premier League,2022/2023,sportsapi_id_unresolved
-860920,Edward Nketiah,Arsenal,Premier League,2022/2023,sportsapi_id_unresolved
 795179,Gabriel,Arsenal,Premier League,2022/2023,sportsapi_id_unresolved
-860975,Joseph Willock,Newcastle United,Premier League,2022/2023,sportsapi_id_unresolved
 841352,Abdul-Aziz Yakubu,Rio Ave,Primeira Liga,2022/2023,sportsapi_id_unresolved
 919919,André,Vitoria de Guimaraes,Primeira Liga,2022/2023,heatmap_request_failed
 1248736,Antony,Arouca,Primeira Liga,2022/2023,heatmap_request_failed
@@ -95,7 +69,6 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 848051,Juan Manuel Boselli,Gil Vicente,Primeira Liga,2022/2023,sportsapi_id_unresolved
 320618,Mateus Uribe,FC Porto,Primeira Liga,2022/2023,sportsapi_id_unresolved
 875133,Pote,Sporting CP,Primeira Liga,2022/2023,sportsapi_id_unresolved
-732282,Trincão,Sporting CP,Primeira Liga,2022/2023,sportsapi_id_unresolved
 737814,Xadas,Maritimo,Primeira Liga,2022/2023,sportsapi_id_unresolved
 526450,Emmanuel Quartsin Gyasi,Spezia,Serie A,2022/2023,sportsapi_id_unresolved
 178538,Filip Djuricic,Sampdoria,Serie A,2022/2023,sportsapi_id_unresolved
@@ -107,7 +80,6 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 976506,Mykhaylo Mudryk,Shakhtar Donetsk,UEFA Champions League,2022/2023,sportsapi_id_unresolved
 547710,Adama Traoré,Ferencvaros,UEFA Europa League,2022/2023,heatmap_request_failed
 862538,Ibañez,Roma,UEFA Europa League,2022/2023,sportsapi_id_unresolved
-540073,Gian-Luca Waldschmidt,1. FC Köln,Bundesliga,2023/2024,sportsapi_id_unresolved
 1119643,Jan Thielmann,1. FC Köln,Bundesliga,2023/2024,sportsapi_id_unresolved
 278831,John Anthony Brooks,Hoffenheim,Bundesliga,2023/2024,sportsapi_id_unresolved
 613714,Jordan Pefok,Borussia Mönchengladbach,Bundesliga,2023/2024,sportsapi_id_unresolved
@@ -115,39 +87,28 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 959404,Silas Katompa Mvumpa,VfB Stuttgart,Bundesliga,2023/2024,sportsapi_id_unresolved
 1097467,Dirk Proper,NEC Nijmegen,Eredivisie,2023/2024,sportsapi_id_unresolved
 843767,Kornelius Hansen,Almere City FC,Eredivisie,2023/2024,sportsapi_id_unresolved
-1049004,Oliver Edvardsen,Go Ahead Eagles,Eredivisie,2023/2024,sportsapi_id_unresolved
 839476,Othman Boussaid,FC Utrecht,Eredivisie,2023/2024,sportsapi_id_unresolved
 874482,Roberto González,NEC Nijmegen,Eredivisie,2023/2024,sportsapi_id_unresolved
 774237,Willum Willumsson,Go Ahead Eagles,Eredivisie,2023/2024,sportsapi_id_unresolved
 210282,Anthony Lozano,Getafe,LaLiga,2023/2024,sportsapi_id_unresolved
-1055327,Antonio Sánchez,Mallorca,LaLiga,2023/2024,sportsapi_id_unresolved
 891059,Christopher Ramos,Cadiz,LaLiga,2023/2024,sportsapi_id_unresolved
 616531,Javi Muñoz,Las Palmas,LaLiga,2023/2024,sportsapi_id_unresolved
 1094778,Raúl García,Osasuna,LaLiga,2023/2024,sportsapi_id_unresolved
-1414859,Samuel Aghehowa,Granada,LaLiga,2023/2024,sportsapi_id_unresolved
-564847,Viktor Tsigankov,Girona,LaLiga,2023/2024,sportsapi_id_unresolved
-1095445,Arnaud Kalimuendo-Muinga,Rennes,Ligue 1,2023/2024,sportsapi_id_unresolved
 950967,Cheikh Sabaly,Metz,Ligue 1,2023/2024,sportsapi_id_unresolved
 1138769,David Da Costa,Lens,Ligue 1,2023/2024,heatmap_request_failed
 1243913,Dion Sahi,Strasbourg,Ligue 1,2023/2024,sportsapi_id_unresolved
-1183148,Emanuel Emegha,Strasbourg,Ligue 1,2023/2024,sportsapi_id_unresolved
-1460534,Junior Kroupi,Lorient,Ligue 1,2023/2024,sportsapi_id_unresolved
-980793,Khéphren Thuram-Ulien,Nice,Ligue 1,2023/2024,sportsapi_id_unresolved
+1183148,Emanuel Emegha,Strasbourg,Ligue 1,2023/2024,heatmap_request_failed
 1092903,Muhammed Cham,Clermont Foot,Ligue 1,2023/2024,heatmap_request_failed
-1061249,Vitinha,Paris Saint-Germain,Ligue 1,2023/2024,sportsapi_id_unresolved
 262550,Bobby Reid,Fulham,Premier League,2023/2024,sportsapi_id_unresolved
 188058,Daniel Burn,Newcastle United,Premier League,2023/2024,sportsapi_id_unresolved
-860920,Edward Nketiah,Arsenal,Premier League,2023/2024,sportsapi_id_unresolved
 795179,Gabriel,Arsenal,Premier League,2023/2024,sportsapi_id_unresolved
 802245,Jacob Brown,Luton Town,Premier League,2023/2024,sportsapi_id_unresolved
 976506,Mykhaylo Mudryk,Chelsea,Premier League,2023/2024,sportsapi_id_unresolved
-1107280,Pape Sarr,Tottenham Hotspur,Premier League,2023/2024,sportsapi_id_unresolved
 919919,André,Vitoria de Guimaraes,Primeira Liga,2023/2024,heatmap_request_failed
 783619,Elves,Farense,Primeira Liga,2023/2024,heatmap_request_failed
 694773,Jo,Chaves,Primeira Liga,2023/2024,sportsapi_id_unresolved
 1116481,Madson,Moreirense,Primeira Liga,2023/2024,sportsapi_id_unresolved
 875133,Pote,Sporting CP,Primeira Liga,2023/2024,sportsapi_id_unresolved
-732282,Trincão,Sporting CP,Primeira Liga,2023/2024,sportsapi_id_unresolved
 526450,Emmanuel Quartsin Gyasi,Empoli,Serie A,2023/2024,sportsapi_id_unresolved
 108381,Milan Djuric,Hellas Verona,Serie A,2023/2024,sportsapi_id_unresolved
 1124533,Kilian Sildillia,Freiburg,UEFA Europa League,2023/2024,sportsapi_id_unresolved
@@ -157,32 +118,20 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 613714,Jordan Pefok,Union Berlin,Bundesliga,2024/2025,sportsapi_id_unresolved
 1286190,Anselmo MacNulty,PEC Zwolle,Eredivisie,2024/2025,sportsapi_id_unresolved
 843767,Kornelius Hansen,Almere City FC,Eredivisie,2024/2025,sportsapi_id_unresolved
-1015183,Mohammed Ihattaren,RKC Waalwijk,Eredivisie,2024/2025,sportsapi_id_unresolved
-1049004,Oliver Edvardsen,Go Ahead Eagles,Eredivisie,2024/2025,sportsapi_id_unresolved
 874482,Roberto González,NEC Nijmegen,Eredivisie,2024/2025,sportsapi_id_unresolved
 1522438,Shiloh Zand,Heracles,Eredivisie,2024/2025,sportsapi_id_unresolved
 1094778,Raúl García,Osasuna,LaLiga,2024/2025,sportsapi_id_unresolved
 309334,Saúl,Sevilla,LaLiga,2024/2025,sportsapi_id_unresolved
-564847,Viktor Tsigankov,Girona,LaLiga,2024/2025,sportsapi_id_unresolved
-1047676,Yéremi Pino,Villarreal,LaLiga,2024/2025,sportsapi_id_unresolved
-1095445,Arnaud Kalimuendo-Muinga,Rennes,Ligue 1,2024/2025,sportsapi_id_unresolved
-1230848,Bamba Dieng,Angers,Ligue 1,2024/2025,sportsapi_id_unresolved
-671961,Douglas Augusto,Nantes,Ligue 1,2024/2025,sportsapi_id_unresolved
-1183148,Emanuel Emegha,Strasbourg,Ligue 1,2024/2025,sportsapi_id_unresolved
 875672,Hamed Traorè,Auxerre,Ligue 1,2024/2025,sportsapi_id_unresolved
-942893,Thelonius Bair,Auxerre,Ligue 1,2024/2025,sportsapi_id_unresolved
 860920,Edward Nketiah,Crystal Palace,Premier League,2024/2025,sportsapi_id_unresolved
 795179,Gabriel,Arsenal,Premier League,2024/2025,sportsapi_id_unresolved
 866686,Matthew O'Riley,Brighton & Hove Albion,Premier League,2024/2025,sportsapi_id_unresolved
 1107280,Pape Sarr,Tottenham Hotspur,Premier League,2024/2025,sportsapi_id_unresolved
-1284404,Babatunde Akinsola,AVS Futebol SAD,Primeira Liga,2024/2025,sportsapi_id_unresolved
 1075457,Chuchu Ramírez,Vitoria de Guimaraes,Primeira Liga,2024/2025,sportsapi_id_unresolved
 1252093,Dudu Teodora,Nacional,Primeira Liga,2024/2025,sportsapi_id_unresolved
 1287941,Gabri Martínez,Braga,Primeira Liga,2024/2025,heatmap_request_failed
 1459741,Isaac Aguiar,Nacional,Primeira Liga,2024/2025,heatmap_request_failed
 1395944,Kaio,Vitoria de Guimaraes,Primeira Liga,2024/2025,sportsapi_id_unresolved
-1414859,Samuel Aghehowa,FC Porto,Primeira Liga,2024/2025,sportsapi_id_unresolved
-732282,Trincão,Sporting CP,Primeira Liga,2024/2025,sportsapi_id_unresolved
 1044194,Vinícius,Santa Clara,Primeira Liga,2024/2025,heatmap_request_failed
 1316088,Benja Domínguez,Bologna,Serie A,2024/2025,sportsapi_id_unresolved
 526450,Emmanuel Quartsin Gyasi,Empoli,Serie A,2024/2025,sportsapi_id_unresolved
@@ -194,51 +143,31 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 547710,Adama Traoré,Ferencvaros,UEFA Europa League,2024/2025,heatmap_request_failed
 766160,Kady Malinowski,Ferencvaros,UEFA Europa League,2024/2025,sportsapi_id_unresolved
 1220633,Prince Adu,Viktoria Plzen,UEFA Europa League,2024/2025,sportsapi_id_unresolved
-1414859,Samuel Aghehowa,FC Porto,UEFA Europa League,2024/2025,sportsapi_id_unresolved
 1119168,Tural Bayramov,Qarabag FK,UEFA Europa League,2024/2025,sportsapi_id_unresolved
 1047670,Andrej Ilic,Union Berlin,Bundesliga,2025/2026,missing_heatmap_session
-540073,Gian-Luca Waldschmidt,1. FC Köln,Bundesliga,2025/2026,sportsapi_id_unresolved
 1119643,Jan Thielmann,1. FC Köln,Bundesliga,2025/2026,sportsapi_id_unresolved
-1121170,Ransford Königsdörffer,Hamburger SV,Bundesliga,2025/2026,sportsapi_id_unresolved
-1269497,Yannik Engelhardt,Borussia Mönchengladbach,Bundesliga,2025/2026,sportsapi_id_unresolved
-937032,Brynjólfur Willumsson,FC Groningen,Eredivisie,2025/2026,sportsapi_id_unresolved
-592910,Dimitrios Limnios,Fortuna Sittard,Eredivisie,2025/2026,sportsapi_id_unresolved
 1124533,Kilian Sildillia,PSV Eindhoven,Eredivisie,2025/2026,sportsapi_id_unresolved
-1015183,Mohammed Ihattaren,Fortuna Sittard,Eredivisie,2025/2026,sportsapi_id_unresolved
 1383534,Weslley Pinto,AZ Alkmaar,Eredivisie,2025/2026,sportsapi_id_unresolved
-1131957,Jon Olasagasti,Levante,LaLiga,2025/2026,sportsapi_id_unresolved
 852071,Juan Hernández,Real Betis,LaLiga,2025/2026,sportsapi_id_unresolved
-872396,Pathé Ciss,Rayo Vallecano,LaLiga,2025/2026,sportsapi_id_unresolved
 1094778,Raúl García,Osasuna,LaLiga,2025/2026,sportsapi_id_unresolved
 1130583,Samú,Mallorca,LaLiga,2025/2026,sportsapi_id_unresolved
 1436270,Unai Gómez,Athletic Club,LaLiga,2025/2026,sportsapi_id_unresolved
-564847,Viktor Tsigankov,Girona,LaLiga,2025/2026,sportsapi_id_unresolved
-1230848,Bamba Dieng,Lorient,Ligue 1,2025/2026,sportsapi_id_unresolved
 601145,Habibou Mouhamadou Diallo,Metz,Ligue 1,2025/2026,sportsapi_id_unresolved
 1040889,Junior Dina Ebimbe,Brest,Ligue 1,2025/2026,sportsapi_id_unresolved
 437329,Mbwana Samatta,Le Havre,Ligue 1,2025/2026,sportsapi_id_unresolved
 1202239,Mohamed Bamba,Lorient,Ligue 1,2025/2026,sportsapi_id_unresolved
-1693546,Mohamed Meïté,Rennes,Ligue 1,2025/2026,sportsapi_id_unresolved
-1401248,Rémy Lascary,Brest,Ligue 1,2025/2026,sportsapi_id_unresolved
 795179,Gabriel,Arsenal,Premier League,2025/2026,sportsapi_id_unresolved
 1460534,Junior Kroupi,AFC Bournemouth,Premier League,2025/2026,sportsapi_id_unresolved
 292313,Raul Jiménez,Fulham,Premier League,2025/2026,missing_heatmap_session
 1047676,Yéremi Pino,Crystal Palace,Premier League,2025/2026,sportsapi_id_unresolved
-1284404,Babatunde Akinsola,AVS Futebol SAD,Primeira Liga,2025/2026,sportsapi_id_unresolved
-1027396,Barbero,Arouca,Primeira Liga,2025/2026,sportsapi_id_unresolved
 1075457,Chuchu Ramírez,Nacional,Primeira Liga,2025/2026,sportsapi_id_unresolved
 1287941,Gabri Martínez,Braga,Primeira Liga,2025/2026,heatmap_request_failed
-1116734,Gabriel Veiga,FC Porto,Primeira Liga,2025/2026,sportsapi_id_unresolved
 613714,Jordan Pefok,Tondela,Primeira Liga,2025/2026,sportsapi_id_unresolved
-1130711,Lucas Figueiredo,Alverca,Primeira Liga,2025/2026,sportsapi_id_unresolved
 792303,Luis Suárez,Sporting CP,Primeira Liga,2025/2026,heatmap_request_failed
 1284376,Marezi,Alverca,Primeira Liga,2025/2026,sportsapi_id_unresolved
 1031656,Maxi Araújo,Sporting CP,Primeira Liga,2025/2026,sportsapi_id_unresolved
-940443,Nabili Touaizi,Alverca,Primeira Liga,2025/2026,sportsapi_id_unresolved
 1174640,Pedro Maranhão,Tondela,Primeira Liga,2025/2026,sportsapi_id_unresolved
 875133,Pote,Sporting CP,Primeira Liga,2025/2026,sportsapi_id_unresolved
-1414859,Samuel Aghehowa,FC Porto,Primeira Liga,2025/2026,sportsapi_id_unresolved
-732282,Trincão,Sporting CP,Primeira Liga,2025/2026,sportsapi_id_unresolved
 1044194,Vinícius,Santa Clara,Primeira Liga,2025/2026,heatmap_request_failed
 1355574,Giovane Nascimento,Hellas Verona,Serie A,2025/2026,sportsapi_id_unresolved
 857269,Gleison Bremer,Juventus,Serie A,2025/2026,sportsapi_id_unresolved
@@ -249,19 +178,12 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 942193,Mikael Egill Ellertsson,Genoa,Serie A,2025/2026,sportsapi_id_unresolved
 459658,Ruslan Malinovsky,Genoa,Serie A,2025/2026,sportsapi_id_unresolved
 889535,Yann Aurel Bisseck,Inter,Serie A,2025/2026,sportsapi_id_unresolved
-860975,Joseph Willock,Newcastle United,UEFA Champions League,2025/2026,sportsapi_id_unresolved
 792303,Luis Suárez,Sporting CP,UEFA Champions League,2025/2026,heatmap_request_failed
 875133,Pote,Sporting CP,UEFA Champions League,2025/2026,sportsapi_id_unresolved
-732282,Trincão,Sporting CP,UEFA Champions League,2025/2026,sportsapi_id_unresolved
 324910,Abdul Rahman Baba,PAOK Thessaloniki,UEFA Europa League,2025/2026,sportsapi_id_unresolved
 1060604,Abner,Lyon,UEFA Europa League,2025/2026,sportsapi_id_unresolved
-1133802,Bamidele Yusuf,Ferencvaros,UEFA Europa League,2025/2026,sportsapi_id_unresolved
 1208040,Caio,Ludogorets Razgrad,UEFA Europa League,2025/2026,sportsapi_id_unresolved
 882163,Chukwubuike Adamu,Freiburg,UEFA Europa League,2025/2026,sportsapi_id_unresolved
-1054011,Collins Sor,Genk,UEFA Europa League,2025/2026,sportsapi_id_unresolved
 1287941,Gabri Martínez,Braga,UEFA Europa League,2025/2026,heatmap_request_failed
-1116734,Gabriel Veiga,FC Porto,UEFA Europa League,2025/2026,sportsapi_id_unresolved
-1310440,Javi Rueda,Celta Vigo,UEFA Europa League,2025/2026,sportsapi_id_unresolved
 852071,Juan Hernández,Real Betis,UEFA Europa League,2025/2026,sportsapi_id_unresolved
 1166344,Kevin Carlos,Nice,UEFA Europa League,2025/2026,sportsapi_id_unresolved
-1414859,Samuel Aghehowa,FC Porto,UEFA Europa League,2025/2026,sportsapi_id_unresolved
