@@ -1,6 +1,7 @@
 import unittest
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
@@ -11,6 +12,7 @@ from scripts.build_tactical_ratios import (
     discover_tournaments,
     missing_static_cohort_sessions,
     read_fotmob_map,
+    read_missing_failure_reasons,
     reverse_fotmob_map,
     resolve_ranked_sportsapi_id,
     spatial_metrics,
@@ -116,6 +118,38 @@ class CcaOverlayTests(unittest.TestCase):
 
 
 class TacticalCoverageAuditTests(unittest.TestCase):
+    def test_failure_reason_reader_returns_dict_for_existing_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "missing.csv"
+            path.write_text(
+                "fotmob_player_id,player_name,team_name,competition_name,season_name,reason\n"
+                "212867,Heung-Min Son,Tottenham Hotspur,Premier League,2023/2024,sportsapi_id_unresolved\n",
+                encoding="utf-8",
+            )
+
+            reasons = read_missing_failure_reasons(path)
+
+        self.assertEqual(
+            reasons[("212867", "Premier League", "2023/2024")],
+            "sportsapi_id_unresolved",
+        )
+
+    def test_failure_reason_reader_returns_empty_dict_for_missing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            reasons = read_missing_failure_reasons(Path(directory) / "missing.csv")
+        self.assertEqual(reasons, {})
+
+    def test_failure_reason_reader_ignores_incomplete_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "missing.csv"
+            path.write_text(
+                "fotmob_player_id,competition_name,season_name,reason\n"
+                ",Premier League,2023/2024,sportsapi_id_unresolved\n",
+                encoding="utf-8",
+            )
+            reasons = read_missing_failure_reasons(path)
+        self.assertEqual(reasons, {})
+
     def test_verified_son_mapping_is_available_in_both_directions(self) -> None:
         root = Path(__file__).resolve().parents[1]
         mapping = read_fotmob_map(root / "data" / "fotmob_player_map.csv")

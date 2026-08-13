@@ -774,6 +774,15 @@ def missing_session_key(row: dict[str, Any]) -> tuple[str, str, str]:
 def read_missing_failure_reasons(path: Path) -> dict[tuple[str, str, str], str]:
     if not path.exists():
         return {}
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            return {
+                missing_session_key(row): str(row.get("reason", "")).strip()
+                for row in csv.DictReader(source)
+                if all(missing_session_key(row)) and row.get("reason")
+            }
+    except (OSError, csv.Error):
+        return {}
 
 
 def tactical_coverage_regressions(
@@ -784,15 +793,6 @@ def tactical_coverage_regressions(
     if baseline_missing_keys is None:
         return set()
     return current_missing_keys - baseline_missing_keys
-    try:
-        with path.open(encoding="utf-8", newline="") as source:
-            return {
-                missing_session_key(row): str(row.get("reason", "")).strip()
-                for row in csv.DictReader(source)
-                if all(missing_session_key(row)) and row.get("reason")
-            }
-    except OSError:
-        return {}
 
 
 def read_checkpoint(path: Path) -> list[dict[str, str]]:
