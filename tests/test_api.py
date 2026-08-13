@@ -194,6 +194,7 @@ def test_v2_europe_leaderboard_and_contextual_player_detail_contract():
     assert continuous["coreAreaPct"] == spatial["ccaAreaPct"]
     assert continuous["coreAreaPct"] <= core["coreAreaPct"]
     assert spatial["shotmapPointCount"] == len(spatial["shotmapPoints"])
+    assert isinstance(spatial["shotmapSnapshotAvailable"], bool)
 
 
 def test_v2_unavailable_competition_is_not_silently_rendered_as_empty():

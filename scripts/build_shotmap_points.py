@@ -26,6 +26,8 @@ from tactical_ratio import _same_competition
 DATA_DIR = ROOT / "data"
 TACTICAL_PATH = DATA_DIR / "tactical_3zone_ratio.csv"
 OUTPUT_PATH = DATA_DIR / "tactical_shotmap_points.json"
+FOTMOB_PITCH_LENGTH = 105.0
+FOTMOB_PITCH_WIDTH = 68.0
 
 
 def _number(value: object) -> float | None:
@@ -40,10 +42,10 @@ def shot_outcome(shot: dict[str, Any]) -> str:
     event = str(shot.get("eventType") or shot.get("event_type") or "").casefold()
     if shot.get("isGoal") is True or event == "goal":
         return "goal"
-    if any(token in event for token in ("save", "saved", "on target", "post")):
-        return "on_target"
-    if "block" in event:
+    if shot.get("isBlocked") is True or "block" in event:
         return "blocked"
+    if shot.get("isOnTarget") is True or any(token in event for token in ("save", "saved", "on target")):
+        return "on_target"
     return "off_target"
 
 
@@ -54,9 +56,17 @@ def normalize_shotmap(payload: object) -> list[dict[str, object]]:
     for shot in payload:
         if not isinstance(shot, dict) or shot.get("isOwnGoal"):
             continue
-        x, y = _number(shot.get("x")), _number(shot.get("y"))
-        if x is None or y is None or not (0.0 <= x <= 100.0 and 0.0 <= y <= 100.0):
+        source_x, source_y = _number(shot.get("x")), _number(shot.get("y"))
+        if (
+            source_x is None or source_y is None
+            or not (0.0 <= source_x <= FOTMOB_PITCH_LENGTH)
+            or not (0.0 <= source_y <= FOTMOB_PITCH_WIDTH)
+        ):
             continue
+        # FotMob shotmaps use a 105 x 68 pitch. Activity heatmaps and the
+        # supplied positional pitch use 0..100 on each axis.
+        x = source_x / FOTMOB_PITCH_LENGTH * 100.0
+        y = source_y / FOTMOB_PITCH_WIDTH * 100.0
         shots.append({
             "x": round(x, 3), "y": round(y, 3), "outcome": shot_outcome(shot),
             "xg": round(value, 4) if (value := _number(shot.get("expectedGoals"))) is not None else None,
@@ -82,13 +92,20 @@ def _targets(
     return grouped
 
 
+def _output_path(season: str | None) -> Path:
+    if not season:
+        return OUTPUT_PATH
+    return DATA_DIR / f"tactical_shotmap_points_{season.replace('/', '_')}.json"
+
+
 def build(
     season: str | None = None, limit: int | None = None, player_id: str | None = None,
 ) -> tuple[int, int]:
+    output_path = _output_path(season)
     existing: dict[str, list[dict[str, object]]] = {}
-    if OUTPUT_PATH.exists():
+    if output_path.exists():
         try:
-            raw = json.loads(OUTPUT_PATH.read_text(encoding="utf-8"))
+            raw = json.loads(output_path.read_text(encoding="utf-8"))
             if isinstance(raw, dict):
                 existing = raw
         except ValueError:
@@ -119,9 +136,10 @@ def build(
             shotmap = stats.get("shotmap") if isinstance(stats, dict) else None
             existing[str(match["heatmap_key"])] = normalize_shotmap(shotmap)
             completed += 1
-        if completed and completed % 25 == 0:
-            OUTPUT_PATH.write_text(json.dumps(existing, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    OUTPUT_PATH.write_text(json.dumps(existing, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        if index % 20 == 0 or completed % 25 == 0:
+            output_path.write_text(json.dumps(existing, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+            print(f"Shotmap progress: {index + 1}/{len(targets)} player-season targets; {completed} sessions updated", flush=True)
+    output_path.write_text(json.dumps(existing, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return len(targets), completed
 
 

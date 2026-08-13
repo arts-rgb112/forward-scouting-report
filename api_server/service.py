@@ -10,7 +10,7 @@ from rankings import (
 )
 from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
-from shotmap import get_shotmap_points
+from shotmap import get_shotmap_points, has_shotmap_snapshot
 
 from .schemas import (
     AgeBand, AssetRef, CompareMeta, ContinuousCoreAnalysis, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, ShotmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
@@ -425,6 +425,7 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
     return SpatialAnalysis(
         available=bool(tactical), heatmapPointCount=len(valid_points), heatmapPoints=valid_points,
         shotmapPointCount=len(valid_shots), shotmapPoints=valid_shots,
+        shotmapSnapshotAvailable=has_shotmap_snapshot(str(tactical.get("heatmap_key")) if tactical else None),
         inBoxRatio=value("in_box_ratio"), outBoxFinalRatio=value("out_box_final_ratio"),
         midThirdRatio=value("mid_third_ratio"), finalThirdRatio=value("final_third_ratio"),
         ccaAreaPct=value("cca_area_pct"), laneRatios=[value(f"lane_{index}_ratio") or 0.0 for index in range(1, 6)] if tactical else [],
