@@ -131,6 +131,7 @@ def _same_competition(left: object, right: object) -> bool:
         "uefaeuropaleague": "europaleague",
         "uefaeuropaconferenceleague": "europaconferenceleague",
         "uefaconferenceleague": "europaconferenceleague",
+        "conferenceleague": "europaconferenceleague",
     }
     return aliases.get(_normalise(left), _normalise(left)) == aliases.get(_normalise(right), _normalise(right))
 
