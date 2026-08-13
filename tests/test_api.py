@@ -261,6 +261,56 @@ def test_watchlist_resolve_keeps_order_and_isolates_invalid_contexts():
     assert results[0]["context"] != results[2]["context"]
 
 
+def test_son_data_quality_exposes_spatial_imputation_without_changing_player_dto():
+    response = client.get("/api/v2/players/212867/data-quality", params={
+        "season": "2023/2024", "mode": "league", "scope": 7,
+        "competition": "all",
+    })
+    assert response.status_code == 200
+    quality = response.json()["data"]["dataQuality"]
+    assert quality == {
+        "qualityVersion": "messi-quality-v1",
+        "spatialAvailable": False,
+        "messiScoreComplete": False,
+        "reason": "spatial_session_missing",
+        "imputedMetrics": ["boxThreat", "dangerZone", "spaceControl"],
+        "imputedComponents": [
+            "boxThreat.ratio", "dangerZone.ratio",
+            "spaceControl.volume", "spaceControl.ratio",
+        ],
+        "observedWeightPct": 62.5,
+        "fallbackComponentScore": 20,
+    }
+
+
+def test_watchlist_data_quality_batches_contexts_under_the_same_security_gate():
+    origin = "https://forward-scouting-report-6dn7-tau.vercel.app"
+    key = "fotmob:212867|season:2023/2024|mode:league|scope:7|competition:null"
+    payload = {"entries": [{
+        "key": key,
+        "player": {"idNamespace": "fotmob", "playerId": 212867},
+        "context": {
+            "season": "2023/2024", "mode": "league", "scope": 7,
+            "competition": None,
+        },
+    }]}
+    response = client.post(
+        "/api/v2/watchlist/data-quality", headers={"Origin": origin}, json=payload,
+    )
+    assert response.status_code == 200
+    result = response.json()["results"][0]
+    assert result["key"] == key and result["status"] == "resolved"
+    assert result["playerId"] == 212867
+    assert result["dataQuality"]["observedWeightPct"] == 62.5
+
+    hostile = client.post(
+        "/api/v2/watchlist/data-quality",
+        headers={"Origin": "https://attacker.invalid"}, json=payload,
+    )
+    assert hostile.status_code == 403
+    assert "access-control-allow-origin" not in hostile.headers
+
+
 def test_watchlist_resolution_rejects_hostile_origins_and_large_bodies():
     payload = {"entries": []}
     hostile = client.post("/api/v2/watchlist/resolve", headers={"Origin": "https://attacker.invalid"}, json=payload)
@@ -289,6 +339,9 @@ def test_openapi_advertises_the_v1_response_contract():
     assert {item["$ref"].rsplit("/", 1)[-1] for item in leaderboard_schema["anyOf"]} == {"LeaderboardEnvelope", "LeaderboardPageEnvelope"}
     assert "/api/v2/compare" in paths
     assert "/api/v2/watchlist/resolve" in paths
+    assert "/api/v2/watchlist/data-quality" in paths
+    assert "/api/v2/players/{player_id}/data-quality" in paths
+    assert schema["MessiDataQuality"]["properties"]["qualityVersion"]["const"] == "messi-quality-v1"
     assert "PlayerAnalysis" in schema and "LeaderboardPageMeta" in schema
 
 

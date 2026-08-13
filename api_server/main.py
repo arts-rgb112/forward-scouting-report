@@ -10,13 +10,15 @@ from fastapi.responses import JSONResponse
 from .schemas import (
     AgeBand, DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
     LeaderboardSort, MinutesBand, SortOrder,
-    PlayerComparisonEnvelope, PlayerDetailEnvelope, PlayerEnvelope, PlayersEnvelope,
+    PlayerComparisonEnvelope, PlayerDataQualityEnvelope, PlayerDetailEnvelope,
+    PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
     WatchlistResolveEnvelope, WatchlistResolveRequest,
 )
 from .service import (
-    build_duel_spatial_analysis, build_players, build_player_detail, compare_players, find_v2_player, leaderboard_options,
+    build_duel_spatial_analysis, build_player_data_quality, build_players,
+    build_player_detail, compare_players, find_v2_player, leaderboard_options,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
-    resolve_watchlist_entries, supported_seasons,
+    resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
 )
 
 
@@ -30,6 +32,10 @@ DEFAULT_ORIGINS = (
 VERCEL_PREVIEW_ORIGIN_REGEX = r"^https://forward-scouting-report-6dn7-[a-z0-9-]+-messiflick\.vercel\.app$"
 WATCHLIST_ALLOWED_ORIGIN = "https://forward-scouting-report-6dn7-tau.vercel.app"
 WATCHLIST_MAX_BODY_BYTES = 64 * 1024
+PROTECTED_WATCHLIST_POST_PATHS = {
+    "/api/v2/watchlist/resolve",
+    "/api/v2/watchlist/data-quality",
+}
 
 
 def cors_origins() -> list[str]:
@@ -64,7 +70,7 @@ app.add_middleware(
 @app.middleware("http")
 async def guard_watchlist_resolution(request: Request, call_next):
     """Bound the stateless resolver and give POST access only to production."""
-    if request.url.path != "/api/v2/watchlist/resolve":
+    if request.url.path not in PROTECTED_WATCHLIST_POST_PATHS:
         return await call_next(request)
     if request.headers.get("origin") != WATCHLIST_ALLOWED_ORIGIN:
         return JSONResponse(status_code=403, content={"detail": "Origin is not allowed for watchlist resolution"})
@@ -231,3 +237,40 @@ def compare_player_details(
 def resolve_watchlist(request: WatchlistResolveRequest) -> WatchlistResolveEnvelope:
     """Validate up to 100 client-owned contextual watchlist entries."""
     return WatchlistResolveEnvelope(results=resolve_watchlist_entries(request.entries))
+
+
+@app.get(
+    "/api/v2/players/{player_id}/data-quality",
+    response_model=PlayerDataQualityEnvelope,
+    tags=["players"],
+)
+def player_data_quality(
+    player_id: int,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7"] = Query(default="7"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+) -> PlayerDataQualityEnvelope:
+    quality = build_player_data_quality(
+        player_id, season, mode, int(scope), competition,
+    )
+    if quality is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Player is not available in the selected leaderboard context",
+        )
+    return PlayerDataQualityEnvelope(data=quality)
+
+
+@app.post(
+    "/api/v2/watchlist/data-quality",
+    response_model=WatchlistDataQualityEnvelope,
+    tags=["watchlist"],
+)
+def watchlist_data_quality(
+    request: WatchlistResolveRequest,
+) -> WatchlistDataQualityEnvelope:
+    """Return imputation status without changing the strict resolve contract."""
+    return WatchlistDataQualityEnvelope(
+        results=resolve_watchlist_data_quality(request.entries),
+    )
