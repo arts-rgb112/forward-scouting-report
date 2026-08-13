@@ -193,10 +193,18 @@ _CONTINENTAL_HINTS = (
     "champions league", "ucl", "europa league", "conference league",
 )
 _CUP_HINTS = ("cup", "copa", "super")
+_SUPPORTED_DOMESTIC_LEAGUES = {
+    "premierleague", "laliga", "laligaea", "bundesliga", "seriea",
+    "ligue1", "eredivisie", "ligaportugal", "primeiraliga",
+}
+
+
+def _competition_token(value: object) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
 
 
 def _league_selections(
-    data: dict[str, Any], max_seasons: int = 3, competitions_per_season: int = 4,
+    data: dict[str, Any], max_seasons: int = 3, competitions_per_season: int = 10,
     target_season: str | None = None,
 ) -> list[dict[str, Any]]:
     """Choose the domestic league and any UEFA club competition from club seasons.
@@ -229,9 +237,12 @@ def _league_selections(
                 continue
             name_lower = str(tournament.get("name", "")).lower()
             is_league_slot = index == 0  # FotMob puts the domestic league first
+            is_supported_domestic = _competition_token(tournament.get("name")) in _SUPPORTED_DOMESTIC_LEAGUES
             is_continental = any(hint in name_lower for hint in _CONTINENTAL_HINTS)
             is_cup = any(hint in name_lower for hint in _CUP_HINTS) and not is_continental
-            if is_cup or not (is_league_slot or is_continental):
+            # A transferred player can have two domestic leagues in the same
+            # season. FotMob only guarantees that one of them is first.
+            if is_cup or not (is_league_slot or is_supported_domestic or is_continental):
                 continue
             season_selections.append({
                 "season": row["seasonName"],

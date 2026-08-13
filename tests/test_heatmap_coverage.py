@@ -31,7 +31,7 @@ from continuous_core import continuous_core_from_points, continuous_core_summary
 from tactical_ratio import _same_competition
 from scripts.backfill_true_core_zones import DEFINITION_VERSION
 from scripts.build_shotmap_points import normalize_shotmap, shot_outcome
-from fotmob_client import FotMobError, _get
+from fotmob_client import FotMobError, _get, _league_selections
 
 
 def _payload(league_name: str, league_id: int) -> dict:
@@ -56,8 +56,31 @@ class ExpandedLeagueParsingTests(unittest.TestCase):
         self.assertTrue(_same_competition("Liga Portugal", "Primeira Liga"))
         self.assertTrue(_same_competition("Primeira Liga", "Liga Portugal"))
 
+    def test_conference_league_short_name_matches_tactical_label(self) -> None:
+        self.assertTrue(_same_competition(
+            "Conference League", "UEFA Europa Conference League",
+        ))
+
 
 class CcaOverlayTests(unittest.TestCase):
+    def test_player_season_selection_keeps_second_domestic_league_after_transfer(self) -> None:
+        payload = {"statSeasons": [{
+            "seasonName": "2025/2026",
+            "tournaments": [
+                {"name": "Premier League", "entryId": "1", "tournamentId": 17},
+                {"name": "FA Cup", "entryId": "2", "tournamentId": 132},
+                {"name": "Serie A", "entryId": "3", "tournamentId": 23},
+                {"name": "Conference League", "entryId": "4", "tournamentId": 9469},
+            ],
+        }]}
+
+        selections = _league_selections(payload, target_season="2025/2026")
+
+        self.assertEqual(
+            [selection["league_name"] for selection in selections],
+            ["Premier League", "Serie A", "Conference League"],
+        )
+
     @patch("fotmob_client.time.sleep")
     @patch("fotmob_client.urlopen")
     def test_fotmob_request_retries_read_timeouts(self, mock_urlopen, mock_sleep) -> None:
