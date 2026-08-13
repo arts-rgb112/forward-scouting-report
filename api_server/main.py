@@ -12,11 +12,11 @@ from .schemas import (
     LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDataQualityEnvelope, PlayerDetailEnvelope,
     PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
-    WatchlistResolveEnvelope, WatchlistResolveRequest,
+    WatchlistResolveEnvelope, WatchlistResolveRequest, TacticalQuadrantEnvelope,
 )
 from .service import (
     build_duel_spatial_analysis, build_player_data_quality, build_players,
-    build_player_detail, compare_players, find_v2_player, leaderboard_options,
+    build_player_detail, build_tactical_quadrant_analysis, compare_players, find_v2_player, leaderboard_options,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
 )
@@ -206,6 +206,29 @@ def get_player_duel_spatial(
     if analysis is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     return DuelSpatialEnvelope(data=analysis)
+
+
+@app.get(
+    "/api/v2/players/{player_id}/tactical-quadrant",
+    response_model=TacticalQuadrantEnvelope,
+    tags=["players"],
+)
+def get_player_tactical_quadrant(
+    player_id: int,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7"] = Query(default="7"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+) -> TacticalQuadrantEnvelope:
+    """Expose the detail-page quadrant without expanding strict detail DTOs."""
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    analysis = build_tactical_quadrant_analysis(
+        player_id, season, mode, int(scope), competition,
+    )
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+    return TacticalQuadrantEnvelope(data=analysis)
 
 
 @app.get("/api/v2/compare", response_model=PlayerComparisonEnvelope, tags=["players"])

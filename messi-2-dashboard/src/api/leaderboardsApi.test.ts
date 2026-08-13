@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchLeaderboard } from "./leaderboardsApi";
+import { fetchLeaderboard, fetchTacticalQuadrant } from "./leaderboardsApi";
 
 const config = { baseUrl: "https://api.example.test", season: "2025/2026", scope: 7 as const, limit: 1000 };
 const player = { id: 1, rank: 1, name: "Player", position: "CF", archetype: "Type A", age: null, minutes: 100, tier: { code: "diamond", level: 1, label: "Diamond" }, score: 90, face: null, nation: null, league: { id: 1, name: "League", icon: null }, club: { id: 2, name: "Club", icon: null }, stats: { outsideShot: 1, boxThreat: 2, dangerZone: 3, aerial: 4, groundDuel: 5, spaceControl: 6 } };
@@ -15,5 +15,13 @@ describe("leaderboard API pagination", () => {
     expect(new URL(String(request.mock.calls[0][0])).searchParams.get("pageSize")).toBe("50");
     expect(result.players).toHaveLength(1);
     expect(result.serverPage?.pageSize).toBe(50);
+  });
+
+  it("validates and requests the separate tactical quadrant companion endpoint", async () => {
+    const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: { playerId: 1, season: "2025/2026", mode: "league", scope: 7, competition: null, available: true, reason: "complete", source: "messi-static-cohort", cohortPopulation: 2, xAxis: "netProgressionPer90", yAxis: "inBoxXgotMinusXg", xMedian: 1, yMedian: 0, selectedPoint: { playerId: 1, playerName: "Player", teamName: "Club", netProgressionPer90: 2, inBoxXgotMinusXg: 1, selected: true }, points: [{ playerId: 1, playerName: "Player", teamName: "Club", netProgressionPer90: 2, inBoxXgotMinusXg: 1, selected: true }, { playerId: 2, playerName: "Peer", teamName: "Peer FC", netProgressionPer90: 0, inBoxXgotMinusXg: -1, selected: false }] } }), { headers: { "Content-Type": "application/json" } }));
+    const result = await fetchTacticalQuadrant(config, 1, { season: "2025/2026", mode: "league", scope: 7, competition: "all" }, new AbortController().signal);
+    expect(new URL(String(request.mock.calls[0][0])).pathname).toBe("/api/v2/players/1/tactical-quadrant");
+    expect(new URL(String(request.mock.calls[0][0])).searchParams.get("competition")).toBe("all");
+    expect(result.selectedPoint?.selected).toBe(true);
   });
 });

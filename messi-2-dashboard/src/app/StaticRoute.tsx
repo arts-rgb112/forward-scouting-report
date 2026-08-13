@@ -3,12 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import { DataQualityIdentityError, fetchPlayerDataQuality } from "../api/dataQualityApi";
 import { parseMessiApiConfig, type MessiApiConfig } from "../api/env";
 import { MessiApiError } from "../api/errors";
-import { fetchComparison, fetchPlayerDetail } from "../api/leaderboardsApi";
+import { fetchComparison, fetchPlayerDetail, fetchTacticalQuadrant } from "../api/leaderboardsApi";
 import { DataQualityBadge } from "../dashboard/components/DataQualityBadge";
 import { metricIsImputed, qualityDisplay, type QualityDisplay } from "../dashboard/dataQualityViewModel";
 import { datasetFromSearch, datasetHref } from "../dashboard/datasetRoute";
 import { metricConfig, metricKeys } from "../dashboard/scoutingConfig";
-import type { DatasetRouteState, MetricKey, PlayerAnalysis, PlayerComparison, PlayerDetail, RadarAxis } from "../dashboard/types";
+import type { DatasetRouteState, MetricKey, PlayerAnalysis, PlayerComparison, PlayerDetail, RadarAxis, TacticalQuadrant } from "../dashboard/types";
 
 function currentDataset(config?: MessiApiConfig): DatasetRouteState { return datasetFromSearch(window.location.search, { season: config?.season ?? "2025/2026", mode: "league", scope: (config?.scope ?? 7) as 3 | 5 | 7, competition: "all" }); }
 function ContextBadge({ dataset }: { dataset: DatasetRouteState }) { return <span className="inline-flex rounded border border-lime-300/30 bg-lime-300/10 px-2 py-1 text-[10px] font-bold text-lime-200">{dataset.mode === "europe" ? `Europe · ${dataset.competition.toUpperCase()}` : `League · ${dataset.scope} leagues`} · {dataset.season}</span>; }
@@ -26,12 +26,80 @@ function axisQualityCopy(quality: QualityDisplay) {
     : "서버가 이 축에 대체값이 포함되었다고 표시했습니다.";
 }
 
-function AnalysisSummary({ analysis, quality }: { analysis?: PlayerAnalysis; quality?: QualityDisplay }) {
+function LegacyAnalysisSummary({ analysis, quality }: { analysis?: PlayerAnalysis; quality?: QualityDisplay }) {
   if (!analysis) return <section className="mt-6 rounded border border-white/10 bg-black/20 p-4" aria-label="Server analysis"><h2 className="font-bold">Server analysis</h2><p className="mt-2 text-sm text-zinc-400">The current API returned no analysis for this player. No client-side analysis has been invented.</p></section>;
   const metrics = Object.entries(analysis.rawMetrics).filter(([, value]) => value !== null).slice(0, 8);
   return <section className="mt-6 rounded border border-white/10 bg-black/20 p-4" aria-label="Server analysis"><h2 className="font-bold">Server analysis</h2><p className="mt-2 flex items-center text-sm text-zinc-300">Score {analysis.score.value} · cohort {analysis.score.population}<DataQualityBadge quality={quality} /></p><div className="mt-4 grid gap-4 md:grid-cols-2"><MetricTable title="Volume profile" axes={analysis.volumeRadar.axes} quality={quality} /><MetricTable title="Ratio profile" axes={analysis.ratioRadar.axes} quality={quality} /></div><p className="mt-4 text-xs text-zinc-400">Spatial data: {analysis.spatial.available ? `${analysis.spatial.heatmapPointCount} server-provided points` : "unavailable for this context"}.</p>{metrics.length > 0 && <dl className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">{metrics.map(([key, value]) => <div key={key} className="rounded bg-white/[.03] p-2"><dt className="truncate text-zinc-500">{key}</dt><dd className="font-bold text-zinc-200">{String(value)}</dd></div>)}</dl>}</section>;
 }
 function MetricTable({ title, axes, quality }: { title: string; axes: PlayerAnalysis["volumeRadar"]["axes"]; quality?: QualityDisplay }) { return <div><h3 className="text-sm font-bold text-zinc-200">{title}</h3><table className="mt-2 w-full text-left text-xs"><thead className="text-zinc-500"><tr><th>Metric</th><th className="text-right">Score</th><th className="text-right">Percentile</th></tr></thead><tbody>{axes.map((axis) => { const imputed = axisIsImputed(axis, quality); return <tr key={axis.id} className="border-t border-white/10"><th className="py-1 font-medium text-zinc-300">{axis.label}</th><td className="py-1 text-right text-lime-300">{axis.score}{imputed && <span title={axisQualityCopy(quality!)} className="ml-1 text-[9px] text-amber-100">대체값</span>}</td><td className="py-1 text-right text-zinc-400">{axis.percentile ?? "—"}</td></tr>; })}</tbody></table></div>; }
+
+function displayPercent(value: number | null | undefined) {
+  return value === null || value === undefined ? "—" : `${value.toFixed(1)}%`;
+}
+
+function displayAxisRank(axis: RadarAxis) {
+  return axis.rank === null ? "—" : `#${axis.rank}`;
+}
+
+function DetailMetricTable({ title, axes, quality }: { title: string; axes: PlayerAnalysis["volumeRadar"]["axes"]; quality?: QualityDisplay }) {
+  return <div>
+    <h3 className="text-sm font-bold text-zinc-200">{title}</h3>
+    <table className="mt-2 w-full text-left text-xs">
+      <thead className="text-zinc-500"><tr><th>Metric</th><th className="text-right">Score</th><th className="text-right">Percentile</th><th className="text-right">Rank</th><th className="text-right">Cohort</th></tr></thead>
+      <tbody>{axes.map((axis) => {
+        const imputed = axisIsImputed(axis, quality);
+        return <tr key={axis.id} className="border-t border-white/10"><th className="py-1 font-medium text-zinc-300">{axis.label}</th><td className="py-1 text-right text-lime-300">{axis.score}{imputed && <span title={axisQualityCopy(quality!)} className="ml-1 text-[9px] text-amber-100">대체값</span>}</td><td className="py-1 text-right text-zinc-400">{displayPercent(axis.percentile)}</td><td className="py-1 text-right text-zinc-400">{displayAxisRank(axis)}</td><td className="py-1 text-right text-zinc-400">{axis.population || "—"}</td></tr>;
+      })}</tbody>
+    </table>
+  </div>;
+}
+
+function PositionalGrid({ analysis }: { analysis: PlayerAnalysis }) {
+  const { spatial } = analysis;
+  if (!spatial.available || spatial.positionalGrid.length === 0) return null;
+  const occupancyByCell = new Map(spatial.positionalGrid.map((cell) => [`${cell.depth}-${cell.lane}`, cell.occupancyPct]));
+  return <section aria-label="Positional grid" className="mt-4 rounded-lg border border-white/10 bg-zinc-950/60 p-3">
+    <div className="flex items-baseline justify-between gap-3"><h3 className="text-sm font-bold text-zinc-200">Positional occupancy</h3><span className="text-xs text-zinc-500">six-depth by five-lane grid</span></div>
+    <div className="mt-2 overflow-x-auto"><table className="w-full text-right text-xs"><caption className="sr-only">Six-depth by five-lane positional occupancy grid</caption><thead className="text-zinc-500"><tr><th className="text-left">Depth</th>{[1, 2, 3, 4, 5].map((lane) => <th key={lane}>Lane {lane}</th>)}<th>Depth total</th></tr></thead><tbody>{[1, 2, 3, 4, 5, 6].map((depth) => <tr key={depth} className="border-t border-white/10"><th className="py-1 text-left font-medium text-zinc-300">Depth {depth}</th>{[1, 2, 3, 4, 5].map((lane) => { const occupancy = occupancyByCell.get(`${depth}-${lane}`) ?? 0; return <td key={lane} title={`Depth ${depth}, lane ${lane}: ${displayPercent(occupancy)}`} className="py-1 text-zinc-400">{displayPercent(occupancy)}</td>; })}<td className="py-1 font-medium text-lime-300">{displayPercent(spatial.depthRatios[depth - 1])}</td></tr>)}</tbody></table></div>
+  </section>;
+}
+
+function TacticalQuadrantChart({ quadrant }: { quadrant?: TacticalQuadrant }) {
+  if (!quadrant || !quadrant.available || !quadrant.selectedPoint || quadrant.xMedian === null || quadrant.yMedian === null) return null;
+  const xValues = quadrant.points.map((point) => point.netProgressionPer90);
+  const yValues = quadrant.points.map((point) => point.inBoxXgotMinusXg);
+  const xMin = Math.min(...xValues, quadrant.xMedian); const xMax = Math.max(...xValues, quadrant.xMedian);
+  const yMin = Math.min(...yValues, quadrant.yMedian); const yMax = Math.max(...yValues, quadrant.yMedian);
+  const xRange = xMax - xMin || 1; const yRange = yMax - yMin || 1;
+  const left = 38; const right = 12; const top = 14; const bottom = 28; const width = 360; const height = 230;
+  const x = (value: number) => left + ((value - xMin) / xRange) * (width - left - right);
+  const y = (value: number) => height - bottom - ((value - yMin) / yRange) * (height - top - bottom);
+  const selected = quadrant.selectedPoint;
+  return <section aria-label="Tactical quadrant" className="mt-4 rounded-lg border border-white/10 bg-zinc-950/60 p-3">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><h3 className="text-sm font-bold text-zinc-200">Tactical quadrant</h3><span className="text-xs text-zinc-500">{quadrant.cohortPopulation} players · median split</span></div>
+    <svg className="mt-2 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${selected.playerName} tactical quadrant: net progression per 90 against in-box xGOT minus xG`}>
+      <rect x={left} y={top} width={x(quadrant.xMedian) - left} height={y(quadrant.yMedian) - top} className="fill-sky-400/10" />
+      <rect x={x(quadrant.xMedian)} y={top} width={width - right - x(quadrant.xMedian)} height={y(quadrant.yMedian) - top} className="fill-lime-400/10" />
+      <rect x={left} y={y(quadrant.yMedian)} width={x(quadrant.xMedian) - left} height={height - bottom - y(quadrant.yMedian)} className="fill-rose-400/10" />
+      <rect x={x(quadrant.xMedian)} y={y(quadrant.yMedian)} width={width - right - x(quadrant.xMedian)} height={height - bottom - y(quadrant.yMedian)} className="fill-violet-400/10" />
+      <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="currentColor" className="text-zinc-600" />
+      <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="currentColor" className="text-zinc-600" />
+      <line x1={x(quadrant.xMedian)} x2={x(quadrant.xMedian)} y1={top} y2={height - bottom} stroke="currentColor" className="text-zinc-500" strokeDasharray="3 3" />
+      <line x1={left} x2={width - right} y1={y(quadrant.yMedian)} y2={y(quadrant.yMedian)} stroke="currentColor" className="text-zinc-500" strokeDasharray="3 3" />
+      <text x={left + 5} y={top + 23} className="fill-sky-200 text-[10px]">포처</text><text x={width - right - 5} y={top + 23} textAnchor="end" className="fill-lime-200 text-[10px]">컴플리트 포워드</text><text x={left + 5} y={height - bottom - 10} className="fill-rose-200 text-[10px]">컴플리트 낙제점</text><text x={width - right - 5} y={height - bottom - 10} textAnchor="end" className="fill-violet-200 text-[10px]">펄스 나인</text>
+      {quadrant.points.filter((point) => !point.selected).map((point) => <circle key={point.playerId} cx={x(point.netProgressionPer90)} cy={y(point.inBoxXgotMinusXg)} r="2.5" className="fill-zinc-500"><title>{`${point.playerName} · ${point.teamName}`}</title></circle>)}
+      <circle cx={x(selected.netProgressionPer90)} cy={y(selected.inBoxXgotMinusXg)} r="5" className="fill-lime-300 stroke-white" strokeWidth="1.5"><title>{`${selected.playerName} · selected player`}</title></circle>
+      <text x={left} y={height - 7} className="fill-zinc-500 text-[9px]">Lower progression</text><text x={width - right} y={height - 7} textAnchor="end" className="fill-zinc-500 text-[9px]">Higher progression</text><text x={left + 3} y={top + 9} className="fill-zinc-500 text-[9px]">Higher in-box finish</text><text x={left + 3} y={height - bottom - 5} className="fill-zinc-500 text-[9px]">Lower in-box finish</text>
+    </svg>
+    <p className="mt-1 text-xs text-zinc-400"><span className="font-medium text-lime-300">{selected.playerName}</span>: {selected.netProgressionPer90.toFixed(2)} net progression/90 · {selected.inBoxXgotMinusXg.toFixed(2)} in-box xGOT − xG</p><p className="sr-only">Quadrants: upper left poacher, upper right complete forward, lower left complete failing point, lower right false nine.</p>
+  </section>;
+}
+
+function AnalysisSummary({ analysis, quality, quadrant }: { analysis?: PlayerAnalysis; quality?: QualityDisplay; quadrant?: TacticalQuadrant }) {
+  if (!analysis) return <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-400">No server-side analysis is available for this player.</div>;
+  const scoreRank = analysis.score.rank === null ? "—" : `#${analysis.score.rank}`;
+  return <section className="rounded-xl border border-white/10 bg-white/5 p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-black tracking-tight text-white">Server analysis</h2><p className="text-xs text-zinc-400">Score {analysis.score.value} · rank {scoreRank} / cohort {analysis.score.population}<DataQualityBadge quality={quality} /></p></div><span className="rounded bg-lime-300/10 px-2 py-1 text-xs font-bold text-lime-200">{analysis.score.archetype}</span></div><div className="mt-4 grid gap-4 md:grid-cols-2"><DetailMetricTable title="Volume radar" axes={analysis.volumeRadar.axes} quality={quality} /><DetailMetricTable title="Ratio radar" axes={analysis.ratioRadar.axes} quality={quality} /></div><p className="mt-4 text-xs text-zinc-500">Spatial data: {analysis.spatial.available ? `${analysis.spatial.heatmapPointCount} server-provided points` : "not available"}</p><PositionalGrid analysis={analysis} /><TacticalQuadrantChart quadrant={quadrant} /><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-400">{Object.entries(analysis.rawMetrics).map(([key, value]) => <div key={key} className="flex justify-between gap-2 border-b border-white/5 py-1"><span>{key}</span><span className="text-zinc-200">{value ?? "—"}</span></div>)}</div></section>;
+}
 
 export function StaticRoute() {
   const path = window.location.pathname; let config: MessiApiConfig | undefined;
@@ -43,17 +111,19 @@ export function StaticRoute() {
 }
 
 function PlayerDetailRoute({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {
-  const [detail, setDetail] = useState<PlayerDetail>(); const [error, setError] = useState<"network" | "not-found" | "config">(); const [retry, setRetry] = useState(0); const [quality, setQuality] = useState<QualityDisplay>({ kind: "idle" });
+  const [detail, setDetail] = useState<PlayerDetail>(); const [quadrant, setQuadrant] = useState<TacticalQuadrant>(); const [error, setError] = useState<"network" | "not-found" | "config">(); const [retry, setRetry] = useState(0); const [quality, setQuality] = useState<QualityDisplay>({ kind: "idle" });
   useEffect(() => {
     if (!Number.isInteger(id) || id <= 0) { setError("not-found"); return; } if (!config) { setError("config"); return; }
-    const controller = new AbortController(); setDetail(undefined); setError(undefined); setQuality({ kind: "pending" });
+    const controller = new AbortController(); setDetail(undefined); setQuadrant(undefined); setError(undefined); setQuality({ kind: "pending" });
     // No Promise.all: the primary detail is valid independently of companion quality.
     void fetchPlayerDetail(config, id, dataset, controller.signal).then(setDetail).catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof MessiApiError && cause.status === 404 ? "not-found" : "network"); });
+    // The tactical chart is a companion API; its absence cannot hide the player report.
+    void fetchTacticalQuadrant(config, id, dataset, controller.signal).then(setQuadrant).catch(() => { /* unavailable quadrant remains absent */ });
     void fetchPlayerDataQuality(config, id, dataset, controller.signal).then((data) => { if (!controller.signal.aborted) setQuality(qualityDisplay(data.dataQuality)); }).catch((cause: unknown) => { if (!controller.signal.aborted) setQuality({ kind: "unknown", cause: cause instanceof DataQualityIdentityError ? "identity" : cause instanceof MessiApiError && cause.kind === "http" ? "http" : cause instanceof MessiApiError && cause.kind === "network" ? "network" : "schema" }); });
     return () => controller.abort();
   }, [config, dataset, id, retry]);
   const player = detail?.player; const analysis = detail?.analysis;
-  return <Page><ContextBadge dataset={dataset} />{!player && !error && <><FocusTitle>Player profile</FocusTitle><div aria-busy="true" className="mt-5 space-y-3"><div className="h-7 w-48 animate-pulse rounded bg-white/10" /><div className="h-24 animate-pulse rounded bg-white/10" /></div></>}{error && <><FocusTitle>{error === "not-found" ? "Player not found" : "Player details unavailable"}</FocusTitle><p role="alert" className="mt-3 text-zinc-400">{error === "not-found" ? "This player is not available in the selected dataset." : error === "config" ? "Dashboard API configuration is unavailable." : "We could not load this player profile. Check your connection and try again."}</p>{error !== "not-found" && <button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-5 min-h-11 rounded border border-lime-300/40 px-4 text-lime-300">Retry</button>}</>}{player && <><FocusTitle>{player.name}</FocusTitle><p className="mt-2 text-zinc-400">{player.club.name} · {player.league.name} · {player.position}</p><div className="mt-5 grid grid-cols-2 gap-3 text-sm">{metricKeys.map((key) => <div key={key} className="rounded bg-black/20 p-3"><span className="text-zinc-500">{metricConfig[key].label}</span><b className="float-right text-lime-300">{player.stats[key]}{metricIsImputed(quality, key) && <span className="ml-1 text-[9px] text-amber-100">대체값</span>}</b></div>)}</div><AnalysisSummary analysis={analysis} quality={quality} /></>}<div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
+  return <Page><ContextBadge dataset={dataset} />{!player && !error && <><FocusTitle>Player profile</FocusTitle><div aria-busy="true" className="mt-5 space-y-3"><div className="h-7 w-48 animate-pulse rounded bg-white/10" /><div className="h-24 animate-pulse rounded bg-white/10" /></div></>}{error && <><FocusTitle>{error === "not-found" ? "Player not found" : "Player details unavailable"}</FocusTitle><p role="alert" className="mt-3 text-zinc-400">{error === "not-found" ? "This player is not available in the selected dataset." : error === "config" ? "Dashboard API configuration is unavailable." : "We could not load this player profile. Check your connection and try again."}</p>{error !== "not-found" && <button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-5 min-h-11 rounded border border-lime-300/40 px-4 text-lime-300">Retry</button>}</>}{player && <><FocusTitle>{player.name}</FocusTitle><p className="mt-2 text-zinc-400">{player.club.name} · {player.league.name} · {player.position}</p><div className="mt-5 grid grid-cols-2 gap-3 text-sm">{metricKeys.map((key) => <div key={key} className="rounded bg-black/20 p-3"><span className="text-zinc-500">{metricConfig[key].label}</span><b className="float-right text-lime-300">{player.stats[key]}{metricIsImputed(quality, key) && <span className="ml-1 text-[9px] text-amber-100">대체값</span>}</b></div>)}</div><AnalysisSummary analysis={analysis} quality={quality} quadrant={quadrant} /></>}<div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
 }
 
 function CompareRoute({ dataset, config, ids }: { dataset: DatasetRouteState; config?: MessiApiConfig; ids: number[] | undefined }) {

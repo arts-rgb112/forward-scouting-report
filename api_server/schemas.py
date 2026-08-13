@@ -383,6 +383,47 @@ class DuelSpatialEnvelope(BaseModel):
     data: DuelSpatialAnalysis
 
 
+class TacticalQuadrantPoint(BaseModel):
+    """One player in the detail page's tactical quadrant cohort."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    playerName: str = Field(min_length=1)
+    teamName: str
+    netProgressionPer90: float
+    inBoxXgotMinusXg: float
+    selected: bool = False
+
+
+class TacticalQuadrantAnalysis(BaseModel):
+    """Server-owned quadrant data using the same cohort as detail ranks."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    season: str
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7] | None = None
+    competition: CompetitionCode | None = None
+    available: bool
+    reason: Literal["complete", "axis_metric_missing", "cohort_unavailable"]
+    source: Literal["messi-static-cohort"] = "messi-static-cohort"
+    cohortPopulation: int = Field(ge=0)
+    xAxis: Literal["netProgressionPer90"] = "netProgressionPer90"
+    yAxis: Literal["inBoxXgotMinusXg"] = "inBoxXgotMinusXg"
+    xMedian: float | None = None
+    yMedian: float | None = None
+    selectedPoint: TacticalQuadrantPoint | None = None
+    points: list[TacticalQuadrantPoint]
+
+
+class TacticalQuadrantEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: TacticalQuadrantAnalysis
+
+
 class CompareMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

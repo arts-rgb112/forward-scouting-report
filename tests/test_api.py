@@ -261,7 +261,7 @@ def test_watchlist_resolve_keeps_order_and_isolates_invalid_contexts():
     assert results[0]["context"] != results[2]["context"]
 
 
-def test_son_data_quality_exposes_spatial_imputation_without_changing_player_dto():
+def test_son_data_quality_exposes_recovered_spatial_data_without_changing_player_dto():
     response = client.get("/api/v2/players/212867/data-quality", params={
         "season": "2023/2024", "mode": "league", "scope": 7,
         "competition": "all",
@@ -270,15 +270,12 @@ def test_son_data_quality_exposes_spatial_imputation_without_changing_player_dto
     quality = response.json()["data"]["dataQuality"]
     assert quality == {
         "qualityVersion": "messi-quality-v1",
-        "spatialAvailable": False,
-        "messiScoreComplete": False,
-        "reason": "spatial_session_missing",
-        "imputedMetrics": ["boxThreat", "dangerZone", "spaceControl"],
-        "imputedComponents": [
-            "boxThreat.ratio", "dangerZone.ratio",
-            "spaceControl.volume", "spaceControl.ratio",
-        ],
-        "observedWeightPct": 62.5,
+        "spatialAvailable": True,
+        "messiScoreComplete": True,
+        "reason": "complete",
+        "imputedMetrics": [],
+        "imputedComponents": [],
+        "observedWeightPct": 100.0,
         "fallbackComponentScore": 20,
     }
 
@@ -301,7 +298,7 @@ def test_watchlist_data_quality_batches_contexts_under_the_same_security_gate():
     result = response.json()["results"][0]
     assert result["key"] == key and result["status"] == "resolved"
     assert result["playerId"] == 212867
-    assert result["dataQuality"]["observedWeightPct"] == 62.5
+    assert result["dataQuality"]["observedWeightPct"] == 100.0
 
     hostile = client.post(
         "/api/v2/watchlist/data-quality",
@@ -341,8 +338,35 @@ def test_openapi_advertises_the_v1_response_contract():
     assert "/api/v2/watchlist/resolve" in paths
     assert "/api/v2/watchlist/data-quality" in paths
     assert "/api/v2/players/{player_id}/data-quality" in paths
+    assert "/api/v2/players/{player_id}/tactical-quadrant" in paths
     assert schema["MessiDataQuality"]["properties"]["qualityVersion"]["const"] == "messi-quality-v1"
     assert "PlayerAnalysis" in schema and "LeaderboardPageMeta" in schema
+
+
+def test_tactical_quadrant_uses_detail_context_and_exposes_selected_player():
+    leaderboard = client.get(
+        "/api/v2/leaderboards",
+        params={"season": "2023/2024", "mode": "league", "scope": 7, "limit": 10},
+    )
+    assert leaderboard.status_code == 200
+    player_id = leaderboard.json()["data"][0]["id"]
+    response = client.get(
+        f"/api/v2/players/{player_id}/tactical-quadrant",
+        params={"season": "2023/2024", "mode": "league", "scope": 7, "competition": "all"},
+    )
+    assert response.status_code == 200
+    quadrant = response.json()["data"]
+    assert quadrant["playerId"] == player_id
+    assert quadrant["season"] == "2023/2024"
+    assert quadrant["scope"] == 7 and quadrant["competition"] is None
+    assert quadrant["xAxis"] == "netProgressionPer90"
+    assert quadrant["yAxis"] == "inBoxXgotMinusXg"
+    assert quadrant["cohortPopulation"] == len(quadrant["points"])
+    if quadrant["available"]:
+        assert quadrant["reason"] == "complete"
+        assert quadrant["selectedPoint"]["playerId"] == player_id
+        assert sum(point["selected"] for point in quadrant["points"]) == 1
+        assert quadrant["xMedian"] is not None and quadrant["yMedian"] is not None
 
 
 def test_crystal_v2_tier_preserves_percentile_positions_and_level_math():
