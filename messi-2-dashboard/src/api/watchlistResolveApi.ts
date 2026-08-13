@@ -68,7 +68,7 @@ async function resolveChunk(config: MessiApiConfig, entries: readonly WatchlistE
     }
     if (result.status !== "resolved") return { key: entry.key, status: result.status };
     if (!exactResolvedEntry(result, entry)) return { key: entry.key, status: "unavailable" };
-    return { key: entry.key, status: "resolved", player: adaptPlayer(result.player!) };
+    return { key: entry.key, status: "resolved", player: adaptPlayer(result.player!, parsed.data.tierTaxonomyVersion) };
   });
 }
 

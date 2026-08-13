@@ -1,4 +1,4 @@
-import { metricConfig, metricKeys } from "../scoutingConfig";
+import { metricConfig, metricKeys, resolveTierPresentation } from "../scoutingConfig";
 import type { SortState } from "../types";
 import type { WatchlistRow } from "../watchlistViewModel";
 import { datasetStateFromWatchlistEntry, watchlistContextLabel } from "../watchlistViewModel";
@@ -14,8 +14,9 @@ function profileHref(row: WatchlistRow) {
   return enabledLegacyHref(legacyDetailHref(row.entry.playerId, { name: row.profile.name, clubName: row.profile.clubName }, state) ?? "") ?? datasetHref(`/players/${row.entry.playerId}`, state);
 }
 function sourceBadge(row: WatchlistRow) {
-  if (row.source === "current") return <span className="rounded border border-sky-300/25 bg-sky-300/10 px-2 py-1 text-[9px] font-bold text-sky-100">현재 서버 데이터</span>;
-  if (row.source === "snapshot") return <span title="Stored score at save time; current rank is not recomputed." className="rounded border border-amber-300/25 bg-amber-300/10 px-2 py-1 text-[9px] font-bold text-amber-100">저장 시점 스냅샷 · 현재 서버 데이터 아님</span>;
+  const legacy = row.profile.tier && resolveTierPresentation(row.profile.tier).taxonomy === "legacy-v1" ? " · Legacy tiers" : "";
+  if (row.source === "current") return <span className="rounded border border-sky-300/25 bg-sky-300/10 px-2 py-1 text-[9px] font-bold text-sky-100">현재 서버 데이터{legacy}</span>;
+  if (row.source === "snapshot") return <span title="Stored score at save time; current rank is not recomputed." className="rounded border border-amber-300/25 bg-amber-300/10 px-2 py-1 text-[9px] font-bold text-amber-100">저장 시점 스냅샷 · 현재 서버 데이터 아님{legacy}</span>;
   return <span className="rounded border border-white/15 px-2 py-1 text-[9px] font-bold text-zinc-400">이전 형식 저장</span>;
 }
 

@@ -33,6 +33,10 @@ function normalizeLeaderboardMeta(meta: DatasetMeta): DatasetMeta {
   return { ...meta, totalItems: meta.totalItems ?? meta.population };
 }
 
+function responseTierTaxonomyVersion(envelope: { tierTaxonomyVersion?: string; meta?: { tierTaxonomyVersion?: string } }): string | undefined {
+  return envelope.tierTaxonomyVersion ?? envelope.meta?.tierTaxonomyVersion;
+}
+
 export async function fetchLeaderboardOptions(config: MessiApiConfig, signal: AbortSignal): Promise<LeaderboardOptions> {
   try { return optionsSchema.parse(await getJson(new URL("/api/v2/leaderboard-options", config.baseUrl).toString(), signal)); }
   catch (error) { return parseError("Leaderboard options response was invalid", error); }
@@ -54,10 +58,14 @@ export async function fetchLeaderboard(config: MessiApiConfig, state: DatasetRou
     if (paged.success) {
       const data = paged.data.data.slice(0, PAGE_SIZE);
       const meta = { ...normalizeLeaderboardMeta(paged.data.meta), returned: data.length };
-      return { players: data.map(adaptPlayer), meta, serverPage: { page: paged.data.meta.page, pageSize: PAGE_SIZE, totalPages: paged.data.meta.totalPages, hasNextPage: paged.data.meta.hasNextPage } };
+      const tierTaxonomyVersion = responseTierTaxonomyVersion(paged.data);
+      return { players: data.map((player) => adaptPlayer(player, tierTaxonomyVersion)), meta: { ...meta, ...(tierTaxonomyVersion ? { tierTaxonomyVersion } : {}) }, serverPage: { page: paged.data.meta.page, pageSize: PAGE_SIZE, totalPages: paged.data.meta.totalPages, hasNextPage: paged.data.meta.hasNextPage } };
     }
     const legacy = leaderboardEnvelopeSchema.safeParse(json);
-    if (legacy.success) return { players: legacy.data.data.map(adaptPlayer), meta: legacy.data.meta };
+    if (legacy.success) {
+      const tierTaxonomyVersion = responseTierTaxonomyVersion(legacy.data);
+      return { players: legacy.data.data.map((player) => adaptPlayer(player, tierTaxonomyVersion)), meta: { ...legacy.data.meta, ...(tierTaxonomyVersion ? { tierTaxonomyVersion } : {}) } };
+    }
     throw paged.error;
   } catch (error) { return parseError("Leaderboard response was invalid", error); }
 }
@@ -67,7 +75,7 @@ export async function fetchPlayerDetail(config: MessiApiConfig, id: number, stat
   url.search = new URLSearchParams({ ...contextParams(state), includeAnalysis: "true" }).toString();
   try {
     const parsed = playerDetailEnvelopeSchema.parse(await getJson(url.toString(), signal));
-    return { player: adaptPlayer(parsed.data), analysis: parsed.data.analysis ? adaptAnalysis(parsed.data.analysis) : undefined };
+    return { player: adaptPlayer(parsed.data, parsed.tierTaxonomyVersion), analysis: parsed.data.analysis ? adaptAnalysis(parsed.data.analysis) : undefined };
   } catch (error) { return parseError("Player detail response was invalid", error); }
 }
 
@@ -77,7 +85,8 @@ export async function fetchComparison(config: MessiApiConfig, ids: readonly numb
   url.search = new URLSearchParams({ ...contextParams(state), players: ids.join(",") }).toString();
   try {
     const parsed = comparisonEnvelopeSchema.parse(await getJson(url.toString(), signal));
-    return { players: parsed.data.map((row) => ({ player: adaptPlayer(row), analysis: adaptAnalysis(row.analysis) })), meta: parsed.meta };
+    const tierTaxonomyVersion = responseTierTaxonomyVersion(parsed);
+    return { players: parsed.data.map((row) => ({ player: adaptPlayer(row, tierTaxonomyVersion), analysis: adaptAnalysis(row.analysis) })), meta: { ...parsed.meta, ...(tierTaxonomyVersion ? { tierTaxonomyVersion } : {}) } };
   } catch (error) { return parseError("Comparison response was invalid", error); }
 }
 

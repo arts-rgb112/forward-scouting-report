@@ -13,7 +13,10 @@ import { DatasetHeader } from "./DatasetHeader";
 import { PlayerCardList } from "./PlayerCardList";
 import { PlayerTable } from "./PlayerTable";
 import { ScoreLegend } from "./ScoreLegend";
+import { WatchlistTable } from "./WatchlistTable";
 import type { LeaderboardOptions } from "../types";
+import { entryFromPlayer } from "../watchlistStorage";
+import { watchlistRows } from "../watchlistViewModel";
 
 afterEach(() => {
   cleanup();
@@ -30,10 +33,30 @@ describe("asset nullability", () => {
 describe("dashboard contract UI", () => {
   it("shows only six ability score ranges in the legend", () => {
     render(<ScoreLegend />);
-    expect(screen.getByLabelText("Ability score legend")).toHaveTextContent("90–100");
+    const legend = screen.getByLabelText("Ability score legend");
+    expect(legend).toHaveTextContent("90–100");
     expect(screen.getAllByLabelText(/Ability score range/)).toHaveLength(6);
     expect(screen.queryByText("Diamond")).not.toBeInTheDocument();
     expect(screen.queryByText("Iron")).not.toBeInTheDocument();
+    expect(legend).not.toHaveTextContent("Legacy tier taxonomy");
+  });
+
+  it("shows legacy taxonomy state once for a mixed leaderboard response, but never in the score legend", () => {
+    const crystalPlayer = { ...samplePlayers[1], tier: { code: "diamond", label: "Diamond", level: 2, taxonomyVersion: "crystal-v2" } };
+    const view = render(<MessiScoutingDashboard players={[samplePlayers[0], crystalPlayer]} meta={sampleMeta} refreshing={false} onRefresh={vi.fn()} />);
+    expect(screen.getByLabelText("Leaderboard tier taxonomy status")).toHaveAttribute("title", expect.stringContaining("previous overall M.E.S.S.I. tier taxonomy"));
+    expect(screen.getByLabelText("Ability score legend")).not.toHaveTextContent("Legacy tier taxonomy");
+
+    view.rerender(<MessiScoutingDashboard players={[crystalPlayer]} meta={sampleMeta} refreshing={false} onRefresh={vi.fn()} />);
+    expect(screen.queryByLabelText("Leaderboard tier taxonomy status")).not.toBeInTheDocument();
+  });
+
+  it("gives the Watchlist tier column enough desktop width for full legacy labels", () => {
+    const legacyPlatinum = { ...samplePlayers[1], tier: { code: "platinum", label: "Platinum I", level: 1 } };
+    const rows = watchlistRows([entryFromPlayer(legacyPlatinum, { season: sampleMeta.season, mode: "league", scope: 7, competition: null })], {});
+    const { container } = render(<WatchlistTable rows={rows} sort={{ key: "score", direction: "desc" }} onMetricSort={vi.fn()} onRemove={vi.fn()} onRetry={vi.fn()} />);
+    expect(container.querySelector("colgroup col:nth-child(2)")).toHaveClass("w-40");
+    expect(screen.getByLabelText("Overall M.E.S.S.I. tier: Legacy Platinum, level 1")).toHaveTextContent("Legacy Platinum");
   });
   it("does not debounce an unchanged query when the parent callback is recreated", () => {
     vi.useFakeTimers();
@@ -78,7 +101,7 @@ describe("dashboard contract UI", () => {
     render(<MessiScoutingDashboard players={samplePlayers} meta={sampleMeta} refreshing={false} onRefresh={vi.fn()} />);
     expect(screen.getAllByText("02").length).toBeGreaterThan(0);
     expect(screen.getAllByText("오프 더 볼").length).toBeGreaterThan(0);
-    expect(screen.getAllByTitle("Diamond II, level 2").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Overall M.E.S.S.I. tier: Legacy Diamond, level 2").length).toBeGreaterThan(0);
   });
 
   it("mobile cards expose six metrics without disclosure", () => {

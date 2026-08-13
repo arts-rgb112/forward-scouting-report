@@ -1,7 +1,8 @@
 export const metricKeys = ["outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"] as const;
 export type MetricKey = (typeof metricKeys)[number];
-export const tierCodes = ["diamond", "platinum", "gold", "silver", "bronze", "iron"] as const;
-export type TierCode = (typeof tierCodes)[number];
+/** Tier codes are server-owned during the taxonomy migration; unknown codes must remain renderable. */
+export type TierCode = string;
+export type TierTaxonomyVersion = "crystal-v2" | "legacy-v1" | (string & {});
 export type SortKey = "score" | "name" | "age" | MetricKey;
 export type SortState = { key: SortKey; direction: "asc" | "desc" };
 export type AgeBand = "all" | "u23" | "23-25" | "26-30" | "31-plus";
@@ -12,7 +13,7 @@ export type DatasetRouteState = { season: string; mode: DatasetMode; scope: 3 | 
 export type CompetitionOption = { code: CompetitionCode; label: string; available: boolean; reason: string | null };
 export type LeaderboardOptions = { seasons: string[]; scopes: { value: 3 | 5 | 7; label: string; leagueIds: number[] }[]; competitions: Record<CompetitionCode, CompetitionOption> };
 export type AssetRef = { id: number; name: string; icon: string | null };
-export type Tier = { code: TierCode; level: number; label: string };
+export type Tier = { code: TierCode; level: number; label: string; taxonomyVersion?: TierTaxonomyVersion };
 export type Player = {
   id: number; rank: number; name: string; position: string; archetype: "Type A" | "Type B";
   age: number | null; minutes: number; tier: Tier; score: number; face: string | null;
@@ -22,6 +23,8 @@ export type DatasetMeta = {
   schemaVersion: "1.0.0" | "2.0.0" | "2.1.0"; season: string; scope: 3 | 5 | 7 | null; population: number;
   /** `totalItems` is the paged v2 total; `population` remains the v2.0-compatible name. */
   totalItems?: number; returned: number; generatedAt: string; source: "messi-static-cohort"; mode?: DatasetMode; competition?: CompetitionCode | null;
+  /** Explicit taxonomy is optional while the API transitions; its absence means legacy-v1. */
+  tierTaxonomyVersion?: TierTaxonomyVersion;
   /** Server-owned filter echo. It may gain fields without requiring a client release. */
   applied?: { position?: string | null; ageBand?: AgeBand | null; minutesBand?: MinutesBand | null; [key: string]: unknown };
 };

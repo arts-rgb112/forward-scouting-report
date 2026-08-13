@@ -41,6 +41,17 @@ describe("watchlist view model", () => {
     expect(sorted.map((row) => row.key)).toEqual([saved.key, noAge.key]);
   });
 
+  it("keeps the current resolver taxonomy ahead of the immutable snapshot taxonomy", () => {
+    const saved = entryFromPlayer({ ...samplePlayers[0], tier: { ...samplePlayers[0].tier, taxonomyVersion: "crystal-v2" } }, league);
+    const current = { ...samplePlayers[1], id: saved.playerId, tier: { ...samplePlayers[1].tier } };
+    const resolved = watchlistRows([saved], { [saved.key]: { key: saved.key, status: "resolved", player: current } })[0];
+    const fallback = watchlistRows([saved], { [saved.key]: { key: saved.key, status: "unavailable" } })[0];
+    expect(resolved).toMatchObject({ source: "current", profile: { tier: { code: "platinum" } } });
+    expect(resolved.profile.tier?.taxonomyVersion).toBeUndefined();
+    expect(fallback).toMatchObject({ source: "snapshot", profile: { tier: { code: "diamond", taxonomyVersion: "crystal-v2" } } });
+    expect(saved.snapshot.tier).toMatchObject({ code: "diamond", taxonomyVersion: "crystal-v2" });
+  });
+
   it("filters resolved and complete snapshot age/minutes locally while excluding partial data", () => {
     const younger = entryFromPlayer({ ...samplePlayers[0], age: 22, minutes: 1200 }, league);
     const older = entryFromPlayer({ ...samplePlayers[1], age: 31, minutes: 3000 }, league);
