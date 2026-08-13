@@ -186,7 +186,14 @@ def test_v2_europe_leaderboard_and_contextual_player_detail_contract():
     assert core["zoneCount"] == len(core["zoneIds"]) == len(core["zones"])
     assert core["achievedDensityPct"] >= 50
     assert all(zone["densityPct"] > 0 for zone in core["zones"])
-    assert core["coreAreaPct"] == spatial["ccaAreaPct"]
+    continuous = spatial["continuousCore"]
+    assert continuous["available"] is True
+    assert continuous["definitionVersion"] == "continuous-hdr-50-v1"
+    assert continuous["targetDensityPct"] == 50
+    assert continuous["achievedDensityPct"] >= 50
+    assert continuous["coreAreaPct"] == spatial["ccaAreaPct"]
+    assert continuous["coreAreaPct"] <= core["coreAreaPct"]
+    assert spatial["shotmapPointCount"] == len(spatial["shotmapPoints"])
 
 
 def test_v2_unavailable_competition_is_not_silently_rendered_as_empty():

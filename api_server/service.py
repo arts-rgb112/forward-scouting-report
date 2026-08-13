@@ -10,9 +10,10 @@ from rankings import (
 )
 from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
+from shotmap import get_shotmap_points
 
 from .schemas import (
-    AgeBand, AssetRef, CompareMeta, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
+    AgeBand, AssetRef, CompareMeta, ContinuousCoreAnalysis, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, ShotmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
     LeaderboardPageEnvelope, MessiDataQuality, MessiScoreAnalysis, PlayerAnalysis,
     LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDataQuality, PlayerDetailResponse, PlayerResponse,
@@ -393,6 +394,13 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
             continue
         if 0 <= x <= 100 and 0 <= y <= 100:
             valid_points.append(HeatmapPoint(x=x, y=y))
+    shot_rows = get_shotmap_points(str(tactical.get("heatmap_key")) if tactical else None)
+    valid_shots: list[ShotmapPoint] = []
+    for shot in shot_rows:
+        try:
+            valid_shots.append(ShotmapPoint.model_validate(shot))
+        except (TypeError, ValueError):
+            continue
     def value(name: str) -> float | None:
         raw = tactical.get(name) if tactical else None
         return round(float(raw), 4) if raw is not None else None
@@ -403,11 +411,20 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
         achievedDensityPct=round(float(tactical.get("true_core_density_pct") or 0.0), 4) if tactical else 0.0,
         zoneIds=[str(zone_id) for zone_id in core_ids],
         zoneCount=int(tactical.get("true_core_zone_count") or 0) if tactical else 0,
-        coreAreaPct=round(float(tactical.get("cca_area_pct") or 0.0), 4) if tactical else 0.0,
+        coreAreaPct=round(sum(float(zone.get("areaPct") or 0.0) for zone in core_zones), 4),
         zones=[TrueCoreZone.model_validate(zone) for zone in core_zones],
+    )
+    continuous_payload = dict(tactical.get("continuous_core") or {}) if tactical else {}
+    continuous_core = ContinuousCoreAnalysis(
+        available=bool(valid_points and continuous_payload),
+        achievedDensityPct=round(float(continuous_payload.get("achievedDensityPct") or 0.0), 4),
+        coreAreaPct=round(float(continuous_payload.get("coreAreaPct") or 0.0), 4),
+        densityThreshold=round(float(continuous_payload.get("densityThreshold") or 0.0), 8),
+        thresholdOfPeak=round(float(continuous_payload.get("thresholdOfPeak") or 0.0), 8),
     )
     return SpatialAnalysis(
         available=bool(tactical), heatmapPointCount=len(valid_points), heatmapPoints=valid_points,
+        shotmapPointCount=len(valid_shots), shotmapPoints=valid_shots,
         inBoxRatio=value("in_box_ratio"), outBoxFinalRatio=value("out_box_final_ratio"),
         midThirdRatio=value("mid_third_ratio"), finalThirdRatio=value("final_third_ratio"),
         ccaAreaPct=value("cca_area_pct"), laneRatios=[value(f"lane_{index}_ratio") or 0.0 for index in range(1, 6)] if tactical else [],
@@ -416,7 +433,7 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
             PositionalGridCell(depth=depth, lane=lane, occupancyPct=value(f"grid_d{depth}_l{lane}_ratio") or 0.0)
             for depth in range(1, 7) for lane in range(1, 6)
         ] if tactical else [],
-        trueCore=true_core,
+        trueCore=true_core, continuousCore=continuous_core,
         dangerZoneDensity=value("danger_zone_density"), deepBoxZoneScore=value("deep_box_zone_score"),
     )
 

@@ -11,6 +11,7 @@ from typing import Optional
 
 from positional_grid import POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics
 from true_core import true_core_zones, true_core_zones_from_points
+from continuous_core import continuous_core_summary
 
 
 DATA_DIR = Path(__file__).with_name("data")
@@ -100,7 +101,12 @@ def _with_true_core_definition(ratio: dict[str, float]) -> dict[str, float]:
         str(ratio.get("heatmap_key", "")) or None,
     )
     core = true_core_zones_from_points(points) if points else true_core_zones(corrected)
-    corrected["cca_area_pct"] = float(core["coreAreaPct"])
+    continuous = continuous_core_summary(points) if points else None
+    if continuous is not None:
+        corrected["cca_area_pct"] = float(continuous["coreAreaPct"])
+        corrected["continuous_core"] = continuous
+    else:
+        corrected["cca_area_pct"] = float(core["coreAreaPct"])
     corrected["true_core_zone_ids"] = list(core["zoneIds"])
     corrected["true_core_zone_count"] = int(core["zoneCount"])
     corrected["true_core_density_pct"] = float(core["achievedDensityPct"])
