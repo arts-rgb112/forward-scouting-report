@@ -15,10 +15,11 @@ import { StaticRoute } from "./StaticRoute";
 import { samplePlayers } from "../test/fixtures/players";
 
 const axes = (kind: "volume" | "ratio") => ["outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"].map((id) => ({ id, label: id === "spaceControl" ? "Space control" : id, score: id === "spaceControl" ? 20 : 80, percentile: 50, rank: 10, population: 100, rawValue: 1, tier: "B" as const, imputed: false, kind }));
+const emptyTrueCore = { available: false, gridVersion: "positional-6x5-v1" as const, definitionVersion: "true-core-50-v1" as const, targetDensityPct: 50 as const, achievedDensityPct: 0, zoneIds: [], zoneCount: 0, coreAreaPct: 0, tieBreak: "density-desc-depth-asc-lane-asc" as const, zones: [] };
 const analysis = {
   score: { value: 82, rank: 10, topPercent: 90, population: 100, archetype: "Type A" as const },
   volumeRadar: { kind: "volume" as const, axes: axes("volume") }, ratioRadar: { kind: "ratio" as const, axes: axes("ratio") }, rawMetrics: {},
-  spatial: { available: false, heatmapPointCount: 0, inBoxRatio: null, outBoxFinalRatio: null, midThirdRatio: null, finalThirdRatio: null, ccaAreaPct: null, laneRatios: [], depthRatios: [], positionalGrid: [], dangerZoneDensity: null, deepBoxZoneScore: null },
+  spatial: { available: false, heatmapPointCount: 0, inBoxRatio: null, outBoxFinalRatio: null, midThirdRatio: null, finalThirdRatio: null, ccaAreaPct: null, laneRatios: [], depthRatios: [], positionalGrid: [], trueCore: emptyTrueCore, dangerZoneDensity: null, deepBoxZoneScore: null },
 };
 const incomplete = { qualityVersion: "messi-quality-v1" as const, spatialAvailable: false, messiScoreComplete: false, reason: "spatial_session_missing" as const, imputedMetrics: ["spaceControl" as const], imputedComponents: ["spaceControl.volume"], observedWeightPct: 62.5, fallbackComponentScore: 20 as const };
 
@@ -50,7 +51,8 @@ describe("detail analysis data quality", () => {
 
   it("renders server ranks, occupancy grid, and a companion tactical quadrant without coupling its failure to player detail", async () => {
     const positionalGrid = Array.from({ length: 30 }, (_, index) => ({ depth: Math.floor(index / 5) + 1, lane: index % 5 + 1, occupancyPct: index === 27 ? 12.5 : 0 }));
-    transport.detail.mockResolvedValueOnce({ player: samplePlayers[0], analysis: { ...analysis, spatial: { ...analysis.spatial, available: true, heatmapPointCount: 30, depthRatios: [1, 2, 3, 4, 5, 6], positionalGrid } } });
+    const trueCore = { ...emptyTrueCore, available: true, achievedDensityPct: 52.5, zoneIds: ["depth6_lane3"], zoneCount: 1, coreAreaPct: 8.33, zones: [{ id: "depth6_lane3", depth: 6, lane: 3, densityPct: 52.5, areaPct: 8.33 }] };
+    transport.detail.mockResolvedValueOnce({ player: samplePlayers[0], analysis: { ...analysis, spatial: { ...analysis.spatial, available: true, heatmapPointCount: 30, depthRatios: [1, 2, 3, 4, 5, 6], positionalGrid, trueCore } } });
     transport.quadrant.mockResolvedValueOnce({ playerId: 1, season: "2025/2026", mode: "league", scope: 7, competition: null, available: true, reason: "complete", source: "messi-static-cohort", cohortPopulation: 2, xAxis: "netProgressionPer90", yAxis: "inBoxXgotMinusXg", xMedian: 1, yMedian: 0, selectedPoint: { playerId: 1, playerName: samplePlayers[0].name, teamName: "Club", netProgressionPer90: 2, inBoxXgotMinusXg: 1, selected: true }, points: [{ playerId: 1, playerName: samplePlayers[0].name, teamName: "Club", netProgressionPer90: 2, inBoxXgotMinusXg: 1, selected: true }, { playerId: 2, playerName: "Peer", teamName: "Peer FC", netProgressionPer90: 0, inBoxXgotMinusXg: -1, selected: false }] });
     render(<StaticRoute />);
     await screen.findByRole("heading", { name: samplePlayers[0].name });
@@ -58,7 +60,9 @@ describe("detail analysis data quality", () => {
     expect(screen.getAllByRole("columnheader", { name: "Rank" })).toHaveLength(2);
     expect(screen.getAllByText("#10")).toHaveLength(12);
     const grid = screen.getByRole("region", { name: "Positional grid" });
-    expect(within(grid).getByTitle("Depth 6, lane 3: 12.5%")).toBeInTheDocument();
+    expect(within(grid).getByTitle("depth6_lane3: 12.5% · True Core zone")).toHaveClass("bg-cyan-400/20");
+    expect(within(grid).getByRole("group", { name: "True Core summary" })).toHaveTextContent("1 cells · depth6_lane3");
+    expect(within(grid).getByText("52.5% / target 50%")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Tactical quadrant" })).toHaveTextContent("Tactical quadrant");
     expect(screen.getByText("컴플리트 포워드")).toBeInTheDocument();
   });

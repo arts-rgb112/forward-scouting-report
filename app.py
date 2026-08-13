@@ -21,7 +21,8 @@ from rankings import (
     get_top_leagues_shot_quality,
 )
 from spear_cohort import load_spear_cohort
-from tactical_ratio import cca_core_region, get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
+from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
+from positional_grid import POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES, true_core_zones_from_points
 
 
 _UNIFIED_BAR_COUNTER = itertools.count()
@@ -1147,7 +1148,7 @@ def render_season_heatmap(
     tactical_ratio: dict[str, object] | None = None,
 ) -> None:
     points = get_heatmap_points(player_id, heatmap_key)
-    cca_core, cca_hull = cca_core_region(points)
+    true_core = true_core_zones_from_points(points)
     st.markdown("#### 📍 시즌 활동 히트맵")
     st.caption(
         "저장된 시즌 좌표를 6-depth × 5-lane 포지셔널 그리드에 표시합니다. 공격 방향은 화면 왼쪽→오른쪽이며, "
@@ -1196,14 +1197,20 @@ def render_season_heatmap(
         ],
         hovertemplate="활동 밀도 %{z:.0%}<extra></extra>",
     ))
-    if len(cca_hull) >= 3:
-        outline_x = [point[0] for point in cca_hull] + [cca_hull[0][0]]
-        outline_y = [point[1] for point in cca_hull] + [cca_hull[0][1]]
-        figure.add_trace(go.Scatter(
-            x=outline_x, y=outline_y, mode="lines", hoverinfo="skip",
-            line={"color": "#38BDF8", "width": 2.2, "dash": "dash"},
-            fill="toself", fillcolor="rgba(56,189,248,0.13)",
-        ))
+    # True Core is rendered as the exact selected 30-zone cells. Disconnected
+    # cells stay disconnected; no hull may bridge empty or low-density space.
+    for zone in true_core["zones"]:
+        depth, lane = int(zone["depth"]), int(zone["lane"])
+        figure.add_shape(
+            type="rect",
+            x0=POSITIONAL_DEPTH_BOUNDARIES[depth - 1],
+            x1=POSITIONAL_DEPTH_BOUNDARIES[depth],
+            y0=POSITIONAL_LANE_BOUNDARIES[lane - 1],
+            y1=POSITIONAL_LANE_BOUNDARIES[lane],
+            line={"color": "#38BDF8", "width": 2.0},
+            fillcolor="rgba(56,189,248,0.16)",
+            layer="above",
+        )
     # The supplied pitch is 1.41:1 inside its touchlines.  Use that aspect
     # instead of distorting its positional lines to the former generic pitch.
     figure.update_layout(height=430, margin={"l": 0, "r": 0, "t": 0, "b": 0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis={"range": [-4, 104], "visible": False, "fixedrange": True, "constrain": "domain"}, yaxis={"range": [0, 100], "visible": False, "scaleanchor": "x", "scaleratio": 0.709, "fixedrange": True, "constrain": "domain"}, showlegend=False)
@@ -1221,11 +1228,11 @@ def render_season_heatmap(
         )
         if zone_text:
             st.caption(f"주요 활동 구역(저장된 전체 시즌 좌표 기준): {zone_text}")
-    if cca_core and cca_hull:
+    if true_core["zones"]:
         st.caption(
-            f"청록 점선은 CCA 핵심 반복 활동 영역입니다. 전체 {len(points)}개 좌표에서 반복 활동만 남긴 뒤, "
-            f"가장 밀집한 셀로 {len(cca_core)}개(핵심 50% 이상)를 포함하도록 계산합니다. "
-            "히트맵 색상은 전체 저장 좌표를 부드럽게 표시하므로 점선보다 넓게 보일 수 있습니다."
+            f"청록 구역은 전체 {len(points)}개 좌표를 30-zone에 배치한 뒤 활동 비중이 높은 순서로 "
+            f"누적 {float(true_core['achievedDensityPct']):.1f}%를 구성한 {int(true_core['zoneCount'])}개 True Core Zone입니다. "
+            f"실제 피치 면적 합은 {float(true_core['coreAreaPct']):.1f}%이며, 0%·저밀도 구역은 포함하지 않습니다."
         )
 
 
@@ -2858,9 +2865,9 @@ def render_messi_about_page() -> None:
         ),
         (
             "Q4. 공간 데이터와 히트맵은 어떻게 해석하나요?",
-            "시즌 활동 좌표를 정적 데이터로 저장한 뒤, 반복 밀도가 높은 핵심 활동 반경(CCA)을 계산합니다. "
-            "CCA는 KDE(커널 밀도 추정)에서 상위 50% 밀도 영역을 기반으로 하며, 일회성 위치보다 "
-            "지속적으로 점유한 공간을 우선 반영합니다. 3-Zone은 전진 깊이, 5-Lane은 횡적 움직임과 "
+            "시즌 활동 좌표를 6-depth × 5-lane의 30-zone에 배치한 뒤 Zone별 활동 비중을 계산합니다. "
+            "CCA는 활동 비중이 높은 Zone부터 누적 50%에 도달하는 최소 True Core Zone의 실제 면적 합이며, "
+            "0% 및 선택되지 않은 저밀도 Zone은 제외합니다. 3-Zone은 전진 깊이, 5-Lane은 횡적 움직임과 "
             "좌우 밸런스를 보여줍니다.",
         ),
         (

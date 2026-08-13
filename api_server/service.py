@@ -19,6 +19,7 @@ from .schemas import (
     PlayersEnvelope, PlayerStats, PlayerTier, RadarAxis, RadarChart,
     PositionalGridCell, RawMetrics, SpatialAnalysis,
     TacticalQuadrantAnalysis, TacticalQuadrantPoint,
+    TrueCoreAnalysis, TrueCoreZone,
     WatchlistDataQualityResult, WatchlistResolveResult, WatchlistResolvedContext,
     WatchlistResolvedPlayer,
 )
@@ -395,6 +396,16 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
     def value(name: str) -> float | None:
         raw = tactical.get(name) if tactical else None
         return round(float(raw), 4) if raw is not None else None
+    core_zones = list(tactical.get("true_core_zones") or []) if tactical else []
+    core_ids = list(tactical.get("true_core_zone_ids") or []) if tactical else []
+    true_core = TrueCoreAnalysis(
+        available=bool(tactical and core_zones),
+        achievedDensityPct=round(float(tactical.get("true_core_density_pct") or 0.0), 4) if tactical else 0.0,
+        zoneIds=[str(zone_id) for zone_id in core_ids],
+        zoneCount=int(tactical.get("true_core_zone_count") or 0) if tactical else 0,
+        coreAreaPct=round(float(tactical.get("cca_area_pct") or 0.0), 4) if tactical else 0.0,
+        zones=[TrueCoreZone.model_validate(zone) for zone in core_zones],
+    )
     return SpatialAnalysis(
         available=bool(tactical), heatmapPointCount=len(valid_points), heatmapPoints=valid_points,
         inBoxRatio=value("in_box_ratio"), outBoxFinalRatio=value("out_box_final_ratio"),
@@ -405,6 +416,7 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
             PositionalGridCell(depth=depth, lane=lane, occupancyPct=value(f"grid_d{depth}_l{lane}_ratio") or 0.0)
             for depth in range(1, 7) for lane in range(1, 6)
         ] if tactical else [],
+        trueCore=true_core,
         dangerZoneDensity=value("danger_zone_density"), deepBoxZoneScore=value("deep_box_zone_score"),
     )
 

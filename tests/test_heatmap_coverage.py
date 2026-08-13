@@ -21,11 +21,15 @@ from scripts.build_tactical_ratios import (
 )
 from positional_grid import (
     POSITIONAL_CELL_FIELDS,
+    POSITIONAL_DEPTH_BOUNDARIES,
     POSITIONAL_DEPTH_FIELDS,
     POSITIONAL_LANE_BOUNDARIES,
     positional_grid_metrics,
+    true_core_zones,
+    true_core_zones_from_points,
 )
-from tactical_ratio import _same_competition, cca_core_region
+from tactical_ratio import _same_competition
+from scripts.backfill_true_core_zones import DEFINITION_VERSION
 
 
 def _payload(league_name: str, league_id: int) -> dict:
@@ -52,6 +56,8 @@ class ExpandedLeagueParsingTests(unittest.TestCase):
 
 
 class CcaOverlayTests(unittest.TestCase):
+    def test_true_core_backfill_has_an_explicit_definition_version(self) -> None:
+        self.assertEqual(DEFINITION_VERSION, "true-core-30zone-v1")
     def test_etl_script_can_import_the_root_positional_grid_when_run_as_a_script(self) -> None:
         root = Path(__file__).resolve().parents[1]
         result = subprocess.run(
@@ -77,9 +83,7 @@ class CcaOverlayTests(unittest.TestCase):
         self.assertAlmostEqual(sum(metrics[field] for field in POSITIONAL_DEPTH_FIELDS), 100.0)
         self.assertAlmostEqual(sum(metrics[field] for field in POSITIONAL_CELL_FIELDS), 100.0)
 
-    def test_grid_occupancy_uses_all_saved_points_while_cca_remains_repeat_only(self) -> None:
-        # CCA intentionally discards one-off noise; positional occupancy must
-        # still describe the full heatmap shown to users.
+    def test_grid_occupancy_and_true_core_use_all_saved_points(self) -> None:
         core_points = [(10, 10)] * 4
         all_points = [*core_points, (90, 90)]
 
@@ -88,19 +92,82 @@ class CcaOverlayTests(unittest.TestCase):
         self.assertEqual(metrics["grid_d1_l1_ratio"], 80.0)
         self.assertEqual(metrics["grid_d6_l5_ratio"], 20.0)
         self.assertEqual(sum(metrics[f"lane_{lane}_ratio"] for lane in range(1, 6)), 100.0)
+        self.assertGreater(metrics["cca_area_pct"], 0.0)
 
-    def test_cca_overlay_uses_the_densest_repeated_cells_not_all_visual_points(self) -> None:
-        # Four points in one cell and three in a second cell form the earliest
-        # core that reaches at least 50% of the seven repeated observations.
-        points = [
-            [11, 11], [12, 13], [13, 12], [14, 14],
-            [31, 31], [32, 32], [33, 33],
-            [90, 90],  # A one-off visual point must not enter CCA.
-        ]
-        core, hull = cca_core_region(points)
-        self.assertEqual(len(core), 4)
-        self.assertEqual(set(core), {(11.0, 11.0), (12.0, 13.0), (13.0, 12.0), (14.0, 14.0)})
-        self.assertGreaterEqual(len(hull), 3)
+    def test_true_core_selects_the_minimum_cells_reaching_half_density(self) -> None:
+        occupancy = {field: 0.0 for field in POSITIONAL_CELL_FIELDS}
+        occupancy.update({
+            "grid_d6_l3_ratio": 40.0,
+            "grid_d5_l3_ratio": 30.0,
+            "grid_d4_l3_ratio": 20.0,
+            "grid_d3_l3_ratio": 10.0,
+        })
+
+        core = true_core_zones(occupancy)
+
+        self.assertEqual(core["zoneIds"], ["depth6_lane3", "depth5_lane3"])
+        self.assertEqual(core["zoneCount"], 2)
+        self.assertEqual(core["achievedDensityPct"], 70.0)
+        self.assertLess(core["zones"][0]["densityPct"], 50.0)
+        expected_area = sum(
+            (POSITIONAL_DEPTH_BOUNDARIES[depth] - POSITIONAL_DEPTH_BOUNDARIES[depth - 1])
+            * (POSITIONAL_LANE_BOUNDARIES[3] - POSITIONAL_LANE_BOUNDARIES[2]) / 100.0
+            for depth in (6, 5)
+        )
+        self.assertAlmostEqual(core["coreAreaPct"], expected_area, places=4)
+
+    def test_true_core_excludes_zeroes_and_breaks_density_ties_by_depth_then_lane(self) -> None:
+        occupancy = {field: 0.0 for field in POSITIONAL_CELL_FIELDS}
+        occupancy.update({
+            "grid_d2_l1_ratio": 25.0,
+            "grid_d1_l2_ratio": 25.0,
+            "grid_d1_l1_ratio": 25.0,
+            "grid_d2_l2_ratio": 25.0,
+        })
+
+        core = true_core_zones(occupancy)
+
+        self.assertEqual(core["zoneIds"], ["depth1_lane1", "depth1_lane2"])
+        self.assertEqual(core["achievedDensityPct"], 50.0)
+        self.assertNotIn("depth1_lane3", core["zoneIds"])
+
+    def test_true_core_raw_point_wrapper_uses_the_same_30_zone_distribution(self) -> None:
+        points = [(90, 50)] * 3 + [(10, 10)] * 2
+
+        direct = true_core_zones(positional_grid_metrics(points))
+        wrapped = true_core_zones_from_points(points)
+
+        self.assertEqual(wrapped, direct)
+        self.assertEqual(wrapped["zoneIds"], ["depth6_lane3"])
+        self.assertEqual(wrapped["achievedDensityPct"], 60.0)
+
+    def test_true_core_raw_counts_preserve_tie_break_before_rounding_residual(self) -> None:
+        points = [(1, 1), (1, 25), (1, 50)]
+        core = true_core_zones_from_points(points)
+        self.assertEqual(core["zoneIds"], ["depth1_lane1", "depth1_lane2"])
+
+    def test_spatial_metrics_keep_positional_core_when_repeat_filter_is_empty(self) -> None:
+        metrics = spatial_metrics([], positional_points=[(90, 50), (90, 50)])
+        self.assertEqual(metrics["grid_d6_l3_ratio"], 100.0)
+        self.assertGreater(metrics["cca_area_pct"], 0.0)
+
+    def test_true_core_returns_empty_for_zero_distribution_and_rejects_malformed_input(self) -> None:
+        empty = {field: 0.0 for field in POSITIONAL_CELL_FIELDS}
+        self.assertEqual(true_core_zones(empty), {
+            "zoneIds": [], "zoneCount": 0, "coreAreaPct": 0.0,
+            "achievedDensityPct": 0.0, "zones": [],
+        })
+
+        with self.assertRaisesRegex(ValueError, "missing"):
+            true_core_zones({})
+        invalid = dict(empty)
+        invalid["grid_d1_l1_ratio"] = float("nan")
+        with self.assertRaisesRegex(ValueError, "between 0 and 100"):
+            true_core_zones(invalid)
+        incomplete_total = dict(empty)
+        incomplete_total["grid_d1_l1_ratio"] = 90.0
+        with self.assertRaisesRegex(ValueError, "total 100"):
+            true_core_zones(incomplete_total)
 
     def test_eredivisie_is_retained(self) -> None:
         metrics = extract_multi_season_metrics(_payload("Eredivisie", 999))

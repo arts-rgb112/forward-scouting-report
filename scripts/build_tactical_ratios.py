@@ -34,7 +34,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from positional_grid import POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics
+from positional_grid import (
+    POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics,
+    true_core_zones_from_points,
+)
 
 
 # Prefer the canonical path-based endpoint. Some accounts are still rolling
@@ -126,9 +129,7 @@ COHORT_COMPETITION_NAMES = {
 ATTACKING_POSITION_TOKENS = ("attacker", "forward", "striker", "centre-forward", "center-forward", "attacking midfielder", " cf", "st")
 ACTIVITY_GRID_SIZE = 5.0
 MIN_CELL_OVERLAP = 3
-ACTIVITY_FILTER_VERSION = "cluster-v2-positional-grid"
-CORE_COVERAGE_SHARE = 0.50
-PITCH_AREA = 100.0 * 100.0
+ACTIVITY_FILTER_VERSION = "true-core-30zone-v1"
 GOLD_ZONE_WEIGHT = 1.50
 SILVER_ZONE_WEIGHT = 1.00
 BRONZE_ZONE_WEIGHT = 0.50
@@ -360,33 +361,6 @@ def core_activity_points(payload: Any) -> list[tuple[float, float]]:
     ]
 
 
-def _convex_hull_area(points: list[tuple[float, float]]) -> float:
-    """Return the area covered by a point cloud's convex hull in pitch units."""
-    unique = sorted(set(points))
-    if len(unique) < 3:
-        return 0.0
-
-    def cross(origin: tuple[float, float], left: tuple[float, float], right: tuple[float, float]) -> float:
-        return (left[0] - origin[0]) * (right[1] - origin[1]) - (left[1] - origin[1]) * (right[0] - origin[0])
-
-    lower: list[tuple[float, float]] = []
-    for point in unique:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
-            lower.pop()
-        lower.append(point)
-    upper: list[tuple[float, float]] = []
-    for point in reversed(unique):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
-            upper.pop()
-        upper.append(point)
-    hull = lower[:-1] + upper[:-1]
-    return abs(sum(
-        hull[index][0] * hull[(index + 1) % len(hull)][1]
-        - hull[index][1] * hull[(index + 1) % len(hull)][0]
-        for index in range(len(hull))
-    )) / 2.0
-
-
 def spatial_metrics(
     points: list[tuple[float, float]], *, positional_points: list[tuple[float, float]] | None = None,
 ) -> dict[str, float]:
@@ -411,35 +385,23 @@ def spatial_metrics(
         "box_wide_ratio": 0.0, "deep_box_zone_score": 0.0,
         **positional_grid_metrics(()),
     }
-    if not points:
-        return empty
-
-    # CCA: retain the densest cells until they contain the core 50% of the
-    # repeated activity population, then calculate their convex-hull area.
-    cell_counts = Counter((int(x // ACTIVITY_GRID_SIZE), int(y // ACTIVITY_GRID_SIZE)) for x, y in points)
-    core_target = len(points) * CORE_COVERAGE_SHARE
-    selected_cells: set[tuple[int, int]] = set()
-    selected_count = 0
-    for cell, count in sorted(cell_counts.items(), key=lambda item: (-item[1], item[0])):
-        selected_cells.add(cell)
-        selected_count += count
-        if selected_count >= core_target:
-            break
-    core_points = [
-        point for point in points
-        if (int(point[0] // ACTIVITY_GRID_SIZE), int(point[1] // ACTIVITY_GRID_SIZE)) in selected_cells
-    ]
-    empty["cca_area_pct"] = round(min(100.0, _convex_hull_area(core_points) / PITCH_AREA * 100.0), 2)
-
-    total = float(len(points))
     # Keep the legacy lane fields, but now use the actual non-uniform five
     # lanes drawn in the positional-grid pitch rather than arbitrary 20% bins.
-    grid = positional_grid_metrics(positional_points if positional_points is not None else points)
+    grid_points = positional_points if positional_points is not None else points
+    grid = positional_grid_metrics(grid_points)
+    # CCA v3: select only positive 30-zone cells until their cumulative
+    # density reaches 50%. The width is the sum of those real grid-cell areas;
+    # no empty space between disconnected cells is counted.
+    empty["cca_area_pct"] = round(float(true_core_zones_from_points(grid_points)["coreAreaPct"]), 2)
     for index in range(1, 6):
         empty[f"lane_{index}_ratio"] = round(sum(
             grid[f"grid_d{depth}_l{index}_ratio"] for depth in range(1, 7)
         ), 2)
     empty.update(grid)
+    if not points:
+        return empty
+
+    total = float(len(points))
 
     # Zone 14 and the two advanced half-spaces are the dangerous central
     # channels.  This remains an activity-density signal, not a progression
@@ -833,8 +795,6 @@ def enrich_checkpoint_spatial_metrics(
     """
     for row in rows:
         row["activity_filter"] = ACTIVITY_FILTER_VERSION
-        if row.get("grid_d1_l1_ratio") not in (None, ""):
-            continue
         raw_points = visual_points.get(str(row.get("heatmap_key", "")), [])
         points = [
             (float(point[0]), float(point[1]))
