@@ -537,6 +537,13 @@ def _normalise_name(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", ascii_name)
 
 
+def _name_token_signature(value: str) -> str:
+    """Ignore harmless given/family-name ordering without fuzzy guessing."""
+    ascii_name = unicodedata.normalize("NFKD", value.lower())
+    ascii_name = ascii_name.encode("ascii", "ignore").decode("ascii")
+    return "".join(sorted(re.findall(r"[a-z0-9]+", ascii_name)))
+
+
 def resolve_fotmob_id(player_name: str) -> str | None:
     """Auto-map only an unambiguous exact-name match; never guess otherwise."""
     try:
@@ -664,7 +671,11 @@ def resolve_ranked_sportsapi_id(
     name_matches = [
         (str(sports_id), player)
         for sports_id, player in players.items()
-        if _normalise_name(str(player.get("name", ""))) == target_name
+        if (
+            _normalise_name(str(player.get("name", ""))) == target_name
+            or _name_token_signature(str(player.get("name", "")))
+            == _name_token_signature(player_name)
+        )
     ]
     if len(name_matches) == 1:
         return name_matches[0][0]
