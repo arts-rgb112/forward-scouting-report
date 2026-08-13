@@ -180,6 +180,13 @@ def test_v2_europe_leaderboard_and_contextual_player_detail_contract():
     assert {(cell["depth"], cell["lane"]) for cell in spatial["positionalGrid"]} == {
         (depth, lane) for depth in range(1, 7) for lane in range(1, 6)
     }
+    core = spatial["trueCore"]
+    assert core["available"] is True
+    assert core["targetDensityPct"] == 50
+    assert core["zoneCount"] == len(core["zoneIds"]) == len(core["zones"])
+    assert core["achievedDensityPct"] >= 50
+    assert all(zone["densityPct"] > 0 for zone in core["zones"])
+    assert core["coreAreaPct"] == spatial["ccaAreaPct"]
 
 
 def test_v2_unavailable_competition_is_not_silently_rendered_as_empty():

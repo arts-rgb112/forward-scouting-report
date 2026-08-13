@@ -6,11 +6,13 @@ import csv
 import functools
 import json
 import re
-from collections import Counter
 from pathlib import Path
 from typing import Optional
 
-from positional_grid import POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS
+from positional_grid import (
+    POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics,
+    true_core_zones, true_core_zones_from_points,
+)
 
 
 DATA_DIR = Path(__file__).with_name("data")
@@ -26,73 +28,6 @@ SPATIAL_FIELDS = (
     *POSITIONAL_DEPTH_FIELDS,
     *POSITIONAL_CELL_FIELDS,
 )
-CCA_GRID_SIZE = 5.0
-CCA_MIN_CELL_OVERLAP = 3
-CCA_CORE_COVERAGE_SHARE = 0.50
-
-
-def _convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    """Return a stable outline for the CCA visual overlay."""
-    unique = sorted(set(points))
-    if len(unique) < 3:
-        return unique
-
-    def cross(origin: tuple[float, float], left: tuple[float, float], right: tuple[float, float]) -> float:
-        return (left[0] - origin[0]) * (right[1] - origin[1]) - (left[1] - origin[1]) * (right[0] - origin[0])
-
-    lower: list[tuple[float, float]] = []
-    for point in unique:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
-            lower.pop()
-        lower.append(point)
-    upper: list[tuple[float, float]] = []
-    for point in reversed(unique):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
-            upper.pop()
-        upper.append(point)
-    return lower[:-1] + upper[:-1]
-
-
-def cca_core_region(points: list[list[float]]) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    """Return the same repeated-point CCA core and outline used by the ETL.
-
-    The retained core contains at least 50% of repeated activity, selected from
-    the densest 5×5m cells.  Its hull is visual-only: it makes the CCA number
-    explainable alongside the broader, smoothed heatmap.
-    """
-    valid: list[tuple[float, float]] = []
-    for point in points:
-        if not isinstance(point, (list, tuple)) or len(point) != 2:
-            continue
-        try:
-            x, y = float(point[0]), float(point[1])
-        except (TypeError, ValueError):
-            continue
-        if 0 <= x <= 100 and 0 <= y <= 100:
-            valid.append((x, y))
-    all_cell_counts = Counter((int(x // CCA_GRID_SIZE), int(y // CCA_GRID_SIZE)) for x, y in valid)
-    repeated = [
-        point for point in valid
-        if all_cell_counts[(int(point[0] // CCA_GRID_SIZE), int(point[1] // CCA_GRID_SIZE))] >= CCA_MIN_CELL_OVERLAP
-    ]
-    if not repeated:
-        return [], []
-    repeated_cell_counts = Counter((int(x // CCA_GRID_SIZE), int(y // CCA_GRID_SIZE)) for x, y in repeated)
-    target = len(repeated) * CCA_CORE_COVERAGE_SHARE
-    selected_cells: set[tuple[int, int]] = set()
-    selected_count = 0
-    for cell, count in sorted(repeated_cell_counts.items(), key=lambda item: (-item[1], item[0])):
-        selected_cells.add(cell)
-        selected_count += count
-        if selected_count >= target:
-            break
-    core = [
-        point for point in repeated
-        if (int(point[0] // CCA_GRID_SIZE), int(point[1] // CCA_GRID_SIZE)) in selected_cells
-    ]
-    return core, _convex_hull(core)
-
-
 def _micro_zone_metrics(points: list[list[float]]) -> dict[str, float] | None:
     """Classify stored box activity using mutually exclusive spatial zones.
 
@@ -157,6 +92,26 @@ def _with_current_micro_zone_definition(ratio: dict[str, float]) -> dict[str, fl
     corrected = dict(ratio)
     corrected.update(metrics)
     return corrected
+
+
+def _with_true_core_definition(ratio: dict[str, float]) -> dict[str, float]:
+    """Recalculate every historical CCA from its complete 30-zone density."""
+    corrected = dict(ratio)
+    points = get_heatmap_points(
+        str(ratio.get("fotmob_player_id", "")),
+        str(ratio.get("heatmap_key", "")) or None,
+    )
+    core = true_core_zones_from_points(points) if points else true_core_zones(corrected)
+    corrected["cca_area_pct"] = float(core["coreAreaPct"])
+    corrected["true_core_zone_ids"] = list(core["zoneIds"])
+    corrected["true_core_zone_count"] = int(core["zoneCount"])
+    corrected["true_core_density_pct"] = float(core["achievedDensityPct"])
+    corrected["true_core_zones"] = list(core["zones"])
+    return corrected
+
+
+def _with_current_spatial_definition(ratio: dict[str, float]) -> dict[str, float]:
+    return _with_true_core_definition(_with_current_micro_zone_definition(ratio))
 
 
 def _normalise(value: object) -> str:
@@ -241,14 +196,14 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
 
 def get_tactical_ratio(player_id: str | int) -> Optional[dict[str, float]]:
     matches = [row for row in load_tactical_ratios().values() if str(row.get("fotmob_player_id")) == str(player_id)]
-    return _with_current_micro_zone_definition(matches[0]) if matches else None
+    return _with_current_spatial_definition(matches[0]) if matches else None
 
 
 def get_tactical_ratio_by_name(player_name: str) -> Optional[dict[str, float]]:
     """Use only an unambiguous normalized-name fallback for duplicate search IDs."""
     normalized = re.sub(r"[^a-z0-9]", "", player_name.lower())
     matches = [ratio for ratio in load_tactical_ratios().values() if re.sub(r"[^a-z0-9]", "", str(ratio.get("player_name", "")).lower()) == normalized]
-    return _with_current_micro_zone_definition(matches[0]) if len(matches) == 1 else None
+    return _with_current_spatial_definition(matches[0]) if len(matches) == 1 else None
 
 
 def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, season_label: str) -> Optional[dict[str, float]]:
@@ -259,7 +214,14 @@ def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, 
         and _same_competition(row.get("competition_name") or TOURNAMENT_NAMES.get(str(row.get("tournament_id")), ""), competition_name)
         and (not row.get("season_name") or _same_season(row.get("season_name"), season_label))
     ]
-    return _with_current_micro_zone_definition(candidates[0]) if len(candidates) == 1 else None
+    if not candidates:
+        return None
+    # Historical provider remaps produced two duplicate rows for a handful of
+    # identical FotMob sessions. A shared heatmap key proves they represent the
+    # same persisted spatial sample, so resolve deterministically instead of
+    # hiding the complete player session.
+    heatmap_keys = {str(row.get("heatmap_key") or "") for row in candidates}
+    return _with_current_spatial_definition(candidates[0]) if len(heatmap_keys) == 1 else None
 
 
 @functools.lru_cache(maxsize=1)

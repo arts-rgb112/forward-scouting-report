@@ -257,6 +257,35 @@ class PositionalGridCell(BaseModel):
     occupancyPct: float = Field(ge=0, le=100)
 
 
+class TrueCoreZone(BaseModel):
+    """One positive-density positional zone selected into the 50% core."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^depth[1-6]_lane[1-5]$")
+    depth: int = Field(ge=1, le=6)
+    lane: int = Field(ge=1, le=5)
+    densityPct: float = Field(gt=0, le=100)
+    areaPct: float = Field(gt=0, le=100)
+
+
+class TrueCoreAnalysis(BaseModel):
+    """The minimum positive 30-zone set reaching 50% event share."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    available: bool
+    gridVersion: Literal["positional-6x5-v1"] = "positional-6x5-v1"
+    definitionVersion: Literal["true-core-50-v1"] = "true-core-50-v1"
+    targetDensityPct: Literal[50] = 50
+    achievedDensityPct: float = Field(ge=0, le=100)
+    zoneIds: list[str] = Field(max_length=30)
+    zoneCount: int = Field(ge=0, le=30)
+    coreAreaPct: float = Field(ge=0, le=100)
+    tieBreak: Literal["density-desc-depth-asc-lane-asc"] = "density-desc-depth-asc-lane-asc"
+    zones: list[TrueCoreZone] = Field(max_length=30)
+
+
 class SpatialAnalysis(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -272,6 +301,7 @@ class SpatialAnalysis(BaseModel):
     laneRatios: list[float] = Field(default_factory=list, max_length=5)
     depthRatios: list[float] = Field(default_factory=list, max_length=6)
     positionalGrid: list[PositionalGridCell] = Field(default_factory=list, max_length=30)
+    trueCore: TrueCoreAnalysis
     dangerZoneDensity: float | None = Field(default=None, ge=0, le=100)
     deepBoxZoneScore: float | None = Field(default=None, ge=0, le=100)
 
