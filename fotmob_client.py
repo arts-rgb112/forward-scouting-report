@@ -30,13 +30,22 @@ class PlayerCandidate:
 
 def _get(url: str) -> str:
     request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    try:
-        with urlopen(request, timeout=15) as response:
-            return response.read().decode("utf-8")
-    except HTTPError as exc:
-        raise FotMobError(f"FotMob request failed (HTTP {exc.code}).") from exc
-    except URLError as exc:
-        raise FotMobError("Could not reach FotMob.") from exc
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=15) as response:
+                return response.read().decode("utf-8")
+        except HTTPError as exc:
+            last_error = exc
+            if exc.code not in {408, 429, 500, 502, 503, 504}:
+                raise FotMobError(f"FotMob request failed (HTTP {exc.code}).") from exc
+        except (URLError, TimeoutError) as exc:
+            last_error = exc
+        if attempt < 2:
+            time.sleep(1.5 * (attempt + 1))
+    if isinstance(last_error, HTTPError):
+        raise FotMobError(f"FotMob request failed (HTTP {last_error.code}).") from last_error
+    raise FotMobError("Could not reach FotMob after 3 attempts.") from last_error
 
 
 @functools.lru_cache(maxsize=512)

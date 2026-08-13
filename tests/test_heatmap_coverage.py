@@ -3,7 +3,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from urllib.error import URLError
 
 from metrics import extract_multi_season_metrics
@@ -31,6 +31,7 @@ from continuous_core import continuous_core_from_points, continuous_core_summary
 from tactical_ratio import _same_competition
 from scripts.backfill_true_core_zones import DEFINITION_VERSION
 from scripts.build_shotmap_points import normalize_shotmap, shot_outcome
+from fotmob_client import FotMobError, _get
 
 
 def _payload(league_name: str, league_id: int) -> dict:
@@ -57,6 +58,25 @@ class ExpandedLeagueParsingTests(unittest.TestCase):
 
 
 class CcaOverlayTests(unittest.TestCase):
+    @patch("fotmob_client.time.sleep")
+    @patch("fotmob_client.urlopen")
+    def test_fotmob_request_retries_read_timeouts(self, mock_urlopen, mock_sleep) -> None:
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"ok":true}'
+        mock_urlopen.side_effect = [TimeoutError("slow"), response]
+
+        self.assertEqual(_get("https://example.test/data"), '{"ok":true}')
+        self.assertEqual(mock_urlopen.call_count, 2)
+        mock_sleep.assert_called_once_with(1.5)
+
+    @patch("fotmob_client.time.sleep")
+    @patch("fotmob_client.urlopen", side_effect=TimeoutError("slow"))
+    def test_fotmob_request_wraps_repeated_timeouts(self, mock_urlopen, mock_sleep) -> None:
+        with self.assertRaises(FotMobError):
+            _get("https://example.test/data")
+        self.assertEqual(mock_urlopen.call_count, 3)
+        self.assertEqual(mock_sleep.call_count, 2)
+
     def test_true_core_module_accepts_the_legacy_positional_grid_surface(self) -> None:
         """Streamlit hot reload may retain the pre-True-Core grid module."""
         root = Path(__file__).resolve().parents[1]
