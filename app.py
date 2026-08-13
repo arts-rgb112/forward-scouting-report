@@ -25,7 +25,7 @@ from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_
 from positional_grid import POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES
 from true_core import true_core_zones_from_points
 from continuous_core import continuous_core_from_points
-from shotmap import get_shotmap_points, has_shotmap_snapshot
+from shotmap_store_v2 import get_shotmap_points, has_shotmap_snapshot
 
 
 _UNIFIED_BAR_COUNTER = itertools.count()
