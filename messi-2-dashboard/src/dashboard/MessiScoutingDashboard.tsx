@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { MessiApiConfig } from "../api/env";
 import { resolveWatchlistEntries, type ResolvedWatchlistEntry } from "../api/watchlistResolveApi";
+import { fetchWatchlistDataQuality } from "../api/dataQualityApi";
 import { DashboardToolbar } from "./components/DashboardToolbar";
 import { DatasetFooter } from "./components/DatasetFooter";
 import { DatasetHeader } from "./components/DatasetHeader";
@@ -20,6 +21,7 @@ import { filterAndSortPlayers } from "./playerQuery";
 import type { AgeBand, DatasetMeta, DatasetRouteState, LeaderboardOptions, LeaderboardSearch, MinutesBand, Player, PositionFilterCapability, ServerPageMeta, SortKey, SortState } from "./types";
 import { contextFromDataset, entryFromPlayer, readWatchlist, removeWatchlistEntry, resolveUnresolvedLegacyIds, toggleWatchlistSelection, watchlistKey, writeWatchlist } from "./watchlistStorage";
 import { filterAndSortWatchlistRows, watchlistPage, watchlistRows } from "./watchlistViewModel";
+import { watchlistQualityDisplays, type QualityDisplay } from "./dataQualityViewModel";
 
 export type MessiScoutingDashboardProps = {
   players: readonly Player[]; meta: DatasetMeta; refreshing: boolean; onRefresh(): void; refreshWarning?: React.ReactNode;
@@ -44,14 +46,28 @@ export default function MessiScoutingDashboard({
   const [watchSort, setWatchSort] = useState<SortState>({ key: "score", direction: "desc" }); const [watchPage, setWatchPage] = useState(1);
   const [resolvedWatchlist, setResolvedWatchlist] = useState<Record<string, ResolvedWatchlistEntry>>({});
   const [resolvingWatchlist, setResolvingWatchlist] = useState(false); const [resolverStatus, setResolverStatus] = useState("");
+  const [watchlistQuality, setWatchlistQuality] = useState<Record<string, QualityDisplay>>({});
+  // Changes only when a new resolve attempt starts. This lets an explicit retry refresh a
+  // stable-looking page once, without allowing ordinary recomputation to duplicate a batch.
+  const [resolveEpoch, setResolveEpoch] = useState(0);
   const [watchlistOpen, setWatchlistOpen] = useState(false); const [feedback, setFeedback] = useState("");
   const leaderboardRef = useRef<HTMLElement>(null); const resultsSummaryRef = useRef<HTMLParagraphElement>(null); const previousPage = useRef(page); const previousWatchPage = useRef(watchPage);
   const resolverRequest = useRef(0); const resolverController = useRef<AbortController | null>(null);
+  const qualityRequest = useRef(0); const qualityController = useRef<AbortController | null>(null); const qualityBatchKey = useRef<string | undefined>(undefined);
 
   useEffect(() => { writeWatchlist(watchlist); }, [watchlist]);
   useEffect(() => { setWatchlist((current) => resolveUnresolvedLegacyIds(current, players, currentContext)); }, [currentContext, players]);
+  const invalidateWatchlistQuality = useCallback(() => {
+    qualityRequest.current += 1;
+    qualityController.current?.abort();
+    qualityController.current = null;
+    qualityBatchKey.current = undefined;
+    setWatchlistQuality({});
+  }, []);
   const resolveSavedContexts = useCallback(async () => {
     resolverController.current?.abort();
+    invalidateWatchlistQuality();
+    setResolveEpoch((value) => value + 1);
     const controller = new AbortController();
     resolverController.current = controller;
     const requestId = ++resolverRequest.current;
@@ -83,7 +99,7 @@ export default function MessiScoutingDashboard({
     } catch {
       if (!controller.signal.aborted && requestId === resolverRequest.current) setResolverStatus("Saved-context resolver failed; showing saved snapshots.");
     } finally { if (requestId === resolverRequest.current) setResolvingWatchlist(false); }
-  }, [apiConfig, watchlist.entries]);
+  }, [apiConfig, invalidateWatchlistQuality, watchlist.entries]);
   const invalidateWatchlistResolve = () => { resolverRequest.current += 1; resolverController.current?.abort(); };
   useEffect(() => {
     if (viewMode === "watchlist") { void resolveSavedContexts(); return () => resolverController.current?.abort(); }
@@ -110,6 +126,37 @@ export default function MessiScoutingDashboard({
     if (viewMode === "watchlist" && previousWatchPage.current !== localWatchPage.page) { leaderboardRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); resultsSummaryRef.current?.focus({ preventScroll: true }); }
     previousWatchPage.current = localWatchPage.page;
   }, [localWatchPage.page, viewMode]);
+  // Companion quality is intentionally page-scoped and memory-only. It never participates in
+  // resolve, sorting, snapshots, or localStorage, and is shown only after the primary resolve
+  // has produced an exact current profile with the same key/context.
+  const currentVisibleEntries = useMemo(() => localWatchPage.rows
+    .filter((row) => row.source === "current")
+    .map((row) => row.entry), [localWatchPage.rows]);
+  useEffect(() => {
+    if (viewMode !== "watchlist" || !apiConfig || !currentVisibleEntries.length) {
+      qualityController.current?.abort(); qualityController.current = null; qualityRequest.current += 1; qualityBatchKey.current = undefined;
+      setWatchlistQuality({});
+      return;
+    }
+    const entries = currentVisibleEntries;
+    const batchKey = `${resolveEpoch}:${entries.map((entry) => entry.key).join("|")}`;
+    // React recomputation may replace the rows array without changing the resolved visible
+    // page. One resolve generation and one exact target set must produce one request only.
+    if (qualityBatchKey.current === batchKey) return;
+    qualityController.current?.abort(); const requestId = ++qualityRequest.current;
+    qualityBatchKey.current = batchKey;
+    const controller = new AbortController(); qualityController.current = controller;
+    setWatchlistQuality(Object.fromEntries(entries.map((entry) => [entry.key, { kind: "pending" } satisfies QualityDisplay])));
+    void fetchWatchlistDataQuality(apiConfig, entries, controller.signal).then((results) => {
+      if (!controller.signal.aborted && requestId === qualityRequest.current) setWatchlistQuality(watchlistQualityDisplays(entries, results));
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted && requestId === qualityRequest.current) {
+        const cause = error instanceof Error && "kind" in error && (error as { kind?: string }).kind === "http" ? "http" : error instanceof Error && "kind" in error && (error as { kind?: string }).kind === "network" ? "network" : "schema";
+        setWatchlistQuality(Object.fromEntries(entries.map((entry) => [entry.key, { kind: "unknown", cause } satisfies QualityDisplay])));
+      }
+    });
+    return () => controller.abort();
+  }, [apiConfig, currentVisibleEntries, resolveEpoch, viewMode]);
 
   const updateServerSearch = useCallback((patch: Partial<LeaderboardSearch>, replace = false) => { if (search) onSearchChange({ ...search, ...patch, page: patch.page ?? 1 }, replace); }, [onSearchChange, search]);
   const query = viewMode === "watchlist" ? watchQuery : normalQuery; const role = viewMode === "watchlist" ? watchRole : normalRole; const position = viewMode === "watchlist" ? watchPosition : normalPosition; const ageBand = viewMode === "watchlist" ? watchAgeBand : normalAgeBand; const minutesBand = viewMode === "watchlist" ? watchMinutesBand : normalMinutesBand; const sort = viewMode === "watchlist" ? watchSort : normalSort;
@@ -121,8 +168,8 @@ export default function MessiScoutingDashboard({
   const changeAgeBand = useCallback((value: AgeBand) => { if (viewMode === "watchlist") { setWatchAgeBand(value); setWatchPage(1); } else if (serverDriven && (value === "all" || ageCapability === "supported")) updateServerSearch({ ageBand: value, page: 1 }); }, [ageCapability, serverDriven, updateServerSearch, viewMode]);
   const changeMinutesBand = useCallback((value: MinutesBand) => { if (viewMode === "watchlist") { setWatchMinutesBand(value); setWatchPage(1); } else if (serverDriven && (value === "all" || minutesCapability === "supported")) updateServerSearch({ minutesBand: value, page: 1 }); }, [minutesCapability, serverDriven, updateServerSearch, viewMode]);
   const changeSort = useCallback((next: SortState) => { if (viewMode === "watchlist") { setWatchSort(next); setWatchPage(1); } else if (serverDriven) updateServerSearch({ sort: next.key, direction: next.direction, page: 1 }); else { setLocalSort(next); onPageChange(1); } }, [onPageChange, serverDriven, updateServerSearch, viewMode]);
-  const toggleWatch = (player: Player) => { const key = watchlistKey(player.id, currentContext); invalidateWatchlistResolve(); setResolvedWatchlist((current) => { const { [key]: _discarded, ...rest } = current; return rest; }); if (watchedKeys.has(key)) { setWatchlist((current) => removeWatchlistEntry(current, key)); setFeedback(`${player.name} removed from watchlist.`); } else { setWatchlist((current) => ({ ...current, entries: [...current.entries, entryFromPlayer(player, currentContext)] })); setFeedback(`${player.name} saved with this leaderboard context.`); } };
-  const removeWatch = (key: string) => { invalidateWatchlistResolve(); setResolvedWatchlist((current) => { const { [key]: _discarded, ...rest } = current; return rest; }); setWatchlist((current) => removeWatchlistEntry(current, key)); setFeedback("Watchlist entry removed."); };
+  const toggleWatch = (player: Player) => { const key = watchlistKey(player.id, currentContext); invalidateWatchlistResolve(); invalidateWatchlistQuality(); setResolvedWatchlist((current) => { const { [key]: _discarded, ...rest } = current; return rest; }); if (watchedKeys.has(key)) { setWatchlist((current) => removeWatchlistEntry(current, key)); setFeedback(`${player.name} removed from watchlist.`); } else { setWatchlist((current) => ({ ...current, entries: [...current.entries, entryFromPlayer(player, currentContext)] })); setFeedback(`${player.name} saved with this leaderboard context.`); } };
+  const removeWatch = (key: string) => { invalidateWatchlistResolve(); invalidateWatchlistQuality(); setResolvedWatchlist((current) => { const { [key]: _discarded, ...rest } = current; return rest; }); setWatchlist((current) => removeWatchlistEntry(current, key)); setFeedback("Watchlist entry removed."); };
   const toggleSelection = (key: string) => setWatchlist((current) => { if (current.selectedEntryKeys.includes(key)) { setFeedback("Comparison selection removed."); return toggleWatchlistSelection(current, key); } if (current.selectedEntryKeys.length >= 2) { setFeedback("You can select up to two watchlist entries for comparison."); return current; } setFeedback("Watchlist entry selected for comparison."); return toggleWatchlistSelection(current, key); });
   const setMetricSort = (key: SortKey) => changeSort({ key, direction: sort.key === key ? (sort.direction === "desc" ? "asc" : "desc") : "desc" });
   const normalTotal = serverDriven ? (meta.totalItems ?? meta.population) : displayed.length; const shownPage = serverDriven && refreshing ? serverPage!.page : safePage;
@@ -139,7 +186,7 @@ export default function MessiScoutingDashboard({
     <DashboardToolbar query={query} role={role} position={position} ageBand={ageBand} minutesBand={minutesBand} positionCapability={isWatchlist ? "supported" : (serverDriven ? positionCapability : "unsupported")} ageCapability={isWatchlist ? "supported" : (serverDriven ? ageCapability : "unsupported")} minutesCapability={isWatchlist ? "supported" : (serverDriven ? minutesCapability : "unsupported")} watchOnly={false} watchCount={watchlist.entries.length} resultLabel={isWatchlist ? `Watchlist · ${watchlist.entries.length} saved contexts` : (displayed.length ? `${displayed.length} shown · ${normalTotal} results` : "0 shown · 0 results")} hasFilters={hasFilters} players={players} dataset={dataset} onQueryChange={changeQuery} onRoleChange={changeRole} onPositionChange={changePosition} onAgeBandChange={changeAgeBand} onMinutesBandChange={changeMinutesBand} onWatchOnlyChange={() => undefined} viewMode={viewMode} onViewModeChange={setViewMode} onOpenWatchlist={() => setWatchlistOpen(true)} onReset={resetFilters} />
     {hasLegacyTierTaxonomy && <div aria-label="Leaderboard tier taxonomy status" title="Some players in this leaderboard response use the previous overall M.E.S.S.I. tier taxonomy. Legacy labels preserve their original meaning." className="mb-2 flex items-center"><span className="rounded border border-zinc-400/30 bg-zinc-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-300">Legacy tier taxonomy</span></div>}
     <ScoreLegend />
-    <section ref={leaderboardRef} aria-label={isWatchlist ? "Watchlist results" : "Leaderboard results"} className="scroll-mt-4"><p ref={resultsSummaryRef} tabIndex={-1} className="mb-1 text-xs font-bold text-zinc-400">{rangeLabel}{isWatchlist ? "" : " players"}</p><p role="status" aria-live="polite" className="mb-3 min-h-5 text-xs text-zinc-500">{isWatchlist ? resolverStatus : (refreshing && serverDriven ? `Loading page ${safePage}.` : "")}</p>{isWatchlist && legacyPartialCount > 0 && (watchRole !== "ALL" || watchAgeBand !== "all" || watchMinutesBand !== "all") && <div className="mb-3 rounded border border-amber-300/20 bg-amber-300/[.04] px-3 py-2 text-xs text-amber-100">{legacyPartialCount} previous-format saved context{legacyPartialCount === 1 ? " is" : "s are"} excluded by restrictive filters when its saved age, minutes, or role is unknown. <button type="button" onClick={resetFilters} className="ml-2 min-h-9 text-lime-300 underline">Reset filters</button><button type="button" onClick={() => void resolveSavedContexts()} className="ml-2 min-h-9 text-lime-300 underline">Retry Resolve</button></div>}{isWatchlist ? (localWatchPage.rows.length ? <><WatchlistCardList rows={localWatchPage.rows} sort={watchSort} onScoreSort={() => setMetricSort("score")} onRemove={removeWatch} onRetry={() => void resolveSavedContexts()} /><WatchlistTable rows={localWatchPage.rows} sort={watchSort} onMetricSort={setMetricSort} onRemove={removeWatch} onRetry={() => void resolveSavedContexts()} /><LeaderboardPagination page={localWatchPage.page} total={filteredWatchRows.length} pageSize={50} onPageChange={setWatchPage} /></> : <div className="rounded-lg border border-dashed border-white/15 p-6 text-sm text-zinc-400">{watchlist.entries.length ? "No saved contexts match these local filters." : "No saved contexts yet. Save a player from any leaderboard context to see it here."}{hasFilters && <button type="button" onClick={resetFilters} className="ml-3 min-h-11 text-lime-300">Reset local filters</button>}{(watchRole !== "ALL" || watchAgeBand !== "all" || watchMinutesBand !== "all") && legacyPartialCount > 0 && <button type="button" onClick={() => void resolveSavedContexts()} className="ml-3 min-h-11 text-lime-300">Retry Resolve</button>}</div>) : (displayed.length ? <><PlayerCardList players={pagePlayers} dataset={dataset} watchedKeys={watchedKeys} sort={normalSort} onScoreSort={() => setMetricSort("score")} onToggleWatch={toggleWatch} /><PlayerTable players={pagePlayers} dataset={dataset} watchedKeys={watchedKeys} sort={normalSort} onMetricSort={setMetricSort} onToggleWatch={toggleWatch} /><LeaderboardPagination page={safePage} total={normalTotal} pageSize={PAGE_SIZE} pending={refreshing && serverDriven} onPageChange={onPageChange} /></> : <EmptyState onReset={resetFilters} />)}</section>
+    <section ref={leaderboardRef} aria-label={isWatchlist ? "Watchlist results" : "Leaderboard results"} className="scroll-mt-4"><p ref={resultsSummaryRef} tabIndex={-1} className="mb-1 text-xs font-bold text-zinc-400">{rangeLabel}{isWatchlist ? "" : " players"}</p><p role="status" aria-live="polite" className="mb-3 min-h-5 text-xs text-zinc-500">{isWatchlist ? resolverStatus : (refreshing && serverDriven ? `Loading page ${safePage}.` : "")}</p>{isWatchlist && legacyPartialCount > 0 && (watchRole !== "ALL" || watchAgeBand !== "all" || watchMinutesBand !== "all") && <div className="mb-3 rounded border border-amber-300/20 bg-amber-300/[.04] px-3 py-2 text-xs text-amber-100">{legacyPartialCount} previous-format saved context{legacyPartialCount === 1 ? " is" : "s are"} excluded by restrictive filters when its saved age, minutes, or role is unknown. <button type="button" onClick={resetFilters} className="ml-2 min-h-9 text-lime-300 underline">Reset filters</button><button type="button" onClick={() => void resolveSavedContexts()} className="ml-2 min-h-9 text-lime-300 underline">Retry Resolve</button></div>}{isWatchlist ? (localWatchPage.rows.length ? <><WatchlistCardList rows={localWatchPage.rows} qualityByKey={watchlistQuality} sort={watchSort} onScoreSort={() => setMetricSort("score")} onRemove={removeWatch} onRetry={() => void resolveSavedContexts()} /><WatchlistTable rows={localWatchPage.rows} qualityByKey={watchlistQuality} sort={watchSort} onMetricSort={setMetricSort} onRemove={removeWatch} onRetry={() => void resolveSavedContexts()} /><LeaderboardPagination page={localWatchPage.page} total={filteredWatchRows.length} pageSize={50} onPageChange={setWatchPage} /></> : <div className="rounded-lg border border-dashed border-white/15 p-6 text-sm text-zinc-400">{watchlist.entries.length ? "No saved contexts match these local filters." : "No saved contexts yet. Save a player from any leaderboard context to see it here."}{hasFilters && <button type="button" onClick={resetFilters} className="ml-3 min-h-11 text-lime-300">Reset local filters</button>}{(watchRole !== "ALL" || watchAgeBand !== "all" || watchMinutesBand !== "all") && legacyPartialCount > 0 && <button type="button" onClick={() => void resolveSavedContexts()} className="ml-3 min-h-11 text-lime-300">Retry Resolve</button>}</div>) : (displayed.length ? <><PlayerCardList players={pagePlayers} dataset={dataset} watchedKeys={watchedKeys} sort={normalSort} onScoreSort={() => setMetricSort("score")} onToggleWatch={toggleWatch} /><PlayerTable players={pagePlayers} dataset={dataset} watchedKeys={watchedKeys} sort={normalSort} onMetricSort={setMetricSort} onToggleWatch={toggleWatch} /><LeaderboardPagination page={safePage} total={normalTotal} pageSize={PAGE_SIZE} pending={refreshing && serverDriven} onPageChange={onPageChange} /></> : <EmptyState onReset={resetFilters} />)}</section>
     <DatasetFooter meta={meta} resultRange={rangeLabel} />
   </div><WatchlistDrawer open={watchlistOpen} entries={watchlist.entries} selectedKeys={watchlist.selectedEntryKeys} onClose={() => setWatchlistOpen(false)} onRemove={removeWatch} onToggleSelection={toggleSelection} feedback={feedback} /></main>;
 }

@@ -14,6 +14,8 @@ import { PlayerCardList } from "./PlayerCardList";
 import { PlayerTable } from "./PlayerTable";
 import { ScoreLegend } from "./ScoreLegend";
 import { WatchlistTable } from "./WatchlistTable";
+import { WatchlistCardList } from "./WatchlistCardList";
+import { metricConfig } from "../scoutingConfig";
 import type { LeaderboardOptions } from "../types";
 import { entryFromPlayer } from "../watchlistStorage";
 import { watchlistRows } from "../watchlistViewModel";
@@ -57,6 +59,25 @@ describe("dashboard contract UI", () => {
     const { container } = render(<WatchlistTable rows={rows} sort={{ key: "score", direction: "desc" }} onMetricSort={vi.fn()} onRemove={vi.fn()} onRetry={vi.fn()} />);
     expect(container.querySelector("colgroup col:nth-child(2)")).toHaveClass("w-40");
     expect(screen.getByLabelText("Overall M.E.S.S.I. tier: Legacy Platinum, level 1")).toHaveTextContent("Legacy Platinum");
+  });
+  it("preserves Watchlist sort affordances and baseline content without quality state", () => {
+    const saved = entryFromPlayer(samplePlayers[0], { season: sampleMeta.season, mode: "league", scope: 7, competition: null });
+    const current = watchlistRows([saved], { [saved.key]: { key: saved.key, status: "resolved", player: samplePlayers[0] } });
+    const snapshot = watchlistRows([saved], {});
+    const completeQuality = { kind: "complete" as const, dataQuality: { qualityVersion: "messi-quality-v1" as const, spatialAvailable: true, messiScoreComplete: true, reason: "complete" as const, imputedMetrics: [], imputedComponents: [], observedWeightPct: 100, fallbackComponentScore: 20 as const } };
+    const qualityByKey = { [saved.key]: completeQuality };
+    const { container, rerender, unmount } = render(<WatchlistTable rows={current} qualityByKey={qualityByKey} sort={{ key: "outsideShot", direction: "asc" }} onMetricSort={vi.fn()} onRemove={vi.fn()} onRetry={vi.fn()} />);
+    expect(screen.getByText(samplePlayers[0].archetype)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort by M.E.S.S.I. score descending" })).toHaveTextContent("M.E.S.S.I.");
+    expect(screen.getByRole("button", { name: `Sort by ${metricConfig.outsideShot.label} ascending` })).toHaveTextContent("↑");
+    expect(container.querySelectorAll('[aria-describedby^="quality-tooltip"]').length).toBe(0);
+    rerender(<WatchlistTable rows={current} qualityByKey={qualityByKey} sort={{ key: "score", direction: "desc" }} onMetricSort={vi.fn()} onRemove={vi.fn()} onRetry={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Sort by M.E.S.S.I. score descending" })).toHaveTextContent("M.E.S.S.I. ↓");
+    unmount();
+
+    const card = render(<WatchlistCardList rows={snapshot} sort={{ key: "score", direction: "asc" }} onScoreSort={vi.fn()} onRemove={vi.fn()} onRetry={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Sort by M.E.S.S.I. score ascending" })).toHaveTextContent("M.E.S.S.I. score ↑");
+    expect(card.container.querySelectorAll('[aria-describedby^="quality-tooltip"]').length).toBe(0);
   });
   it("does not debounce an unchanged query when the parent callback is recreated", () => {
     vi.useFakeTimers();
