@@ -22,7 +22,8 @@ from rankings import (
 )
 from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
-from positional_grid import POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES, true_core_zones_from_points
+from positional_grid import POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES
+from true_core import true_core_zones_from_points
 
 
 _UNIFIED_BAR_COUNTER = itertools.count()

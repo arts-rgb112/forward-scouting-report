@@ -9,10 +9,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from positional_grid import (
-    POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics,
-    true_core_zones, true_core_zones_from_points,
-)
+from positional_grid import POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics
+from true_core import true_core_zones, true_core_zones_from_points
 
 
 DATA_DIR = Path(__file__).with_name("data")

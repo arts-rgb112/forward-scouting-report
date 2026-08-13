@@ -25,9 +25,8 @@ from positional_grid import (
     POSITIONAL_DEPTH_FIELDS,
     POSITIONAL_LANE_BOUNDARIES,
     positional_grid_metrics,
-    true_core_zones,
-    true_core_zones_from_points,
 )
+from true_core import true_core_zones, true_core_zones_from_points
 from tactical_ratio import _same_competition
 from scripts.backfill_true_core_zones import DEFINITION_VERSION
 
@@ -56,6 +55,25 @@ class ExpandedLeagueParsingTests(unittest.TestCase):
 
 
 class CcaOverlayTests(unittest.TestCase):
+    def test_true_core_module_accepts_the_legacy_positional_grid_surface(self) -> None:
+        """Streamlit hot reload may retain the pre-True-Core grid module."""
+        root = Path(__file__).resolve().parents[1]
+        code = (
+            "import sys,types; "
+            "m=types.ModuleType('positional_grid'); "
+            "m.POSITIONAL_DEPTH_BOUNDARIES=(0,16.67,33.33,50,66.67,83.33,100); "
+            "m.POSITIONAL_LANE_BOUNDARIES=(0,21.82,37,63,78.18,100); "
+            "m.POSITIONAL_CELL_FIELDS=tuple(f'grid_d{d}_l{l}_ratio' for d in range(1,7) for l in range(1,6)); "
+            "sys.modules['positional_grid']=m; "
+            "import true_core; "
+            "assert true_core.true_core_zones_from_points([(90,50)])['zoneIds']==['depth6_lane3']"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], cwd=root,
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_true_core_backfill_has_an_explicit_definition_version(self) -> None:
         self.assertEqual(DEFINITION_VERSION, "true-core-30zone-v1")
     def test_etl_script_can_import_the_root_positional_grid_when_run_as_a_script(self) -> None:

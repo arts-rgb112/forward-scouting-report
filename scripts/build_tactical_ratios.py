@@ -34,10 +34,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from positional_grid import (
-    POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics,
-    true_core_zones_from_points,
-)
+from positional_grid import POSITIONAL_CELL_FIELDS, POSITIONAL_DEPTH_FIELDS, positional_grid_metrics
+from true_core import true_core_zones_from_points
 
 
 # Prefer the canonical path-based endpoint. Some accounts are still rolling
