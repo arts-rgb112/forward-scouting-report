@@ -1,4 +1,15 @@
 sportsapi_player_id,name,team_name
+1013928,Hugo Bueno,
+855845,Florentino Luís,
+1402726,Jack Fletcher,
+829570,Jack Harrison,
+322391,Ryan Christie,
+1631879,Alysson,
+828639,Daniel James,
+1112879,Kevin,
+1035996,André,
+843754,Ibrahim Sangaré,
+,Gabriel,Arsenal
 84539,Koke,
 811629,Luis Milla,
 887055,Cucho Hernández,
@@ -24,6 +35,17 @@ sportsapi_player_id,name,team_name
 1215904,Rodrigo Ribeiro,
 142390,Jonas Hofmann,
 ,Jan Thielmann,1. FC Köln
+797286,Aarón Martín,
+886628,Þórir Jóhann Helgason,
+1459764,Lorran,
+949780,Luca Moro,
+977679,Luís Henrique,
+978327,N'Dri Konan,
+,Giovane Nascimento,Hellas Verona
+,Yann Aurel Bisseck,Inter
+,Michel Ndary Adopo,Cagliari
+,Marc-Oliver Kempf,Como
+,Gleison Bremer,Juventus
 878938,Cristian Cásseres Jr.,
 1465307,Arthur Avom Ebong,
 1174937,Endrick,
@@ -124,7 +146,6 @@ sportsapi_player_id,name,team_name
 ,Pote,Sporting CP
 843754,Ibrahim Sangaré,
 877918,Victor Gómez,
-1020116,Yusuf Bamidele,
 1107592,Mounsef Bakrar,
 1165457,Andreas Tetteh,
 1146009,Franculino Djú,
