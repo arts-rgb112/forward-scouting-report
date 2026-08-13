@@ -24,19 +24,39 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Snapshot exact FotMob shot coordinates
+        id: snapshot
+        continue-on-error: true
         run: python scripts/build_shotmap_points.py --season-name "${{ inputs.season_name }}"
       - name: Audit all tactical sessions
+        if: always()
         run: python scripts/audit_shotmap_coverage.py
       - name: Commit shotmap snapshot
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The audit report is diagnostic output. Leaving it dirty prevents
+          # rebase, and committing it from parallel season jobs causes conflicts.
+          git restore data/missing_shotmap_sessions.csv
           git add data/tactical_shotmap_points*.json
           if git diff --cached --quiet; then
             echo "No shotmap changes to commit."
             exit 0
           fi
           git commit -m "Refresh static shotmap points"
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Concurrent push detected; retrying ($attempt/5)."
+            sleep $((attempt * 2))
+          done
+          echo "Could not publish the snapshot after 5 attempts."
+          exit 1
+      - name: Report snapshot failure after preserving checkpoints
+        if: steps.snapshot.outcome == 'failure'
+        run: |
+          echo "The snapshot process failed, but checkpointed data was published. Re-run this season to resume."
+          exit 1
