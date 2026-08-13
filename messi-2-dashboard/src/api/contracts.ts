@@ -54,3 +54,41 @@ export const watchlistResolveResultSchema = z.object({
 }).strict();
 export const watchlistResolveEnvelopeSchema = z.object({ results: z.array(watchlistResolveResultSchema).max(100), tierTaxonomyVersion: tierTaxonomyVersionSchema.optional() }).strict();
 export type WatchlistResolveResultDto = z.infer<typeof watchlistResolveResultSchema>;
+
+/** These companion contracts are intentionally separate from the established player DTOs. */
+const metricKeySchema = z.enum(["outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"]);
+const qualityReasonSchema = z.enum(["complete", "spatial_session_missing", "source_metric_missing", "mixed_source_missing"]);
+const qualityContextSchema = z.object({
+  season: z.string().min(1), mode: z.enum(["league", "europe"]), scope: scopeSchema.nullable(), competition: competitionSchema.nullable(),
+}).strict();
+const imputedComponentSchema = z.string().refine(
+  (value) => /^(outsideShot|boxThreat|dangerZone|aerial|groundDuel|spaceControl)\.(volume|ratio)$/.test(value),
+  "must name a known metric component",
+);
+const unique = <T>(values: readonly T[]) => new Set(values).size === values.length;
+export const dataQualitySchema = z.object({
+  qualityVersion: z.literal("messi-quality-v1"), spatialAvailable: z.boolean(), messiScoreComplete: z.boolean(), reason: qualityReasonSchema,
+  imputedMetrics: z.array(metricKeySchema).max(6).refine(unique, "imputed metrics must be unique"),
+  imputedComponents: z.array(imputedComponentSchema).max(12).refine(unique, "imputed components must be unique"),
+  observedWeightPct: z.number().finite().min(0).max(100), fallbackComponentScore: z.literal(20),
+}).strict().superRefine((value, ctx) => {
+  const arraysEmpty = value.imputedMetrics.length === 0 && value.imputedComponents.length === 0;
+  if (value.messiScoreComplete && (value.reason !== "complete" || !arraysEmpty)) ctx.addIssue({ code: "custom", path: ["reason"], message: "complete quality requires the complete reason and no imputed fields" });
+  if (!value.messiScoreComplete && (value.reason === "complete" || arraysEmpty)) ctx.addIssue({ code: "custom", path: ["reason"], message: "incomplete quality must declare a non-complete reason and imputed fields" });
+  if (value.messiScoreComplete && value.reason === "complete" && arraysEmpty && !value.spatialAvailable) ctx.addIssue({ code: "custom", path: ["spatialAvailable"], message: "complete quality requires spatial data" });
+  value.imputedComponents.forEach((component, index) => {
+    const metric = component.split(".", 1)[0];
+    if (!value.imputedMetrics.some((imputedMetric) => imputedMetric === metric)) ctx.addIssue({ code: "custom", path: ["imputedComponents", index], message: "imputed component metric must be listed in imputedMetrics" });
+  });
+});
+export const playerDataQualityEnvelopeSchema = z.object({
+  data: z.object({ playerId: z.number().int().positive(), ...qualityContextSchema.shape, dataQuality: dataQualitySchema }).strict(),
+}).strict();
+export const watchlistDataQualityResultSchema = z.object({
+  key: z.string().max(500), status: z.enum(["resolved", "unavailable", "invalid_context"]), playerId: z.number().int().positive().nullable(),
+  context: qualityContextSchema.nullable(), dataQuality: dataQualitySchema.nullable(),
+}).strict();
+export const watchlistDataQualityEnvelopeSchema = z.object({ results: z.array(watchlistDataQualityResultSchema).max(100) }).strict();
+export type DataQualityDto = z.infer<typeof dataQualitySchema>;
+export type PlayerDataQualityDto = z.infer<typeof playerDataQualityEnvelopeSchema>["data"];
+export type WatchlistDataQualityResultDto = z.infer<typeof watchlistDataQualityResultSchema>;
