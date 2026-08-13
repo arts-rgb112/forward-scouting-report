@@ -14,6 +14,7 @@ from scripts.build_tactical_ratios import (
     read_fotmob_map,
     read_missing_failure_reasons,
     reverse_fotmob_map,
+    resolve_sportsapi_id,
     resolve_ranked_sportsapi_id,
     spatial_metrics,
     tactical_coverage_regressions,
@@ -230,6 +231,33 @@ class TacticalCoverageAuditTests(unittest.TestCase):
 
 
 class RankedPlayerMappingTests(unittest.TestCase):
+    def test_resolves_official_v2_search_entity_shape(self) -> None:
+        class FakeClient:
+            def get(self, path: str, key_scope: str, max_attempts: int = 6):
+                self.request = (path, key_scope, max_attempts)
+                return {"success": True, "data": {"results": [{
+                    "type": "player",
+                    "score": 999,
+                    "entity": {"id": 111505, "name": "Son Heung-min"},
+                }]}}
+
+        client = FakeClient()
+        self.assertEqual(
+            resolve_sportsapi_id(client, "Heung-Min Son"),
+            "111505",
+        )
+        self.assertEqual(client.request[1:], ("player", 1))
+
+    def test_v2_search_ignores_non_player_entities_with_same_name(self) -> None:
+        class FakeClient:
+            def get(self, path: str, key_scope: str, max_attempts: int = 6):
+                return {"data": {"results": [{
+                    "type": "team",
+                    "entity": {"id": 1, "name": "Vitinha"},
+                }]}}
+
+        self.assertIsNone(resolve_sportsapi_id(FakeClient(), "Vitinha"))
+
     def test_maps_unique_exact_normalized_name_before_position_filter(self) -> None:
         players = {
             "100": {"name": "Raphael Guerreiro", "team_name": "Bayern München"},

@@ -636,9 +636,14 @@ def resolve_sportsapi_id(client: SportsApiClient, player_name: str) -> str | Non
     matches: set[str] = set()
     for item in walk_dicts(payload):
         candidates: list[dict[str, Any]] = []
-        nested = item.get("player") if isinstance(item, dict) else None
-        if isinstance(nested, dict):
-            candidates.append(nested)
+        for nested_key in ("player", "entity"):
+            nested = item.get(nested_key) if isinstance(item, dict) else None
+            if isinstance(nested, dict):
+                nested_type = str(
+                    item.get("type") or nested.get("type") or nested.get("entityType") or ""
+                ).lower()
+                if nested_key == "player" or nested_type in {"player", "athlete"}:
+                    candidates.append(nested)
         if isinstance(item, dict):
             item_type = str(item.get("type") or item.get("entityType") or "").lower()
             if item_type in {"player", "athlete"} or any(
@@ -648,7 +653,10 @@ def resolve_sportsapi_id(client: SportsApiClient, player_name: str) -> str | Non
         for candidate in candidates:
             identifier = candidate.get("id")
             name = candidate.get("name")
-            if identifier is not None and name and _normalise_name(str(name)) == target:
+            if identifier is not None and name and (
+                _normalise_name(str(name)) == target
+                or _name_token_signature(str(name)) == _name_token_signature(player_name)
+            ):
                 matches.add(str(identifier))
     return next(iter(matches)) if len(matches) == 1 else None
 
