@@ -61,6 +61,7 @@ TARGET_TOURNAMENTS = {
     ("belgian pro league", "belgium"): "Belgian Pro League",
     ("jupiler pro league", "belgium"): "Belgian Pro League",
     ("jupiler league", "belgium"): "Belgian Pro League",
+    ("pro league", "belgium"): "Belgian Pro League",
     ("uefa champions league", "europe"): "UEFA Champions League",
     ("champions league", "europe"): "UEFA Champions League",
     ("uefa europa league", "europe"): "UEFA Europa League",
@@ -93,6 +94,7 @@ UNAMBIGUOUS_DOMESTIC_TOURNAMENT_NAMES = {
     "first division a": "Belgian Pro League",
     "belgian pro league": "Belgian Pro League",
     "jupiler pro league": "Belgian Pro League",
+    "pro league": "Belgian Pro League",
 }
 # SportsAPI's all-leagues catalog omits these competitions for some valid API
 # keys.  Their provider entity IDs are stable, but they are only discovery
@@ -245,6 +247,42 @@ def cached_tournament_discoveries() -> dict[str, dict[str, Any]]:
     return recovered
 
 
+def search_belgian_tournament(client: SportsApiClient) -> dict[str, Any] | None:
+    """Resolve Belgium dynamically when the account catalog omits the league.
+
+    SportsAPI documents ``/search`` as the canonical fallback for obtaining a
+    tournament's season-independent ID.  Require both a recognised league
+    alias and Belgian category metadata so an unrelated competition named
+    simply ``Pro League`` can never enter the dataset.
+    """
+    aliases = {"first division a", "belgian pro league", "jupiler pro league", "pro league"}
+    for query in ("Belgian Pro League", "Jupiler Pro League", "First Division A"):
+        try:
+            payload = client.get(f"search?q={quote(query)}", "all_leagues")
+        except (HTTPError, URLError, RuntimeError, ValueError):
+            continue
+        for item in walk_dicts(payload):
+            entity = item.get("entity") if isinstance(item.get("entity"), dict) else item
+            name = str(entity.get("name", "")).strip()
+            identifier = entity.get("id")
+            category = entity.get("category") if isinstance(entity.get("category"), dict) else {}
+            country = str(
+                category.get("name")
+                or entity.get("countryName")
+                or entity.get("country")
+                or ""
+            ).strip().casefold()
+            item_type = str(item.get("type", "")).strip().casefold()
+            if (
+                identifier is not None
+                and name.casefold() in aliases
+                and "belg" in country
+                and (not item_type or item_type == "tournament")
+            ):
+                return {"id": identifier, "name": "Belgian Pro League"}
+    return None
+
+
 def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
     payload = client.get("tournaments?refresh=false", "all_leagues")
     matches: dict[str, dict[str, Any]] = {}
@@ -271,6 +309,11 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
     recovered_names = [name for name in recovered if name not in matches]
     for name in recovered_names:
         matches[name] = recovered[name]
+    search_recovered = []
+    if "Belgian Pro League" not in matches:
+        if belgian := search_belgian_tournament(client):
+            matches["Belgian Pro League"] = belgian
+            search_recovered.append("Belgian Pro League")
     fallback_names = [name for name in CATALOG_FALLBACK_TOURNAMENTS if name not in matches]
     for name in fallback_names:
         matches[name] = CATALOG_FALLBACK_TOURNAMENTS[name]
@@ -280,6 +323,8 @@ def discover_tournaments(client: SportsApiClient) -> list[dict[str, Any]]:
     source_notes = []
     if recovered_names:
         source_notes.append(f"recovered from prior discovery: {', '.join(sorted(recovered_names))}")
+    if search_recovered:
+        source_notes.append(f"recovered from search: {', '.join(search_recovered)}")
     if fallback_names:
         source_notes.append(f"season-validated fallback IDs: {', '.join(sorted(fallback_names))}")
     source_note = f"; {'; '.join(source_notes)}" if source_notes else ""
