@@ -196,6 +196,7 @@ _CUP_HINTS = ("cup", "copa", "super")
 _SUPPORTED_DOMESTIC_LEAGUES = {
     "premierleague", "laliga", "laligaea", "bundesliga", "seriea",
     "ligue1", "eredivisie", "ligaportugal", "primeiraliga",
+    "firstdivisiona", "belgianproleague", "jupilerproleague",
 }
 
 

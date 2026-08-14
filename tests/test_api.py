@@ -131,7 +131,9 @@ def test_v2_options_advertise_real_capabilities_and_unavailable_competitions():
     assert response.status_code == 200
     payload = response.json()
     assert "2025/2026" in payload["seasons"]
-    assert {scope["value"] for scope in payload["scopes"]} == {3, 5, 7}
+    assert {scope["value"] for scope in payload["scopes"]} == {3, 5, 7, 8}
+    scope_eight = next(scope for scope in payload["scopes"] if scope["value"] == 8)
+    assert 40 in scope_eight["leagueIds"]
     assert payload["competitions"]["ucl"]["available"] is True
     assert payload["competitions"]["uecl"]["available"] is False
     assert payload["competitions"]["uecl"]["reason"]
@@ -150,6 +152,19 @@ def test_2024_2025_leaderboards_are_servable_for_both_v1_and_v21():
     assert v21.status_code == 200
     assert v21.json()["meta"]["season"] == "2024/2025"
     assert v21.json()["meta"]["returned"] == len(v21.json()["data"])
+
+
+def test_scope_eight_is_accepted_by_v1_and_v21_contracts():
+    v1 = client.get("/api/v1/players", params={"season": "2025/2026", "scope": 8, "limit": 3})
+    assert v1.status_code == 200
+    assert v1.json()["meta"]["scope"] == 8
+
+    v21 = client.get("/api/v2/leaderboards", params={
+        "season": "2025/2026", "mode": "league", "scope": 8,
+        "competition": "all", "page": 1, "pageSize": 50,
+    })
+    assert v21.status_code == 200
+    assert v21.json()["meta"]["scope"] == 8
 
 
 def test_v2_europe_leaderboard_and_contextual_player_detail_contract():

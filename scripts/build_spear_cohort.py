@@ -27,6 +27,7 @@ COMPETITIONS = {
     "Ligue 1": 53,
     "Eredivisie": 57,
     "Primeira Liga": 61,
+    "Belgian Pro League": 40,
     "UEFA Champions League": 42,
     "UEFA Europa League": 73,
     "UEFA Europa Conference League": 108,

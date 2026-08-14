@@ -18,7 +18,10 @@ DATA_DIR = Path(__file__).with_name("data")
 THREE_ZONE_DATA_PATH = DATA_DIR / "tactical_3zone_ratio.csv"
 LEGACY_DATA_PATH = DATA_DIR / "tactical_ratio.csv"
 HEATMAP_POINTS_PATH = DATA_DIR / "tactical_heatmap_points.json"
-TOURNAMENT_NAMES = {"17": "Premier League", "8": "LaLiga", "35": "Bundesliga", "23": "Serie A", "34": "Ligue 1"}
+TOURNAMENT_NAMES = {
+    "17": "Premier League", "8": "LaLiga", "35": "Bundesliga",
+    "23": "Serie A", "34": "Ligue 1", "40": "First Division A",
+}
 SPATIAL_FIELDS = (
     "cca_area_pct",
     "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio",
@@ -127,6 +130,10 @@ def _same_competition(left: object, right: object) -> bool:
         "laliga": "laliga", "laligaea": "laliga",
         "primeiraliga": "ligaportugal",
         "ligaportugal": "ligaportugal",
+        "firstdivisiona": "belgianproleague",
+        "belgianproleague": "belgianproleague",
+        "jupilerproleague": "belgianproleague",
+        "jupilerleague": "belgianproleague",
         "uefachampionsleague": "championsleague",
         "uefaeuropaleague": "europaleague",
         "uefaeuropaconferenceleague": "europaconferenceleague",

@@ -33,6 +33,7 @@ COMPARISON_SCOPES = {
     3: frozenset({47, 55, 87}),
     5: frozenset({47, 53, 54, 55, 87}),
     7: frozenset({47, 53, 54, 55, 57, 61, 87}),
+    8: frozenset({40, 47, 53, 54, 55, 57, 61, 87}),
 }
 
 
@@ -312,7 +313,7 @@ def _fetch_elite_dribbler_metrics(
     """Prefer the static cohort; retain live FotMob as a safe bootstrap fallback."""
     if restrict_to_forwards:
         # Continental cups remain isolated even when a cross-league scope is
-        # selected; only domestic competitions use the 3/5/7 league unions.
+        # selected; only domestic competitions use the named league unions.
         target_leagues = (
             frozenset({league_id}) if league_id in CUP_COMPETITION_IDS
             else COMPARISON_SCOPES.get(comparison_scope, frozenset({league_id}))
@@ -623,7 +624,7 @@ def get_tactical_matrix(
         minimum_final_third_ratio, comparison_scope,
     )
     # The old name lookup queried only ``league_id``.  When the report used a
-    # 3/5/7-league comparison scope, every peer from the added leagues then
+    # Named cross-league comparison scope: every peer from the added leagues
     # became "선수 정보 미제공".  Read names from the same static cohort used
     # to form the percentile population instead.
     target_leagues = (

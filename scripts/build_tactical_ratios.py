@@ -57,6 +57,10 @@ TARGET_TOURNAMENTS = {
     ("eredivisie", "netherlands"): "Eredivisie",
     ("primeira liga", "portugal"): "Primeira Liga",
     ("liga portugal", "portugal"): "Primeira Liga",
+    ("first division a", "belgium"): "Belgian Pro League",
+    ("belgian pro league", "belgium"): "Belgian Pro League",
+    ("jupiler pro league", "belgium"): "Belgian Pro League",
+    ("jupiler league", "belgium"): "Belgian Pro League",
     ("uefa champions league", "europe"): "UEFA Champions League",
     ("champions league", "europe"): "UEFA Champions League",
     ("uefa europa league", "europe"): "UEFA Europa League",
@@ -86,6 +90,9 @@ UNAMBIGUOUS_DOMESTIC_TOURNAMENT_NAMES = {
     "eredivisie": "Eredivisie",
     "primeira liga": "Primeira Liga",
     "liga portugal": "Primeira Liga",
+    "first division a": "Belgian Pro League",
+    "belgian pro league": "Belgian Pro League",
+    "jupiler pro league": "Belgian Pro League",
 }
 # SportsAPI's all-leagues catalog omits these competitions for some valid API
 # keys.  Their provider entity IDs are stable, but they are only discovery
@@ -95,7 +102,7 @@ CATALOG_FALLBACK_TOURNAMENTS = {
     "Eredivisie": {"id": 37, "name": "Eredivisie"},
     "Primeira Liga": {"id": 238, "name": "Primeira Liga"},
 }
-# The production dashboard covers seven domestic leagues and the three UEFA
+# The production dashboard covers eight domestic leagues and the three UEFA
 # competitions. IDs remain dynamically discovered; these are stable display
 # labels used only to validate source coverage.
 REQUIRED_HEATMAP_COMPETITIONS = (
@@ -106,6 +113,7 @@ REQUIRED_HEATMAP_COMPETITIONS = (
     "Ligue 1",
     "Eredivisie",
     "Primeira Liga",
+    "Belgian Pro League",
     "UEFA Champions League",
     "UEFA Europa League",
     "UEFA Europa Conference League",
@@ -121,6 +129,7 @@ COHORT_COMPETITION_NAMES = {
     "Ligue 1": "Ligue 1",
     "Eredivisie": "Eredivisie",
     "Primeira Liga": "Liga Portugal",
+    "Belgian Pro League": "First Division A",
     "UEFA Champions League": "Champions League",
     "UEFA Europa League": "Europa League",
     "UEFA Europa Conference League": "Europa Conference League",
