@@ -16,14 +16,29 @@ from shotmap_store_v2 import load_shotmap_points
 
 RATIOS_PATH = ROOT / "data" / "tactical_3zone_ratio.csv"
 REPORT_PATH = ROOT / "data" / "missing_shotmap_sessions.csv"
+SOURCE_EXCEPTIONS_PATH = ROOT / "data" / "shotmap_source_exceptions.csv"
 REPORT_FIELDS = (
     "fotmob_player_id", "player_name", "competition_name", "season_name",
     "heatmap_key", "reason",
 )
 
 
+def load_source_exceptions(path: Path = SOURCE_EXCEPTIONS_PATH) -> dict[str, str]:
+    """Return reviewed source failures keyed by the exact tactical session."""
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8", newline="") as source:
+        return {
+            str(row.get("heatmap_key") or "").strip(): str(row.get("reason") or "").strip()
+            for row in csv.DictReader(source)
+            if str(row.get("heatmap_key") or "").strip()
+            and str(row.get("reason") or "").strip()
+        }
+
+
 def audit() -> tuple[int, int, int, Counter[str]]:
     snapshots = load_shotmap_points()
+    source_exceptions = load_source_exceptions()
     with RATIOS_PATH.open(encoding="utf-8", newline="") as source:
         rows = list(csv.DictReader(source))
     missing: list[dict[str, str]] = []
@@ -40,7 +55,7 @@ def audit() -> tuple[int, int, int, Counter[str]]:
         by_season[season] += 1
         missing.append({
             field: (
-                "snapshot_missing" if field == "reason"
+                source_exceptions.get(key, "snapshot_missing") if field == "reason"
                 else str(row.get(field) or "")
             )
             for field in REPORT_FIELDS

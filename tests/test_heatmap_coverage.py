@@ -33,6 +33,7 @@ from tactical_ratio import _same_competition
 from scripts.backfill_true_core_zones import DEFINITION_VERSION
 from scripts.build_shotmap_points import normalize_shotmap, shot_outcome
 from fotmob_client import FotMobError, _get, _league_selections
+from scripts.audit_shotmap_coverage import load_source_exceptions
 
 
 def _payload(league_name: str, league_id: int) -> dict:
@@ -53,6 +54,19 @@ def _payload(league_name: str, league_id: int) -> dict:
 
 
 class ExpandedLeagueParsingTests(unittest.TestCase):
+    def test_reviewed_shotmap_source_exceptions_keep_explicit_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "exceptions.csv"
+            path.write_text(
+                "heatmap_key,reason,evidence\n"
+                "1:38:10,source_history_unavailable,reviewed\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                load_source_exceptions(path),
+                {"1:38:10": "source_history_unavailable"},
+            )
+
     def test_liga_portugal_session_alias_matches_tactical_label(self) -> None:
         self.assertTrue(_same_competition("Liga Portugal", "Primeira Liga"))
         self.assertTrue(_same_competition("Primeira Liga", "Liga Portugal"))

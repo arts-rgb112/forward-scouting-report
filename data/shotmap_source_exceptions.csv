@@ -1,0 +1,6 @@
+heatmap_key,reason,evidence
+1655748:38:36894,invalid_player_mapping,FotMob ID resolves to an FC Osaka player and exposes no 2021/2022 season history
+1650431:38:36894,source_history_unavailable,FotMob player page exposes no 2021/2022 season history
+1650431:38:42404,source_history_unavailable,FotMob player page exposes no 2022/2023 season history
+967065:38:36894,source_history_unavailable,FotMob player history has no Belgian 2021/2022 competition record
+967065:38:42404,source_history_unavailable,FotMob player history has no Belgian 2022/2023 competition record
