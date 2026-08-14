@@ -15,8 +15,12 @@ from fotmob_client import (
     fetch_player_multi_season_data,
 )
 from metrics import DecisionMetrics, extract_multi_season_metrics
-from spear_cohort import get_static_spear_cohort
-from tactical_ratio import get_tactical_ratio_for_session, passes_final_third_filter
+from spear_cohort import get_static_spear_cohort, load_spear_cohort, spear_cohort_data_version
+from tactical_ratio import (
+    get_tactical_ratio_for_session,
+    passes_final_third_filter,
+    tactical_data_version,
+)
 
 
 CUP_COMPETITION_IDS = frozenset({42, 73, 108})
@@ -36,6 +40,30 @@ COMPARISON_SCOPES = {
     7: frozenset({47, 53, 54, 55, 57, 61, 87}),
     8: frozenset({40, 47, 53, 54, 55, 57, 61, 87}),
 }
+
+
+def scoring_data_version() -> tuple[object, object]:
+    """Identify every static snapshot that can change a M.E.S.S.I. score."""
+    return spear_cohort_data_version(), tactical_data_version()
+
+
+_ACTIVE_SCORING_DATA_VERSION = scoring_data_version()
+
+
+def refresh_scoring_caches_if_needed() -> tuple[object, object]:
+    """Clear process caches after a data-only Community Cloud deployment."""
+    global _ACTIVE_SCORING_DATA_VERSION
+    current = scoring_data_version()
+    if current == _ACTIVE_SCORING_DATA_VERSION:
+        return current
+    load_spear_cohort.cache_clear()
+    _fetch_elite_dribbler_metrics.cache_clear()
+    get_spear_leaderboard.cache_clear()
+    get_league_metric_medians.cache_clear()
+    get_tactical_matrix.cache_clear()
+    get_top_leagues_shot_quality.cache_clear()
+    _ACTIVE_SCORING_DATA_VERSION = current
+    return current
 
 
 @dataclass(frozen=True)

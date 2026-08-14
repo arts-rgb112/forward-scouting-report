@@ -323,6 +323,32 @@ class CcaOverlayTests(unittest.TestCase):
 
 
 class TacticalCoverageAuditTests(unittest.TestCase):
+    def test_scoring_cache_refresh_clears_all_static_score_layers(self) -> None:
+        import rankings
+
+        original = rankings._ACTIVE_SCORING_DATA_VERSION
+        changed = ((1, 2), ((3, 4), (5, 6)))
+        cached_functions = (
+            rankings.load_spear_cohort,
+            rankings._fetch_elite_dribbler_metrics,
+            rankings.get_spear_leaderboard,
+            rankings.get_league_metric_medians,
+            rankings.get_tactical_matrix,
+            rankings.get_top_leagues_shot_quality,
+        )
+        clearers = [patch.object(function, "cache_clear") for function in cached_functions]
+        mocks = [patcher.start() for patcher in clearers]
+        try:
+            rankings._ACTIVE_SCORING_DATA_VERSION = original
+            with patch("rankings.scoring_data_version", return_value=changed):
+                self.assertEqual(rankings.refresh_scoring_caches_if_needed(), changed)
+            for cache_clear in mocks:
+                cache_clear.assert_called_once_with()
+        finally:
+            for patcher in reversed(clearers):
+                patcher.stop()
+            rankings._ACTIVE_SCORING_DATA_VERSION = original
+
     def test_heatmap_cache_invalidates_after_a_data_only_deploy(self) -> None:
         import tactical_ratio
 

@@ -16,6 +16,15 @@ METRIC_FIELDS = tuple(field.name for field in fields(DecisionMetrics))
 CSV_FIELDS = ("player_id", "player_name", "season_name", *METRIC_FIELDS)
 
 
+def spear_cohort_data_version() -> tuple[int, int] | None:
+    """Return a cache token that changes with each deployed cohort snapshot."""
+    try:
+        stat = DATA_PATH.stat()
+        return stat.st_mtime_ns, stat.st_size
+    except OSError:
+        return None
+
+
 def _metric_from_row(row: dict[str, str]) -> DecisionMetrics | None:
     try:
         values: dict[str, object] = {}
@@ -64,4 +73,3 @@ def get_static_spear_cohort(
     metrics = {player_id: metric for player_id, (_, metric) in rows.items()}
     names = {player_id: name for player_id, (name, _) in rows.items()}
     return metrics, names
-
