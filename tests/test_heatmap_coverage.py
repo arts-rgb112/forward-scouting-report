@@ -10,6 +10,7 @@ from metrics import extract_multi_season_metrics
 from scripts.build_tactical_ratios import (
     SportsApiClient,
     discover_tournaments,
+    search_belgian_tournament,
     missing_static_cohort_sessions,
     read_fotmob_map,
     read_missing_failure_reasons,
@@ -478,6 +479,45 @@ class RankedPlayerMappingTests(unittest.TestCase):
 
 
 class TournamentDiscoveryTests(unittest.TestCase):
+    def test_belgian_catalog_omission_is_resolved_by_search(self) -> None:
+        class FakeClient:
+            def get(self, path: str, key_scope: str) -> dict:
+                if path.startswith("search?"):
+                    return {"results": [{
+                        "type": "tournament",
+                        "entity": {
+                            "id": 38,
+                            "name": "Pro League",
+                            "category": {"name": "Belgium"},
+                        },
+                    }]}
+                return {"leagues": []}
+
+        with patch(
+            "scripts.build_tactical_ratios.cached_tournament_discoveries",
+            return_value={},
+        ):
+            discovered = discover_tournaments(FakeClient())
+
+        self.assertEqual(
+            {item["name"]: item["id"] for item in discovered},
+            {"Belgian Pro League": 38, "Eredivisie": 37, "Primeira Liga": 238},
+        )
+
+    def test_belgian_search_rejects_non_belgian_pro_league(self) -> None:
+        class FakeClient:
+            def get(self, path: str, key_scope: str) -> dict:
+                return {"results": [{
+                    "type": "tournament",
+                    "entity": {
+                        "id": 999,
+                        "name": "Pro League",
+                        "category": {"name": "Iran"},
+                    },
+                }]}
+
+        self.assertIsNone(search_belgian_tournament(FakeClient()))
+
     def test_distinctive_expanded_leagues_ignore_country_label_drift(self) -> None:
         class FakeClient:
             def get(self, path: str, key_scope: str) -> dict:
