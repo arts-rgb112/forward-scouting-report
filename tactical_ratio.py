@@ -166,12 +166,20 @@ def _same_season(left: object, right: object) -> bool:
     return canonical(left) == canonical(right)
 
 
-@functools.lru_cache(maxsize=1)
-def load_tactical_ratios() -> dict[str, dict[str, float]]:
-    """Read 3-Zone ETL output, falling back to the legacy two-zone CSV."""
-    data_path = THREE_ZONE_DATA_PATH if THREE_ZONE_DATA_PATH.exists() else LEGACY_DATA_PATH
-    if not data_path.exists():
-        return {}
+def _file_version(path: Path) -> tuple[int, int] | None:
+    """Return a cheap cache key that changes after a deployed data refresh."""
+    try:
+        stat = path.stat()
+        return stat.st_mtime_ns, stat.st_size
+    except OSError:
+        return None
+
+
+@functools.lru_cache(maxsize=4)
+def _load_tactical_ratios(
+    data_path_text: str, _version: tuple[int, int],
+) -> dict[str, dict[str, float]]:
+    data_path = Path(data_path_text)
     ratios: dict[str, dict[str, float]] = {}
     try:
         with data_path.open(encoding="utf-8", newline="") as source:
@@ -218,6 +226,15 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
     return ratios
 
 
+def load_tactical_ratios() -> dict[str, dict[str, float]]:
+    """Read ETL output and invalidate cache whenever its deployed file changes."""
+    data_path = THREE_ZONE_DATA_PATH if THREE_ZONE_DATA_PATH.exists() else LEGACY_DATA_PATH
+    version = _file_version(data_path)
+    if version is None:
+        return {}
+    return _load_tactical_ratios(str(data_path), version)
+
+
 def get_tactical_ratio(player_id: str | int) -> Optional[dict[str, float]]:
     matches = [row for row in load_tactical_ratios().values() if str(row.get("fotmob_player_id")) == str(player_id)]
     return _with_current_spatial_definition(matches[0]) if matches else None
@@ -248,13 +265,22 @@ def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, 
     return _with_current_spatial_definition(candidates[0]) if len(heatmap_keys) == 1 else None
 
 
-@functools.lru_cache(maxsize=1)
-def load_heatmap_points() -> dict[str, list[list[float]]]:
+@functools.lru_cache(maxsize=4)
+def _load_heatmap_points(
+    path_text: str, _version: tuple[int, int],
+) -> dict[str, list[list[float]]]:
     try:
-        raw = json.loads(HEATMAP_POINTS_PATH.read_text(encoding="utf-8"))
+        raw = json.loads(Path(path_text).read_text(encoding="utf-8"))
         return raw if isinstance(raw, dict) else {}
     except (OSError, ValueError):
         return {}
+
+
+def load_heatmap_points() -> dict[str, list[list[float]]]:
+    version = _file_version(HEATMAP_POINTS_PATH)
+    if version is None:
+        return {}
+    return _load_heatmap_points(str(HEATMAP_POINTS_PATH), version)
 
 
 def get_heatmap_points(player_id: str | int, heatmap_key: str | None = None) -> list[list[float]]:

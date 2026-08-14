@@ -2,6 +2,7 @@ import unittest
 import subprocess
 import sys
 import tempfile
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.error import URLError
@@ -32,6 +33,7 @@ from continuous_core import continuous_core_from_points, continuous_core_summary
 from tactical_ratio import (
     _same_competition,
     get_tactical_ratio_for_session,
+    load_heatmap_points,
     passes_final_third_filter,
 )
 from scripts.backfill_true_core_zones import DEFINITION_VERSION
@@ -321,6 +323,23 @@ class CcaOverlayTests(unittest.TestCase):
 
 
 class TacticalCoverageAuditTests(unittest.TestCase):
+    def test_heatmap_cache_invalidates_after_a_data_only_deploy(self) -> None:
+        import tactical_ratio
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "points.json"
+            path.write_text('{"old":[[1,2]]}', encoding="utf-8")
+            with patch("tactical_ratio.HEATMAP_POINTS_PATH", path):
+                tactical_ratio._load_heatmap_points.cache_clear()
+                self.assertEqual(load_heatmap_points(), {"old": [[1, 2]]})
+                old_stat = path.stat()
+                path.write_text('{"new":[[3,4]]}', encoding="utf-8")
+                os.utime(
+                    path,
+                    ns=(old_stat.st_atime_ns, old_stat.st_mtime_ns + 1_000_000),
+                )
+                self.assertEqual(load_heatmap_points(), {"new": [[3, 4]]})
+
     @patch("tactical_ratio.get_tactical_ratio_for_session")
     def test_disabled_session_filter_never_requires_spatial_data(self, get_ratio) -> None:
         self.assertTrue(
