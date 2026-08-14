@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import functools
+import time
 from dataclasses import dataclass
 from typing import Optional
 import pandas as pd
@@ -262,31 +263,48 @@ def _fetch_live_spear_cohort(
         if row.get("id") is not None
     }
 
-    def fetch_one(player_id: str) -> tuple[str, Optional[DecisionMetrics]]:
-        try:
-            if len(season_name) == 9 and "/" in season_name:
-                start_year, end_year = season_name.split("/", 1)
-                short_season = f"{start_year[-2:]}/{end_year[-2:]}"
-            else:
-                short_season = season_name
+    def fetch_one(player_id: str) -> tuple[str, Optional[DecisionMetrics], str]:
+        last_reason = "competition_record_missing"
+        for attempt in range(3):
+            try:
+                if attempt:
+                    # A large league refresh can briefly trigger upstream
+                    # throttling.  Retry the complete profile because the
+                    # lower-level season fetch intentionally skips an
+                    # unavailable tournament record.
+                    time.sleep(1.0 * attempt)
+                if len(season_name) == 9 and "/" in season_name:
+                    start_year, end_year = season_name.split("/", 1)
+                    short_season = f"{start_year[-2:]}/{end_year[-2:]}"
+                else:
+                    short_season = season_name
 
-            parsed = extract_multi_season_metrics(
-                fetch_player_multi_season_data(player_id, target_season=season_name)
-            )
-            for season_key, stat_obj in parsed.items():
-                if season_key.startswith(f"{short_season}_") and stat_obj.league_id == league_id:
-                    return player_id, stat_obj
-        except (FotMobError, StopIteration, ValueError):
-            pass
-        return player_id, None
+                parsed = extract_multi_season_metrics(
+                    fetch_player_multi_season_data(player_id, target_season=season_name)
+                )
+                for season_key, stat_obj in parsed.items():
+                    if season_key.startswith(f"{short_season}_") and stat_obj.league_id == league_id:
+                        return player_id, stat_obj, "resolved"
+            except (FotMobError, StopIteration, ValueError) as exc:
+                last_reason = type(exc).__name__
+        return player_id, None, last_reason
 
     metrics_by_player: dict[str, DecisionMetrics] = {}
     # Multi-season requests fetch several records per player. This matches the
     # concurrency already used by the xGOT fallback and keeps large leagues responsive.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-        for player_id, metric in executor.map(fetch_one, successes):
+    unresolved_reasons: dict[str, int] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        for player_id, metric, reason in executor.map(fetch_one, successes):
             if metric is not None:
                 metrics_by_player[player_id] = metric
+            else:
+                unresolved_reasons[reason] = unresolved_reasons.get(reason, 0) + 1
+    print(
+        "S.P.E.A.R. profile fetch: "
+        f"league={league_id} season={season_name} seeds={len(successes)} "
+        f"resolved={len(metrics_by_player)} unresolved={len(successes) - len(metrics_by_player)} "
+        f"reasons={unresolved_reasons}"
+    )
     # S.P.E.A.R., pure progression, and finishing all share one transparent
     # Population: individual cumulative xG >= 2.0 in domestic leagues and
     # >= 1.0 in continental cups, with the matching appearance cutoff.
