@@ -18,7 +18,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Export the real M.E.S.S.I. API response for static staging.")
     parser.add_argument("--frontend-public", type=Path, required=True)
     parser.add_argument("--season", default="2025/2026")
-    parser.add_argument("--scope", type=int, choices=(3, 5, 7), default=7)
+    parser.add_argument("--scope", type=int, choices=(3, 5, 7, 8), default=8)
     parser.add_argument("--limit", type=int, default=100)
     args = parser.parse_args()
 

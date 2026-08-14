@@ -739,7 +739,7 @@ def comparison_population_label(league_id: int | None, scope: int) -> str:
     cup_names = {42: "챔피언스리그", 73: "유로파리그", 108: "컨퍼런스리그"}
     if league_id in cup_names:
         return f"{cup_names[league_id]} 기준"
-    return f"{scope}대 리그 기준" if scope in (3, 5, 7) else "동일 대회 기준"
+    return f"{scope}대 리그 기준" if scope in (3, 5, 7, 8) else "동일 대회 기준"
 
 
 def comparison_population_criteria(league_id: int | None, season: str, scope: int) -> str:
@@ -2053,9 +2053,9 @@ def render_v32_analysis_center() -> None:
             season = st.selectbox("시즌", ["25/26", "24/25", "23/24", "22/23", "21/22"], index=0)
         with scope_col:
             comparison_scope = st.selectbox(
-                "비교 모집단", [3, 5, 7], index=1,
+                "비교 모집단", [3, 5, 7, 8], index=3,
                 format_func=lambda value: f"{value}대 리그",
-                help="3대: LaLiga·Premier League·Serie A / 5대: 여기에 Bundesliga·Ligue 1 / 7대: 여기에 Eredivisie·Primeira Liga",
+                help="3대: LaLiga·Premier League·Serie A / 5대: + Bundesliga·Ligue 1 / 7대: + Eredivisie·Primeira Liga / 8대: + Belgian Pro League",
             )
         with player_col:
             query = st.text_input("선수명 검색", placeholder="예: Erling Haaland")
@@ -2111,8 +2111,8 @@ def render_v32_analysis_center() -> None:
         player.player_id, filters["season"], selected_stats, 1.0, True, 0,
         filters["comparison_scope"],
     )
-    if filters["comparison_scope"] == 7:
-        st.caption("7대 리그 모드: Eredivisie·Primeira Liga 코호트는 다음 정적 코호트 수집 후 자동으로 포함됩니다. 현재는 적재된 5대 리그 기준입니다.")
+    if filters["comparison_scope"] == 8:
+        st.caption("8대 리그 모드: 기존 7대 리그에 Belgian Pro League를 포함합니다.")
     view_mode = st.radio("분석 보기", ["단일 분석", "Head-to-Head"], horizontal=True, key="v32_view_mode")
     if view_mode == "Head-to-Head":
         st.caption("두 선수는 같은 시즌·같은 대회 세션에서 각각 독립적으로 상대평가됩니다.")
@@ -2287,12 +2287,12 @@ def _query_text(name: str, default: str = "") -> str:
     return str(value[0] if isinstance(value, list) else value)
 
 
-def _query_scope(default: int = 5) -> int:
+def _query_scope(default: int = 8) -> int:
     try:
         value = int(_query_text("scope", str(default)))
         # ``0`` deliberately represents a single selected domestic league.
-        # The named 3/5/7-league options remain the cross-league cohorts.
-        return value if value in {0, 3, 5, 7} else default
+        # Named 3/5/7/8-league options remain cross-league cohorts.
+        return value if value in {0, 3, 5, 7, 8} else default
     except ValueError:
         return default
 
@@ -2319,9 +2319,9 @@ def _contextual_static_candidate(
     if mode == "europe":
         if scope is not None or competition not in LEGACY_EUROPE_COMPETITIONS:
             return None
-        target, comparison_scope = LEGACY_EUROPE_COMPETITIONS[competition], 7
+        target, comparison_scope = LEGACY_EUROPE_COMPETITIONS[competition], 8
     elif mode == "league":
-        if scope not in {3, 5, 7} or competition not in {None, "", "all"}:
+        if scope not in {3, 5, 7, 8} or competition not in {None, "", "all"}:
             return None
         target, comparison_scope = 47, scope
     else:
@@ -2361,7 +2361,7 @@ def _legacy_detail_query_context() -> tuple[PlayerCandidate, DecisionMetrics, in
         return (context[0], context[1], scope) if context is not None else None
     if mode == "europe" and raw_scope in {"", "null"} and competition in LEGACY_EUROPE_COMPETITIONS:
         context = _contextual_static_candidate(player_id, season, mode, None, competition)
-        return (context[0], context[1], 7) if context is not None else None
+        return (context[0], context[1], 8) if context is not None else None
     return None
 
 
@@ -2382,7 +2382,7 @@ def _legacy_compare_query_filters() -> tuple[dict[str, object] | None, str | Non
             try:
                 scope = int(raw_scope)
             except ValueError:
-                return None, "A domestic-league Compare link requires a 3, 5, or 7 league scope."
+                return None, "A domestic-league Compare link requires a 3, 5, 7, or 8 league scope."
         else:
             scope = None if raw_scope in {"", "null"} else -1
         if season not in LEGACY_COMPARE_SEASONS or mode not in {"league", "europe"}:
@@ -2395,13 +2395,13 @@ def _legacy_compare_query_filters() -> tuple[dict[str, object] | None, str | Non
     return {
         "left_id": left[0].player_id, "left_name": left[0].name, "left_team": left[0].team_name or "",
         "left_season": contexts["left"][1], "left_mode": contexts["left"][2],
-        "left_scope": contexts["left"][3] if contexts["left"][3] is not None else 7,
+        "left_scope": contexts["left"][3] if contexts["left"][3] is not None else 8,
         "left_competition": contexts["left"][4],
         "right_id": right[0].player_id, "right_name": right[0].name, "right_team": right[0].team_name or "",
         "right_season": contexts["right"][1], "right_mode": contexts["right"][2],
-        "right_scope": contexts["right"][3] if contexts["right"][3] is not None else 7,
+        "right_scope": contexts["right"][3] if contexts["right"][3] is not None else 8,
         "right_competition": contexts["right"][4],
-        "scope": 7, "auto_context": True,
+        "scope": 8, "auto_context": True,
     }, None
 
 
@@ -2439,14 +2439,14 @@ def render_leaderboard_page() -> None:
     # The static cohort already defines these comparison unions.  Keep the
     # selector labels aligned with the actual scoring population instead of
     # presenting the old ambiguous "integrated league range" wording.
-    league_scope_options = {"3대 리그": 3, "5대 리그": 5, "7대 리그": 7}
+    league_scope_options = {"3대 리그": 3, "5대 리그": 5, "7대 리그": 7, "8대 리그": 8}
     default_season = _query_text("season", "25/26")
-    default_league = _query_text("league_name", "5대 리그")
+    default_league = _query_text("league_name", "8대 리그")
     # Preserve links generated before the selector was renamed.
     if default_league == "통합 리그 범위":
-        default_league = "5대 리그"
+        default_league = "8대 리그"
     if default_league not in league_options:
-        default_league = "5대 리그"
+        default_league = "8대 리그"
     season_options = ["25/26", "24/25", "23/24", "22/23", "21/22"]
     # Keep the season switch separate from the dense search form.  Scouting
     # users should be able to move through historical leaderboards without
@@ -2465,7 +2465,7 @@ def render_leaderboard_page() -> None:
         with league_col:
             league_name = st.selectbox(
                 "리그", list(league_options), index=list(league_options).index(default_league),
-                help="3대 리그: Premier League·LaLiga·Serie A / 5대 리그: 3대 리그 + Bundesliga·Ligue 1 / 7대 리그: 5대 리그 + Eredivisie·Primeira Liga",
+                help="3대: Premier League·LaLiga·Serie A / 5대: + Bundesliga·Ligue 1 / 7대: + Eredivisie·Primeira Liga / 8대: + Belgian Pro League",
             )
         with position_col:
             position = st.selectbox("포지션", ["전체", "FW", "MF", "DF"], index=["전체", "FW", "MF", "DF"].index(_query_text("position", "전체")) if _query_text("position", "전체") in {"전체", "FW", "MF", "DF"} else 0)
@@ -2498,7 +2498,7 @@ def render_leaderboard_page() -> None:
 
     active_league_name = _query_text("league_name", default_league)
     if active_league_name == "통합 리그 범위":
-        active_league_name = "5대 리그"
+        active_league_name = "8대 리그"
     active_position = _query_text("position", "전체")
     active_role = _query_text("role", "전체")
     active_query = _query_text("search", "")
@@ -2538,7 +2538,7 @@ def render_leaderboard_page() -> None:
         index=list(league_scope_options).index(active_league_name)
         if active_league_name in league_scope_options else 0,
         key=f"league_leaderboard_scope_{active_season}",
-        help="3대 리그: Premier League·LaLiga·Serie A / 5대 리그: 3대 리그 + Bundesliga·Ligue 1 / 7대 리그: 5대 리그 + Eredivisie·Primeira Liga",
+        help="3대: Premier League·LaLiga·Serie A / 5대: + Bundesliga·Ligue 1 / 7대: + Eredivisie·Primeira Liga / 8대: + Belgian Pro League",
     )
     league_selected = render_spear_leaderboard(
         active_season, league_scope_options[leaderboard_scope_name], 47,
@@ -2768,7 +2768,7 @@ def render_head_to_head_page() -> None:
                 if len(right_query.strip()) >= 2 else None
             )
         with scope_col:
-            scope = st.selectbox("비교 범위", [3, 5, 7], index=1, key="h2h_scope")
+            scope = st.selectbox("비교 범위", [3, 5, 7, 8], index=3, key="h2h_scope")
         with action_col:
             st.write("")
             st.write("")

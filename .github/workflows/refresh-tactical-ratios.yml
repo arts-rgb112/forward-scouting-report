@@ -12,7 +12,7 @@ on:
         required: false
         default: ""
       competitions:
-        description: Optional comma-separated competition labels; leave blank to verify and refresh all 10 target competitions
+        description: Optional comma-separated competition labels; leave blank to verify and refresh all 11 target competitions
         required: false
         default: ""
   schedule:

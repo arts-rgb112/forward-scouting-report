@@ -726,7 +726,7 @@ def resolve_watchlist_entries(entries: list[dict[str, object]]) -> list[Watchlis
             continue
 
         if mode == "league":
-            if scope not in {3, 5, 7} or competition not in {None, "all"}:
+            if scope not in COMPARISON_SCOPES or competition not in {None, "all"}:
                 resolved.append(WatchlistResolveResult(key=result_key, status="invalid_context"))
                 continue
             expected_key = f"fotmob:{player_id}|season:{season}|mode:league|scope:{scope}|competition:null"
@@ -782,7 +782,7 @@ def resolve_watchlist_data_quality(
             resolved.player.playerId,
             context.season,
             context.mode,
-            context.scope or 7,
+            context.scope or 8,
             context.competition or "all",
         )
         results.append(WatchlistDataQualityResult(

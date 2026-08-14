@@ -97,7 +97,7 @@ def root() -> dict[str, str]:
 
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health() -> HealthResponse:
-    players = build_players("2025/2026", 7)
+    players = build_players("2025/2026", 8)
     return HealthResponse(season="2025/2026", players=len(players))
 
 
@@ -105,7 +105,7 @@ def health() -> HealthResponse:
 def list_players(
     response: Response,
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
-    scope: Literal["3", "5", "7"] = Query(default="7"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
     limit: int = Query(default=100, ge=1, le=1000),
 ) -> PlayersEnvelope:
     if season not in supported_seasons():
@@ -128,7 +128,7 @@ def list_leaderboards(
     response: Response,
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
     mode: Literal["league", "europe"] = Query(default="league"),
-    scope: Literal["3", "5", "7"] = Query(default="7"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
     competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
     limit: int = Query(default=1000, ge=1, le=1000),
     page: int | None = Query(default=None, ge=1),
@@ -170,7 +170,7 @@ def get_player(
     player_id: int,
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
     mode: Literal["league", "europe"] = Query(default="league"),
-    scope: Literal["3", "5", "7"] = Query(default="7"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
     competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
     includeAnalysis: bool = Query(default=False, description="Return server-computed radar, spatial, and raw metric analysis."),
 ) -> PlayerEnvelope | PlayerDetailEnvelope:
@@ -196,7 +196,7 @@ def get_player_duel_spatial(
     player_id: int,
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
     mode: Literal["league", "europe"] = Query(default="league"),
-    scope: Literal["3", "5", "7"] = Query(default="7"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
     competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
 ) -> DuelSpatialEnvelope:
     """Return spatial-duel data only when complete event coordinates exist."""
@@ -217,7 +217,7 @@ def get_player_tactical_quadrant(
     player_id: int,
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
     mode: Literal["league", "europe"] = Query(default="league"),
-    scope: Literal["3", "5", "7"] = Query(default="7"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
     competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
 ) -> TacticalQuadrantEnvelope:
     """Expose the detail-page quadrant without expanding strict detail DTOs."""
@@ -236,7 +236,7 @@ def compare_player_details(
     players: str = Query(description="Comma-separated list of two to four player IDs."),
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
     mode: Literal["league", "europe"] = Query(default="league"),
-    scope: Literal["3", "5", "7"] = Query(default="7"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
     competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
 ) -> PlayerComparisonEnvelope:
     if season not in supported_seasons():
@@ -271,7 +271,7 @@ def player_data_quality(
     player_id: int,
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
     mode: Literal["league", "europe"] = Query(default="league"),
-    scope: Literal["3", "5", "7"] = Query(default="7"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
     competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
 ) -> PlayerDataQualityEnvelope:
     quality = build_player_data_quality(

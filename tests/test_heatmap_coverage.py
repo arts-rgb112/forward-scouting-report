@@ -61,6 +61,10 @@ class ExpandedLeagueParsingTests(unittest.TestCase):
             "Conference League", "UEFA Europa Conference League",
         ))
 
+    def test_belgian_league_aliases_share_one_tactical_identity(self) -> None:
+        self.assertTrue(_same_competition("First Division A", "Belgian Pro League"))
+        self.assertTrue(_same_competition("Jupiler Pro League", "Belgian Pro League"))
+
 
 class CcaOverlayTests(unittest.TestCase):
     def test_player_season_selection_keeps_second_domestic_league_after_transfer(self) -> None:
@@ -281,6 +285,11 @@ class CcaOverlayTests(unittest.TestCase):
         self.assertIn("25/26_61", metrics)
         self.assertEqual(metrics["25/26_61"].league_id, 61)
 
+    def test_belgian_first_division_is_retained(self) -> None:
+        metrics = extract_multi_season_metrics(_payload("First Division A", 999))
+        self.assertIn("25/26_40", metrics)
+        self.assertEqual(metrics["25/26_40"].league_id, 40)
+
 
 class TacticalCoverageAuditTests(unittest.TestCase):
     def test_failure_reason_reader_returns_dict_for_existing_csv(self) -> None:
@@ -476,6 +485,7 @@ class TournamentDiscoveryTests(unittest.TestCase):
                 return {"leagues": [
                     {"id": 37, "name": "Eredivisie", "countryName": "The Netherlands"},
                     {"id": 238, "name": "Liga Portugal", "countryName": "Portuguese Republic"},
+                    {"id": 144, "name": "First Division A", "countryName": "Kingdom of Belgium"},
                 ]}
 
         with patch(
@@ -486,7 +496,7 @@ class TournamentDiscoveryTests(unittest.TestCase):
 
         self.assertEqual(
             {item["name"]: item["id"] for item in discovered},
-            {"Eredivisie": 37, "Primeira Liga": 238},
+            {"Eredivisie": 37, "Primeira Liga": 238, "Belgian Pro League": 144},
         )
 
     def test_catalog_omissions_use_season_validated_fallback_ids(self) -> None:

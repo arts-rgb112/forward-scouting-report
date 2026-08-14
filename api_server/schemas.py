@@ -73,7 +73,7 @@ class DatasetMeta(BaseModel):
 
     schemaVersion: Literal["1.0.0"] = "1.0.0"
     season: str
-    scope: Literal[3, 5, 7]
+    scope: Literal[3, 5, 7, 8]
     population: int = Field(ge=0)
     returned: int = Field(ge=0)
     generatedAt: datetime
@@ -104,7 +104,7 @@ SortOrder = Literal["asc", "desc"]
 class LeaderboardScopeOption(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    value: Literal[3, 5, 7]
+    value: Literal[3, 5, 7, 8]
     label: str = Field(min_length=1)
     leagueIds: list[int]
 
@@ -146,7 +146,7 @@ class LeaderboardMeta(BaseModel):
     schemaVersion: Literal["2.0.0"] = "2.0.0"
     season: str
     mode: LeaderboardMode
-    scope: Literal[3, 5, 7] | None = None
+    scope: Literal[3, 5, 7, 8] | None = None
     competition: CompetitionCode | None = None
     population: int = Field(ge=0)
     returned: int = Field(ge=0)
@@ -367,7 +367,7 @@ class PlayerDataQuality(BaseModel):
     playerId: int = Field(gt=0)
     season: str
     mode: LeaderboardMode
-    scope: Literal[3, 5, 7] | None = None
+    scope: Literal[3, 5, 7, 8] | None = None
     competition: CompetitionCode | None = None
     dataQuality: MessiDataQuality
 
@@ -420,7 +420,7 @@ class DuelSpatialAnalysis(BaseModel):
     playerId: int = Field(gt=0)
     season: str
     mode: LeaderboardMode
-    scope: Literal[3, 5, 7] | None = None
+    scope: Literal[3, 5, 7, 8] | None = None
     competition: CompetitionCode | None = None
     available: bool
     appliedToMessiRating: bool
@@ -464,7 +464,7 @@ class TacticalQuadrantAnalysis(BaseModel):
     playerId: int = Field(gt=0)
     season: str
     mode: LeaderboardMode
-    scope: Literal[3, 5, 7] | None = None
+    scope: Literal[3, 5, 7, 8] | None = None
     competition: CompetitionCode | None = None
     available: bool
     reason: Literal["complete", "axis_metric_missing", "cohort_unavailable"]
@@ -489,7 +489,7 @@ class CompareMeta(BaseModel):
 
     season: str
     mode: LeaderboardMode
-    scope: Literal[3, 5, 7] | None = None
+    scope: Literal[3, 5, 7, 8] | None = None
     competition: CompetitionCode | None = None
     population: int = Field(ge=0)
     generatedAt: datetime
@@ -516,7 +516,7 @@ class WatchlistResolvedContext(BaseModel):
 
     season: str
     mode: LeaderboardMode
-    scope: Literal[3, 5, 7] | None = None
+    scope: Literal[3, 5, 7, 8] | None = None
     competition: CompetitionCode | None = None
 
 
