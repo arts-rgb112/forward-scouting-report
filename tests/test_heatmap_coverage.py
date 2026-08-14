@@ -407,6 +407,13 @@ class TacticalCoverageAuditTests(unittest.TestCase):
         self.assertEqual(mapping["111505"], "212867")
         self.assertEqual(reverse_fotmob_map(mapping)["212867"], {"111505"})
 
+    def test_verified_luis_suarez_alias_mapping_is_available_in_both_directions(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        mapping = read_fotmob_map(root / "data" / "fotmob_player_map.csv")
+
+        self.assertEqual(mapping["914213"], "792303")
+        self.assertEqual(reverse_fotmob_map(mapping)["792303"], {"914213"})
+
     def test_reports_only_missing_competition_season_sessions(self) -> None:
         cohort = [
             {
