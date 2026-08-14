@@ -12,6 +12,7 @@ from .schemas import (
     LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDataQualityEnvelope, PlayerDetailEnvelope,
     PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
+    ShotmapServiceErrorDetail, ShotmapServiceErrorEnvelope,
     WatchlistResolveEnvelope, WatchlistResolveRequest, TacticalQuadrantEnvelope,
 )
 from .service import (
@@ -19,6 +20,7 @@ from .service import (
     build_player_detail, build_tactical_quadrant_analysis, compare_players, find_v2_player, leaderboard_options,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
+    ShotmapContractViolation,
 )
 
 
@@ -65,6 +67,14 @@ app.add_middleware(
     allow_headers=["Content-Type"],
     max_age=600,
 )
+
+
+@app.exception_handler(ShotmapContractViolation)
+async def shotmap_contract_error(_: Request, exc: ShotmapContractViolation) -> JSONResponse:
+    payload = ShotmapServiceErrorEnvelope(
+        detail=ShotmapServiceErrorDetail(message=str(exc)),
+    )
+    return JSONResponse(status_code=500, content=payload.model_dump(mode="json"))
 
 
 @app.middleware("http")
@@ -165,6 +175,12 @@ def list_leaderboards(
 @app.get(
     "/api/v2/players/{player_id}", response_model=PlayerEnvelope | PlayerDetailEnvelope,
     tags=["players"],
+    responses={
+        500: {
+            "model": ShotmapServiceErrorEnvelope,
+            "description": "The stored shotmap snapshot exists but violates the strict shotmap contract.",
+        },
+    },
 )
 def get_player(
     player_id: int,
@@ -231,7 +247,15 @@ def get_player_tactical_quadrant(
     return TacticalQuadrantEnvelope(data=analysis)
 
 
-@app.get("/api/v2/compare", response_model=PlayerComparisonEnvelope, tags=["players"])
+@app.get(
+    "/api/v2/compare", response_model=PlayerComparisonEnvelope, tags=["players"],
+    responses={
+        500: {
+            "model": ShotmapServiceErrorEnvelope,
+            "description": "A stored player shotmap snapshot violates the strict shotmap contract.",
+        },
+    },
+)
 def compare_player_details(
     players: str = Query(description="Comma-separated list of two to four player IDs."),
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
