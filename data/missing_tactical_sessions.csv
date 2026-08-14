@@ -1,4 +1,12 @@
 fotmob_player_id,player_name,team_name,competition_name,season_name,reason
+604870,Faïz Selamani,Kortrijk,Belgian Pro League,2021/2022,sportsapi_id_unresolved
+351152,Ibrahima Seck,Zulte Waregem,Belgian Pro League,2021/2022,sportsapi_id_unresolved
+500932,Joris Kayembe Ditu,Sporting Charleroi,Belgian Pro League,2021/2022,sportsapi_id_unresolved
+1027594,Konan N’Dri,Eupen,Belgian Pro League,2021/2022,sportsapi_id_unresolved
+437329,Mbwana Samatta,Royal Antwerp,Belgian Pro League,2021/2022,sportsapi_id_unresolved
+560772,Michael Ngadeu-Ngadjui,Gent,Belgian Pro League,2021/2022,sportsapi_id_unresolved
+470806,Núrio,Gent,Belgian Pro League,2021/2022,sportsapi_id_unresolved
+929781,Yonas Malede,Gent,Belgian Pro League,2021/2022,sportsapi_id_unresolved
 899291,Roberto Massimo,VfB Stuttgart,Bundesliga,2021/2022,sportsapi_id_unresolved
 199560,Sebastian Andersson,1. FC Köln,Bundesliga,2021/2022,sportsapi_id_unresolved
 861933,Nikolai Baden,Vitesse,Eredivisie,2021/2022,heatmap_request_failed
@@ -39,6 +47,38 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 613714,Jordan Pefok,Young Boys,UEFA Champions League,2021/2022,sportsapi_id_unresolved
 694060,Meschack Elia,Young Boys,UEFA Champions League,2021/2022,sportsapi_id_unresolved
 176989,Yaroslav Rakitskiy,Zenit St. Petersburg,UEFA Champions League,2021/2022,sportsapi_id_unresolved
+602306,Alessio Da Cruz,KV Mechelen,Belgian Pro League,2022/2023,missing_heatmap_session
+643635,Amir Murillo,Anderlecht,Belgian Pro League,2022/2023,missing_heatmap_session
+1031319,Amirhossein Hosseinzadeh,Sporting Charleroi,Belgian Pro League,2022/2023,missing_heatmap_session
+680011,Bart Nieuwkoop,Union St.Gilloise,Belgian Pro League,2022/2023,missing_heatmap_session
+1100315,Billel Messaoudi,Kortrijk,Belgian Pro League,2022/2023,missing_heatmap_session
+1256178,Bjorn Meijer,Club Brugge,Belgian Pro League,2022/2023,missing_heatmap_session
+1280127,Boris Popovic,Cercle Brugge,Belgian Pro League,2022/2023,missing_heatmap_session
+332300,Christian Burgess,Union St.Gilloise,Belgian Pro League,2022/2023,missing_heatmap_session
+604870,Faïz Selamani,Kortrijk,Belgian Pro League,2022/2023,missing_heatmap_session
+1075033,Gary Magnée,Eupen,Belgian Pro League,2022/2023,missing_heatmap_session
+925345,Hyun-Seok Hong,Gent,Belgian Pro League,2022/2023,missing_heatmap_session
+1210943,Jackson Tchatchoua,Sporting Charleroi,Belgian Pro League,2022/2023,missing_heatmap_session
+401004,Jordi Vanlerberghe,KV Mechelen,Belgian Pro League,2022/2023,missing_heatmap_session
+726442,Joseph Okumu,Gent,Belgian Pro League,2022/2023,missing_heatmap_session
+873236,Jón Thorsteinsson,OH Leuven,Belgian Pro League,2022/2023,missing_heatmap_session
+974314,Ken Nkuba,Sporting Charleroi,Belgian Pro League,2022/2023,missing_heatmap_session
+1027594,Konan N’Dri,Eupen,Belgian Pro League,2022/2023,missing_heatmap_session
+305791,Konstantinos Laifis,Standard Liege,Belgian Pro League,2022/2023,missing_heatmap_session
+1178319,Louis Patris,OH Leuven,Belgian Pro League,2022/2023,missing_heatmap_session
+924485,Mark McKenzie,Genk,Belgian Pro League,2022/2023,missing_heatmap_session
+1180280,Marlon Fossey,Standard Liege,Belgian Pro League,2022/2023,missing_heatmap_session
+1134871,Maxim De Cuyper,Westerlo,Belgian Pro League,2022/2023,missing_heatmap_session
+437329,Mbwana Samatta,Genk,Belgian Pro League,2022/2023,missing_heatmap_session
+653577,Merveille Bokadi,Standard Liege,Belgian Pro League,2022/2023,missing_heatmap_session
+202471,Noë Dussenne,Standard Liege,Belgian Pro League,2022/2023,missing_heatmap_session
+848568,Pape Guèye,Kortrijk,Belgian Pro League,2022/2023,missing_heatmap_session
+662834,Regan Charles-Cook,Eupen,Belgian Pro League,2022/2023,missing_heatmap_session
+354175,Sandy Walsh,KV Mechelen,Belgian Pro League,2022/2023,missing_heatmap_session
+160599,Toby Alderweireld,Royal Antwerp,Belgian Pro League,2022/2023,missing_heatmap_session
+1023887,Tsuyoshi Watanabe,Kortrijk,Belgian Pro League,2022/2023,missing_heatmap_session
+664533,Vagner,RFC Seraing,Belgian Pro League,2022/2023,missing_heatmap_session
+929781,Yonas Malede,KV Mechelen,Belgian Pro League,2022/2023,missing_heatmap_session
 613714,Jordan Pefok,Union Berlin,Bundesliga,2022/2023,sportsapi_id_unresolved
 1040889,Junior Dina Ebimbe,Eintracht Frankfurt,Bundesliga,2022/2023,sportsapi_id_unresolved
 959404,Silas Katompa Mvumpa,VfB Stuttgart,Bundesliga,2022/2023,sportsapi_id_unresolved
@@ -80,6 +120,38 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 976506,Mykhaylo Mudryk,Shakhtar Donetsk,UEFA Champions League,2022/2023,sportsapi_id_unresolved
 547710,Adama Traoré,Ferencvaros,UEFA Europa League,2022/2023,heatmap_request_failed
 862538,Ibañez,Roma,UEFA Europa League,2022/2023,sportsapi_id_unresolved
+129918,Alfred Finnbogason,Eupen,Belgian Pro League,2023/2024,missing_heatmap_session
+1256178,Bjorn Meijer,Club Brugge,Belgian Pro League,2023/2024,missing_heatmap_session
+445873,Brandon Mechele,Club Brugge,Belgian Pro League,2023/2024,missing_heatmap_session
+332300,Christian Burgess,Union St.Gilloise,Belgian Pro League,2023/2024,missing_heatmap_session
+1452385,Christopher Bonsu Baah,Genk,Belgian Pro League,2023/2024,missing_heatmap_session
+470399,David Bates,KV Mechelen,Belgian Pro League,2023/2024,missing_heatmap_session
+892709,Dennis Eckert,Union St.Gilloise,Belgian Pro League,2023/2024,missing_heatmap_session
+1075033,Gary Magnée,Eupen,Belgian Pro League,2023/2024,missing_heatmap_session
+435151,Hayao Kawabe,Standard Liege,Belgian Pro League,2023/2024,missing_heatmap_session
+925345,Hyun-Seok Hong,Gent,Belgian Pro League,2023/2024,missing_heatmap_session
+1473998,Ilay Camara,RWDM Brussels,Belgian Pro League,2023/2024,missing_heatmap_session
+737073,Jonatan Braut Brunes,OH Leuven,Belgian Pro League,2023/2024,missing_heatmap_session
+1316930,Jordan Bos,Westerlo,Belgian Pro League,2023/2024,missing_heatmap_session
+166681,Joren Dom,OH Leuven,Belgian Pro League,2023/2024,missing_heatmap_session
+873236,Jón Thorsteinsson,OH Leuven,Belgian Pro League,2023/2024,missing_heatmap_session
+923400,Kamal Sowah,Standard Liege,Belgian Pro League,2023/2024,missing_heatmap_session
+727817,Koki Machida,Union St.Gilloise,Belgian Pro League,2023/2024,missing_heatmap_session
+1110376,Kyan Vaesen,Westerlo,Belgian Pro League,2023/2024,missing_heatmap_session
+1134871,Maxim De Cuyper,Club Brugge,Belgian Pro League,2023/2024,missing_heatmap_session
+869780,Mory Konaté,KV Mechelen,Belgian Pro League,2023/2024,missing_heatmap_session
+1385771,Nachon Nsingi,OH Leuven,Belgian Pro League,2023/2024,missing_heatmap_session
+1107547,Ravil Tagir,Westerlo,Belgian Pro League,2023/2024,missing_heatmap_session
+662834,Regan Charles-Cook,Eupen,Belgian Pro League,2023/2024,missing_heatmap_session
+768266,Ross Sykes,Union St.Gilloise,Belgian Pro League,2023/2024,missing_heatmap_session
+354175,Sandy Walsh,KV Mechelen,Belgian Pro League,2023/2024,missing_heatmap_session
+608125,Sheyi Ojo,Kortrijk,Belgian Pro League,2023/2024,missing_heatmap_session
+1061133,Shuto Abe,RWDM Brussels,Belgian Pro League,2023/2024,missing_heatmap_session
+160599,Toby Alderweireld,Royal Antwerp,Belgian Pro League,2023/2024,missing_heatmap_session
+1023887,Tsuyoshi Watanabe,Gent,Belgian Pro League,2023/2024,missing_heatmap_session
+161937,Victor Pálsson,Eupen,Belgian Pro League,2023/2024,missing_heatmap_session
+1053689,Youssouph Badji,Sporting Charleroi,Belgian Pro League,2023/2024,missing_heatmap_session
+1287871,Zakaria El Ouahdi,RWDM Brussels,Belgian Pro League,2023/2024,missing_heatmap_session
 1119643,Jan Thielmann,1. FC Köln,Bundesliga,2023/2024,sportsapi_id_unresolved
 278831,John Anthony Brooks,Hoffenheim,Bundesliga,2023/2024,sportsapi_id_unresolved
 613714,Jordan Pefok,Borussia Mönchengladbach,Bundesliga,2023/2024,sportsapi_id_unresolved
@@ -111,6 +183,23 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 526450,Emmanuel Quartsin Gyasi,Empoli,Serie A,2023/2024,sportsapi_id_unresolved
 1124533,Kilian Sildillia,Freiburg,UEFA Europa League,2023/2024,sportsapi_id_unresolved
 875133,Pote,Sporting CP,UEFA Europa League,2023/2024,sportsapi_id_unresolved
+1431105,Bilal Bafdili,KV Mechelen,Belgian Pro League,2024/2025,missing_heatmap_session
+445873,Brandon Mechele,Club Brugge,Belgian Pro League,2024/2025,missing_heatmap_session
+1452385,Christopher Bonsu Baah,Genk,Belgian Pro League,2024/2025,missing_heatmap_session
+892709,Dennis Eckert,Union St.Gilloise,Belgian Pro League,2024/2025,missing_heatmap_session
+1122232,Faisel Al-Ghamdi,Beerschot,Belgian Pro League,2024/2025,missing_heatmap_session
+522203,Federico Ricca,OH Leuven,Belgian Pro League,2024/2025,missing_heatmap_session
+1354085,Joel Ordóñez,Club Brugge,Belgian Pro League,2024/2025,missing_heatmap_session
+1027594,Konan N’Dri,OH Leuven,Belgian Pro League,2024/2025,missing_heatmap_session
+1178319,Louis Patris,St.Truiden,Belgian Pro League,2024/2025,missing_heatmap_session
+1413996,Luka Vuskovic,Westerlo,Belgian Pro League,2024/2025,missing_heatmap_session
+1396064,Léandre Kuavita,Standard Liege,Belgian Pro League,2024/2025,missing_heatmap_session
+1134871,Maxim De Cuyper,Club Brugge,Belgian Pro League,2024/2025,missing_heatmap_session
+727419,Ryoya Ogawa,St.Truiden,Belgian Pro League,2024/2025,missing_heatmap_session
+1110862,Stélios Andreou,Sporting Charleroi,Belgian Pro League,2024/2025,missing_heatmap_session
+1276501,Tuur Rommens,Westerlo,Belgian Pro League,2024/2025,missing_heatmap_session
+1288907,Yacine Titraoui,Sporting Charleroi,Belgian Pro League,2024/2025,missing_heatmap_session
+1287871,Zakaria El Ouahdi,Genk,Belgian Pro League,2024/2025,missing_heatmap_session
 882163,Chukwubuike Adamu,Freiburg,Bundesliga,2024/2025,sportsapi_id_unresolved
 844432,Jann-Fiete Arp,Holstein Kiel,Bundesliga,2024/2025,sportsapi_id_unresolved
 613714,Jordan Pefok,Union Berlin,Bundesliga,2024/2025,sportsapi_id_unresolved
@@ -137,6 +226,31 @@ fotmob_player_id,player_name,team_name,competition_name,season_name,reason
 766160,Kady Malinowski,Ferencvaros,UEFA Europa League,2024/2025,sportsapi_id_unresolved
 1220633,Prince Adu,Viktoria Plzen,UEFA Europa League,2024/2025,sportsapi_id_unresolved
 1119168,Tural Bayramov,Qarabag FK,UEFA Europa League,2024/2025,sportsapi_id_unresolved
+1668205,Abdoul Traoré,OH Leuven,Belgian Pro League,2025/2026,missing_heatmap_session
+956576,Aiham Ousou,Sporting Charleroi,Belgian Pro League,2025/2026,missing_heatmap_session
+1110599,Anton Tanghe,Zulte Waregem,Belgian Pro League,2025/2026,missing_heatmap_session
+1227813,Atsuki Ito,Gent,Belgian Pro League,2025/2026,missing_heatmap_session
+445873,Brandon Mechele,Club Brugge,Belgian Pro League,2025/2026,missing_heatmap_session
+924446,Bryan Reynolds,Westerlo,Belgian Pro League,2025/2026,missing_heatmap_session
+1406567,Cheick Keita,Sporting Charleroi,Belgian Pro League,2025/2026,missing_heatmap_session
+892709,Dennis Eckert,Standard Liege,Belgian Pro League,2025/2026,missing_heatmap_session
+1114123,Emin Bayram,Westerlo,Belgian Pro League,2025/2026,missing_heatmap_session
+965823,Ewoud Pletinckx,OH Leuven,Belgian Pro League,2025/2026,missing_heatmap_session
+1307394,Fabio Ferraro,FCV Dender EH,Belgian Pro League,2025/2026,missing_heatmap_session
+1075033,Gary Magnée,Cercle Brugge,Belgian Pro League,2025/2026,missing_heatmap_session
+1047662,Ibe Hautekiet,Standard Liege,Belgian Pro League,2025/2026,missing_heatmap_session
+1785898,Ibrahima Diaby,Cercle Brugge,Belgian Pro League,2025/2026,missing_heatmap_session
+728290,Kevin Mac Allister,Union St.Gilloise,Belgian Pro League,2025/2026,missing_heatmap_session
+1110376,Kyan Vaesen,Westerlo,Belgian Pro League,2025/2026,missing_heatmap_session
+820792,Kévin Van Den Kerkhof,Sporting Charleroi,Belgian Pro League,2025/2026,missing_heatmap_session
+604396,Leonardo Lopes,Gent,Belgian Pro League,2025/2026,missing_heatmap_session
+939427,Mujaid Sadick,Genk,Belgian Pro League,2025/2026,missing_heatmap_session
+1216798,Nathan Saliba,Anderlecht,Belgian Pro League,2025/2026,missing_heatmap_session
+1342516,Rein Van Helden,St.Truiden,Belgian Pro League,2025/2026,missing_heatmap_session
+768266,Ross Sykes,Union St.Gilloise,Belgian Pro League,2025/2026,missing_heatmap_session
+1288907,Yacine Titraoui,Sporting Charleroi,Belgian Pro League,2025/2026,missing_heatmap_session
+1437306,Yuto Tsunashima,Royal Antwerp,Belgian Pro League,2025/2026,missing_heatmap_session
+1287871,Zakaria El Ouahdi,Genk,Belgian Pro League,2025/2026,missing_heatmap_session
 1047670,Andrej Ilic,Union Berlin,Bundesliga,2025/2026,missing_heatmap_session
 1119643,Jan Thielmann,1. FC Köln,Bundesliga,2025/2026,sportsapi_id_unresolved
 1124533,Kilian Sildillia,PSV Eindhoven,Eredivisie,2025/2026,sportsapi_id_unresolved
