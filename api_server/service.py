@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
+from pydantic import ValidationError
 
 from rankings import (
     COMPARISON_SCOPES, EUROPEAN_LEADERBOARD_ID, calculate_league_percentiles,
@@ -10,7 +11,7 @@ from rankings import (
 )
 from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
-from shotmap_store_v2 import get_shotmap_points, has_shotmap_snapshot
+from shotmap_store_v2 import ShotmapSnapshotError, get_shotmap_snapshot
 
 from .schemas import (
     AgeBand, AssetRef, CompareMeta, ContinuousCoreAnalysis, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, ShotmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
@@ -35,6 +36,10 @@ TIER_BANDS = (
     ("silver", "Silver", 77.0, 96.0),
     ("bronze", "Bronze", 96.0, 100.0),
 )
+
+
+class ShotmapContractViolation(RuntimeError):
+    """Stored shotmap data cannot be represented by the public API contract."""
 
 
 def tier_from_rank(rank: int, population: int) -> PlayerTier:
@@ -394,13 +399,19 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
             continue
         if 0 <= x <= 100 and 0 <= y <= 100:
             valid_points.append(HeatmapPoint(x=x, y=y))
-    shot_rows = get_shotmap_points(str(tactical.get("heatmap_key")) if tactical else None)
+    heatmap_key = str(tactical.get("heatmap_key")) if tactical and tactical.get("heatmap_key") else None
+    try:
+        snapshot_available, shot_rows = get_shotmap_snapshot(heatmap_key)
+    except ShotmapSnapshotError as exc:
+        raise ShotmapContractViolation("Stored shotmap snapshot could not be loaded or validated.") from exc
     valid_shots: list[ShotmapPoint] = []
-    for shot in shot_rows:
+    for index, shot in enumerate(shot_rows):
         try:
             valid_shots.append(ShotmapPoint.model_validate(shot))
-        except (TypeError, ValueError):
-            continue
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise ShotmapContractViolation(
+                f"Stored shotmap snapshot contains an invalid record at index {index}."
+            ) from exc
     def value(name: str) -> float | None:
         raw = tactical.get(name) if tactical else None
         return round(float(raw), 4) if raw is not None else None
@@ -425,7 +436,7 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
     return SpatialAnalysis(
         available=bool(tactical), heatmapPointCount=len(valid_points), heatmapPoints=valid_points,
         shotmapPointCount=len(valid_shots), shotmapPoints=valid_shots,
-        shotmapSnapshotAvailable=has_shotmap_snapshot(str(tactical.get("heatmap_key")) if tactical else None),
+        shotmapSnapshotAvailable=snapshot_available,
         inBoxRatio=value("in_box_ratio"), outBoxFinalRatio=value("out_box_final_ratio"),
         midThirdRatio=value("mid_third_ratio"), finalThirdRatio=value("final_third_ratio"),
         ccaAreaPct=value("cca_area_pct"), laneRatios=[value(f"lane_{index}_ratio") or 0.0 for index in range(1, 6)] if tactical else [],

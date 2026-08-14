@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 
 # Crystal v2 keeps the established percentile bands, but gives each band its
@@ -319,9 +319,23 @@ class SpatialAnalysis(BaseModel):
     source: Literal["messi-static-cohort"] = "messi-static-cohort"
     heatmapPointCount: int = Field(ge=0)
     heatmapPoints: list[HeatmapPoint]
-    shotmapPointCount: int = Field(ge=0)
-    shotmapPoints: list[ShotmapPoint]
-    shotmapSnapshotAvailable: bool
+    shotmapPointCount: int = Field(
+        ge=0,
+        description="Exact number of records in shotmapPoints.",
+    )
+    shotmapPoints: list[ShotmapPoint] = Field(
+        description=(
+            "Every validated source shot in the available snapshot. An empty list means either "
+            "a verified zero-shot snapshot when shotmapSnapshotAvailable is true, or no snapshot "
+            "when it is false."
+        ),
+    )
+    shotmapSnapshotAvailable: bool = Field(
+        description=(
+            "False when no snapshot exists for this player-context. True means a snapshot was "
+            "loaded and validated; shotmapPoints may still be empty for a verified zero-shot session."
+        ),
+    )
     inBoxRatio: float | None = Field(default=None, ge=0, le=100)
     outBoxFinalRatio: float | None = Field(default=None, ge=0, le=100)
     midThirdRatio: float | None = Field(default=None, ge=0, le=100)
@@ -334,6 +348,27 @@ class SpatialAnalysis(BaseModel):
     continuousCore: ContinuousCoreAnalysis
     dangerZoneDensity: float | None = Field(default=None, ge=0, le=100)
     deepBoxZoneScore: float | None = Field(default=None, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def validate_shotmap_contract(self) -> "SpatialAnalysis":
+        if self.shotmapPointCount != len(self.shotmapPoints):
+            raise ValueError("shotmapPointCount must equal len(shotmapPoints)")
+        if not self.shotmapSnapshotAvailable and self.shotmapPoints:
+            raise ValueError("an unavailable shotmap snapshot cannot contain shotmapPoints")
+        return self
+
+
+class ShotmapServiceErrorDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Literal["shotmap_contract_violation"] = "shotmap_contract_violation"
+    message: str = Field(min_length=1)
+
+
+class ShotmapServiceErrorEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    detail: ShotmapServiceErrorDetail
 
 
 MessiMetricCode = Literal[
