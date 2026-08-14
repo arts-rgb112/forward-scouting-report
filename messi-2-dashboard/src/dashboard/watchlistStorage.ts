@@ -7,7 +7,7 @@ export const WATCHLIST_KEY = "messi-2-watchlist:v2";
 export type WatchContext = {
   season: string;
   mode: "league" | "europe";
-  scope: 3 | 5 | 7 | null;
+  scope: 3 | 5 | 7 | 8 | null;
   competition: "all" | "ucl" | "uel" | "uecl" | null;
 };
 export type WatchlistSnapshot = {
@@ -45,7 +45,7 @@ export type WatchlistEnvelope = {
   selectedEntryKeys: string[];
 };
 
-const validScope = (value: unknown): value is 3 | 5 | 7 => value === 3 || value === 5 || value === 7;
+const validScope = (value: unknown): value is 3 | 5 | 7 | 8 => value === 3 || value === 5 || value === 7 || value === 8;
 const validCompetition = (value: unknown): value is WatchContext["competition"] => value === null || value === "all" || value === "ucl" || value === "uel" || value === "uecl";
 const validContext = (value: unknown): value is WatchContext => {
   if (!value || typeof value !== "object") return false;

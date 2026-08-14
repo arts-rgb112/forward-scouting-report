@@ -34,6 +34,10 @@ describe("legacy handoff", () => {
     expect(params.get("scope")).toBe("5");
     expect(params.has("competition")).toBe(false);
   });
+  it("preserves scope 8 in the fixed Streamlit handoff", () => {
+    const href = legacyDetailHref(1, { name: "x", clubName: "y" }, { season: "2025/2026", mode: "league", scope: 8, competition: "all" })!;
+    expect(new URL(href).searchParams.get("scope")).toBe("8");
+  });
   it("serializes exactly two independent watchlist contexts for Streamlit Compare", () => {
     const href = legacyCompareHref([
       { playerId: 101, snapshot: { name: "A & B", clubName: "FC / One" }, context: { season: "2025/2026", mode: "league", scope: 5, competition: null } },

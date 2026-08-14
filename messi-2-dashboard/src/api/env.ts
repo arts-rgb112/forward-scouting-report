@@ -1,6 +1,6 @@
 import { MessiApiError } from "./errors";
 
-export type MessiApiConfig = { baseUrl: string; season: string; scope: 3 | 5 | 7; limit: number };
+export type MessiApiConfig = { baseUrl: string; season: string; scope: 3 | 5 | 7 | 8; limit: number };
 export type ConfigErrorCategory = "MISSING_API_BASE_URL" | "INVALID_API_ORIGIN" | "INSECURE_API_ORIGIN" | "INVALID_DATASET_SETTINGS" | "CONFIG_INVALID";
 
 export class MessiConfigError extends MessiApiError {
@@ -21,11 +21,12 @@ export function parseMessiApiConfig(env: Record<string, unknown>, mode: string):
   if (url.protocol !== "https:" && !(localhost && url.protocol === "http:" && mode === "development")) throw new MessiConfigError("INSECURE_API_ORIGIN");
   const season = String(env.VITE_MESSI_SEASON ?? "").trim();
   if (!/^\d{4}\/\d{4}$/.test(season)) throw new MessiConfigError("INVALID_DATASET_SETTINGS");
-  const scope = Number(env.VITE_MESSI_SCOPE);
-  if (![3, 5, 7].includes(scope)) throw new MessiConfigError("INVALID_DATASET_SETTINGS");
+  const scopeValue = String(env.VITE_MESSI_SCOPE ?? "8").trim();
+  const scope = Number(scopeValue);
+  if (![3, 5, 7, 8].includes(scope)) throw new MessiConfigError("INVALID_DATASET_SETTINGS");
   const limit = Number(env.VITE_MESSI_LIMIT);
   if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new MessiConfigError("INVALID_DATASET_SETTINGS");
-  return { baseUrl: url.origin, season, scope: scope as 3 | 5 | 7, limit };
+  return { baseUrl: url.origin, season, scope: scope as 3 | 5 | 7 | 8, limit };
 }
 
 export function buildPlayersUrl(config: MessiApiConfig): string {

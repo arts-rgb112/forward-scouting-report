@@ -1,4 +1,4 @@
-import type { AgeBand, DatasetRouteState, LeaderboardSearch, MinutesBand, SortKey } from "./types";
+import type { AgeBand, DatasetRouteState, LeaderboardSearch, LeagueScope, MinutesBand, SortKey } from "./types";
 
 export const PAGE_SIZE = 50;
 export const positionFilterValues = ["Attacking Midfielder", "Center Back", "Central Midfielder", "Defensive Midfielder", "Left Back", "Left Midfielder", "Left Wing-Back", "Left Winger", "Right Back", "Right Midfielder", "Right Wing-Back", "Right Winger", "Striker", "forward"] as const;
@@ -7,7 +7,7 @@ export const defaultLeaderboardSearch: LeaderboardSearch = { page: 1, pageSize: 
 const ageBands: readonly AgeBand[] = ["all", "u23", "23-25", "26-30", "31-plus"];
 const minutesBands: readonly MinutesBand[] = ["all", "200-499", "500-999", "1000-1499", "1500-1999", "2000-2999", "3000-plus"];
 
-const isScope = (value: number): value is 3 | 5 | 7 => [3, 5, 7].includes(value);
+const isScope = (value: number): value is LeagueScope => [3, 5, 7, 8].includes(value);
 const isCompetition = (value: string | null): value is DatasetRouteState["competition"] =>
   value === "all" || value === "ucl" || value === "uel" || value === "uecl";
 export const isPositionFilterValue = (value: string): value is (typeof positionFilterValues)[number] =>
@@ -20,7 +20,8 @@ export function datasetFromSearch(search: string, fallback: DatasetRouteState): 
   return {
     season: query.get("season") || fallback.season,
     mode,
-    scope: isScope(Number(query.get("scope"))) ? Number(query.get("scope")) as 3 | 5 | 7 : fallback.scope,
+    // Route defaults are product policy, not an environment cohort setting.
+    scope: isScope(Number(query.get("scope"))) ? Number(query.get("scope")) as LeagueScope : 8,
     competition: isCompetition(competition) ? competition : "all",
   };
 }

@@ -3,14 +3,14 @@ import { useEffect, useRef, useState } from "react";
 import { DataQualityIdentityError, fetchPlayerDataQuality } from "../api/dataQualityApi";
 import { parseMessiApiConfig, type MessiApiConfig } from "../api/env";
 import { MessiApiError } from "../api/errors";
-import { fetchComparison, fetchPlayerDetail, fetchTacticalQuadrant } from "../api/leaderboardsApi";
+import { fetchComparison, fetchLeaderboardOptions, fetchPlayerDetail, fetchTacticalQuadrant } from "../api/leaderboardsApi";
 import { DataQualityBadge } from "../dashboard/components/DataQualityBadge";
 import { metricIsImputed, qualityDisplay, type QualityDisplay } from "../dashboard/dataQualityViewModel";
 import { datasetFromSearch, datasetHref } from "../dashboard/datasetRoute";
 import { metricConfig, metricKeys } from "../dashboard/scoutingConfig";
 import type { DatasetRouteState, MetricKey, PlayerAnalysis, PlayerComparison, PlayerDetail, RadarAxis, TacticalQuadrant } from "../dashboard/types";
 
-function currentDataset(config?: MessiApiConfig): DatasetRouteState { return datasetFromSearch(window.location.search, { season: config?.season ?? "2025/2026", mode: "league", scope: (config?.scope ?? 7) as 3 | 5 | 7, competition: "all" }); }
+function currentDataset(config?: MessiApiConfig): DatasetRouteState { return datasetFromSearch(window.location.search, { season: config?.season ?? "2025/2026", mode: "league", scope: config?.scope ?? 8, competition: "all" }); }
 function ContextBadge({ dataset }: { dataset: DatasetRouteState }) { return <span className="inline-flex rounded border border-lime-300/30 bg-lime-300/10 px-2 py-1 text-[10px] font-bold text-lime-200">{dataset.mode === "europe" ? `Europe · ${dataset.competition.toUpperCase()}` : `League · ${dataset.scope} leagues`} · {dataset.season}</span>; }
 function BackLink({ dataset }: { dataset: DatasetRouteState }) { return <a href={datasetHref("/", dataset)} className="text-lime-300 hover:underline">← Leaderboard</a>; }
 function Page({ children }: { children: React.ReactNode }) { return <main id="main-content" className="grid min-h-screen place-items-center bg-[#080b0c] p-6 text-zinc-100"><article className="w-full max-w-3xl rounded-xl border border-white/10 bg-[#101415] p-7">{children}</article></main>; }
@@ -66,6 +66,34 @@ function PositionalGrid({ analysis }: { analysis: PlayerAnalysis }) {
   </section>;
 }
 
+function ShotmapPitchOverlay({ analysis }: { analysis: PlayerAnalysis }) {
+  const { spatial } = analysis;
+  const heatmap = spatial.heatmapPoints ?? [];
+  const shots = spatial.shotmapPoints;
+  const available = spatial.shotmapSnapshotAvailable;
+  const shotState = !available ? "원천 슈팅 이력 없음" : shots.length === 0 ? "슈팅 0회" : `슈팅 ${shots.length}회`;
+  const marker = (point: NonNullable<PlayerAnalysis["spatial"]["shotmapPoints"]>[number], index: number) => {
+    const label = `${point.outcome}, x ${point.x.toFixed(1)}, y ${point.y.toFixed(1)}`;
+    const key = `${point.outcome}-${index}`;
+    const common = { tabIndex: 0, role: "img" as const, "aria-label": label };
+    if (point.outcome === "goal") return <path key={key} {...common} d={`M ${point.x} ${point.y - 1.8} L ${point.x + 1.8} ${point.y} L ${point.x} ${point.y + 1.8} L ${point.x - 1.8} ${point.y} Z`} className="fill-lime-300 stroke-zinc-950" strokeWidth=".45"><title>{label}</title></path>;
+    if (point.outcome === "off_target") return <path key={key} {...common} d={`M ${point.x - 1.5} ${point.y - 1.5} L ${point.x + 1.5} ${point.y + 1.5} M ${point.x + 1.5} ${point.y - 1.5} L ${point.x - 1.5} ${point.y + 1.5}`} className="fill-none stroke-rose-300" strokeWidth=".7"><title>{label}</title></path>;
+    if (point.outcome === "blocked") return <rect key={key} {...common} x={point.x - 1.35} y={point.y - 1.35} width="2.7" height="2.7" className="fill-amber-300 stroke-zinc-950" strokeWidth=".45"><title>{label}</title></rect>;
+    return <circle key={key} {...common} cx={point.x} cy={point.y} r="1.55" className="fill-sky-300 stroke-zinc-950" strokeWidth=".45"><title>{label}</title></circle>;
+  };
+  return <section aria-label="Shotmap and activity heatmap" className="mt-4 rounded-lg border border-white/10 bg-zinc-950/60 p-3">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><h3 className="text-sm font-bold text-zinc-200">Spatial shotmap</h3><span className="text-xs text-zinc-400">{shotState}</span></div>
+    <figure className="mt-2" aria-describedby="shotmap-caption">
+      <svg viewBox="0 0 100 100" className="w-full rounded border border-white/10 bg-emerald-950/40" role="img" aria-label="Pitch with server-provided activity heatmap and shot outcome markers">
+        <rect x="2" y="2" width="96" height="96" fill="none" stroke="currentColor" className="text-zinc-400" strokeWidth=".7" /><line x1="2" x2="98" y1="50" y2="50" className="stroke-zinc-500" strokeWidth=".55" /><circle cx="50" cy="50" r="10" fill="none" className="stroke-zinc-500" strokeWidth=".55" /><rect x="28" y="2" width="44" height="16" fill="none" className="stroke-zinc-500" strokeWidth=".55" /><rect x="28" y="82" width="44" height="16" fill="none" className="stroke-zinc-500" strokeWidth=".55" />
+        {heatmap.map((point, index) => <circle key={`heat-${index}`} cx={point.x} cy={point.y} r="3.2" className="fill-cyan-300/20" />)}
+        {available && shots.map(marker)}
+      </svg>
+      <figcaption id="shotmap-caption" className="mt-2 text-xs text-zinc-500">활동 히트맵은 슈팅 데이터가 아닙니다. <span className="text-lime-200">◆ 골</span> · <span className="text-sky-200">● 유효슈팅</span> · <span className="text-rose-200">× 빗나감</span> · <span className="text-amber-200">■ 블록</span></figcaption>
+    </figure>
+  </section>;
+}
+
 function TacticalQuadrantChart({ quadrant }: { quadrant?: TacticalQuadrant }) {
   if (!quadrant || !quadrant.available || !quadrant.selectedPoint || quadrant.xMedian === null || quadrant.yMedian === null) return null;
   const xValues = quadrant.points.map((point) => point.netProgressionPer90);
@@ -100,7 +128,33 @@ function TacticalQuadrantChart({ quadrant }: { quadrant?: TacticalQuadrant }) {
 function AnalysisSummary({ analysis, quality, quadrant }: { analysis?: PlayerAnalysis; quality?: QualityDisplay; quadrant?: TacticalQuadrant }) {
   if (!analysis) return <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-400">No server-side analysis is available for this player.</div>;
   const scoreRank = analysis.score.rank === null ? "—" : `#${analysis.score.rank}`;
-  return <section className="rounded-xl border border-white/10 bg-white/5 p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-black tracking-tight text-white">Server analysis</h2><p className="text-xs text-zinc-400">Score {analysis.score.value} · rank {scoreRank} / cohort {analysis.score.population}<DataQualityBadge quality={quality} /></p></div><span className="rounded bg-lime-300/10 px-2 py-1 text-xs font-bold text-lime-200">{analysis.score.archetype}</span></div><div className="mt-4 grid gap-4 md:grid-cols-2"><DetailMetricTable title="Volume radar" axes={analysis.volumeRadar.axes} quality={quality} /><DetailMetricTable title="Ratio radar" axes={analysis.ratioRadar.axes} quality={quality} /></div><p className="mt-4 text-xs text-zinc-500">Spatial data: {analysis.spatial.available ? `${analysis.spatial.heatmapPointCount} server-provided points` : "not available"}</p><PositionalGrid analysis={analysis} /><TacticalQuadrantChart quadrant={quadrant} /><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-400">{Object.entries(analysis.rawMetrics).map(([key, value]) => <div key={key} className="flex justify-between gap-2 border-b border-white/5 py-1"><span>{key}</span><span className="text-zinc-200">{value ?? "—"}</span></div>)}</div></section>;
+  return <section className="rounded-xl border border-white/10 bg-white/5 p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="text-lg font-black tracking-tight text-white">Server analysis</h2><p className="text-xs text-zinc-400">Score {analysis.score.value} · rank {scoreRank} / cohort {analysis.score.population}<DataQualityBadge quality={quality} /></p></div><span className="rounded bg-lime-300/10 px-2 py-1 text-xs font-bold text-lime-200">{analysis.score.archetype}</span></div><div className="mt-4 grid gap-4 md:grid-cols-2"><DetailMetricTable title="Volume radar" axes={analysis.volumeRadar.axes} quality={quality} /><DetailMetricTable title="Ratio radar" axes={analysis.ratioRadar.axes} quality={quality} /></div><p className="mt-4 text-xs text-zinc-500">Spatial data: {analysis.spatial.available ? `${analysis.spatial.heatmapPointCount} server-provided points` : "not available"}</p><PositionalGrid analysis={analysis} /><ShotmapPitchOverlay analysis={analysis} /><TacticalQuadrantChart quadrant={quadrant} /><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-400">{Object.entries(analysis.rawMetrics).map(([key, value]) => <div key={key} className="flex justify-between gap-2 border-b border-white/5 py-1"><span>{key}</span><span className="text-zinc-200">{value ?? "—"}</span></div>)}</div></section>;
+}
+
+type Scope8Capability = "checking" | "supported" | "unsupported";
+
+/** Direct routes must independently enforce the authoritative scope-8 options gate. */
+function useScope8Capability(config: MessiApiConfig | undefined, dataset: DatasetRouteState): Scope8Capability {
+  const needsProbe = Boolean(config && dataset.mode === "league" && dataset.scope === 8);
+  const [capability, setCapability] = useState<Scope8Capability>(needsProbe ? "checking" : "supported");
+  useEffect(() => {
+    if (!needsProbe || !config) { setCapability("supported"); return; }
+    const controller = new AbortController();
+    let current = true;
+    const settle = (next: Scope8Capability) => { if (current && !controller.signal.aborted) setCapability(next); };
+    setCapability("checking");
+    const timeout = window.setTimeout(() => { settle("unsupported"); controller.abort(); }, 8_000);
+    void fetchLeaderboardOptions(config, controller.signal)
+      .then((options) => settle(options.scopes.some((scope) => scope.value === 8) ? "supported" : "unsupported"))
+      .catch(() => settle("unsupported"))
+      .finally(() => window.clearTimeout(timeout));
+    return () => { current = false; window.clearTimeout(timeout); controller.abort(); };
+  }, [config, needsProbe]);
+  return needsProbe ? capability : "supported";
+}
+
+function Scope8Unavailable({ dataset }: { dataset: DatasetRouteState }) {
+  return <Page><ContextBadge dataset={dataset} /><FocusTitle>8개 리그 데이터 사용 불가</FocusTitle><p role="alert" className="mt-3 text-zinc-400">현재 선택한 8개 리그 데이터는 이 서버에서 지원되지 않거나 확인할 수 없습니다. URL과 선택한 컨텍스트는 변경되지 않았습니다.</p><div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
 }
 
 export function StaticRoute() {
@@ -114,7 +168,9 @@ export function StaticRoute() {
 
 function PlayerDetailRoute({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {
   const [detail, setDetail] = useState<PlayerDetail>(); const [quadrant, setQuadrant] = useState<TacticalQuadrant>(); const [error, setError] = useState<"network" | "not-found" | "config">(); const [retry, setRetry] = useState(0); const [quality, setQuality] = useState<QualityDisplay>({ kind: "idle" });
+  const scope8Capability = useScope8Capability(config, dataset);
   useEffect(() => {
+    if (scope8Capability !== "supported") { setDetail(undefined); setQuadrant(undefined); setError(undefined); setQuality({ kind: "idle" }); return; }
     if (!Number.isInteger(id) || id <= 0) { setError("not-found"); return; } if (!config) { setError("config"); return; }
     const controller = new AbortController(); setDetail(undefined); setQuadrant(undefined); setError(undefined); setQuality({ kind: "pending" });
     // No Promise.all: the primary detail is valid independently of companion quality.
@@ -123,14 +179,17 @@ function PlayerDetailRoute({ id, dataset, config }: { id: number; dataset: Datas
     void fetchTacticalQuadrant(config, id, dataset, controller.signal).then(setQuadrant).catch(() => { /* unavailable quadrant remains absent */ });
     void fetchPlayerDataQuality(config, id, dataset, controller.signal).then((data) => { if (!controller.signal.aborted) setQuality(qualityDisplay(data.dataQuality)); }).catch((cause: unknown) => { if (!controller.signal.aborted) setQuality({ kind: "unknown", cause: cause instanceof DataQualityIdentityError ? "identity" : cause instanceof MessiApiError && cause.kind === "http" ? "http" : cause instanceof MessiApiError && cause.kind === "network" ? "network" : "schema" }); });
     return () => controller.abort();
-  }, [config, dataset, id, retry]);
+  }, [config, dataset, id, retry, scope8Capability]);
   const player = detail?.player; const analysis = detail?.analysis;
+  if (scope8Capability === "unsupported") return <Scope8Unavailable dataset={dataset} />;
   return <Page><ContextBadge dataset={dataset} />{!player && !error && <><FocusTitle>Player profile</FocusTitle><div aria-busy="true" className="mt-5 space-y-3"><div className="h-7 w-48 animate-pulse rounded bg-white/10" /><div className="h-24 animate-pulse rounded bg-white/10" /></div></>}{error && <><FocusTitle>{error === "not-found" ? "Player not found" : "Player details unavailable"}</FocusTitle><p role="alert" className="mt-3 text-zinc-400">{error === "not-found" ? "This player is not available in the selected dataset." : error === "config" ? "Dashboard API configuration is unavailable." : "We could not load this player profile. Check your connection and try again."}</p>{error !== "not-found" && <button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-5 min-h-11 rounded border border-lime-300/40 px-4 text-lime-300">Retry</button>}</>}{player && <><FocusTitle>{player.name}</FocusTitle><p className="mt-2 text-zinc-400">{player.club.name} · {player.league.name} · {player.position}</p><div className="mt-5 grid grid-cols-2 gap-3 text-sm">{metricKeys.map((key) => <div key={key} className="rounded bg-black/20 p-3"><span className="text-zinc-500">{metricConfig[key].label}</span><b className="float-right text-lime-300">{player.stats[key]}{metricIsImputed(quality, key) && <span className="ml-1 text-[9px] text-amber-100">대체값</span>}</b></div>)}</div><AnalysisSummary analysis={analysis} quality={quality} quadrant={quadrant} /></>}<div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
 }
 
 function CompareRoute({ dataset, config, ids }: { dataset: DatasetRouteState; config?: MessiApiConfig; ids: number[] | undefined }) {
   const [comparison, setComparison] = useState<PlayerComparison>(); const [error, setError] = useState<"network" | "config">(); const [retry, setRetry] = useState(0);
-  useEffect(() => { if (!ids || ids.length !== 2 || !config) return; const controller = new AbortController(); setComparison(undefined); setError(undefined); fetchComparison(config, ids, dataset, controller.signal).then(setComparison).catch(() => { if (!controller.signal.aborted) setError("network"); }); return () => controller.abort(); }, [config, dataset, ids?.join(","), retry]);
+  const scope8Capability = useScope8Capability(config, dataset);
+  useEffect(() => { if (scope8Capability !== "supported") { setComparison(undefined); setError(undefined); return; } if (!ids || ids.length !== 2 || !config) return; const controller = new AbortController(); setComparison(undefined); setError(undefined); fetchComparison(config, ids, dataset, controller.signal).then((value) => { if (!controller.signal.aborted) setComparison(value); }).catch(() => { if (!controller.signal.aborted) setError("network"); }); return () => controller.abort(); }, [config, dataset, ids?.join(","), retry, scope8Capability]);
+  if (scope8Capability === "unsupported") return <Scope8Unavailable dataset={dataset} />;
   if (ids === undefined) return <Page><ContextBadge dataset={dataset} /><FocusTitle>Player comparison</FocusTitle><p role="alert" className="mt-3 text-zinc-400">Choose two distinct players before opening comparison.</p><div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
   if (!ids.length) return <Page><ContextBadge dataset={dataset} /><FocusTitle>Player comparison</FocusTitle><p className="mt-3 text-zinc-400">Select two players from the leaderboard to request a server comparison.</p><div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
   if (!config || error) return <Page><ContextBadge dataset={dataset} /><FocusTitle>Player comparison unavailable</FocusTitle><p role="alert" className="mt-3 text-zinc-400">{!config ? "Dashboard API configuration is unavailable." : "The server comparison could not be loaded."}</p>{config && <button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-5 min-h-11 rounded border border-lime-300/40 px-4 text-lime-300">Retry</button>}<div className="mt-6"><BackLink dataset={dataset} /></div></Page>;

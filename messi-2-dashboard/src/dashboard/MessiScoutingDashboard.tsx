@@ -33,7 +33,7 @@ export type MessiScoutingDashboardProps = {
 
 export default function MessiScoutingDashboard({
   players, meta, refreshing, onRefresh, refreshWarning, apiConfig,
-  dataset = { season: meta.season, mode: "league", scope: (meta.scope ?? 7) as 3 | 5 | 7, competition: "all" },
+  dataset = { season: meta.season, mode: "league", scope: meta.scope ?? 8, competition: "all" },
   options, onDatasetChange = () => undefined, page = 1, onPageChange = () => undefined,
   serverPage, search, positionCapability = "unknown", ageCapability = "unknown", minutesCapability = "unknown", onSearchChange = () => undefined,
 }: MessiScoutingDashboardProps) {

@@ -16,8 +16,8 @@ export type WatchlistFilters = { query: string; role: string; position: string; 
 
 export function datasetStateFromWatchlistEntry(entry: WatchlistEntry): DatasetRouteState {
   return entry.context.mode === "league"
-    ? { season: entry.context.season, mode: "league", scope: entry.context.scope ?? 7, competition: "all" }
-    : { season: entry.context.season, mode: "europe", scope: 7, competition: entry.context.competition ?? "all" };
+    ? { season: entry.context.season, mode: "league", scope: entry.context.scope ?? 8, competition: "all" }
+    : { season: entry.context.season, mode: "europe", scope: 8, competition: entry.context.competition ?? "all" };
 }
 
 export function watchlistContextLabel(entry: WatchlistEntry): string {

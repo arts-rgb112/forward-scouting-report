@@ -18,8 +18,8 @@ type Props = {
 
 function stateFromEntry(entry: WatchlistEntry): DatasetRouteState {
   return entry.context.mode === "league"
-    ? { season: entry.context.season, mode: "league", scope: entry.context.scope ?? 7, competition: "all" }
-    : { season: entry.context.season, mode: "europe", scope: 7, competition: entry.context.competition ?? "all" };
+    ? { season: entry.context.season, mode: "league", scope: entry.context.scope ?? 8, competition: "all" }
+    : { season: entry.context.season, mode: "europe", scope: 8, competition: entry.context.competition ?? "all" };
 }
 function contextLabel(entry: WatchlistEntry) {
   return entry.context.mode === "league"
