@@ -29,7 +29,11 @@ from positional_grid import (
 )
 from true_core import true_core_zones, true_core_zones_from_points
 from continuous_core import continuous_core_from_points, continuous_core_summary
-from tactical_ratio import _same_competition
+from tactical_ratio import (
+    _same_competition,
+    get_tactical_ratio_for_session,
+    passes_final_third_filter,
+)
 from scripts.backfill_true_core_zones import DEFINITION_VERSION
 from scripts.build_shotmap_points import normalize_shotmap, shot_outcome
 from fotmob_client import FotMobError, _get, _league_selections
@@ -317,6 +321,53 @@ class CcaOverlayTests(unittest.TestCase):
 
 
 class TacticalCoverageAuditTests(unittest.TestCase):
+    @patch("tactical_ratio.get_tactical_ratio_for_session")
+    def test_disabled_session_filter_never_requires_spatial_data(self, get_ratio) -> None:
+        self.assertTrue(
+            passes_final_third_filter(
+                "792303", 0, "Liga Portugal", "2025/2026",
+            )
+        )
+        get_ratio.assert_not_called()
+
+    @patch("tactical_ratio.load_tactical_ratios")
+    def test_session_lookup_never_falls_back_to_another_season(self, load_ratios) -> None:
+        load_ratios.return_value = {"792303:8:old": {
+            "fotmob_player_id": "792303",
+            "competition_name": "LaLiga",
+            "season_name": "2021/2022",
+            "final_third_ratio": 60,
+        }}
+
+        self.assertIsNone(
+            get_tactical_ratio_for_session(
+                "792303", "Liga Portugal", "2025/2026",
+            )
+        )
+        self.assertFalse(
+            passes_final_third_filter(
+                "792303", 50, "Liga Portugal", "2025/2026",
+            )
+        )
+
+    @patch("tactical_ratio._with_current_spatial_definition", side_effect=lambda row: row)
+    @patch("tactical_ratio.load_tactical_ratios")
+    def test_session_filter_accepts_only_the_exact_session(
+        self, load_ratios, _normalize_spatial,
+    ) -> None:
+        load_ratios.return_value = {"792303:61:current": {
+            "fotmob_player_id": "792303",
+            "competition_name": "Primeira Liga",
+            "season_name": "2025/2026",
+            "final_third_ratio": 55,
+        }}
+
+        self.assertTrue(
+            passes_final_third_filter(
+                "792303", 50, "Liga Portugal", "25/26",
+            )
+        )
+
     def test_failure_reason_reader_returns_dict_for_existing_csv(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "missing.csv"

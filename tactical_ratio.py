@@ -262,7 +262,14 @@ def get_heatmap_points(player_id: str | int, heatmap_key: str | None = None) -> 
     return points if isinstance(points, list) else []
 
 
-def passes_final_third_filter(player_id: str | int, minimum_ratio: int) -> bool:
-    """Keep legacy behaviour at 0%; require ETL data for any active threshold."""
-    ratio = get_tactical_ratio(player_id)
-    return minimum_ratio <= 0 or (ratio is not None and ratio["final_third_ratio"] >= minimum_ratio)
+def passes_final_third_filter(
+    player_id: str | int,
+    minimum_ratio: int,
+    competition_name: str,
+    season_label: str,
+) -> bool:
+    """Apply an active filter only to the requested competition-season."""
+    if minimum_ratio <= 0:
+        return True
+    ratio = get_tactical_ratio_for_session(player_id, competition_name, season_label)
+    return ratio is not None and ratio["final_third_ratio"] >= minimum_ratio
