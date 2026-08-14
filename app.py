@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 from fotmob_client import FotMobError, PlayerCandidate, fetch_player_multi_season_data, search_players
 from metrics import DecisionMetrics, extract_multi_season_metrics
+from legacy_sessions import merge_season_sessions
 from rankings import (
     EUROPEAN_LEADERBOARD_ID,
     calculate_league_percentiles,
@@ -182,6 +183,11 @@ def cached_search(term: str):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_player_data(player_id: str):
+    # Streamlit hashes this wrapper, not every transitive parser dependency.
+    # Keep an explicit source-contract marker so adding a domestic league
+    # invalidates persisted Community Cloud player-history results.
+    player_session_cache_version = "eight-league-belgian-v1"
+    _ = player_session_cache_version
     return fetch_player_multi_season_data(player_id)
 
 
@@ -206,6 +212,17 @@ def _static_session_rows(player_id: str, season: str) -> list[tuple[str, Decisio
         _, metric = item
         rows.append((f"{season}_{league_id}", metric))
     return sorted(rows, key=lambda item: ((item[1].league_name or ""), item[1].league_id or 0))
+
+
+def _merged_session_rows(
+    player_id: str, season: str, live_sessions: dict[str, DecisionMetrics] | None,
+) -> list[tuple[str, DecisionMetrics]]:
+    """Merge live and static season records without losing one competition."""
+    return merge_season_sessions(
+        season,
+        live_sessions,
+        _static_session_rows(player_id, season),
+    )
 
 
 def _resolve_static_player(player: PlayerCandidate, season: str) -> PlayerCandidate:
@@ -1915,7 +1932,11 @@ def render_player_report(
     st.subheader(player.name)
     if show_activity:
         render_activity_ratio(player.player_id, player.name)
-    for season_key, stats in seasons.items():
+    report_sessions = (
+        _merged_session_rows(str(player.player_id), selected_seasons[0], seasons)
+        if len(selected_seasons) == 1 else list(seasons.items())
+    )
+    for season_key, stats in report_sessions:
         season_str = season_key.split("_", 1)[0]
         is_ucl = stats.league_id == 42 or "champions" in (stats.league_name or "").lower()
         if season_str not in selected_seasons:
@@ -2671,35 +2692,37 @@ def render_player_detail_page() -> None:
     filters = {"season": detail_season, "scope": detail_context[2] if detail_context is not None else _query_scope()}
     player = detail_context[0] if detail_context is not None else PlayerCandidate(player_id, _query_text("name", "선수"), _query_text("team", ""))
     player = _resolve_static_player(player, filters["season"])
-    using_static_snapshot = detail_context is not None
+    using_static_snapshot = False
     selected_stats = detail_context[1] if detail_context is not None else None
-    session_rows: list[tuple[str, DecisionMetrics]] = []
-    if detail_context is None:
-        try:
-            sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
-        except (FotMobError, TypeError, ValueError, KeyError):
-            # An archived cohort may still contain this player/season even after
-            # the mutable player-history response has been removed upstream. The
-            # extra structural exceptions are an upstream-response safety net: an
-            # unavailable player must render a fallback notice, never a red page.
-            sessions = {}
-        session_rows = [
-            (key, stats) for key, stats in sessions.items()
-            if key.split("_", 1)[0] == filters["season"]
-        ]
-        if not session_rows:
-            session_rows = _static_session_rows(player.player_id, filters["season"])
-            using_static_snapshot = bool(session_rows)
-    if not session_rows and detail_context is None:
+    try:
+        sessions = extract_multi_season_metrics(cached_player_data(player.player_id))
+    except (FotMobError, TypeError, ValueError, KeyError):
+        # The deployed static cohort remains the source of truth when mutable
+        # player history is unavailable or temporarily partial.
+        sessions = {}
+    live_league_ids = {
+        int(stats.league_id) for key, stats in sessions.items()
+        if key.split("_", 1)[0] == filters["season"] and stats.league_id is not None
+    }
+    session_rows = _merged_session_rows(player.player_id, filters["season"], sessions)
+    if not session_rows:
         st.warning(f"{filters['season']} 시즌에 조회 가능한 대회 기록이 없습니다.")
         return
-    if detail_context is None:
+    if session_rows:
+        contextual_league_id = selected_stats.league_id if selected_stats is not None else None
+        default_index = next((
+            index for index, (_, stats) in enumerate(session_rows)
+            if stats.league_id == contextual_league_id
+        ), 0)
+        if default_index:
+            session_rows.insert(0, session_rows.pop(default_index))
         selected_index = st.selectbox(
             "대회", range(len(session_rows)),
             format_func=lambda index: session_rows[index][1].league_name or "대회 정보 없음",
             key=f"detail_competition_{player.player_id}_{filters['season']}",
         )
         _, selected_stats = session_rows[selected_index]
+        using_static_snapshot = int(selected_stats.league_id or 0) not in live_league_ids
     emit_ga_event_once(
         "player_report_open",
         f"{player.player_id}:{filters['season']}:{selected_stats.league_id}",
@@ -2716,8 +2739,8 @@ def render_player_detail_page() -> None:
     st.caption("역할은 해당 대회·시즌의 박스 점유율을 기준으로 자동 분류됩니다. 수동 탭 전환은 점수나 역할 표기를 바꾸지 않습니다.")
     rank = _render_role_overview(player, filters, selected_stats, tactical_ratio)
     if using_static_snapshot:
-        st.caption("과거 원본 선수 이력 API가 없는 시즌입니다. 세부 상대평가 바는 생략하고, 적재된 공간·히트맵 데이터를 표시합니다.")
-    else:
+        st.caption("라이브 선수 이력에서 누락된 대회이므로 적재된 코호트·공간·히트맵 데이터로 동일한 상세 분석을 복원했습니다.")
+    if selected_stats is not None:
         st.divider()
         st.subheader("세부 상대평가")
         render_player_report(

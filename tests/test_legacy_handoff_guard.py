@@ -35,16 +35,16 @@ def test_legacy_detail_consumes_validated_contextual_watchlist_handoff() -> None
     assert "selected_stats = detail_context[1]" in detail
 
 
-def test_verified_detail_context_skips_live_player_history_fetch() -> None:
-    """A validated Vercel handoff must render from the static cohort immediately."""
+def test_verified_detail_context_merges_live_and_static_competitions() -> None:
+    """A contextual handoff is the default selection, not the only competition."""
     source = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
     detail = source.split("def render_player_detail_page()", 1)[1].split(
         "def render_head_to_head_page", 1
     )[0]
-    guarded_fetch = detail.split("if detail_context is None:", 1)[1].split(
-        "if not session_rows and detail_context is None:", 1
-    )[0]
-    assert "cached_player_data(player.player_id)" in guarded_fetch
+    assert "cached_player_data(player.player_id)" in detail
+    assert "_merged_session_rows(player.player_id, filters[\"season\"], sessions)" in detail
+    assert "contextual_league_id = selected_stats.league_id" in detail
+    assert 'st.selectbox(\n            "대회"' in detail
 
 
 def test_streamlit_leaderboard_detail_links_bypass_the_legacy_share_redirector() -> None:
