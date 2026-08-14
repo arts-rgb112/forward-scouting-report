@@ -59,3 +59,19 @@ def test_streamlit_root_handoff_never_embeds_the_vercel_app_in_an_iframe() -> No
     handoff = source.split("def render_frontend_handoff() -> None:", 1)[1].split("if not _requested_legacy_page", 1)[0]
     assert "st.link_button" in handoff
     assert "window.location.replace" not in handoff
+
+
+def test_contextual_detail_does_not_reuse_another_seasons_spatial_snapshot() -> None:
+    source = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
+    renderer = source.split("def render_activity_ratio(", 1)[1].split(
+        "def render_season_heatmap", 1
+    )[0]
+    badges = source.split("def spatial_identity_badges(", 1)[1].split(
+        "def activity_coverage_identity", 1
+    )[0]
+
+    assert "_UNSPECIFIED_TACTICAL_RATIO" in renderer
+    assert "if ratio is _UNSPECIFIED_TACTICAL_RATIO:" in renderer
+    assert "ratio = ratio or get_tactical_ratio" not in renderer
+    assert "if not ratio:\n        # Missing spatial data" in badges
+    assert "return []" in badges

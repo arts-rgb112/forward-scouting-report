@@ -317,7 +317,12 @@ def _fetch_live_spear_cohort(
     }
     metrics_by_player = {
         player_id: metric for player_id, metric in metrics_by_player.items()
-        if passes_final_third_filter(player_id, minimum_final_third_ratio)
+        if passes_final_third_filter(
+            player_id,
+            minimum_final_third_ratio,
+            metric.league_name or "",
+            season_name,
+        )
     }
     successes = {player_id: value for player_id, value in successes.items() if player_id in metrics_by_player}
     return metrics_by_player, successes
@@ -345,7 +350,12 @@ def _fetch_elite_dribbler_metrics(
                 and (metric.minutes_played or 0.0) >= _minimum_minutes_for_competition(
                     metric.league_id or target_league_id
                 )
-                and passes_final_third_filter(player_id, minimum_final_third_ratio)
+                and passes_final_third_filter(
+                    player_id,
+                    minimum_final_third_ratio,
+                    metric.league_name or "",
+                    season_name,
+                )
             })
         if static_metrics:
             return static_metrics, {player_id: 0.0 for player_id in static_metrics}
@@ -1101,9 +1111,13 @@ def get_top_leagues_shot_quality(
     # the initial board load several times slower even though each request is I/O-bound.
     with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
         for (league_name, league_id, player_id, _), (result_league, name, metric) in zip(jobs, executor.map(fetch_candidate, jobs)):
-            if league_name != result_league or not passes_final_third_filter(player_id, minimum_final_third_ratio):
+            if league_name != result_league or metric is None:
                 continue
-            if metric is None or metric.in_box_finishing is None:
+            if not passes_final_third_filter(
+                player_id, minimum_final_third_ratio, metric.league_name or league_name, season_name,
+            ):
+                continue
+            if metric.in_box_finishing is None:
                 continue
             row_data = {
                 "선수": name,

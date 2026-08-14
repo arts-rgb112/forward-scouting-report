@@ -30,6 +30,7 @@ from shotmap_store_v2 import get_shotmap_points, has_shotmap_snapshot
 
 
 _UNIFIED_BAR_COUNTER = itertools.count()
+_UNSPECIFIED_TACTICAL_RATIO = object()
 
 # A GA4 measurement ID is public by design: it is delivered to the browser
 # with the Google tag.  A Streamlit secret can override this default later
@@ -1348,7 +1349,8 @@ def spatial_identity_badges(
     false_nine_badge = "👻 2선 지향 펄스 나인형 (Deep-Lying)"
     false_nine_text = "상대 수비와의 물리적 마찰을 피해 2선으로 내려와 플레이메이킹과 공간 창출에 집중하는 변칙적 포워드"
     if not ratio:
-        return [(false_nine_badge, false_nine_text)]
+        # Missing spatial data is not evidence of a false-nine identity.
+        return []
     badges: list[tuple[str, str]] = []
     micro_fields = ("box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio")
     box_ratio = float(ratio.get("in_box_ratio") or 0.0)
@@ -1475,11 +1477,17 @@ def render_lane_analysis(player_name: str, ratio: dict[str, object], rank=None) 
 
 
 def render_activity_ratio(
-    player_id: str, player_name: str, ratio: dict[str, object] | None = None,
+    player_id: str, player_name: str,
+    ratio: dict[str, object] | None | object = _UNSPECIFIED_TACTICAL_RATIO,
     force_type_b: bool = False, rank=None,
 ) -> None:
     """Render the ETL-backed mid/final-third activity split without live API calls."""
-    ratio = ratio or get_tactical_ratio(player_id) or get_tactical_ratio_by_name(player_name)
+    # Callers that selected a specific competition-season pass either its
+    # exact snapshot or None.  Do not replace an explicit None with another
+    # season belonging to the same player.  The omitted-argument fallback is
+    # retained only for the old non-contextual report surface.
+    if ratio is _UNSPECIFIED_TACTICAL_RATIO:
+        ratio = get_tactical_ratio(player_id) or get_tactical_ratio_by_name(player_name)
     st.markdown("#### 🏃 주요 활동 반경")
     st.caption("일회성 좌표를 제외한 반복 활동 구역 기준")
     if ratio is None:
