@@ -75,3 +75,20 @@ def test_contextual_detail_does_not_reuse_another_seasons_spatial_snapshot() -> 
     assert "ratio = ratio or get_tactical_ratio" not in renderer
     assert "if not ratio:\n        # Missing spatial data" in badges
     assert "return []" in badges
+
+
+def test_detail_score_cache_is_keyed_by_the_deployed_scoring_snapshot() -> None:
+    source = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
+    internal = source.split("def _cached_percentiles(", 1)[1].split(
+        "def cached_percentiles(", 1
+    )[0]
+    wrapper = source.split("def cached_percentiles(", 1)[1].split(
+        "def _cached_spear_leaderboard", 1
+    )[0]
+
+    assert "scoring_version" in internal
+    assert "version = refresh_scoring_caches_if_needed()" in wrapper
+    assert "role_override, version" in wrapper
+    assert "def _cached_league_medians(" in source
+    assert "def _cached_tactical_matrix(" in source
+    assert source.count("refresh_scoring_caches_if_needed()") >= 5

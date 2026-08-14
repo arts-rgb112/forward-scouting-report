@@ -20,6 +20,7 @@ from rankings import (
     get_spear_leaderboard,
     get_tactical_matrix,
     get_top_leagues_shot_quality,
+    refresh_scoring_caches_if_needed,
 )
 from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio, get_tactical_ratio_by_name, get_tactical_ratio_for_session
@@ -248,10 +249,10 @@ def _resolve_static_player(player: PlayerCandidate, season: str) -> PlayerCandid
     return PlayerCandidate(cached_id, cached_name or player.name, metric.team_name or player.team_name)
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def cached_percentiles(
+def _cached_percentiles(
     player_id: str, season: str, metrics: DecisionMetrics, min_xg: float,
     restrict_to_forwards: bool, minimum_final_third_ratio: int, comparison_scope: int = 0,
-    role_override: str = "auto",
+    role_override: str = "auto", scoring_version: object = None,
 ):
     # Streamlit hashes this wrapper rather than the transitive ranking/data
     # dependencies.  Keep the spatial definition here so a CCA migration
@@ -268,32 +269,79 @@ def cached_percentiles(
     )
 
 
+def cached_percentiles(
+    player_id: str, season: str, metrics: DecisionMetrics, min_xg: float,
+    restrict_to_forwards: bool, minimum_final_third_ratio: int, comparison_scope: int = 0,
+    role_override: str = "auto",
+):
+    """Cache one detail score under the exact deployed data snapshot."""
+    version = refresh_scoring_caches_if_needed()
+    return _cached_percentiles(
+        player_id, season, metrics, min_xg, restrict_to_forwards,
+        minimum_final_third_ratio, comparison_scope, role_override, version,
+    )
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def cached_spear_leaderboard(league_id: int, season: str, comparison_scope: int) -> pd.DataFrame:
+def _cached_spear_leaderboard(
+    league_id: int, season: str, comparison_scope: int, scoring_version: object,
+) -> pd.DataFrame:
     spatial_score_cache_version = "continuous-hdr-50-v1"
     if spatial_score_cache_version != "continuous-hdr-50-v1":
         raise RuntimeError("unsupported spatial score cache version")
     season_name = f"20{season[:2]}/20{season[3:]}" if len(season) == 5 and "/" in season else season
     return get_spear_leaderboard(league_id, season_name, comparison_scope)
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def cached_top20(minimum_final_third_ratio: int):
-    return get_top_leagues_shot_quality("25/26", minimum_final_third_ratio)
+
+def cached_spear_leaderboard(league_id: int, season: str, comparison_scope: int) -> pd.DataFrame:
+    return _cached_spear_leaderboard(
+        league_id, season, comparison_scope, refresh_scoring_caches_if_needed(),
+    )
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def cached_league_medians(
+def _cached_top20(minimum_final_third_ratio: int, scoring_version: object):
+    return get_top_leagues_shot_quality("25/26", minimum_final_third_ratio)
+
+
+def cached_top20(minimum_final_third_ratio: int):
+    return _cached_top20(minimum_final_third_ratio, refresh_scoring_caches_if_needed())
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cached_league_medians(
     league_id: int, season_name: str, restrict_to_forwards: bool, minimum_final_third_ratio: int,
+    scoring_version: object,
 ) -> dict[str, float | None]:
     return get_league_metric_medians(league_id, season_name, restrict_to_forwards, minimum_final_third_ratio)
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def cached_tactical_matrix(
+
+def cached_league_medians(
     league_id: int, season_name: str, restrict_to_forwards: bool, minimum_final_third_ratio: int,
-    comparison_scope: int,
+) -> dict[str, float | None]:
+    return _cached_league_medians(
+        league_id, season_name, restrict_to_forwards, minimum_final_third_ratio,
+        refresh_scoring_caches_if_needed(),
+    )
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cached_tactical_matrix(
+    league_id: int, season_name: str, restrict_to_forwards: bool, minimum_final_third_ratio: int,
+    comparison_scope: int, scoring_version: object,
 ) -> pd.DataFrame:
     return get_tactical_matrix(
         league_id, season_name, restrict_to_forwards,
         minimum_final_third_ratio, comparison_scope,
+    )
+
+
+def cached_tactical_matrix(
+    league_id: int, season_name: str, restrict_to_forwards: bool, minimum_final_third_ratio: int,
+    comparison_scope: int,
+) -> pd.DataFrame:
+    return _cached_tactical_matrix(
+        league_id, season_name, restrict_to_forwards, minimum_final_third_ratio,
+        comparison_scope, refresh_scoring_caches_if_needed(),
     )
 
 

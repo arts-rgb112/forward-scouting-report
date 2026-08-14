@@ -175,6 +175,12 @@ def _file_version(path: Path) -> tuple[int, int] | None:
         return None
 
 
+def tactical_data_version() -> tuple[tuple[int, int] | None, tuple[int, int] | None]:
+    """Version the ratio and coordinate snapshots used by score caches."""
+    data_path = THREE_ZONE_DATA_PATH if THREE_ZONE_DATA_PATH.exists() else LEGACY_DATA_PATH
+    return _file_version(data_path), _file_version(HEATMAP_POINTS_PATH)
+
+
 @functools.lru_cache(maxsize=4)
 def _load_tactical_ratios(
     data_path_text: str, _version: tuple[int, int],
