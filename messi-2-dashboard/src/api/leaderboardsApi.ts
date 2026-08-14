@@ -7,7 +7,7 @@ import { MessiApiError } from "./errors";
 import { PAGE_SIZE } from "../dashboard/datasetRoute";
 import type { DatasetMeta, DatasetRouteState, LeaderboardOptions, LeaderboardSearch, PlayerComparison, PlayerDetail, PlayersPayload, TacticalQuadrant } from "../dashboard/types";
 
-const scopeSchema = z.union([z.literal(3), z.literal(5), z.literal(7)]);
+const scopeSchema = z.union([z.literal(3), z.literal(5), z.literal(7), z.literal(8)]);
 const competitionSchema = z.enum(["all", "ucl", "uel", "uecl"]);
 const optionsSchema = z.object({ seasons: z.array(z.string()), scopes: z.array(z.object({ value: scopeSchema, label: z.string(), leagueIds: z.array(z.number()) })), competitions: z.record(competitionSchema, z.object({ code: competitionSchema, label: z.string(), available: z.boolean(), reason: z.string().nullable() })) });
 
@@ -33,6 +33,14 @@ function normalizeLeaderboardMeta(meta: DatasetMeta): DatasetMeta {
   return { ...meta, totalItems: meta.totalItems ?? meta.population };
 }
 
+function leaderboardMetaMatchesRequest(meta: Pick<DatasetMeta, "season" | "mode" | "scope" | "competition">, state: DatasetRouteState): boolean {
+  const expectedScope = state.mode === "league" ? state.scope : null;
+  // `competition=all` is a request selector for league mode, not a response
+  // identity. The API correctly serializes the inapplicable dimension as null.
+  const expectedCompetition = state.mode === "league" ? null : state.competition;
+  return meta.season === state.season && meta.mode === state.mode && meta.scope === expectedScope && meta.competition === expectedCompetition;
+}
+
 function responseTierTaxonomyVersion(envelope: { tierTaxonomyVersion?: string; meta?: { tierTaxonomyVersion?: string } }): string | undefined {
   return envelope.tierTaxonomyVersion ?? envelope.meta?.tierTaxonomyVersion;
 }
@@ -56,6 +64,7 @@ export async function fetchLeaderboard(config: MessiApiConfig, state: DatasetRou
     const json = await getJson(url.toString(), signal);
     const paged = leaderboardPageEnvelopeSchema.safeParse(json);
     if (paged.success) {
+      if (!leaderboardMetaMatchesRequest(paged.data.meta, state)) throw new MessiApiError("schema", "Leaderboard response metadata did not match request");
       const data = paged.data.data.slice(0, PAGE_SIZE);
       const meta = { ...normalizeLeaderboardMeta(paged.data.meta), returned: data.length };
       const tierTaxonomyVersion = responseTierTaxonomyVersion(paged.data);
@@ -63,6 +72,7 @@ export async function fetchLeaderboard(config: MessiApiConfig, state: DatasetRou
     }
     const legacy = leaderboardEnvelopeSchema.safeParse(json);
     if (legacy.success) {
+      if (!leaderboardMetaMatchesRequest(legacy.data.meta, state)) throw new MessiApiError("schema", "Leaderboard response metadata did not match request");
       const tierTaxonomyVersion = responseTierTaxonomyVersion(legacy.data);
       return { players: legacy.data.data.map((player) => adaptPlayer(player, tierTaxonomyVersion)), meta: { ...legacy.data.meta, ...(tierTaxonomyVersion ? { tierTaxonomyVersion } : {}) } };
     }
@@ -97,6 +107,7 @@ export async function fetchComparison(config: MessiApiConfig, ids: readonly numb
   url.search = new URLSearchParams({ ...contextParams(state), players: ids.join(",") }).toString();
   try {
     const parsed = comparisonEnvelopeSchema.parse(await getJson(url.toString(), signal));
+    if (!leaderboardMetaMatchesRequest(parsed.meta, state)) throw new MessiApiError("schema", "Comparison response metadata did not match request");
     const tierTaxonomyVersion = responseTierTaxonomyVersion(parsed);
     return { players: parsed.data.map((row) => ({ player: adaptPlayer(row, tierTaxonomyVersion), analysis: adaptAnalysis(row.analysis) })), meta: { ...parsed.meta, ...(tierTaxonomyVersion ? { tierTaxonomyVersion } : {}) } };
   } catch (error) { return parseError("Comparison response was invalid", error); }

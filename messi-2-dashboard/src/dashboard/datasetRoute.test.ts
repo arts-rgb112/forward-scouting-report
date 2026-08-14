@@ -26,4 +26,15 @@ describe("dataset route serialization", () => {
     expect(leaderboardSearchFromSearch("?ageBand=u23&minutesBand=1000-1499")).toMatchObject({ ageBand: "u23", minutesBand: "1000-1499" });
     expect(leaderboardHref(fallback, { ...leaderboardSearchFromSearch(""), ageBand: "all", minutesBand: "all" })).not.toMatch(/ageBand|minutesBand/);
   });
+
+  it("retains explicit scope 8 while existing 3/5/7 URLs remain valid", () => {
+    expect(datasetFromSearch("?scope=8", fallback).scope).toBe(8);
+    expect([3, 5, 7].map((scope) => datasetFromSearch(`?scope=${scope}`, fallback).scope)).toEqual([3, 5, 7]);
+  });
+
+  it("defaults a missing or invalid URL scope to the fixed eight-league route policy", () => {
+    const environmentConfiguredSeven = { ...fallback, scope: 7 as const };
+    expect(datasetFromSearch("", environmentConfiguredSeven).scope).toBe(8);
+    expect(datasetFromSearch("?scope=6", environmentConfiguredSeven).scope).toBe(8);
+  });
 });

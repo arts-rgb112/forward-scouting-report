@@ -1,7 +1,7 @@
 import type { DatasetRouteState } from "../dashboard/types";
 
 export const LEGACY_ORIGIN = "https://forward-scouting-report-fd4zfq2gjrr5ladifytpcq.streamlit.app" as const;
-const scopes = new Set([3, 5, 7]);
+const scopes = new Set([3, 5, 7, 8]);
 const competitions = new Set(["all", "ucl", "uel", "uecl"]);
 
 /** The persisted fields required by Streamlit's contextual Compare handoff. */
@@ -11,7 +11,7 @@ export type LegacyCompareEntry = {
   context: {
     season: string;
     mode: "league" | "europe";
-    scope: 3 | 5 | 7 | null;
+    scope: 3 | 5 | 7 | 8 | null;
     competition: "all" | "ucl" | "uel" | "uecl" | null;
   };
 };

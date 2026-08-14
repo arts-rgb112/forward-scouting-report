@@ -12,7 +12,7 @@ import { playersResourceReducer, stablePayload } from "./playersResourceState";
 import type { DatasetMeta, DatasetRouteState, LeaderboardOptions, LeaderboardSearch, PositionFilterCapability } from "./types";
 
 type ParsedConfig = { config?: MessiApiConfig; category?: ConfigErrorCategory };
-const fallbackRoute = (config: MessiApiConfig): DatasetRouteState => ({ season: config.season, mode: "league", scope: config.scope as 3 | 5 | 7, competition: "all" });
+const fallbackRoute = (config: MessiApiConfig): DatasetRouteState => ({ season: config.season, mode: "league", scope: 8, competition: "all" });
 function routeFromUrl(config: MessiApiConfig) { return datasetFromSearch(window.location.search, fallbackRoute(config)); }
 function apiError(error: unknown) { return error instanceof MessiApiError ? error : new MessiApiError("network", "Request failed"); }
 export function positionWasApplied(meta: DatasetMeta, requested: string) {
@@ -32,7 +32,7 @@ export function PlayersResourceContainer() {
   const [resolvedRouteKey, setResolvedRouteKey] = useState<string>();
   const request = useRef(0); const optionsRequest = useRef(0); const controller = useRef<AbortController | null>(null); const optionsController = useRef<AbortController | null>(null); const optionsTimer = useRef<number | undefined>(undefined); const stateRef = useRef(state); stateRef.current = state;
   const parsed = useMemo((): ParsedConfig => { try { return { config: parseMessiApiConfig(import.meta.env, import.meta.env.MODE) }; } catch (error) { return { category: error instanceof MessiConfigError ? error.category : "CONFIG_INVALID" }; } }, []);
-  const [dataset, setDataset] = useState<DatasetRouteState>(() => parsed.config ? routeFromUrl(parsed.config) : { season: "2025/2026", mode: "league", scope: 7, competition: "all" });
+  const [dataset, setDataset] = useState<DatasetRouteState>(() => parsed.config ? routeFromUrl(parsed.config) : { season: "2025/2026", mode: "league", scope: 8, competition: "all" });
   const [search, setSearch] = useState<LeaderboardSearch>(() => leaderboardSearchFromSearch(window.location.search));
   const [positionCapability, setPositionCapability] = useState<PositionFilterCapability>("unknown");
   const [ageCapability, setAgeCapability] = useState<PositionFilterCapability>("unknown");
@@ -166,13 +166,20 @@ export function PlayersResourceContainer() {
     };
   }, [parsed.config, writeRoute]);
   useEffect(() => probeOptions(), [probeOptions]);
+  const scope8Supported = options?.scopes.some((scope) => scope.value === 8) === true;
   // Do not render a v1 fallback payload for a context URL before v2 options have settled:
   // it could incorrectly normalize a valid URL-backed page using the wrong dataset.
   useEffect(() => {
     if (!parsed.config || !optionsResolved) return;
+    if (dataset.mode === "league" && dataset.scope === 8 && !scope8Supported) {
+      controller.current?.abort();
+      setResolvedRouteKey(undefined);
+      dispatch({ type: "clear" });
+      return;
+    }
     void load();
     return () => controller.current?.abort();
-  }, [load, optionsResolved, parsed.config, routeKey]);
+  }, [dataset.mode, dataset.scope, load, optionsResolved, parsed.config, routeKey, scope8Supported]);
   const resolvedPayload = state.type === "success" || state.type === "empty" ? state.payload : undefined;
   const normalizedPage = resolvedRouteKey === routeKey && resolvedPayload?.serverPage && resolvedPayload.serverPage.totalPages > 0
     ? Math.min(resolvedPayload.serverPage.page, resolvedPayload.serverPage.totalPages)
@@ -194,6 +201,12 @@ export function PlayersResourceContainer() {
     writeRoute(datasetRef.current, next, replace);
   }, [writeRoute]);
   if (parsed.category) return <ConfigErrorFallback category={parsed.category} mode={import.meta.env.MODE} />;
+  const scope8Unsupported = dataset.mode === "league" && dataset.scope === 8 && optionsResolved && !scope8Supported;
+  if (scope8Unsupported) return <main id="main-content" className="grid min-h-screen place-items-center bg-[#080b0c] p-6 text-zinc-100"><section role="alert" className="max-w-md rounded-lg border border-amber-300/30 bg-[#101415] p-6 text-center"><h1 className="font-bold">현재 선택한 8개 리그 데이터는 이 서버에서 지원되지 않습니다.</h1><p className="mt-2 text-sm text-zinc-400">URL과 저장된 컨텍스트는 변경되지 않았습니다. 사용 가능한 리그 범위를 직접 선택하세요.</p></section></main>;
+  // A scope-8 navigation must never briefly render rows or pagination retained
+  // from a previous (often seven-league) route while its authoritative request
+  // is still pending.
+  if (dataset.mode === "league" && dataset.scope === 8 && resolvedRouteKey !== routeKey) return <DashboardLoading />;
   if (state.type === "idle" || state.type === "loading") return <DashboardLoading />;
   const retry = () => { if (dataset.mode === "europe") probeOptions(); else void load(); };
   if (state.type === "error" && !state.previous) return <DashboardDataFallback error={state.error} onRetry={retry} />;

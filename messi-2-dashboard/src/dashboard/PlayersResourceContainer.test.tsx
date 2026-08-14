@@ -29,7 +29,7 @@ function deferred(): Deferred {
 
 const validConfig = { baseUrl: "http://localhost:8000", season: "2025/2026", scope: 7, limit: 1000 };
 
-beforeEach(() => { apiEnvironment.parseMessiApiConfig.mockReturnValue(validConfig); transport.fetchLeaderboardOptions.mockRejectedValue(new Error("v2 unavailable")); window.history.replaceState(null, "", "/"); });
+beforeEach(() => { apiEnvironment.parseMessiApiConfig.mockReturnValue(validConfig); transport.fetchLeaderboardOptions.mockRejectedValue(new Error("v2 unavailable")); window.history.replaceState(null, "", "/?scope=7"); });
 afterEach(() => { vi.useRealTimers(); cleanup(); transport.fetchPlayers.mockReset(); transport.fetchLeaderboard.mockReset(); transport.fetchLeaderboardOptions.mockReset(); apiEnvironment.parseMessiApiConfig.mockReset(); });
 
 describe("PlayersResourceContainer request lifecycle", () => {
@@ -110,6 +110,25 @@ describe("PlayersResourceContainer URL-backed pages", () => {
     expect(window.location.search).toContain("page=2");
     expect(transport.fetchPlayers).not.toHaveBeenCalled();
     expect(transport.fetchLeaderboard).toHaveBeenCalled();
+  });
+
+  it("does not request or render a scope-8 leaderboard when the options probe fails", async () => {
+    transport.fetchLeaderboard.mockResolvedValue({ players: [{ ...samplePlayers[0], name: "Stale seven-league row" }], meta: sampleMeta });
+    window.history.replaceState(null, "", "/?scope=8");
+    render(<PlayersResourceContainer />);
+    await screen.findByRole("alert");
+    expect(transport.fetchLeaderboard).not.toHaveBeenCalled();
+    expect(screen.queryByText("Stale seven-league row")).not.toBeInTheDocument();
+    expect(window.location.search).toContain("scope=8");
+  });
+
+  it("does not fall back to scope 7 when authoritative options omit scope 8", async () => {
+    transport.fetchLeaderboardOptions.mockResolvedValue({ seasons: ["2025/2026"], scopes: [{ value: 7, label: "7 major leagues", leagueIds: [1] }], competitions: { all: { code: "all", label: "All", available: true, reason: null }, ucl: { code: "ucl", label: "UCL", available: true, reason: null }, uel: { code: "uel", label: "UEL", available: true, reason: null }, uecl: { code: "uecl", label: "UECL", available: true, reason: null } } });
+    window.history.replaceState(null, "", "/?scope=8");
+    render(<PlayersResourceContainer />);
+    await screen.findByRole("alert");
+    expect(transport.fetchLeaderboard).not.toHaveBeenCalled();
+    expect(window.location.search).toContain("scope=8");
   });
 
   it("re-probes Europe options on retry before loading v2 data and preserves page=2", async () => {
