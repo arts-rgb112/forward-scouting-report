@@ -66,6 +66,16 @@ class ExpandedLeagueParsingTests(unittest.TestCase):
         self.assertTrue(_same_competition("First Division A", "Belgian Pro League"))
         self.assertTrue(_same_competition("Jupiler Pro League", "Belgian Pro League"))
 
+    def test_belgian_playoff_groups_share_regular_season_identity(self) -> None:
+        self.assertTrue(_same_competition(
+            "Belgian Pro League",
+            "Belgian Pro League Playoff Conference League Group",
+        ))
+        self.assertTrue(_same_competition(
+            "Belgian Pro League Playoff Relegation Group",
+            "Belgian Pro League",
+        ))
+
 
 class CcaOverlayTests(unittest.TestCase):
     def test_player_season_selection_keeps_second_domestic_league_after_transfer(self) -> None:

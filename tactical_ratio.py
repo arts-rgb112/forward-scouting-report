@@ -140,7 +140,19 @@ def _same_competition(left: object, right: object) -> bool:
         "uefaconferenceleague": "europaconferenceleague",
         "conferenceleague": "europaconferenceleague",
     }
-    return aliases.get(_normalise(left), _normalise(left)) == aliases.get(_normalise(right), _normalise(right))
+    left_token = _normalise(left)
+    right_token = _normalise(right)
+    # FotMob separates the Belgian regular season and post-season groups in
+    # player statistics even though SportsAPI supplies one Pro League heatmap
+    # session.  Treat those suffixes as the same league; the season remains an
+    # independent key, so data cannot leak across campaigns.
+    for token_name, token in (("left", left_token), ("right", right_token)):
+        if token.startswith("belgianproleagueplayoff"):
+            if token_name == "left":
+                left_token = "belgianproleague"
+            else:
+                right_token = "belgianproleague"
+    return aliases.get(left_token, left_token) == aliases.get(right_token, right_token)
 
 
 def _same_season(left: object, right: object) -> bool:
