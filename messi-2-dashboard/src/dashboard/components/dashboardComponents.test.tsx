@@ -85,14 +85,90 @@ describe("dashboard contract UI", () => {
     const props = { query: "", role: "ALL", sort: "score" as const, watchOnly: false, watchCount: 0, resultLabel: "", hasFilters: false, players: samplePlayers, dataset: { season: "2025/2026", mode: "league" as const, scope: 7 as const, competition: "all" as const }, onRoleChange: vi.fn(), onSortChange: vi.fn(), onWatchOnlyChange: vi.fn(), onReset: vi.fn() };
     const view = render(<DashboardToolbar {...props} onQueryChange={first} />);
     view.rerender(<DashboardToolbar {...props} onQueryChange={vi.fn()} />);
-    act(() => { vi.advanceTimersByTime(181); });
+    act(() => { vi.advanceTimersByTime(350); });
     expect(first).not.toHaveBeenCalled();
     const changed = vi.fn();
     view.rerender(<DashboardToolbar {...props} onQueryChange={changed} />);
     fireEvent.change(screen.getByRole("combobox", { name: "Search players" }), { target: { value: "Erling" } });
-    act(() => { vi.advanceTimersByTime(181); });
+    act(() => { vi.advanceTimersByTime(349); });
+    expect(changed).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1); });
     expect(changed).toHaveBeenCalledTimes(1);
     expect(changed).toHaveBeenCalledWith("Erling");
+  });
+
+  it("protects IME composition and supports immediate Enter and deletion commits", () => {
+    vi.useFakeTimers();
+    const commit = vi.fn();
+    render(<DashboardToolbar query="" role="ALL" watchOnly={false} watchCount={0} hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={commit} onRoleChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={vi.fn()} />);
+    const input = screen.getByRole("combobox", { name: "Search players" });
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "김" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(commit).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(input, { data: "김" });
+    act(() => { vi.advanceTimersByTime(349); });
+    expect(commit).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(commit).toHaveBeenLastCalledWith("김");
+    fireEvent.change(input, { target: { value: "Haaland" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(commit).toHaveBeenLastCalledWith("Haaland");
+    fireEvent.change(input, { target: { value: "" } });
+    expect(commit).toHaveBeenLastCalledWith("");
+  });
+
+  it("cancels a pending leaderboard draft when the query namespace changes", () => {
+    vi.useFakeTimers();
+    const commit = vi.fn();
+    const props = { query: "", role: "ALL", watchOnly: false, watchCount: 0, hasFilters: false, players: samplePlayers, dataset: { season: "2025/2026", mode: "league" as const, scope: 7 as const, competition: "all" as const }, onQueryChange: commit, onRoleChange: vi.fn(), onWatchOnlyChange: vi.fn(), onReset: vi.fn() };
+    const view = render(<DashboardToolbar {...props} viewMode="leaderboard" />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Search players" }), { target: { value: "pending leaderboard draft" } });
+    view.rerender(<DashboardToolbar {...props} viewMode="watchlist" />);
+    expect(screen.getByRole("combobox", { name: "Search saved contexts" })).toHaveValue("");
+    act(() => { vi.advanceTimersByTime(350); });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it("preserves a pending search draft when the first non-query filter becomes active", () => {
+    vi.useFakeTimers();
+    const commit = vi.fn();
+    const props = { query: "", role: "ALL", watchOnly: false, watchCount: 0, players: samplePlayers, dataset: { season: "2025/2026", mode: "league" as const, scope: 7 as const, competition: "all" as const }, onQueryChange: commit, onRoleChange: vi.fn(), onWatchOnlyChange: vi.fn(), onReset: vi.fn() };
+    const view = render(<DashboardToolbar {...props} hasFilters={false} />);
+    const input = screen.getByRole("combobox", { name: "Search players" });
+    fireEvent.change(input, { target: { value: "Haaland" } });
+    view.rerender(<DashboardToolbar {...props} role="Type A" hasFilters />);
+    expect(input).toHaveValue("Haaland");
+    act(() => { vi.advanceTimersByTime(349); });
+    expect(commit).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(commit).toHaveBeenCalledOnce();
+    expect(commit).toHaveBeenCalledWith("Haaland");
+  });
+
+  it("clears pending draft and autocomplete state immediately on Reset", () => {
+    vi.useFakeTimers();
+    const commit = vi.fn(); const reset = vi.fn();
+    render(<DashboardToolbar query="" role="Type A" watchOnly={false} watchCount={0} hasFilters players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={commit} onRoleChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={reset} />);
+    const input = screen.getByRole("combobox", { name: "Search players" });
+    fireEvent.change(input, { target: { value: "Erling" } });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
+    expect(input).toHaveValue("");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(reset).toHaveBeenCalledOnce();
+    act(() => { vi.advanceTimersByTime(350); });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it("reports busy state for the visible watchlist rather than a background leaderboard refresh", () => {
+    render(<MessiScoutingDashboard players={samplePlayers} meta={sampleMeta} refreshing onRefresh={vi.fn()} />);
+    expect(document.getElementById("main-content")).toHaveAttribute("aria-busy", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Watchlist 0" }));
+    expect(document.getElementById("main-content")).toHaveAttribute("aria-busy", "false");
+    expect(screen.queryByText("Refreshing results…")).not.toBeInTheDocument();
   });
 
   it("keeps dataset filters interactive while a refresh is in progress", () => {
