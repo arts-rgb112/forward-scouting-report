@@ -13,6 +13,12 @@ const isCompetition = (value: string | null): value is DatasetRouteState["compet
 export const isPositionFilterValue = (value: string): value is (typeof positionFilterValues)[number] =>
   positionFilterValues.includes(value as (typeof positionFilterValues)[number]);
 
+/** Identifies the server dataset independently from its current leaderboard view. */
+export function datasetKeyOf(state: DatasetRouteState): string {
+  const competition = typeof state.competition === "string" && state.competition.trim() ? state.competition.trim() : "all";
+  return JSON.stringify([state.season, state.mode, state.scope, competition]);
+}
+
 export function datasetFromSearch(search: string, fallback: DatasetRouteState): DatasetRouteState {
   const query = new URLSearchParams(search);
   const mode = query.get("mode") === "europe" ? "europe" : "league";

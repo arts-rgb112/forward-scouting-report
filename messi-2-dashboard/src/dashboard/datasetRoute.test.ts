@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { datasetFromSearch, datasetHref, leaderboardHref, leaderboardSearchFromSearch, pageFromSearch, PAGE_SIZE } from "./datasetRoute";
+import { datasetFromSearch, datasetHref, datasetKeyOf, leaderboardHref, leaderboardSearchFromSearch, pageFromSearch, PAGE_SIZE } from "./datasetRoute";
 
 const fallback = { season: "2025/2026", mode: "league" as const, scope: 7 as const, competition: "all" as const };
 
 describe("dataset route serialization", () => {
+  it("keys only the dataset and normalizes an empty competition", () => {
+    const key = datasetKeyOf(fallback);
+    expect(datasetKeyOf({ ...fallback, competition: "" as "all" })).toBe(key);
+    expect(datasetKeyOf({ ...fallback, season: "2024/2025" })).not.toBe(key);
+    expect(datasetKeyOf({ ...fallback, mode: "europe" })).not.toBe(key);
+    expect(datasetKeyOf({ ...fallback, scope: 5 })).not.toBe(key);
+    expect(datasetKeyOf({ ...fallback, competition: "ucl" })).not.toBe(key);
+    expect(leaderboardHref(fallback, { ...leaderboardSearchFromSearch(""), q: "Haaland", role: "Type A", page: 4 })).not.toBe(leaderboardHref(fallback));
+    expect(datasetKeyOf(fallback)).toBe(key);
+  });
   it("keeps only league context and removes a page from player links", () => {
     const route = datasetFromSearch("?season=2024%2F2025&mode=league&scope=5&competition=ucl&page=3", fallback);
     expect(datasetHref("/players/12", route)).toBe("/players/12?season=2024%2F2025&mode=league&scope=5");

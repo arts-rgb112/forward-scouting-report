@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { MessiConfigError, type ConfigErrorCategory, parseMessiApiConfig, type MessiApiConfig } from "../api/env";
 import { MessiApiError, isAbortError } from "../api/errors";
 import { fetchLeaderboard, fetchLeaderboardOptions } from "../api/leaderboardsApi";
-import { datasetFromSearch, leaderboardHref, leaderboardSearchFromSearch } from "./datasetRoute";
+import { datasetFromSearch, datasetKeyOf, leaderboardHref, leaderboardSearchFromSearch } from "./datasetRoute";
 import { ConfigErrorFallback } from "./components/ConfigErrorFallback";
 import { DashboardDataFallback } from "./components/DashboardDataFallback";
 import { DashboardLoading } from "./components/DashboardLoading";
@@ -30,6 +30,8 @@ export function PlayersResourceContainer() {
   const [options, setOptions] = useState<LeaderboardOptions>();
   const [optionsResolved, setOptionsResolved] = useState(false);
   const [resolvedRouteKey, setResolvedRouteKey] = useState<string>();
+  const [resolvedDatasetKey, setResolvedDatasetKey] = useState<string>();
+  const resolvedDatasetKeyRef = useRef<string | undefined>(undefined);
   const request = useRef(0); const optionsRequest = useRef(0); const controller = useRef<AbortController | null>(null); const optionsController = useRef<AbortController | null>(null); const optionsTimer = useRef<number | undefined>(undefined); const stateRef = useRef(state); stateRef.current = state;
   const parsed = useMemo((): ParsedConfig => { try { return { config: parseMessiApiConfig(import.meta.env, import.meta.env.MODE) }; } catch (error) { return { category: error instanceof MessiConfigError ? error.category : "CONFIG_INVALID" }; } }, []);
   const [dataset, setDataset] = useState<DatasetRouteState>(() => parsed.config ? routeFromUrl(parsed.config) : { season: "2025/2026", mode: "league", scope: 8, competition: "all" });
@@ -43,6 +45,7 @@ export function PlayersResourceContainer() {
   const ageCapabilityRef = useRef(ageCapability); ageCapabilityRef.current = ageCapability;
   const minutesCapabilityRef = useRef(minutesCapability); minutesCapabilityRef.current = minutesCapability;
   const routeKey = leaderboardHref(dataset, search);
+  const datasetKey = datasetKeyOf(dataset);
 
   const writeRoute = useCallback((next: DatasetRouteState, nextSearch: LeaderboardSearch, replace = false) => {
     const nextKey = leaderboardHref(next, nextSearch);
@@ -87,8 +90,10 @@ export function PlayersResourceContainer() {
     const next = datasetRef.current;
     const nextSearch = searchRef.current;
     const requestRouteKey = leaderboardHref(next, nextSearch);
+    const requestDatasetKey = datasetKeyOf(next);
     controller.current?.abort(); const abort = new AbortController(); controller.current = abort; const requestId = ++request.current;
-    dispatch({ type: "start", requestId, previous: stablePayload(stateRef.current) });
+    const previous = resolvedDatasetKeyRef.current === requestDatasetKey ? stablePayload(stateRef.current) : undefined;
+    dispatch({ type: "start", requestId, previous });
     try {
       const requestSearch = {
         ...nextSearch,
@@ -113,10 +118,12 @@ export function PlayersResourceContainer() {
       if (payload.serverPage && ageCapabilityRef.current !== "unsupported") setAgeCapability(bandWasApplied(payload.meta, "ageBand", requestSearch.ageBand) ? "supported" : "unsupported");
       if (payload.serverPage && minutesCapabilityRef.current !== "unsupported") setMinutesCapability(bandWasApplied(payload.meta, "minutesBand", requestSearch.minutesBand) ? "supported" : "unsupported");
       setResolvedRouteKey(requestRouteKey);
+      resolvedDatasetKeyRef.current = requestDatasetKey;
+      setResolvedDatasetKey(requestDatasetKey);
       dispatch({ type: "resolve", requestId, payload });
     }
     catch (error) {
-      if (isAbortError(error)) return;
+      if (isAbortError(error) || abort.signal.aborted || request.current !== requestId) return;
       dispatch({ type: "reject", requestId, error: apiError(error) });
     }
   }, [parsed.config, writeRoute]);
@@ -174,6 +181,8 @@ export function PlayersResourceContainer() {
     if (dataset.mode === "league" && dataset.scope === 8 && !scope8Supported) {
       controller.current?.abort();
       setResolvedRouteKey(undefined);
+      resolvedDatasetKeyRef.current = undefined;
+      setResolvedDatasetKey(undefined);
       dispatch({ type: "clear" });
       return;
     }
@@ -203,10 +212,9 @@ export function PlayersResourceContainer() {
   if (parsed.category) return <ConfigErrorFallback category={parsed.category} mode={import.meta.env.MODE} />;
   const scope8Unsupported = dataset.mode === "league" && dataset.scope === 8 && optionsResolved && !scope8Supported;
   if (scope8Unsupported) return <main id="main-content" className="grid min-h-screen place-items-center bg-[#080b0c] p-6 text-zinc-100"><section role="alert" className="max-w-md rounded-lg border border-amber-300/30 bg-[#101415] p-6 text-center"><h1 className="font-bold">현재 선택한 8개 리그 데이터는 이 서버에서 지원되지 않습니다.</h1><p className="mt-2 text-sm text-zinc-400">URL과 저장된 컨텍스트는 변경되지 않았습니다. 사용 가능한 리그 범위를 직접 선택하세요.</p></section></main>;
-  // A scope-8 navigation must never briefly render rows or pagination retained
-  // from a previous (often seven-league) route while its authoritative request
-  // is still pending.
-  if (dataset.mode === "league" && dataset.scope === 8 && resolvedRouteKey !== routeKey) return <DashboardLoading />;
+  // Query/filter/page changes keep this dataset's payload mounted. A true
+  // dataset transition must never expose rows retained from the old dataset.
+  if (resolvedDatasetKey !== datasetKey && !(state.type === "error" && !state.previous)) return <DashboardLoading />;
   if (state.type === "idle" || state.type === "loading") return <DashboardLoading />;
   const retry = () => { if (dataset.mode === "europe") probeOptions(); else void load(); };
   if (state.type === "error" && !state.previous) return <DashboardDataFallback error={state.error} onRetry={retry} />;

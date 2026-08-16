@@ -20,11 +20,12 @@ vi.mock("../api/leaderboardsApi", () => ({ fetchLeaderboard: transport.fetchLead
 
 import { PlayersResourceContainer, positionWasApplied } from "./PlayersResourceContainer";
 
-type Deferred = { promise: Promise<PlayersPayload>; resolve(value: PlayersPayload): void };
+type Deferred = { promise: Promise<PlayersPayload>; resolve(value: PlayersPayload): void; reject(reason: unknown): void };
 function deferred(): Deferred {
   let resolve!: (value: PlayersPayload) => void;
-  const promise = new Promise<PlayersPayload>((next) => { resolve = next; });
-  return { promise, resolve };
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<PlayersPayload>((next, fail) => { resolve = next; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 const validConfig = { baseUrl: "http://localhost:8000", season: "2025/2026", scope: 7, limit: 1000 };
@@ -56,6 +57,61 @@ describe("PlayersResourceContainer request lifecycle", () => {
 });
 
 describe("PlayersResourceContainer URL-backed pages", () => {
+  it("keeps the input and previous rows mounted while a server search refreshes", async () => {
+    const calls: Array<{ search: { q: string; page: number; pageSize: number }; request: Deferred }> = [];
+    transport.fetchLeaderboard.mockImplementation((_config, _dataset, search, _signal: AbortSignal) => {
+      const request = deferred(); calls.push({ search, request }); return request.promise;
+    });
+    render(<PlayersResourceContainer />);
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await act(async () => { calls[0].request.resolve({ players: [{ ...samplePlayers[0], name: "Previous row" }], meta: { ...sampleMeta, population: 123, totalItems: 123, returned: 1 }, serverPage: { page: 1, pageSize: 50, totalPages: 3, hasNextPage: true } }); });
+    const input = screen.getByRole("combobox", { name: "Search players" });
+    const row = screen.getAllByText("Previous row")[0];
+    fireEvent.change(input, { target: { value: "Haaland" } });
+    await waitFor(() => expect(calls).toHaveLength(2), { timeout: 1_000 });
+    expect(calls[1].search).toMatchObject({ q: "Haaland", page: 1, pageSize: 50 });
+    expect(screen.getByRole("combobox", { name: "Search players" })).toBe(input);
+    expect(screen.getAllByText("Previous row")).toContain(row);
+    expect(document.getElementById("main-content")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Refreshing results…")).toBeInTheDocument();
+    expect(window.location.search).toContain("q=Haaland");
+  });
+
+  it("uses full loading and hides retained rows when the dataset changes", async () => {
+    const calls: Deferred[] = [];
+    transport.fetchLeaderboard.mockImplementation(() => { const request = deferred(); calls.push(request); return request.promise; });
+    render(<PlayersResourceContainer />);
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await act(async () => { calls[0].resolve({ players: [{ ...samplePlayers[0], name: "Old dataset row" }], meta: sampleMeta }); });
+    expect(screen.getAllByText("Old dataset row")).not.toHaveLength(0);
+    act(() => {
+      window.history.replaceState(null, "", "/?season=2024%2F2025&mode=league&scope=7&page=1&pageSize=50&sort=score&direction=desc");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(screen.getByText(/scouting dataset loading/i)).toBeInTheDocument();
+    expect(screen.queryByText("Old dataset row")).not.toBeInTheDocument();
+    await waitFor(() => expect(calls).toHaveLength(2));
+  });
+
+  it("never exposes an errored dataset's previous rows during the next dataset transition", async () => {
+    const calls: Deferred[] = [];
+    transport.fetchLeaderboard.mockImplementation(() => { const request = deferred(); calls.push(request); return request.promise; });
+    render(<PlayersResourceContainer />);
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await act(async () => { calls[0].resolve({ players: [{ ...samplePlayers[0], name: "Dataset A row" }], meta: { ...sampleMeta, totalItems: 1 }, serverPage: { page: 1, pageSize: 50, totalPages: 1, hasNextPage: false } }); });
+    fireEvent.change(screen.getByRole("combobox", { name: "Search players" }), { target: { value: "missing" } });
+    await waitFor(() => expect(calls).toHaveLength(2), { timeout: 1_000 });
+    await act(async () => { calls[1].reject(new Error("refresh failed")); });
+    expect(screen.getAllByText("Dataset A row")).not.toHaveLength(0);
+    act(() => {
+      window.history.replaceState(null, "", "/?season=2024%2F2025&mode=league&scope=7&page=1&pageSize=50&sort=score&direction=desc");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(screen.getByText(/scouting dataset loading/i)).toBeInTheDocument();
+    expect(screen.queryByText("Dataset A row")).not.toBeInTheDocument();
+    await waitFor(() => expect(calls).toHaveLength(3));
+  });
+
   it("keeps the requested page while its retained previous page is refreshing", async () => {
     const calls: Array<{ signal: AbortSignal; request: Deferred }> = [];
     transport.fetchLeaderboard.mockImplementation((_config, _dataset, _search, signal: AbortSignal) => {
