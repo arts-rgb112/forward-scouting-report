@@ -151,6 +151,18 @@ class LeaguePercentiles:
     cca_area_rank: Optional[int] = None
     danger_zone_density_top_percent: Optional[float] = None
     danger_zone_density_rank: Optional[int] = None
+    combined_duel_volume_top_percent: Optional[float] = None
+    combined_duel_volume_rank: Optional[int] = None
+    combined_duel_efficiency_top_percent: Optional[float] = None
+    combined_duel_efficiency_rank: Optional[int] = None
+    recoveries_per90_top_percent: Optional[float] = None
+    recoveries_per90_rank: Optional[int] = None
+    final_third_possessions_won_per90_top_percent: Optional[float] = None
+    final_third_possessions_won_per90_rank: Optional[int] = None
+    combined_duel_top_percent: Optional[float] = None
+    combined_duel_rank: Optional[int] = None
+    forward_press_top_percent: Optional[float] = None
+    forward_press_rank: Optional[int] = None
     spear_shot_quality_top_percent: Optional[float] = None
     spear_shot_quality_rank: Optional[int] = None
     spear_score: Optional[float] = None
@@ -159,6 +171,12 @@ class LeaguePercentiles:
     spear_score_eligible: int = 0
     spear_imputed_volume_attrs: tuple[str, ...] = ()
     spear_imputed_ratio_attrs: tuple[str, ...] = ()
+    pressing_imputed_volume_attrs: tuple[str, ...] = ()
+    pressing_imputed_ratio_attrs: tuple[str, ...] = ()
+    spear_pressing_score: Optional[float] = None
+    spear_pressing_score_rank: Optional[int] = None
+    spear_pressing_score_top_percent: Optional[float] = None
+    spear_pressing_score_eligible: int = 0
     is_type_b: bool = False
     spear_role: str = "Type A · 정통 타겟/포처"
 
@@ -283,6 +301,21 @@ def _fetch_live_spear_cohort(
     # for those sessions rather than treating the whole competition as empty.
     if not rows:
         rows = fetch_league_stat_table(league_id, season_name, "expected_goals")
+
+    def per90_table(stat: str) -> dict[str, float]:
+        """Load one complete provider table without making it an eligibility gate."""
+        try:
+            stat_rows = fetch_league_stat_table(league_id, season_name, stat)
+        except FotMobError:
+            return {}
+        return {
+            str(row.get("id")): value
+            for row in stat_rows
+            if row.get("id") is not None and (value := _value(row)) is not None
+        }
+
+    recoveries_per90 = per90_table("ball_recovery")
+    final_third_wins_per90 = per90_table("poss_won_att_3rd")
     
     # Seed with every listed player; no contest-stat cutoff.
     successes = {
@@ -327,6 +360,26 @@ def _fetch_live_spear_cohort(
                 metrics_by_player[player_id] = metric
             else:
                 unresolved_reasons[reason] = unresolved_reasons.get(reason, 0) + 1
+
+    # Player-season totals are the primary source.  Deep-stat tables are a
+    # lossless fallback and explicitly contain observed zeroes.  Reconstruct a
+    # compatible total from the provider's /90 value so every downstream
+    # calculation continues to use one formula and never divides a /90 twice.
+    for player_id, metric in metrics_by_player.items():
+        minutes = metric.minutes_played
+        if minutes is None or minutes <= 0:
+            continue
+        if metric.recoveries is None and player_id in recoveries_per90:
+            metric.recoveries = recoveries_per90[player_id] * minutes / 90.0
+            metric.recoveries_source = "league_per90_fallback"
+        if (
+            metric.final_third_possessions_won is None
+            and player_id in final_third_wins_per90
+        ):
+            metric.final_third_possessions_won = (
+                final_third_wins_per90[player_id] * minutes / 90.0
+            )
+            metric.final_third_possessions_won_source = "league_per90_fallback"
     print(
         "S.P.E.A.R. profile fetch: "
         f"league={league_id} season={season_name} seeds={len(successes)} "
@@ -509,6 +562,21 @@ def get_spear_leaderboard(
         "ground": scores({pid: metric.ground_duel_attempts for pid, metric in peers.items() if metric.ground_duel_attempts is not None}),
         "space": cca_scores,
     }
+    recovery_scores = scores({
+        pid: metric.recoveries_per90
+        for pid, metric in peers.items() if metric.recoveries_per90 is not None
+    })
+    final_third_press_scores = scores({
+        pid: metric.final_third_possessions_won_per90
+        for pid, metric in peers.items()
+        if metric.final_third_possessions_won_per90 is not None
+    })
+    combined_duel_volume_scores = _blend_volume_ratio_scores(
+        volume_scores["ground"], volume_scores["aerial"], peers,
+    )
+    combined_duel_efficiency_scores = _blend_volume_ratio_scores(
+        duel_scores, aerial_scores, peers,
+    )
     sector_scores = {
         "outside_box": _blend_volume_ratio_scores(volume_scores["outside_box"], scores({pid: metric.out_box_shot_quality for pid, metric in peers.items() if metric.out_box_shot_quality is not None}), peers),
         "box": _blend_volume_ratio_scores(volume_scores["box"], deep_scores, peers),
@@ -516,6 +584,12 @@ def get_spear_leaderboard(
         "aerial": _blend_volume_ratio_scores(volume_scores["aerial"], aerial_scores, peers),
         "ground": _blend_volume_ratio_scores(volume_scores["ground"], duel_scores, peers),
         "space": _blend_volume_ratio_scores(volume_scores["space"], danger_scores, peers),
+        "duel": _blend_volume_ratio_scores(
+            combined_duel_volume_scores, combined_duel_efficiency_scores, peers,
+        ),
+        "press": _blend_volume_ratio_scores(
+            recovery_scores, final_third_press_scores, peers,
+        ),
     }
 
     records: list[dict[str, object]] = []
@@ -533,6 +607,14 @@ def get_spear_leaderboard(
         if not all(player_id in source for source, _ in weights):
             continue
         score = round(sum(source[player_id] * weight for source, weight in weights), 2)
+        pressing_weights = (
+            (sector_scores["box"], 0.30), (sector_scores["outside_box"], 0.20),
+            (sector_scores["danger"], 0.15), (sector_scores["space"], 0.15),
+            (sector_scores["duel"], 0.10), (sector_scores["press"], 0.10),
+        )
+        pressing_score = round(
+            sum(source[player_id] * weight for source, weight in pressing_weights), 2
+        )
         def factor_tier(source: dict[str, float]) -> str:
             return _spear_tier(source[player_id]) if player_id in source else "-"
         records.append({
@@ -542,10 +624,17 @@ def get_spear_leaderboard(
             "league_id": metric.league_id,
             "team_id": metric.team_id,
             "minutes_played": metric.minutes_played,
+            "recoveries": metric.recoveries,
+            "recoveries_per90": metric.recoveries_per90,
+            "recoveries_source": metric.recoveries_source,
+            "final_third_possessions_won": metric.final_third_possessions_won,
+            "final_third_possessions_won_per90": metric.final_third_possessions_won_per90,
+            "final_third_possessions_won_source": metric.final_third_possessions_won_source,
             # The strict score is intentionally independent from its relative
             # tier.  The latter is assigned only after every cohort score is
             # ranked below.
             "score": score,
+            "pressing_score": pressing_score,
             "tier": "—",
             "role": "Type B" if is_type_b else "Type A",
             "position": metric.position or metric.position_group or "미분류",
@@ -555,6 +644,8 @@ def get_spear_leaderboard(
             "aerial_tier": factor_tier(sector_scores["aerial"]),
             "ground_duel_tier": factor_tier(sector_scores["ground"]),
             "space_control_tier": factor_tier(sector_scores["space"]),
+            "combined_duel_tier": factor_tier(sector_scores["duel"]),
+            "forward_press_tier": factor_tier(sector_scores["press"]),
             # Public API consumers need the real numeric sector values, not
             # only their display tiers.  Keep these fields on the same 0–100
             # percentile scale used to calculate the weighted M.E.S.S.I. score.
@@ -564,6 +655,12 @@ def get_spear_leaderboard(
             "aerial_score": round(sector_scores["aerial"][player_id], 2),
             "ground_duel_score": round(sector_scores["ground"][player_id], 2),
             "space_control_score": round(sector_scores["space"][player_id], 2),
+            "combined_duel_score": round(sector_scores["duel"][player_id], 2),
+            "forward_press_score": round(sector_scores["press"][player_id], 2),
+            "combined_duel_volume_score": round(combined_duel_volume_scores[player_id], 2),
+            "combined_duel_efficiency_score": round(combined_duel_efficiency_scores[player_id], 2),
+            "recoveries_score": round(recovery_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "final_third_press_score": round(final_third_press_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
         })
     table = pd.DataFrame(records)
     if table.empty:
@@ -572,6 +669,14 @@ def get_spear_leaderboard(
     table.insert(0, "rank", table.index + 1)
     population = len(table)
     table["tier"] = table["rank"].map(lambda rank: messi_rank_tier(int(rank), population))
+    pressing_order = table.sort_values(
+        ["pressing_score", "player_name"], ascending=[False, True], kind="stable",
+    ).index
+    pressing_ranks = {index: rank for rank, index in enumerate(pressing_order, start=1)}
+    table["pressing_rank"] = table.index.map(pressing_ranks)
+    table["pressing_tier"] = table["pressing_rank"].map(
+        lambda rank: messi_rank_tier(int(rank), population)
+    )
     return table
 
 
@@ -854,6 +959,15 @@ def calculate_league_percentiles(
         "aerial": _scores_from_population({peer_id: peer.aerial_duel_attempts for peer_id, peer in peers.items() if peer.aerial_duel_attempts is not None}),
         "ground": _scores_from_population({peer_id: peer.ground_duel_attempts for peer_id, peer in peers.items() if peer.ground_duel_attempts is not None}),
     }
+    recovery_scores = _scores_from_population({
+        peer_id: peer.recoveries_per90
+        for peer_id, peer in peers.items() if peer.recoveries_per90 is not None
+    })
+    final_third_press_scores = _scores_from_population({
+        peer_id: peer.final_third_possessions_won_per90
+        for peer_id, peer in peers.items()
+        if peer.final_third_possessions_won_per90 is not None
+    })
 
     # S.P.E.A.R. 2.0 spatial factors are sourced only from the exact
     # player/competition/season heatmap session.  A missing heatmap row stays
@@ -910,6 +1024,12 @@ def calculate_league_percentiles(
         peer_id: peer.duel_margin_per90
         for peer_id, peer in peers.items() if peer.duel_margin_per90 is not None
     })
+    combined_duel_volume_scores = _blend_volume_ratio_scores(
+        volume_scores["ground"], volume_scores["aerial"], peers,
+    )
+    combined_duel_efficiency_scores = _blend_volume_ratio_scores(
+        duel_scores, aerial_scores, peers,
+    )
     deep_box_scores = {
         peer_id: round(0.70 * in_box_scores[peer_id] + 0.30 * micro_scores.get(peer_id, 0.0), 2)
         for peer_id, row in spatial_rows.items()
@@ -926,6 +1046,12 @@ def calculate_league_percentiles(
         "aerial": _blend_volume_ratio_scores(volume_scores["aerial"], aerial_scores, peers),
         "ground": _blend_volume_ratio_scores(volume_scores["ground"], duel_scores, peers),
         "space": _blend_volume_ratio_scores(cca_scores, danger_scores, peers),
+        "duel": _blend_volume_ratio_scores(
+            combined_duel_volume_scores, combined_duel_efficiency_scores, peers,
+        ),
+        "press": _blend_volume_ratio_scores(
+            recovery_scores, final_third_press_scores, peers,
+        ),
     }
     imputed_volume_attrs = tuple(
         attr for attr, source in (
@@ -952,12 +1078,29 @@ def calculate_league_percentiles(
     danger_pct, danger_rank = _rank_score(player_key, danger_progression_scores)
     cca_pct, cca_rank = _rank_score(player_key, cca_scores)
     danger_density_pct, danger_density_rank = _rank_score(player_key, danger_scores)
+    combined_duel_volume_pct, combined_duel_volume_rank = _rank_score(
+        player_key, combined_duel_volume_scores,
+    )
+    combined_duel_efficiency_pct, combined_duel_efficiency_rank = _rank_score(
+        player_key, combined_duel_efficiency_scores,
+    )
+    recoveries_pct, recoveries_rank = _rank_score(player_key, recovery_scores)
+    final_third_press_pct, final_third_press_rank = _rank_score(
+        player_key, final_third_press_scores,
+    )
+    combined_duel_pct, combined_duel_rank = _rank_score(player_key, sector_scores["duel"])
+    forward_press_pct, forward_press_rank = _rank_score(player_key, sector_scores["press"])
     # Role is descriptive only. Every player uses the same six-factor formula;
     # Type B no longer receives a masked box score or a score shield.
     common_weights = (
         (sector_scores["box"], 0.30), (sector_scores["outside_box"], 0.20),
         (sector_scores["danger"], 0.15), (sector_scores["space"], 0.15),
         (sector_scores["aerial"], 0.10), (sector_scores["ground"], 0.10),
+    )
+    pressing_weights = (
+        (sector_scores["box"], 0.30), (sector_scores["outside_box"], 0.20),
+        (sector_scores["danger"], 0.15), (sector_scores["space"], 0.15),
+        (sector_scores["duel"], 0.10), (sector_scores["press"], 0.10),
     )
 
     def is_type_b(peer_id: str) -> bool:
@@ -997,6 +1140,29 @@ def calculate_league_percentiles(
     )
     # Tier and rank use the same volume-and-ratio blended M.E.S.S.I. score.
     spear_score = spear_scores.get(player_key)
+    pressing_spear_scores = {
+        peer_id: score
+        for peer_id in peers
+        if (score := weighted_score(peer_id, pressing_weights)) is not None
+    }
+    _, spear_pressing_score_rank = _rank_score(player_key, pressing_spear_scores)
+    spear_pressing_score_top_percent = (
+        round((spear_pressing_score_rank / len(pressing_spear_scores)) * 100.0, 1)
+        if spear_pressing_score_rank is not None and pressing_spear_scores else None
+    )
+    spear_pressing_score = pressing_spear_scores.get(player_key)
+    pressing_imputed_volume_attrs = tuple(
+        attr for attr, source in (
+            ("combined_duel_volume_top_percent", combined_duel_volume_scores),
+            ("recoveries_per90_top_percent", recovery_scores),
+        ) if player_key not in source
+    )
+    pressing_imputed_ratio_attrs = tuple(
+        attr for attr, source in (
+            ("combined_duel_efficiency_top_percent", combined_duel_efficiency_scores),
+            ("final_third_possessions_won_per90_top_percent", final_third_press_scores),
+        ) if player_key not in source
+    )
     progression_eligible = int(progression_percentiles["cohort_count"])
     duels_eligible = progression_eligible
     aerials_eligible = progression_eligible
@@ -1081,6 +1247,18 @@ def calculate_league_percentiles(
         cca_area_rank=cca_rank,
         danger_zone_density_top_percent=danger_density_pct,
         danger_zone_density_rank=danger_density_rank,
+        combined_duel_volume_top_percent=combined_duel_volume_pct,
+        combined_duel_volume_rank=combined_duel_volume_rank,
+        combined_duel_efficiency_top_percent=combined_duel_efficiency_pct,
+        combined_duel_efficiency_rank=combined_duel_efficiency_rank,
+        recoveries_per90_top_percent=recoveries_pct,
+        recoveries_per90_rank=recoveries_rank,
+        final_third_possessions_won_per90_top_percent=final_third_press_pct,
+        final_third_possessions_won_per90_rank=final_third_press_rank,
+        combined_duel_top_percent=combined_duel_pct,
+        combined_duel_rank=combined_duel_rank,
+        forward_press_top_percent=forward_press_pct,
+        forward_press_rank=forward_press_rank,
         spear_shot_quality_top_percent=spear_sq_pct,
         spear_shot_quality_rank=spear_sq_rk,
         spear_score=spear_score,
@@ -1089,6 +1267,12 @@ def calculate_league_percentiles(
         spear_score_eligible=len(spear_scores),
         spear_imputed_volume_attrs=imputed_volume_attrs,
         spear_imputed_ratio_attrs=imputed_ratio_attrs,
+        pressing_imputed_volume_attrs=pressing_imputed_volume_attrs,
+        pressing_imputed_ratio_attrs=pressing_imputed_ratio_attrs,
+        spear_pressing_score=spear_pressing_score,
+        spear_pressing_score_rank=spear_pressing_score_rank,
+        spear_pressing_score_top_percent=spear_pressing_score_top_percent,
+        spear_pressing_score_eligible=len(pressing_spear_scores),
         is_type_b=active_type_b,
         spear_role="Type B · 2선 지향/펄스 나인" if active_type_b else "Type A · 정통 타겟/포처",
     )

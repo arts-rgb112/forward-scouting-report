@@ -11,7 +11,10 @@ from metrics import DecisionMetrics
 
 
 DATA_PATH = Path(__file__).with_name("data") / "spear_cohort.csv"
-TEXT_FIELDS = {"league_name", "team_name", "position", "position_group"}
+TEXT_FIELDS = {
+    "league_name", "team_name", "position", "position_group",
+    "recoveries_source", "final_third_possessions_won_source",
+}
 METRIC_FIELDS = tuple(field.name for field in fields(DecisionMetrics))
 CSV_FIELDS = ("player_id", "player_name", "season_name", *METRIC_FIELDS)
 

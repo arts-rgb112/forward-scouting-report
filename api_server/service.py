@@ -15,6 +15,9 @@ from shotmap_store_v2 import ShotmapSnapshotError, get_shotmap_snapshot
 
 from .schemas import (
     AgeBand, AssetRef, CompareMeta, ContinuousCoreAnalysis, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, ShotmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
+    DuelPressAppliedFilters, DuelPressComponents, DuelPressLeaderboardEnvelope,
+    DuelPressLeaderboardSort, DuelPressPlayerEnvelope, DuelPressPlayerResponse,
+    DuelPressPlayerStats, DuelPressRawMetrics,
     LeaderboardPageEnvelope, MessiDataQuality, MessiScoreAnalysis, PlayerAnalysis,
     LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDataQuality, PlayerDetailResponse, PlayerResponse,
@@ -114,6 +117,85 @@ def _players_from_frame(frame, *, require_complete_profiles: bool = True) -> tup
     return tuple(players)
 
 
+def _optional_number(value: object) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed == parsed else None
+
+
+def _optional_source(value: object) -> str | None:
+    text = str(value or "").strip()
+    return text if text in {"player_season_total", "league_per90_fallback"} else None
+
+
+def _duel_press_players_from_frame(frame) -> tuple[DuelPressPlayerResponse, ...]:
+    """Build the opt-in taxonomy without changing the deployed v2 DTO."""
+    population = len(frame)
+    players: list[DuelPressPlayerResponse] = []
+    for record in frame.to_dict(orient="records"):
+        try:
+            player_id = _source_player_id(record["player_id"])
+        except (TypeError, ValueError):
+            continue
+        league_id = _asset_id(record.get("league_id") or 0)
+        team_id = _asset_id(record.get("team_id") or 0)
+        if not league_id or not team_id:
+            continue
+        rank = int(record["pressing_rank"])
+        players.append(DuelPressPlayerResponse(
+            id=player_id,
+            rank=rank,
+            name=str(record["player_name"]),
+            position=str(record.get("position") or "FW"),
+            archetype=str(record.get("role") or "Type A"),
+            age=player_age(player_id),
+            minutes=max(0, round(float(record.get("minutes_played") or 0))),
+            tier=tier_from_rank(rank, population),
+            score=round(float(record["pressing_score"]), 2),
+            face=player_face_url(player_id),
+            nation=None,
+            league=AssetRef(
+                id=league_id, name=str(record.get("league_name") or "Unknown league"),
+                icon=league_logo_url(league_id),
+            ),
+            club=AssetRef(
+                id=team_id, name=str(record.get("team_name") or "Unknown club"),
+                icon=team_logo_url(team_id),
+            ),
+            stats=DuelPressPlayerStats(
+                outsideShot=round(float(record["outside_shot_score"]), 2),
+                boxThreat=round(float(record["deep_box_score"]), 2),
+                dangerZone=round(float(record["danger_zone_score"]), 2),
+                combinedDuel=round(float(record["combined_duel_score"]), 2),
+                spaceControl=round(float(record["space_control_score"]), 2),
+                forwardPress=round(float(record["forward_press_score"]), 2),
+            ),
+            components=DuelPressComponents(
+                combinedDuelVolume=round(float(record["combined_duel_volume_score"]), 2),
+                combinedDuelEfficiency=round(float(record["combined_duel_efficiency_score"]), 2),
+                recoveries=round(float(record["recoveries_score"]), 2),
+                finalThirdPossessionsWon=round(float(record["final_third_press_score"]), 2),
+            ),
+            pressingRawMetrics=DuelPressRawMetrics(
+                recoveries=_optional_number(record.get("recoveries")),
+                recoveriesPer90=_optional_number(record.get("recoveries_per90")),
+                recoveriesSource=_optional_source(record.get("recoveries_source")),
+                finalThirdPossessionsWon=_optional_number(
+                    record.get("final_third_possessions_won")
+                ),
+                finalThirdPossessionsWonPer90=_optional_number(
+                    record.get("final_third_possessions_won_per90")
+                ),
+                finalThirdPossessionsWonSource=_optional_source(
+                    record.get("final_third_possessions_won_source")
+                ),
+            ),
+        ))
+    return tuple(players)
+
+
 @lru_cache(maxsize=16)
 def build_players(season: str, scope: int) -> tuple[PlayerResponse, ...]:
     """Legacy v1 domestic data. Kept strict for already deployed clients."""
@@ -140,6 +222,14 @@ def build_v2_players(season: str, mode: str, scope: int, competition: str) -> tu
     return _players_from_frame(
         get_spear_leaderboard(target, season, scope), require_complete_profiles=False,
     )
+
+
+@lru_cache(maxsize=64)
+def build_duel_press_players(
+    season: str, mode: str, scope: int, competition: str,
+) -> tuple[DuelPressPlayerResponse, ...]:
+    target = leaderboard_target(mode, scope, competition)
+    return _duel_press_players_from_frame(get_spear_leaderboard(target, season, scope))
 
 
 def available_competitions(season: str) -> dict[str, dict[str, object]]:
@@ -181,6 +271,19 @@ SORTABLE_FIELDS = {
     "aerial": lambda player: player.stats.aerial,
     "groundDuel": lambda player: player.stats.groundDuel,
     "spaceControl": lambda player: player.stats.spaceControl,
+}
+DUEL_PRESS_SORTABLE_FIELDS = {
+    "rank": lambda player: player.rank,
+    "score": lambda player: player.score,
+    "name": lambda player: player.name.casefold(),
+    "minutes": lambda player: player.minutes,
+    "age": lambda player: player.age,
+    "outsideShot": lambda player: player.stats.outsideShot,
+    "boxThreat": lambda player: player.stats.boxThreat,
+    "dangerZone": lambda player: player.stats.dangerZone,
+    "combinedDuel": lambda player: player.stats.combinedDuel,
+    "spaceControl": lambda player: player.stats.spaceControl,
+    "forwardPress": lambda player: player.stats.forwardPress,
 }
 
 
@@ -312,6 +415,70 @@ def leaderboard_v21_envelope(
             "generatedAt": dataset_generated_at(), "source": "messi-static-cohort",
         },
     })
+
+
+def duel_press_leaderboard_envelope(
+    season: str, mode: str, scope: int, competition: str, *, page: int,
+    page_size: int, role: str | None, position: str | None,
+    age_band: AgeBand = "all", minutes_band: MinutesBand = "all",
+    query: str | None, sort: DuelPressLeaderboardSort, order: SortOrder,
+) -> DuelPressLeaderboardEnvelope:
+    applied = DuelPressAppliedFilters(
+        role=role,
+        position=(position.strip() or None) if position is not None else None,
+        q=(query.strip() or None) if query is not None else None,
+        ageBand=age_band, minutesBand=minutes_band, sort=sort, order=order,
+    )
+    rows = build_duel_press_players(season, mode, scope, competition)
+    if applied.role:
+        rows = tuple(player for player in rows if player.archetype == applied.role)
+    if applied.position:
+        rows = tuple(player for player in rows if player.position == applied.position)
+    rows = tuple(player for player in rows if matches_age_band(player.age, applied.ageBand))
+    rows = tuple(player for player in rows if matches_minutes_band(player.minutes, applied.minutesBand))
+    if applied.q:
+        needle = applied.q.casefold()
+        rows = tuple(
+            player for player in rows
+            if needle in player.name.casefold()
+            or needle in player.club.name.casefold()
+            or needle in player.league.name.casefold()
+        )
+    rows = tuple(sorted(rows, key=lambda player: (player.rank, player.id)))
+    key = DUEL_PRESS_SORTABLE_FIELDS[applied.sort]
+    reverse = applied.order == "desc"
+    if applied.sort == "age":
+        known = tuple(player for player in rows if player.age is not None)
+        missing = tuple(player for player in rows if player.age is None)
+        rows = tuple(sorted(known, key=key, reverse=reverse)) + missing
+    else:
+        rows = tuple(sorted(rows, key=key, reverse=reverse))
+    population = len(rows)
+    total_pages = (population + page_size - 1) // page_size
+    start = (page - 1) * page_size
+    selected = list(rows[start:start + page_size]) if page <= max(total_pages, 1) else []
+    return DuelPressLeaderboardEnvelope.model_validate({
+        "data": selected,
+        "meta": {
+            "season": season, "mode": mode,
+            "scope": scope if mode == "league" else None,
+            "competition": competition if mode == "europe" else None,
+            "population": population, "returned": len(selected),
+            "page": page, "pageSize": page_size, "totalItems": population,
+            "totalPages": total_pages, "hasNextPage": page < total_pages,
+            "applied": applied, "generatedAt": dataset_generated_at(),
+        },
+    })
+
+
+def find_duel_press_player(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> DuelPressPlayerEnvelope | None:
+    player = next((
+        row for row in build_duel_press_players(season, mode, scope, competition)
+        if row.id == player_id
+    ), None)
+    return DuelPressPlayerEnvelope(data=player) if player is not None else None
 
 
 VOLUME_RADAR_AXES = (

@@ -27,6 +27,10 @@ class DecisionMetrics:
     duels_won_percentage: Optional[float] = None
     aerial_duels_won: Optional[float] = None
     aerial_duels_won_percentage: Optional[float] = None
+    recoveries: Optional[float] = None
+    final_third_possessions_won: Optional[float] = None
+    recoveries_source: Optional[str] = None
+    final_third_possessions_won_source: Optional[str] = None
     in_box_goals: Optional[float] = None
     in_box_xg: Optional[float] = None
     in_box_xgot: Optional[float] = None
@@ -153,6 +157,14 @@ class DecisionMetrics:
     @property
     def aerial_duels_won_per90(self) -> Optional[float]:
         return _per90(self.aerial_duels_won, self.minutes_played)
+
+    @property
+    def recoveries_per90(self) -> Optional[float]:
+        return _per90(self.recoveries, self.minutes_played)
+
+    @property
+    def final_third_possessions_won_per90(self) -> Optional[float]:
+        return _per90(self.final_third_possessions_won, self.minutes_played)
 
     @property
     def aerial_duels_lost_per90(self) -> Optional[float]:
@@ -293,6 +305,11 @@ _AERIAL_DUELS_WON_TITLES = {
 _AERIAL_DUELS_WON_PERCENTAGE_TITLES = {
     "aerial duels won percentage", "aerial duel won percentage",
     "aerial duels won %", "aerials won %", "aerials won percentage",
+}
+_RECOVERIES_TITLES = {"recoveries", "ball recoveries"}
+_FINAL_THIRD_POSSESSIONS_WON_TITLES = {
+    "possession won final 3rd", "possession won final third",
+    "possessions won final 3rd", "possessions won final third",
 }
 
 
@@ -471,6 +488,10 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
         aerial_duels_won_percentage = _find_stat_by_title(
             stats_payload, _AERIAL_DUELS_WON_PERCENTAGE_TITLES
         )
+        recoveries = _find_stat_by_title(stats_payload, _RECOVERIES_TITLES)
+        final_third_possessions_won = _find_stat_by_title(
+            stats_payload, _FINAL_THIRD_POSSESSIONS_WON_TITLES
+        )
         # FotMob omits this row when a player has won no penalties; this is a
         # real zero, not missing data, for the net-progression formula.
         penalties_awarded = _find_stat_by_title(stats_payload, _PENALTIES_AWARDED_TITLES)
@@ -504,6 +525,12 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
             duels_won_percentage=duels_won_percentage,
             aerial_duels_won=aerial_duels_won,
             aerial_duels_won_percentage=aerial_duels_won_percentage,
+            recoveries=recoveries,
+            final_third_possessions_won=final_third_possessions_won,
+            recoveries_source="player_season_total" if recoveries is not None else None,
+            final_third_possessions_won_source=(
+                "player_season_total" if final_third_possessions_won is not None else None
+            ),
             **zone_totals,
         )
 
@@ -522,6 +549,10 @@ def extract_multi_season_metrics(raw_data: Any) -> Dict[str, DecisionMetrics]:
             if ext.duels_won_percentage is None and new_metric.duels_won_percentage is not None: ext.duels_won_percentage = new_metric.duels_won_percentage
             if ext.aerial_duels_won is None and new_metric.aerial_duels_won is not None: ext.aerial_duels_won = new_metric.aerial_duels_won
             if ext.aerial_duels_won_percentage is None and new_metric.aerial_duels_won_percentage is not None: ext.aerial_duels_won_percentage = new_metric.aerial_duels_won_percentage
+            if ext.recoveries is None and new_metric.recoveries is not None: ext.recoveries = new_metric.recoveries
+            if ext.final_third_possessions_won is None and new_metric.final_third_possessions_won is not None: ext.final_third_possessions_won = new_metric.final_third_possessions_won
+            if ext.recoveries_source is None and new_metric.recoveries_source is not None: ext.recoveries_source = new_metric.recoveries_source
+            if ext.final_third_possessions_won_source is None and new_metric.final_third_possessions_won_source is not None: ext.final_third_possessions_won_source = new_metric.final_third_possessions_won_source
             if ext.position is None and new_metric.position is not None: ext.position = new_metric.position
             for attr in (
                 "in_box_goals", "in_box_xg", "in_box_xgot", "in_box_shots",
