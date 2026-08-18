@@ -1,0 +1,97 @@
+player_id,player_name,team_name,league_id,league_name,season_name,reason
+174031,Pontus Jansson,Brentford,47,Premier League,2021/2022,final_third_possessions_won_unavailable
+247761,Conor Coady,Wolverhampton Wanderers,47,Premier League,2021/2022,final_third_possessions_won_unavailable
+490868,Jan Bednarek,Southampton,47,Premier League,2021/2022,final_third_possessions_won_unavailable
+202180,Grant Hanley,Norwich City,47,Premier League,2021/2022,final_third_possessions_won_unavailable
+282676,Iñigo Martínez,Athletic Club,87,LaLiga,2021/2022,final_third_possessions_won_unavailable
+269222,Lucas Alario,Bayer Leverkusen,54,Bundesliga,2021/2022,final_third_possessions_won_unavailable
+616170,Martin Erlic,Spezia,55,Serie A,2021/2022,final_third_possessions_won_unavailable
+163994,Steven Vitória,Moreirense,61,Liga Portugal,2021/2022,final_third_possessions_won_unavailable
+178261,Dorian Dessoleil,Sporting Charleroi,40,First Division A,2021/2022,final_third_possessions_won_unavailable
+207021,Trent Sainsbury,Kortrijk,40,First Division A,2021/2022,final_third_possessions_won_unavailable
+40636,Luis Suárez,Atletico Madrid,42,Champions League,2021/2022,final_third_possessions_won_unavailable
+210184,Wissam Ben Yedder,Monaco,73,Europa League,2021/2022,final_third_possessions_won_unavailable
+563216,Almamy Touré,Eintracht Frankfurt,73,Europa League,2021/2022,final_third_possessions_won_unavailable
+169586,Leandro Cabrera,Espanyol,87,LaLiga,2022/2023,final_third_possessions_won_unavailable
+184521,Florian Lejeune,Rayo Vallecano,87,LaLiga,2022/2023,final_third_possessions_won_unavailable
+301023,Armando Izzo,Monza,55,Serie A,2022/2023,final_third_possessions_won_unavailable
+188555,Stefan de Vrij,Inter,55,Serie A,2022/2023,final_third_possessions_won_unavailable
+493731,Jubal,Auxerre,53,Ligue 1,2022/2023,final_third_possessions_won_unavailable
+492494,Pawel Bochniewicz,SC Heerenveen,57,Eredivisie,2022/2023,final_third_possessions_won_unavailable
+1218555,André Amaro,Vitoria de Guimaraes,61,Liga Portugal,2022/2023,final_third_possessions_won_unavailable
+1130889,Anderson,Vizela,61,Liga Portugal,2022/2023,final_third_possessions_won_unavailable
+163994,Steven Vitória,Chaves,61,Liga Portugal,2022/2023,final_third_possessions_won_unavailable
+1023887,Tsuyoshi Watanabe,Kortrijk,40,Belgian Pro League,2022/2023,final_third_possessions_won_unavailable
+976506,Mykhaylo Mudryk,Shakhtar Donetsk,42,Champions League,2022/2023,final_third_possessions_won_unavailable
+362212,Piotr Zielinski,Napoli,42,Champions League,2022/2023,final_third_possessions_won_unavailable
+385437,Serge Gnabry,Bayern München,42,Champions League,2022/2023,final_third_possessions_won_unavailable
+1174708,Youssoufa Moukoko,Borussia Dortmund,42,Champions League,2022/2023,final_third_possessions_won_unavailable
+450980,Timo Werner,RB Leipzig,42,Champions League,2022/2023,final_third_possessions_won_unavailable
+614006,Rúben Dias,Manchester City,42,Champions League,2022/2023,final_third_possessions_won_unavailable
+209405,Virgil van Dijk,Liverpool,42,Champions League,2022/2023,final_third_possessions_won_unavailable
+259296,Robin Knoche,Union Berlin,73,Europa League,2022/2023,final_third_possessions_won_unavailable
+961306,Nathan Collins,Brentford,47,Premier League,2023/2024,final_third_possessions_won_unavailable
+201690,Lewis Dunk,Brighton & Hove Albion,47,Premier League,2023/2024,final_third_possessions_won_unavailable
+423624,Patrick Mainka,FC Heidenheim,54,Bundesliga,2023/2024,final_third_possessions_won_unavailable
+278831,John Anthony Brooks,Hoffenheim,54,Bundesliga,2023/2024,final_third_possessions_won_unavailable
+1098607,Jake O'Brien,Lyon,53,Ligue 1,2023/2024,final_third_possessions_won_unavailable
+1186553,Alexsandro Ribeiro,Lille,53,Ligue 1,2023/2024,final_third_possessions_won_unavailable
+1080657,Benaissa Benamar,FC Volendam,57,Eredivisie,2023/2024,final_third_possessions_won_unavailable
+278838,Thomas Lam,PEC Zwolle,57,Eredivisie,2023/2024,final_third_possessions_won_unavailable
+1107547,Ravil Tagir,Westerlo,40,Belgian Pro League,2023/2024,final_third_possessions_won_unavailable
+161937,Victor Pálsson,Eupen,40,Belgian Pro League,2023/2024,final_third_possessions_won_unavailable
+1337911,Oscar Gloukh,Salzburg,42,Champions League,2023/2024,final_third_possessions_won_unavailable
+611528,Angelo Fulgini,Lens,42,Champions League,2023/2024,final_third_possessions_won_unavailable
+826089,Kyogo Furuhashi,Celtic,42,Champions League,2023/2024,final_third_possessions_won_unavailable
+1035208,Victor Okoh Boniface,Bayer Leverkusen,73,Europa League,2023/2024,final_third_possessions_won_unavailable
+1165710,Gonçalo Inácio,Sporting CP,73,Europa League,2023/2024,final_third_possessions_won_unavailable
+540097,Patrik Schick,Bayer Leverkusen,73,Europa League,2023/2024,both_source_metrics_unavailable
+919330,Bahlul Mustafazada,Qarabag FK,73,Europa League,2023/2024,final_third_possessions_won_unavailable
+770136,Martin Terrier,Rennes,73,Europa League,2023/2024,final_third_possessions_won_unavailable
+277761,Chancel Mbemba,Marseille,73,Europa League,2023/2024,final_third_possessions_won_unavailable
+950485,Maxence Lacroix,Crystal Palace,47,Premier League,2024/2025,final_third_possessions_won_unavailable
+888167,Kike Pérez,Real Valladolid,87,LaLiga,2024/2025,final_third_possessions_won_unavailable
+1311985,César Tárrega,Valencia,87,LaLiga,2024/2025,final_third_possessions_won_unavailable
+617310,Nayef Aguerd,Real Sociedad,87,LaLiga,2024/2025,final_third_possessions_won_unavailable
+814663,Alejandro Catena,Osasuna,87,LaLiga,2024/2025,final_third_possessions_won_unavailable
+184521,Florian Lejeune,Rayo Vallecano,87,LaLiga,2024/2025,final_third_possessions_won_unavailable
+867080,Jeff Chabot,VfB Stuttgart,54,Bundesliga,2024/2025,final_third_possessions_won_unavailable
+1189288,Federico Gatti,Juventus,55,Serie A,2024/2025,final_third_possessions_won_unavailable
+557799,Duje Caleta-Car,Lyon,53,Ligue 1,2024/2025,final_third_possessions_won_unavailable
+1286190,Anselmo MacNulty,PEC Zwolle,57,Eredivisie,2024/2025,final_third_possessions_won_unavailable
+1386551,Ryan Flamingo,PSV Eindhoven,57,Eredivisie,2024/2025,final_third_possessions_won_unavailable
+264860,Mike van der Hoorn,FC Utrecht,57,Eredivisie,2024/2025,final_third_possessions_won_unavailable
+1256692,Zé Vítor,Nacional,61,Liga Portugal,2024/2025,final_third_possessions_won_unavailable
+193927,Paulo Oliveira,Braga,61,Liga Portugal,2024/2025,final_third_possessions_won_unavailable
+664500,Viktor Gyökeres,Sporting CP,42,Champions League,2024/2025,final_third_possessions_won_unavailable
+304345,Sead Kolasinac,Atalanta,42,Champions League,2024/2025,final_third_possessions_won_unavailable
+1014980,Daniel Bragança,Sporting CP,42,Champions League,2024/2025,final_third_possessions_won_unavailable
+1386551,Ryan Flamingo,PSV Eindhoven,42,Champions League,2024/2025,final_third_possessions_won_unavailable
+795179,Gabriel,Arsenal,42,Champions League,2024/2025,final_third_possessions_won_unavailable
+260964,Berat Djimsiti,Atalanta,42,Champions League,2024/2025,final_third_possessions_won_unavailable
+1283034,Loum Tchaouna,Lazio,73,Europa League,2024/2025,final_third_possessions_won_unavailable
+255610,Harry Maguire,Manchester United,73,Europa League,2024/2025,final_third_possessions_won_unavailable
+1293912,Pablo Marín,Real Sociedad,73,Europa League,2024/2025,final_third_possessions_won_unavailable
+640279,Dinis Almeida,Ludogorets Razgrad,73,Europa League,2024/2025,final_third_possessions_won_unavailable
+1200657,Yerson Mosquera,Wolverhampton Wanderers,47,Premier League,2025/2026,final_third_possessions_won_unavailable
+1097466,Micky van de Ven,Tottenham Hotspur,47,Premier League,2025/2026,final_third_possessions_won_unavailable
+1137407,Malick Thiaw,Newcastle United,47,Premier League,2025/2026,final_third_possessions_won_unavailable
+950829,Chris Richards,Crystal Palace,47,Premier League,2025/2026,final_third_possessions_won_unavailable
+815431,Davide Frattesi,Inter,55,Serie A,2025/2026,final_third_possessions_won_unavailable
+474448,Antonio Sanabria,Cremonese,55,Serie A,2025/2026,final_third_possessions_won_unavailable
+1574492,Tiago Gabriel,Lecce,55,Serie A,2025/2026,final_third_possessions_won_unavailable
+1186444,Charlie Cresswell,Toulouse,53,Ligue 1,2025/2026,final_third_possessions_won_unavailable
+1159831,Casper Widell,Excelsior,57,Eredivisie,2025/2026,final_third_possessions_won_unavailable
+969711,Justin De Haas,Famalicao,61,Liga Portugal,2025/2026,final_third_possessions_won_unavailable
+1342516,Rein Van Helden,St.Truiden,40,Belgian Pro League,2025/2026,final_third_possessions_won_unavailable
+965823,Ewoud Pletinckx,OH Leuven,40,Belgian Pro League,2025/2026,final_third_possessions_won_unavailable
+1437306,Yuto Tsunashima,Royal Antwerp,40,Belgian Pro League,2025/2026,final_third_possessions_won_unavailable
+1110599,Anton Tanghe,Zulte Waregem,40,Belgian Pro League,2025/2026,final_third_possessions_won_unavailable
+939427,Mujaid Sadick,Genk,40,Belgian Pro League,2025/2026,final_third_possessions_won_unavailable
+1088753,Geny Catamo,Sporting CP,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+721089,Gianluca Scamacca,Atalanta,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+852071,Juan Hernández,Real Betis,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+660301,Donyell Malen,Aston Villa,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+609505,Borja Iglesias,Celta Vigo,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+766611,Nikola Milenkovic,Nottingham Forest,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+352968,Sébastien Haller,FC Utrecht,73,Europa League,2025/2026,final_third_possessions_won_unavailable
