@@ -59,12 +59,14 @@ jobs:
               python scripts/build_spear_cohort.py --season-name "$season"
             fi
           done
+      - name: Audit forward-pressing source coverage
+        run: python scripts/audit_pressing_coverage.py --minimum-coverage 0.98
       - name: Commit static cohort
         if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/spear_cohort.csv
+          git add data/spear_cohort.csv data/missing_pressing_sessions.csv
           if git diff --cached --quiet; then
             echo "No cohort changes to commit."
             exit 0

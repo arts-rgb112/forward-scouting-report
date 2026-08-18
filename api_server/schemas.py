@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 # never has to infer whether (for example) ``platinum`` is legacy or Crystal.
 TierCode = Literal["diamond", "emerald", "platinum", "gold", "silver", "bronze"]
 TierTaxonomyVersion = Literal["crystal-v2"]
+MetricTaxonomyVersion = Literal["duel-press-v1"]
 
 
 class AssetRef(BaseModel):
@@ -68,6 +69,48 @@ class PlayerResponse(BaseModel):
     stats: PlayerStats
 
 
+class DuelPressPlayerStats(BaseModel):
+    """Opt-in six-sector taxonomy; legacy PlayerStats remains unchanged."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outsideShot: float = Field(ge=0, le=100)
+    boxThreat: float = Field(ge=0, le=100)
+    dangerZone: float = Field(ge=0, le=100)
+    combinedDuel: float = Field(ge=0, le=100)
+    spaceControl: float = Field(ge=0, le=100)
+    forwardPress: float = Field(ge=0, le=100)
+
+
+class DuelPressComponents(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    combinedDuelVolume: float = Field(ge=0, le=100)
+    combinedDuelEfficiency: float = Field(ge=0, le=100)
+    recoveries: float = Field(ge=0, le=100)
+    finalThirdPossessionsWon: float = Field(ge=0, le=100)
+
+
+class DuelPressRawMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recoveries: float | None = Field(default=None, ge=0)
+    recoveriesPer90: float | None = Field(default=None, ge=0)
+    recoveriesSource: Literal["player_season_total", "league_per90_fallback"] | None = None
+    finalThirdPossessionsWon: float | None = Field(default=None, ge=0)
+    finalThirdPossessionsWonPer90: float | None = Field(default=None, ge=0)
+    finalThirdPossessionsWonSource: Literal[
+        "player_season_total", "league_per90_fallback"
+    ] | None = None
+
+
+class DuelPressPlayerResponse(PlayerResponse):
+    stats: DuelPressPlayerStats
+    metricTaxonomyVersion: MetricTaxonomyVersion = "duel-press-v1"
+    components: DuelPressComponents
+    pressingRawMetrics: DuelPressRawMetrics
+
+
 class DatasetMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -97,6 +140,10 @@ MinutesBand = Literal[
 LeaderboardSort = Literal[
     "rank", "score", "name", "minutes", "age", "outsideShot", "boxThreat",
     "dangerZone", "aerial", "groundDuel", "spaceControl",
+]
+DuelPressLeaderboardSort = Literal[
+    "rank", "score", "name", "minutes", "age", "outsideShot", "boxThreat",
+    "dangerZone", "combinedDuel", "spaceControl", "forwardPress",
 ]
 SortOrder = Literal["asc", "desc"]
 
@@ -179,6 +226,52 @@ class LeaderboardPageEnvelope(BaseModel):
 
     data: list[PlayerResponse]
     meta: LeaderboardPageMeta
+
+
+class DuelPressAppliedFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["Type A", "Type B"] | None = None
+    position: str | None = None
+    q: str | None = None
+    ageBand: AgeBand = "all"
+    minutesBand: MinutesBand = "all"
+    sort: DuelPressLeaderboardSort = "rank"
+    order: SortOrder = "asc"
+
+
+class DuelPressLeaderboardMeta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    metricTaxonomyVersion: MetricTaxonomyVersion = "duel-press-v1"
+    season: str
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7, 8] | None = None
+    competition: CompetitionCode | None = None
+    population: int = Field(ge=0)
+    returned: int = Field(ge=0)
+    page: int = Field(ge=1)
+    pageSize: int = Field(ge=1, le=250)
+    totalItems: int = Field(ge=0)
+    totalPages: int = Field(ge=0)
+    hasNextPage: bool
+    applied: DuelPressAppliedFilters
+    generatedAt: datetime
+    source: Literal["messi-static-cohort"] = "messi-static-cohort"
+
+
+class DuelPressLeaderboardEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: list[DuelPressPlayerResponse]
+    meta: DuelPressLeaderboardMeta
+
+
+class DuelPressPlayerEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: DuelPressPlayerResponse
 
 
 class RadarAxis(BaseModel):
