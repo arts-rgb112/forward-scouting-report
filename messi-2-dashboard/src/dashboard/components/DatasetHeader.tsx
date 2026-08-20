@@ -1,8 +1,8 @@
-import type { CompetitionCode, CompetitionOption, DatasetMeta, DatasetRouteState, LeaderboardOptions } from "../types";
+import type { CompetitionCode, CompetitionOption, DatasetDisplayMeta, DatasetRouteState, LeaderboardOptions } from "../types";
 import { enabledLegacyHref, legacyAboutHref } from "../../navigation/legacyHandoff";
 
 type Props = {
-  meta: DatasetMeta; visibleCount: number; refreshing: boolean; onRefresh(): void;
+  meta: DatasetDisplayMeta; visibleCount: number; refreshing: boolean; onRefresh(): void;
   state: DatasetRouteState; options?: LeaderboardOptions; onStateChange(next: DatasetRouteState): void;
   watchlistMode?: boolean;
 };

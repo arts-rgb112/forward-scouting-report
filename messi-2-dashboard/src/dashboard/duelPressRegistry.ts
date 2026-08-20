@@ -1,7 +1,7 @@
 import { metricConfig } from "./scoutingConfig";
 import { legacyMetricKeys } from "./types";
 import { DUEL_PRESS_METRIC_KEYS, type DuelPressMetricKey } from "../api/duelPressTypes";
-export type MetricPresentation = { label: string; short: string; detail: string };
+import type { MetricPresentation } from "./components/LeaderboardPresentation";
 export const duelPressMetricConfig: Record<DuelPressMetricKey, MetricPresentation> = {
   outsideShot: metricConfig.outsideShot, boxThreat: metricConfig.boxThreat, dangerZone: metricConfig.dangerZone,
   combinedDuel: { label: "통합 경합", short: "경합", detail: "지상·공중 경합의 시도량과 승패 마진을 각각 정규화해 균등 결합한 종합 경합 영향력입니다." },

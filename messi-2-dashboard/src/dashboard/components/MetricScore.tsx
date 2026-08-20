@@ -5,18 +5,19 @@ import type { MetricKey } from "../types";
 import type { QualityDisplay } from "../dataQualityViewModel";
 import { metricIsImputed } from "../dataQualityViewModel";
 
-type Props = { playerId: number; metric: MetricKey; value: number; surface: "table" | "mobile"; compact?: boolean; snapshot?: boolean; quality?: QualityDisplay };
+export type MetricScorePresentation = { label: string; detail: string };
+type Props<K extends string = MetricKey> = { playerId: number; metric: K; value: number; surface: "table" | "mobile"; compact?: boolean; snapshot?: boolean; quality?: QualityDisplay; presentation?: MetricScorePresentation };
 
-export function MetricScore({ playerId, metric, value, surface, compact = false, snapshot = false, quality }: Props) {
+export function MetricScore<K extends string = MetricKey>({ playerId, metric, value, surface, compact = false, snapshot = false, quality, presentation }: Props<K>) {
   const triggerRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const reactId = useId().replace(/:/g, "");
   const tooltipId = `metric-tooltip-${surface}-${playerId}-${metric}-${reactId}`;
-  const help = metricConfig[metric];
+  const help = presentation ?? metricConfig[metric as MetricKey];
   const band = getScoreBand(value);
-  const imputed = metricIsImputed(quality, metric);
+  const imputed = presentation ? false : metricIsImputed(quality, metric as MetricKey);
   const place = useCallback(() => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
