@@ -42,8 +42,15 @@ export async function fetchDuelPressLeaderboard(config: MessiApiConfig, state: i
   return { players: parsed.data.data.map(adaptDuelPressPlayerCore), meta: parsed.data.meta, serverPage: { page: parsed.data.meta.page, pageSize: 50, totalPages: parsed.data.meta.totalPages, hasNextPage: parsed.data.meta.hasNextPage } };
 }
 export async function fetchDuelPressDetail(config: MessiApiConfig, playerId: number, state: import("../dashboard/types").DatasetRouteState, signal: AbortSignal) {
-  const parsed = duelPressDetailCoreSchema.safeParse(await getJson(buildDuelPressDetailUrl(config.baseUrl, playerId, requestContext(state)), signal)); if (!parsed.success) throw new DuelPressApiError("schema", "Duel-press detail response violated the 1.1.0 contract");
-  const expectedScope = state.mode === "league" ? state.scope : null; const expectedCompetition = state.mode === "league" ? null : state.competition;
-  if (parsed.data.context.playerId !== playerId || parsed.data.context.season !== state.season || parsed.data.context.mode !== state.mode || parsed.data.context.scope !== expectedScope || parsed.data.context.competition !== expectedCompetition) throw new DuelPressApiError("schema", "Duel-press detail identity did not match request");
+  return fetchDuelPressDetailByContext(config, playerId, requestContext(state), signal);
+}
+
+/** Resolves one immutable saved context. This is intentionally GET-only and does not use the legacy watchlist resolver. */
+export async function fetchDuelPressDetailByContext(config: MessiApiConfig, playerId: number, context: DuelPressModeContext, signal: AbortSignal) {
+  const parsed = duelPressDetailCoreSchema.safeParse(await getJson(buildDuelPressDetailUrl(config.baseUrl, playerId, context), signal));
+  if (!parsed.success) throw new DuelPressApiError("schema", "Duel-press detail response violated the 1.1.0 contract");
+  const responseContext = parsed.data.context;
+  const expectedCompetition = context.mode === "league" ? null : context.competition;
+  if (responseContext.playerId !== playerId || responseContext.idNamespace !== "fotmob" || responseContext.season !== context.season || responseContext.mode !== context.mode || responseContext.scope !== context.scope || responseContext.competition !== expectedCompetition) throw new DuelPressApiError("schema", "Duel-press detail identity did not match request");
   return adaptDuelPressPlayerCore(parsed.data.data);
 }
