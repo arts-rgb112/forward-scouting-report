@@ -59,7 +59,7 @@ def test_opt_in_contract_keeps_legacy_endpoint_unchanged() -> None:
     )
     pressing = client.get(
         "/api/v2/leaderboards/duel-press",
-        params={"season": "2025/2026", "scope": 8, "page": 1, "pageSize": 1},
+        params={"season": "2025/2026", "scope": 8, "page": 1, "pageSize": 50},
     )
 
     assert legacy.status_code == 200
@@ -69,7 +69,8 @@ def test_opt_in_contract_keeps_legacy_endpoint_unchanged() -> None:
         "spaceControl",
     }
     payload = pressing.json()
-    assert payload["meta"]["metricTaxonomyVersion"] == "duel-press-v1"
+    assert payload["metricTaxonomyVersion"] == "duel-press-v1"
+    assert "metricTaxonomyVersion" not in payload["meta"]
     assert set(payload["data"][0]["stats"]) == {
         "outsideShot", "boxThreat", "dangerZone", "combinedDuel",
         "spaceControl", "forwardPress",
@@ -79,6 +80,8 @@ def test_opt_in_contract_keeps_legacy_endpoint_unchanged() -> None:
         "finalThirdPossessionsWon",
     }
     player = payload["data"][0]
+    assert player["idNamespace"] == "fotmob"
+    assert "metricTaxonomyVersion" not in player
     assert player["stats"]["combinedDuel"] == pytest.approx(
         0.5 * player["components"]["combinedDuelVolume"]
         + 0.5 * player["components"]["combinedDuelEfficiency"],
@@ -103,9 +106,14 @@ def test_opt_in_contract_keeps_legacy_endpoint_unchanged() -> None:
 def test_opt_in_openapi_documents_both_endpoints() -> None:
     schema = TestClient(app).get("/openapi.json").json()
     assert "/api/v2/leaderboards/duel-press" in schema["paths"]
-    assert "/api/v2/players/{player_id}/duel-press" in schema["paths"]
+    assert "/api/v2/players/{playerId}/duel-press" in schema["paths"]
     player_schema = schema["components"]["schemas"]["DuelPressPlayerStats"]
     assert set(player_schema["required"]) == {
         "outsideShot", "boxThreat", "dangerZone", "combinedDuel",
         "spaceControl", "forwardPress",
     }
+    leaderboard_schema = schema["components"]["schemas"]["DuelPressLeaderboardEnvelope"]
+    detail_schema = schema["components"]["schemas"]["DuelPressPlayerEnvelope"]
+    assert "metricTaxonomyVersion" in leaderboard_schema["properties"]
+    assert "metricTaxonomyVersion" in detail_schema["properties"]
+    assert "context" in detail_schema["required"]

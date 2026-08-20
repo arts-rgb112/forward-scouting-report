@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 TierCode = Literal["diamond", "emerald", "platinum", "gold", "silver", "bronze"]
 TierTaxonomyVersion = Literal["crystal-v2"]
 MetricTaxonomyVersion = Literal["duel-press-v1"]
+RawMetricSource = Literal["player_season_total", "league_per90_fallback"]
 
 
 class AssetRef(BaseModel):
@@ -92,21 +93,61 @@ class DuelPressComponents(BaseModel):
 
 
 class DuelPressRawMetrics(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "description": (
+                "For each metric, a non-null source requires non-null total and per90 values. "
+                "A null source requires both values to be null. Numeric zero is an observed zero, "
+                "never an unavailable sentinel."
+            ),
+        },
+    )
 
-    recoveries: float | None = Field(default=None, ge=0)
-    recoveriesPer90: float | None = Field(default=None, ge=0)
-    recoveriesSource: Literal["player_season_total", "league_per90_fallback"] | None = None
-    finalThirdPossessionsWon: float | None = Field(default=None, ge=0)
-    finalThirdPossessionsWonPer90: float | None = Field(default=None, ge=0)
-    finalThirdPossessionsWonSource: Literal[
-        "player_season_total", "league_per90_fallback"
-    ] | None = None
+    recoveries: float | None = Field(
+        default=None, ge=0, description="Season-compatible total; null only when the source is unavailable.",
+    )
+    recoveriesPer90: float | None = Field(
+        default=None, ge=0, description="Per-90 recovery rate; null only when the source is unavailable.",
+    )
+    recoveriesSource: RawMetricSource | None = Field(
+        default=None, description="Null means recoveries are unavailable, not zero.",
+    )
+    finalThirdPossessionsWon: float | None = Field(
+        default=None, ge=0, description="Season-compatible total; null only when the source is unavailable.",
+    )
+    finalThirdPossessionsWonPer90: float | None = Field(
+        default=None, ge=0, description="Per-90 final-third possession-win rate; null only when unavailable.",
+    )
+    finalThirdPossessionsWonSource: RawMetricSource | None = Field(
+        default=None, description="Null means final-third possession wins are unavailable, not zero.",
+    )
+
+    @model_validator(mode="after")
+    def validate_source_value_pairs(self) -> "DuelPressRawMetrics":
+        pairs = (
+            ("recoveries", self.recoveriesSource, self.recoveries, self.recoveriesPer90),
+            (
+                "finalThirdPossessionsWon",
+                self.finalThirdPossessionsWonSource,
+                self.finalThirdPossessionsWon,
+                self.finalThirdPossessionsWonPer90,
+            ),
+        )
+        for label, source, total, per90 in pairs:
+            if source is None and (total is not None or per90 is not None):
+                raise ValueError(f"{label} values must both be null when source is null")
+            if source is not None and (total is None or per90 is None):
+                raise ValueError(f"{label} values must both be numeric when source is present")
+        return self
 
 
 class DuelPressPlayerResponse(PlayerResponse):
     stats: DuelPressPlayerStats
-    metricTaxonomyVersion: MetricTaxonomyVersion = "duel-press-v1"
+    idNamespace: Literal["fotmob"] = Field(
+        default="fotmob",
+        description="The player id is the same FotMob id used by legacy player/detail/watchlist routes.",
+    )
     components: DuelPressComponents
     pressingRawMetrics: DuelPressRawMetrics
 
@@ -243,8 +284,7 @@ class DuelPressAppliedFilters(BaseModel):
 class DuelPressLeaderboardMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schemaVersion: Literal["1.0.0"] = "1.0.0"
-    metricTaxonomyVersion: MetricTaxonomyVersion = "duel-press-v1"
+    schemaVersion: Literal["1.1.0"] = "1.1.0"
     season: str
     mode: LeaderboardMode
     scope: Literal[3, 5, 7, 8] | None = None
@@ -252,7 +292,7 @@ class DuelPressLeaderboardMeta(BaseModel):
     population: int = Field(ge=0)
     returned: int = Field(ge=0)
     page: int = Field(ge=1)
-    pageSize: int = Field(ge=1, le=250)
+    pageSize: Literal[50] = 50
     totalItems: int = Field(ge=0)
     totalPages: int = Field(ge=0)
     hasNextPage: bool
@@ -264,14 +304,50 @@ class DuelPressLeaderboardMeta(BaseModel):
 class DuelPressLeaderboardEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    metricTaxonomyVersion: MetricTaxonomyVersion = "duel-press-v1"
     data: list[DuelPressPlayerResponse]
     meta: DuelPressLeaderboardMeta
+
+
+class DuelPressRequestContext(BaseModel):
+    """Canonical context actually used to resolve a companion player."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(
+        gt=0, description="FotMob player id; identical to data.id and legacy player identity.",
+    )
+    idNamespace: Literal["fotmob"] = "fotmob"
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7, 8] | None = Field(
+        default=None, description="Applied domestic scope; null for mode=europe.",
+    )
+    competition: CompetitionCode | None = Field(
+        default=None, description="Applied European competition; null for mode=league.",
+    )
+
+    @model_validator(mode="after")
+    def validate_active_dimension(self) -> "DuelPressRequestContext":
+        if self.mode == "league" and (self.scope is None or self.competition is not None):
+            raise ValueError("league context requires scope and null competition")
+        if self.mode == "europe" and (self.scope is not None or self.competition is None):
+            raise ValueError("europe context requires competition and null scope")
+        return self
 
 
 class DuelPressPlayerEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    metricTaxonomyVersion: MetricTaxonomyVersion = "duel-press-v1"
+    context: DuelPressRequestContext
     data: DuelPressPlayerResponse
+
+
+class ApiErrorEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    detail: str = Field(min_length=1)
 
 
 class RadarAxis(BaseModel):

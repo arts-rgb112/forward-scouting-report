@@ -1,0 +1,11 @@
+{
+  "left": {
+    "request": {"playerId": 194165, "season": "2025/2026", "mode": "europe", "scope": 8, "competition": "ucl"},
+    "expectedContext": {"playerId": 194165, "idNamespace": "fotmob", "season": "2025/2026", "mode": "europe", "scope": null, "competition": "ucl"}
+  },
+  "right": {
+    "request": {"playerId": 194165, "season": "2024/2025", "mode": "league", "scope": 8, "competition": "all"},
+    "expectedContext": {"playerId": 194165, "idNamespace": "fotmob", "season": "2024/2025", "mode": "league", "scope": 8, "competition": null}
+  },
+  "rule": "Resolve each request independently; never reuse the left context for the right response."
+}

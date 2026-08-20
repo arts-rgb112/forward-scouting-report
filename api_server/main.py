@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .schemas import (
-    AgeBand, DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
+    AgeBand, ApiErrorEnvelope, DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
     DuelPressLeaderboardEnvelope, DuelPressLeaderboardSort, DuelPressPlayerEnvelope,
     LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDataQualityEnvelope, PlayerDetailEnvelope,
@@ -41,6 +41,33 @@ PROTECTED_WATCHLIST_POST_PATHS = {
     "/api/v2/watchlist/data-quality",
 }
 
+DUEL_PRESS_ERROR_RESPONSES = {
+    404: {
+        "model": ApiErrorEnvelope,
+        "description": "The season, European competition, or player is unavailable in the selected context.",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "seasonUnavailable": {
+                        "summary": "Unsupported season",
+                        "value": {"detail": "No static cohort is available for season 2020/2021"},
+                    },
+                    "playerUnavailable": {
+                        "summary": "Player outside the selected context",
+                        "value": {"detail": "Player is not in the selected leaderboard"},
+                    },
+                },
+            },
+        },
+    },
+    422: {
+        "description": (
+            "FastAPI validation error for an unsupported enum, pageSize other than 50, "
+            "or a mode/competition mismatch."
+        ),
+    },
+}
+
 
 def cors_origins() -> list[str]:
     """Use an exact comma-separated allowlist; deployment origins are configured externally."""
@@ -53,9 +80,17 @@ def cors_origin_regex() -> str:
     return VERCEL_PREVIEW_ORIGIN_REGEX
 
 
+def validate_duel_press_context(mode: str, competition: str) -> None:
+    if mode == "league" and competition != "all":
+        raise HTTPException(
+            status_code=422,
+            detail="competition must be 'all' when mode is 'league'",
+        )
+
+
 app = FastAPI(
     title="M.E.S.S.I. 2.0 Scouting API",
-    version="2.2.0",
+    version="2.3.0",
     description=(
         "M.E.S.S.I. scouting API. Existing v2 responses remain stable; the opt-in "
         "duel-press-v1 companion contract combines ground/aerial duels and adds "
@@ -140,6 +175,7 @@ def list_leaderboard_options() -> LeaderboardOptions:
     "/api/v2/leaderboards/duel-press",
     response_model=DuelPressLeaderboardEnvelope,
     tags=["leaderboards"],
+    responses=DUEL_PRESS_ERROR_RESPONSES,
 )
 def list_duel_press_leaderboards(
     response: Response,
@@ -148,7 +184,10 @@ def list_duel_press_leaderboards(
     scope: Literal["3", "5", "7", "8"] = Query(default="8"),
     competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
     page: int = Query(default=1, ge=1),
-    pageSize: int = Query(default=50, ge=1, le=250),
+    pageSize: int = Query(
+        default=50, ge=50, le=50,
+        description="duel-press-v1 uses a fixed 50-player server page.",
+    ),
     sort: DuelPressLeaderboardSort = Query(default="rank"),
     order: SortOrder = Query(default="asc"),
     role: Literal["Type A", "Type B"] | None = Query(default=None),
@@ -157,9 +196,16 @@ def list_duel_press_leaderboards(
     minutesBand: MinutesBand = Query(default="all"),
     q: str | None = Query(default=None, min_length=1, max_length=100),
 ) -> DuelPressLeaderboardEnvelope:
-    """Opt-in six-sector taxonomy with combined duels and forward pressing."""
+    """Opt-in six-sector taxonomy with combined duels and forward pressing.
+
+    A valid empty filter result and a page beyond ``totalPages`` both return
+    HTTP 200 with ``data: []``.  The metadata remains canonical, with
+    ``returned: 0`` and ``hasNextPage: false``. Equal primary sort values are
+    always ordered by ``rank ASC`` then ``id ASC``, regardless of sort order.
+    """
     if season not in supported_seasons():
         raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    validate_duel_press_context(mode, competition)
     envelope = duel_press_leaderboard_envelope(
         season, mode, int(scope), competition, page=page, page_size=pageSize,
         role=role, position=position, age_band=ageBand,
@@ -245,12 +291,13 @@ def get_player(
 
 
 @app.get(
-    "/api/v2/players/{player_id}/duel-press",
+    "/api/v2/players/{playerId}/duel-press",
     response_model=DuelPressPlayerEnvelope,
     tags=["players"],
+    responses=DUEL_PRESS_ERROR_RESPONSES,
 )
 def get_duel_press_player(
-    player_id: int,
+    playerId: int,
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
     mode: Literal["league", "europe"] = Query(default="league"),
     scope: Literal["3", "5", "7", "8"] = Query(default="8"),
@@ -258,7 +305,8 @@ def get_duel_press_player(
 ) -> DuelPressPlayerEnvelope:
     if season not in supported_seasons():
         raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
-    player = find_duel_press_player(player_id, season, mode, int(scope), competition)
+    validate_duel_press_context(mode, competition)
+    player = find_duel_press_player(playerId, season, mode, int(scope), competition)
     if player is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     return player
