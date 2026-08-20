@@ -1,4 +1,4 @@
-import type { DatasetRouteState, MetricKey, Player, Tier } from "./types";
+import type { AssetRef, DatasetRouteState, MetricKey, Player, Tier } from "./types";
 
 /** The former ID-only key is deliberately read-only: never overwrite it. */
 export const LEGACY_WATCHLIST_KEY = "messi-2-watchlist";
@@ -27,6 +27,10 @@ export type WatchlistSnapshot = {
   /** Written only when the source response explicitly declares a taxonomy version. */
   tierTaxonomyVersion?: string;
   stats?: Partial<Record<MetricKey, number>>;
+  rank?: number;
+  nation?: AssetRef | null;
+  league?: AssetRef;
+  club?: AssetRef;
 };
 export type WatchlistEntry = {
   version: 2;
@@ -58,6 +62,11 @@ const validTier = (value: unknown): value is Tier => {
   const tier = value as Record<string, unknown>;
   return typeof tier.code === "string" && typeof tier.level === "number" && typeof tier.label === "string";
 };
+const validAsset = (value: unknown): value is AssetRef => {
+  if (!value || typeof value !== "object") return false;
+  const asset = value as Record<string, unknown>;
+  return Number.isSafeInteger(asset.id) && typeof asset.name === "string" && (typeof asset.icon === "string" || asset.icon === null);
+};
 const validCompleteSnapshot = (snapshot: Record<string, unknown>): boolean =>
   (snapshot.profile === "complete" || snapshot.profile === undefined)
   && (snapshot.archetype === "Type A" || snapshot.archetype === "Type B")
@@ -87,6 +96,10 @@ const normalizeSnapshot = (value: unknown): WatchlistSnapshot | null => {
     ...(validTier(snapshot.tier) ? { tier: { ...snapshot.tier } } : {}),
     ...(typeof snapshot.tierTaxonomyVersion === "string" ? { tierTaxonomyVersion: snapshot.tierTaxonomyVersion } : {}),
     ...(stats ? { stats } : {}),
+    ...(typeof snapshot.rank === "number" && Number.isSafeInteger(snapshot.rank) && snapshot.rank > 0 ? { rank: snapshot.rank } : {}),
+    ...(snapshot.nation === null || validAsset(snapshot.nation) ? { nation: snapshot.nation } : {}),
+    ...(validAsset(snapshot.league) ? { league: { ...snapshot.league } } : {}),
+    ...(validAsset(snapshot.club) ? { club: { ...snapshot.club } } : {}),
   };
 };
 const validEntry = (value: unknown): value is WatchlistEntry => {
@@ -114,6 +127,7 @@ export function entryFromPlayer(player: Player, context: WatchContext, savedAt =
       age: player.age, minutes: player.minutes, score: player.score, tier: { ...player.tier }, tierLabel: player.tier.label,
       ...(player.tier.taxonomyVersion ? { tierTaxonomyVersion: player.tier.taxonomyVersion } : {}),
       face: player.face, clubName: player.club.name, leagueName: player.league.name, stats: { ...player.stats },
+      rank: player.rank, nation: player.nation ? { ...player.nation } : null, league: { ...player.league }, club: { ...player.club },
     },
     context: { ...context }, savedAt,
   };

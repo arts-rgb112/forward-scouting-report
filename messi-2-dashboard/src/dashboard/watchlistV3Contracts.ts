@@ -14,10 +14,12 @@ export const watchlistV3ContextSchema = z.discriminatedUnion("mode", [
 ]);
 
 const tier = z.object({ code: z.string().min(1), level: z.number().finite(), label: z.string().min(1), taxonomyVersion: z.string().min(1).optional() }).strict();
+const asset = z.object({ id: z.number().int().safe(), name: z.string().min(1), icon: z.string().url().nullable() }).strict();
 const legacyStats = z.object({ outsideShot: z.number().finite().optional(), boxThreat: z.number().finite().optional(), dangerZone: z.number().finite().optional(), aerial: z.number().finite().optional(), groundDuel: z.number().finite().optional(), spaceControl: z.number().finite().optional() }).strict();
 export const legacyWatchlistV3SnapshotSchema = z.object({
   profile: z.enum(["complete", "legacy-partial"]).optional(), name: z.string().min(1), position: z.string(), clubName: z.string(), leagueName: z.string().optional(), face: z.string().nullable().optional(),
   score: z.number().finite().optional(), tierLabel: z.string().optional(), archetype: z.enum(["Type A", "Type B"]).optional(), age: z.number().int().nullable().optional(), minutes: z.number().finite().nonnegative().optional(), tier: tier.optional(), tierTaxonomyVersion: z.string().optional(), stats: legacyStats.optional(),
+  rank: z.number().int().positive().safe().optional(), nation: asset.nullable().optional(), league: asset.optional(), club: asset.optional(),
 }).strict();
 
 export function watchlistV3Key(taxonomy: "legacy-v1" | "duel-press-v1", playerId: number, context: DuelPressModeContext): string {
