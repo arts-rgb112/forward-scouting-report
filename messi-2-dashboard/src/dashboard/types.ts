@@ -24,6 +24,10 @@ export type Player = {
   nation: AssetRef | null; league: AssetRef; club: AssetRef; stats: Record<MetricKey, number>;
 };
 export type LegacyPlayer = Player;
+export type DatasetDisplayMeta = {
+  schemaVersion: string; season: string; scope: LeagueScope | null; population: number; totalItems?: number;
+  returned: number; generatedAt: string; source: string; mode?: DatasetMode; competition?: CompetitionCode | null;
+};
 export type DatasetMeta = {
   schemaVersion: "1.0.0" | "2.0.0" | "2.1.0"; season: string; scope: LeagueScope | null; population: number;
   /** `totalItems` is the paged v2 total; `population` remains the v2.0-compatible name. */

@@ -1,15 +1,16 @@
 import { datasetHref } from "../datasetRoute";
-import type { DatasetRouteState, Player } from "../types";
+import type { AssetRef, DatasetRouteState, Player } from "../types";
 import { AssetImage } from "./AssetImage";
 import { enabledLegacyHref, legacyDetailHref } from "../../navigation/legacyHandoff";
 import { leagueFallbackLabel } from "../leagueDisplay";
 
-export function PlayerIdentity({ player, mobile = false, dataset }: { player: Player; mobile?: boolean; dataset?: DatasetRouteState }) {
+export type PlayerIdentityData = Pick<Player, "id" | "name" | "position" | "archetype" | "face"> & { nation: AssetRef | null; league: AssetRef; club: AssetRef };
+export function PlayerIdentity({ player, mobile = false, dataset, detailHref: suppliedDetailHref }: { player: PlayerIdentityData; mobile?: boolean; dataset?: DatasetRouteState; detailHref?: string }) {
   const size = mobile ? 56 : 48;
   const query = new URLSearchParams(window.location.search);
   const rawScope = Number(query.get("scope"));
   const current = dataset ?? { season: query.get("season") || "2025/2026", mode: query.get("mode") === "europe" ? "europe" as const : "league" as const, scope: ([3, 5, 7, 8].includes(rawScope) ? rawScope : 8) as DatasetRouteState["scope"], competition: "all" as const };
-  const detailHref = enabledLegacyHref(legacyDetailHref(player.id, { name: player.name, clubName: player.club.name }, current) ?? "") ?? datasetHref(`/players/${player.id}`, current);
+  const detailHref = suppliedDetailHref ?? enabledLegacyHref(legacyDetailHref(player.id, { name: player.name, clubName: player.club.name }, current) ?? "") ?? datasetHref(`/players/${player.id}`, current);
   return <div id={mobile ? undefined : `player-${player.id}`} className="flex min-w-0 items-center gap-3">
     <AssetImage src={player.face} alt={`${player.name} portrait`} kind="face" fallbackLabel={player.name} width={size} height={size} className={`${mobile ? "h-14 w-14" : "h-12 w-12"} rounded-md border border-white/10 object-cover`} />
     <div className="min-w-0"><a href={detailHref} className="block truncate text-[13px] font-extrabold hover:text-lime-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300">{player.name}</a>
