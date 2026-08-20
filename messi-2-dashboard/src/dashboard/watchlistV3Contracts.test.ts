@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import validLeaderboard from "../../../docs/fixtures/duel_press_v1/valid_leaderboard.json";
 import { duelPressPlayerSchema } from "../api/duelPressContracts";
 import { entryFromPlayer, WATCHLIST_KEY } from "./watchlistStorage";
-import { duelPressEntry } from "./watchlistStorageV3";
+import { duelPressEntry, legacyV3Entry } from "./watchlistStorageV3";
 import { bootWatchlistV3, commitWatchlistV3Operation, createMemoryWatchlistV3LockCoordinator, parseWatchlistV3StorageEvent, persistWatchlistV3, WATCHLIST_V3_MIGRATION_MARKER_KEY } from "./watchlistV3Repository";
 import { parseWatchlistV3, WATCHLIST_V3_KEY, watchlistV3EnvelopeSchema, watchlistV3Key } from "./watchlistV3Contracts";
 import { samplePlayers } from "../test/fixtures/players";
@@ -34,6 +34,10 @@ describe("Watchlist V3 strict contract", () => {
   });
   it("makes same player cross-season and cross-taxonomy identities distinct", () => {
     const other = { ...context, season: "2024/2025" }; expect(watchlistV3Key("duel-press-v1", player.id, context)).not.toBe(watchlistV3Key("duel-press-v1", player.id, other)); expect(watchlistV3Key("legacy-v1", player.id, context)).not.toBe(entry.key);
+  });
+  it("accepts historical partial legacy snapshots and future saves with only real identity assets", () => {
+    const historical = legacyV3Entry(999, { profile: "legacy-partial", name: "Historical", position: "", clubName: "Known club" }, context, now); expect(watchlistV3EnvelopeSchema.safeParse({ ...envelope, entries: [historical], selectedEntryKeys: [] }).success).toBe(true);
+    const future = legacyV3Entry(samplePlayers[0].id, entryFromPlayer(samplePlayers[0], { season: context.season, mode: "league", scope: 8, competition: null }, now).snapshot, context, now); const parsed = watchlistV3EnvelopeSchema.parse({ ...envelope, entries: [future], selectedEntryKeys: [] }); const snapshot = parsed.entries[0].taxonomy === "legacy-v1" ? parsed.entries[0].snapshot : null; expect(snapshot).toMatchObject({ rank: samplePlayers[0].rank, nation: samplePlayers[0].nation, league: samplePlayers[0].league, club: samplePlayers[0].club });
   });
 });
 
