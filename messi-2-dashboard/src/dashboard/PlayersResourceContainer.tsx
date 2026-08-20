@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 
 import { MessiConfigError, type ConfigErrorCategory, parseMessiApiConfig, type MessiApiConfig } from "../api/env";
 import { MessiApiError, isAbortError } from "../api/errors";
+import { evaluateDuelPressFeature } from "../api/duelPressFeatureGate";
 import { fetchLeaderboard, fetchLeaderboardOptions } from "../api/leaderboardsApi";
 import { datasetFromSearch, datasetKeyOf, leaderboardHref, leaderboardSearchFromSearch } from "./datasetRoute";
 import { ConfigErrorFallback } from "./components/ConfigErrorFallback";
@@ -33,7 +34,12 @@ export function PlayersResourceContainer() {
   const [resolvedDatasetKey, setResolvedDatasetKey] = useState<string>();
   const resolvedDatasetKeyRef = useRef<string | undefined>(undefined);
   const request = useRef(0); const optionsRequest = useRef(0); const controller = useRef<AbortController | null>(null); const optionsController = useRef<AbortController | null>(null); const optionsTimer = useRef<number | undefined>(undefined); const stateRef = useRef(state); stateRef.current = state;
-  const parsed = useMemo((): ParsedConfig => { try { return { config: parseMessiApiConfig(import.meta.env, import.meta.env.MODE) }; } catch (error) { return { category: error instanceof MessiConfigError ? error.category : "CONFIG_INVALID" }; } }, []);
+  const parsed = useMemo((): ParsedConfig => {
+    // No release evidence is embedded in production. An exact true request is a
+    // hard stop, never permission to fetch legacy data under duel-press labels.
+    if (evaluateDuelPressFeature(import.meta.env).requested) return { category: "CONFIG_INVALID" };
+    try { return { config: parseMessiApiConfig(import.meta.env, import.meta.env.MODE) }; } catch (error) { return { category: error instanceof MessiConfigError ? error.category : "CONFIG_INVALID" }; }
+  }, []);
   const [dataset, setDataset] = useState<DatasetRouteState>(() => parsed.config ? routeFromUrl(parsed.config) : { season: "2025/2026", mode: "league", scope: 8, competition: "all" });
   const [search, setSearch] = useState<LeaderboardSearch>(() => leaderboardSearchFromSearch(window.location.search));
   const [positionCapability, setPositionCapability] = useState<PositionFilterCapability>("unknown");

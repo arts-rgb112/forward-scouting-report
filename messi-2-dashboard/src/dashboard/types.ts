@@ -1,5 +1,8 @@
-export const metricKeys = ["outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"] as const;
-export type MetricKey = (typeof metricKeys)[number];
+export const legacyMetricKeys = ["outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"] as const;
+/** @deprecated Legacy alias retained so the established UI/API cannot silently change taxonomy. */
+export const metricKeys = legacyMetricKeys;
+export type LegacyMetricKey = (typeof legacyMetricKeys)[number];
+export type MetricKey = LegacyMetricKey;
 /** Tier codes are server-owned during the taxonomy migration; unknown codes must remain renderable. */
 export type TierCode = string;
 export type TierTaxonomyVersion = "crystal-v2" | "legacy-v1" | (string & {});
@@ -20,6 +23,7 @@ export type Player = {
   age: number | null; minutes: number; tier: Tier; score: number; face: string | null;
   nation: AssetRef | null; league: AssetRef; club: AssetRef; stats: Record<MetricKey, number>;
 };
+export type LegacyPlayer = Player;
 export type DatasetMeta = {
   schemaVersion: "1.0.0" | "2.0.0" | "2.1.0"; season: string; scope: LeagueScope | null; population: number;
   /** `totalItems` is the paged v2 total; `population` remains the v2.0-compatible name. */
