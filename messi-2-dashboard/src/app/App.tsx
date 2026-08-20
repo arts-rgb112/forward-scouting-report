@@ -4,6 +4,7 @@ import { PlayersResourceContainer } from "../dashboard/PlayersResourceContainer"
 import { DashboardErrorBoundary } from "../dashboard/components/DashboardErrorBoundary";
 import { StaticRoute } from "./StaticRoute";
 import { enabledLegacyHref, legacyAboutHref, legacyCompareHref } from "../navigation/legacyHandoff";
+import { WatchlistV3Provider } from "../dashboard/WatchlistV3Provider";
 
 function GlobalNavigation({ pathname }: { pathname: string }) {
   const active = pathname === "/compare" ? "compare" : pathname === "/about/messi" ? "about" : "leaderboard";
@@ -32,5 +33,5 @@ export default function App() {
     return () => window.removeEventListener("popstate", updatePath);
   }, []);
   const routed = pathname !== "/";
-  return <><GlobalNavigation pathname={pathname} /><DashboardErrorBoundary resetKey={resetKey} onReset={() => setResetKey((key) => key + 1)}>{routed ? <StaticRoute /> : <PlayersResourceContainer key={resetKey} />}</DashboardErrorBoundary></>;
+  return <WatchlistV3Provider><GlobalNavigation pathname={pathname} /><DashboardErrorBoundary resetKey={resetKey} onReset={() => setResetKey((key) => key + 1)}>{routed ? <StaticRoute /> : <PlayersResourceContainer key={resetKey} />}</DashboardErrorBoundary></WatchlistV3Provider>;
 }
