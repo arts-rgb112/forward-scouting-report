@@ -9,8 +9,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build --configLoader runner",
-    "build:staging": "tsc -b && vite build --mode staging --configLoader runner",
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.node.json && vite build --configLoader runner",
+    "build:staging": "tsc -p tsconfig.build.json && tsc -p tsconfig.node.json && vite build --mode staging --configLoader runner",
     "preview": "vite preview",
     "test": "vitest run --configLoader runner"
   },
