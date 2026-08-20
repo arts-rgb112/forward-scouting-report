@@ -18,6 +18,8 @@ from .schemas import (
     DuelPressAppliedFilters, DuelPressComponents, DuelPressLeaderboardEnvelope,
     DuelPressLeaderboardSort, DuelPressPlayerEnvelope, DuelPressPlayerResponse,
     DuelPressPlayerStats, DuelPressRawMetrics, DuelPressRequestContext,
+    DuelPressMetricRanks, MetricRankContext, MetricRankRequestEntry,
+    MetricRankResult, MetricRankValue,
     LeaderboardPageEnvelope, MessiDataQuality, MessiScoreAnalysis, PlayerAnalysis,
     LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDataQuality, PlayerDetailResponse, PlayerResponse,
@@ -490,6 +492,93 @@ def find_duel_press_player(
         competition=competition if mode == "europe" else None,
     )
     return DuelPressPlayerEnvelope(context=context, data=player)
+
+
+DUEL_PRESS_METRIC_FIELDS = (
+    "outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl",
+    "forwardPress",
+)
+
+
+@lru_cache(maxsize=64)
+def _duel_press_metric_rank_maps(
+    season: str, mode: str, scope: int, competition: str,
+) -> dict[int, DuelPressMetricRanks] | None:
+    """Rank every duel-press sector once for one unfiltered context.
+
+    The companion endpoint batches entries by this key before looking up a
+    player.  This deliberately reads no page, search, role, age, or minutes
+    predicate: rank is always relative to the complete eligible cohort.
+    """
+    if season not in supported_seasons():
+        return None
+    rows = build_duel_press_players(season, mode, scope, competition)
+    if not rows:
+        return None
+
+    per_metric: dict[str, dict[int, float]] = {
+        field: {
+            player.id: float(getattr(player.stats, field))
+            for player in rows
+            if getattr(player.stats, field, None) is not None
+        }
+        for field in DUEL_PRESS_METRIC_FIELDS
+    }
+    result: dict[int, DuelPressMetricRanks] = {}
+    for player in rows:
+        values: dict[str, MetricRankValue] = {}
+        for field, population_values in per_metric.items():
+            score = population_values.get(player.id)
+            population = len(population_values)
+            rank = (
+                1 + sum(candidate > score for candidate in population_values.values())
+                if score is not None else None
+            )
+            values[field] = MetricRankValue(rank=rank, population=population)
+        result[player.id] = DuelPressMetricRanks(**values)
+    return result
+
+
+def resolve_metric_rank_entries(
+    entries: list[MetricRankRequestEntry],
+) -> list[MetricRankResult]:
+    """Resolve metric ranks in input order while loading each cohort once."""
+    grouped: dict[tuple[str, str, int, str], list[MetricRankRequestEntry]] = {}
+    for entry in entries:
+        context = entry.context
+        key = (
+            context.season, context.mode, context.scope or 8,
+            context.competition,
+        )
+        grouped.setdefault(key, []).append(entry)
+
+    rank_maps = {
+        key: _duel_press_metric_rank_maps(*key)
+        for key in grouped
+    }
+    results: list[MetricRankResult] = []
+    for entry in entries:
+        context: MetricRankContext = entry.context
+        key = (
+            context.season, context.mode, context.scope or 8,
+            context.competition,
+        )
+        ranks = rank_maps[key]
+        if ranks is None:
+            status = "invalid_context"
+            metrics = None
+        else:
+            metrics = ranks.get(entry.player.playerId)
+            status = "resolved" if metrics is not None else "unavailable"
+        results.append(MetricRankResult(
+            key=entry.key,
+            player=entry.player,
+            metricTaxonomyVersion=entry.metricTaxonomyVersion,
+            context=context,
+            status=status,
+            metrics=metrics,
+        ))
+    return results
 
 
 VOLUME_RADAR_AXES = (

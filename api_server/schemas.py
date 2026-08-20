@@ -344,6 +344,113 @@ class DuelPressPlayerEnvelope(BaseModel):
     data: DuelPressPlayerResponse
 
 
+class MetricRankPlayerRef(BaseModel):
+    """Stable player identity echoed by the metric-ranks batch endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    idNamespace: Literal["fotmob"]
+    playerId: int = Field(gt=0)
+
+
+class MetricRankContext(BaseModel):
+    """The exact browser context used for an all-cohort rank lookup.
+
+    Unlike the legacy watchlist context, domestic requests retain
+    ``competition: \"all\"`` so the request can be echoed byte-for-byte in a
+    strict client contract.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7, 8] | None = None
+    competition: CompetitionCode
+
+    @model_validator(mode="after")
+    def validate_active_dimension(self) -> "MetricRankContext":
+        if self.mode == "league" and (self.scope is None or self.competition != "all"):
+            raise ValueError("league context requires scope and competition 'all'")
+        if self.mode == "europe" and self.scope is not None:
+            raise ValueError("europe context requires null scope")
+        return self
+
+
+class MetricRankRequestEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1, max_length=500)
+    player: MetricRankPlayerRef
+    metricTaxonomyVersion: MetricTaxonomyVersion
+    context: MetricRankContext
+
+
+class MetricRanksRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[MetricRankRequestEntry] = Field(min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_unique_keys(self) -> "MetricRanksRequest":
+        keys = [entry.key for entry in self.entries]
+        if len(keys) != len(set(keys)):
+            raise ValueError("entries must contain unique key values")
+        return self
+
+
+class MetricRankValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rank: int | None = Field(default=None, ge=1)
+    population: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_rank_bounds(self) -> "MetricRankValue":
+        if self.rank is not None and self.rank > self.population:
+            raise ValueError("rank must not exceed population")
+        return self
+
+
+class DuelPressMetricRanks(BaseModel):
+    """Exactly the six sectors defined by ``duel-press-v1``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outsideShot: MetricRankValue
+    boxThreat: MetricRankValue
+    dangerZone: MetricRankValue
+    combinedDuel: MetricRankValue
+    spaceControl: MetricRankValue
+    forwardPress: MetricRankValue
+
+
+class MetricRankResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1, max_length=500)
+    player: MetricRankPlayerRef
+    metricTaxonomyVersion: MetricTaxonomyVersion
+    context: MetricRankContext
+    status: Literal["resolved", "unavailable", "invalid_context"]
+    metrics: DuelPressMetricRanks | None = None
+
+    @model_validator(mode="after")
+    def validate_metrics_status(self) -> "MetricRankResult":
+        if self.status == "resolved" and self.metrics is None:
+            raise ValueError("resolved metric-rank results require metrics")
+        if self.status != "resolved" and self.metrics is not None:
+            raise ValueError("non-resolved metric-rank results must have null metrics")
+        return self
+
+
+class MetricRanksEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    results: list[MetricRankResult] = Field(min_length=1, max_length=50)
+
+
 class ApiErrorEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

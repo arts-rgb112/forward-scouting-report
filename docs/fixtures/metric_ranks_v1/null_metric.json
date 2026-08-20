@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0.0",
+  "results": [
+    {
+      "key": "unavailable-metric-fixture",
+      "player": {"idNamespace": "fotmob", "playerId": 194165},
+      "metricTaxonomyVersion": "duel-press-v1",
+      "context": {"season": "2025/2026", "mode": "league", "scope": 8, "competition": "all"},
+      "status": "resolved",
+      "metrics": {
+        "outsideShot": {"rank": null, "population": 0},
+        "boxThreat": {"rank": null, "population": 0},
+        "dangerZone": {"rank": null, "population": 0},
+        "combinedDuel": {"rank": null, "population": 0},
+        "spaceControl": {"rank": null, "population": 0},
+        "forwardPress": {"rank": null, "population": 0}
+      }
+    }
+  ]
+}
