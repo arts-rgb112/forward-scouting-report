@@ -14,7 +14,8 @@ type Props = {
   query: string; role: string; position?: string; ageBand?: AgeBand; minutesBand?: MinutesBand;
   positionCapability?: PositionFilterCapability; ageCapability?: PositionFilterCapability; minutesCapability?: PositionFilterCapability;
   watchOnly: boolean; watchCount: number; watchAvailable?: boolean; resultLabel?: string; hasFilters: boolean;
-  players: readonly Player[]; dataset: DatasetRouteState;
+  players: readonly ToolbarPlayer[]; dataset: DatasetRouteState;
+  onPlayerSuggestionSelect?(player: ToolbarPlayer): void;
   onQueryChange(value: string): void; onRoleChange(value: string): void; onPositionChange?(value: string): void;
   onAgeBandChange?(value: AgeBand): void; onMinutesBandChange?(value: MinutesBand): void;
   onWatchOnlyChange(value: boolean): void; onOpenWatchlist?(): void; viewMode?: "leaderboard" | "watchlist";
@@ -23,6 +24,7 @@ type Props = {
   /** Retained only to keep older embedding callers type-compatible; toolbar sorting is no longer rendered. */
   sort?: string; direction?: "asc" | "desc"; onSortChange?(value: never): void; onDirectionChange?(value: "asc" | "desc"): void;
 };
+export type ToolbarPlayer = Pick<Player, "id" | "name" | "position" | "club" | "league">;
 const action = "inline-flex min-h-11 items-center justify-center rounded-md border px-3 text-[11px] font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#8cff68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#080b0c]";
 const selectClass = "min-h-11 min-w-[9rem] rounded-md border border-white/10 bg-[#111516] px-3 text-[11px] font-bold text-zinc-300";
 function capabilityMessage(capability: PositionFilterCapability, label: string) {
@@ -84,7 +86,12 @@ export function DashboardToolbar(props: Props) {
   }, [props.hasFilters, props.query, queryNamespace]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => cancelCommit(), []); // eslint-disable-line react-hooks/exhaustive-deps
   const candidates = needle.trim() ? props.players.filter((player) => `${player.name} ${player.club.name} ${player.league.name}`.toLocaleLowerCase().includes(needle.toLocaleLowerCase())).slice(0, 8) : [];
-  const choose = (player: Player) => { cancelCommit(); const legacy = enabledLegacyHref(legacyDetailHref(player.id, { name: player.name, clubName: player.club.name }, props.dataset) ?? ""); window.location.assign(legacy || datasetHref(`/players/${player.id}`, props.dataset)); };
+  const choose = (player: ToolbarPlayer) => {
+    cancelCommit();
+    if (props.onPlayerSuggestionSelect) { props.onPlayerSuggestionSelect(player); return; }
+    const legacy = enabledLegacyHref(legacyDetailHref(player.id, { name: player.name, clubName: player.club.name }, props.dataset) ?? "");
+    window.location.assign(legacy || datasetHref(`/players/${player.id}`, props.dataset));
+  };
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter" && (composingRef.current || event.nativeEvent.isComposing)) return;
     if (event.key === "ArrowDown" && candidates.length) { event.preventDefault(); setOpen(true); setActive((index) => Math.min(index + 1, candidates.length - 1)); }
@@ -102,6 +109,7 @@ export function DashboardToolbar(props: Props) {
     props.onReset();
   };
   const positionCapability = props.positionCapability ?? "unsupported"; const ageCapability = props.ageCapability ?? "unsupported"; const minutesCapability = props.minutesCapability ?? "unsupported";
+  const watchAvailable = props.watchAvailable ?? true;
   const positionSupported = positionCapability === "supported"; const ageSupported = ageCapability === "supported"; const minutesSupported = minutesCapability === "supported";
   const statusMessages = !watchlistMode ? [[positionCapability, "Position"], [ageCapability, "Age"], [minutesCapability, "Minutes played"]].filter(([capability]) => capability !== "supported") as [PositionFilterCapability, string][] : [];
 
@@ -114,8 +122,9 @@ export function DashboardToolbar(props: Props) {
       <select aria-label="Position" value={positionSupported || watchlistMode ? (props.position ?? "ALL") : "ALL"} onChange={(event) => props.onPositionChange?.(event.target.value)} className={selectClass}>{positionFilters.map((item) => <option key={item.value} value={item.value} disabled={item.value !== "ALL" && !positionSupported && !watchlistMode}>{item.label}</option>)}</select>
       <select aria-label="Age" value={ageSupported || watchlistMode ? (props.ageBand ?? "all") : "all"} onChange={(event) => props.onAgeBandChange?.(event.target.value as AgeBand)} className={selectClass}>{ageFilters.map((item) => <option key={item.value} value={item.value} disabled={item.value !== "all" && !ageSupported && !watchlistMode}>{item.label}</option>)}</select>
       <select aria-label="Minutes played" value={minutesSupported || watchlistMode ? (props.minutesBand ?? "all") : "all"} onChange={(event) => props.onMinutesBandChange?.(event.target.value as MinutesBand)} className={selectClass}>{minutesFilters.map((item) => <option key={item.value} value={item.value} disabled={item.value !== "all" && !minutesSupported && !watchlistMode}>{item.label}</option>)}</select>
-      <button type="button" onClick={() => props.onViewModeChange?.(watchlistMode ? "leaderboard" : "watchlist")} aria-pressed={watchlistMode} className={`${action} ${watchlistMode ? "border-[#8cff68]/45 bg-[#8cff68]/10 text-[#a7ff5b]" : "border-white/10 bg-[#111516] text-zinc-300"}`}>Watchlist {props.watchCount}</button><button type="button" onClick={props.onOpenWatchlist} className={`${action} border-white/10 bg-[#111516] text-zinc-300`}>Manage / Compare</button>{props.resultLabel && <b className="ml-1 text-[11px] text-zinc-300">{props.resultLabel}</b>}{props.hasFilters && <button type="button" onClick={reset} className="ml-auto min-h-9 rounded px-2 text-[11px] font-bold text-[#a7ff5b]">Reset filters</button>}
+      <button type="button" disabled={!watchAvailable} aria-describedby={!watchAvailable ? "watch-actions-status" : undefined} title={!watchAvailable ? "준비 중" : undefined} onClick={watchAvailable ? () => props.onViewModeChange?.(watchlistMode ? "leaderboard" : "watchlist") : undefined} aria-pressed={watchlistMode} className={`${action} ${watchlistMode ? "border-[#8cff68]/45 bg-[#8cff68]/10 text-[#a7ff5b]" : "border-white/10 bg-[#111516] text-zinc-300"} disabled:cursor-not-allowed disabled:opacity-50`}>Watchlist {props.watchCount}</button><button type="button" disabled={!watchAvailable} aria-describedby={!watchAvailable ? "watch-actions-status" : undefined} title={!watchAvailable ? "준비 중" : undefined} onClick={watchAvailable ? props.onOpenWatchlist : undefined} className={`${action} border-white/10 bg-[#111516] text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50`}>Manage / Compare</button>{props.resultLabel && <b className="ml-1 text-[11px] text-zinc-300">{props.resultLabel}</b>}{props.hasFilters && <button type="button" onClick={reset} className="ml-auto min-h-9 rounded px-2 text-[11px] font-bold text-[#a7ff5b]">Reset filters</button>}
     </div>
     {statusMessages.length > 0 && <p id="server-filter-status" role="status" className="min-h-5 text-[11px] text-zinc-500">{statusMessages.map(([capability, label]) => capabilityMessage(capability, label)).join(" ")}</p>}
+    {!watchAvailable && <p id="watch-actions-status" className="min-h-5 text-[11px] text-zinc-500">Watchlist 및 비교는 준비 중입니다.</p>}
   </section>;
 }

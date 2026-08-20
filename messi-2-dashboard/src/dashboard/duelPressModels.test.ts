@@ -4,6 +4,8 @@ import { beginDuelPressRequest, settleDuelPressRequest, type DuelPressResource }
 import { duelPressEntry, migrateWatchlistV2Source, WATCHLIST_V3_KEY, watchlistV3Key } from "./watchlistStorageV3";
 import { entryFromPlayer } from "./watchlistStorage";
 import { samplePlayers } from "../test/fixtures/players";
+import validLeaderboard from "../../../docs/fixtures/duel_press_v1/valid_leaderboard.json";
+import { duelPressPlayerSchema } from "../api/duelPressContracts";
 const league = { season: "2025/2026", mode: "league" as const, scope: 8 as const, competition: "all" as const };
 const europe = { season: "2024/2025", mode: "europe" as const, scope: null, competition: "uel" as const };
 describe("duel-press saved and compare models", () => {
@@ -24,8 +26,9 @@ describe("duel-press saved and compare models", () => {
     const source = JSON.stringify({ version: 2, entries: [v2Entry], unresolvedLegacyIds: [], migration: { legacyKey: "messi-2-watchlist", migratedAt: null }, selectedEntryKeys: [] });
     const migrated = migrateWatchlistV2Source(source); expect(migrated[0]).toMatchObject({ version: 3, taxonomy: "legacy-v1", playerId: 1, context: league }); expect(source).toBe(JSON.stringify(JSON.parse(source))); expect(WATCHLIST_V3_KEY).toBe("messi-2-watchlist:v3");
   });
+  it("rejects unsafe V2 identities and malformed contexts during V3 migration", () => { const good = entryFromPlayer(samplePlayers[0], { season: league.season, mode: "league", scope: 8, competition: null }); const raw = JSON.stringify({ version: 2, entries: [{ ...good, playerId: -1 }, { ...good, key: "bad-season", context: { ...good.context, season: "yesterday" } }], unresolvedLegacyIds: [], migration: { legacyKey: "messi-2-watchlist", migratedAt: null }, selectedEntryKeys: [] }); expect(migrateWatchlistV2Source(raw)).toEqual([]); expect(() => watchlistV3Key("duel-press-v1", Number.MAX_SAFE_INTEGER + 1, europe)).toThrow(); });
   it("keys duel snapshots by taxonomy and full context", () => {
-    const player = { id: 7, idNamespace: "fotmob" as const, rank: 2, score: 91, stats: { outsideShot: 1, boxThreat: 2, dangerZone: 3, combinedDuel: 4, spaceControl: 5, forwardPress: 6 }, components: { combinedDuelVolume: 7, combinedDuelEfficiency: 8, recoveries: 9, finalThirdPossessionsWon: 10 }, pressingRawMetrics: { recoveries: 0, recoveriesPer90: 0, recoveriesSource: "player_season_total" as const, finalThirdPossessionsWon: null, finalThirdPossessionsWonPer90: null, finalThirdPossessionsWonSource: null } };
-    const entry = duelPressEntry(player, europe, "2026-01-01T00:00:00Z"); expect(entry.snapshot).toEqual(player); expect(entry.snapshot).not.toBe(player); expect(entry.key).toBe(watchlistV3Key("duel-press-v1", 7, europe)); expect(entry.key).not.toBe(watchlistV3Key("legacy-v1", 7, europe));
+    const player = duelPressPlayerSchema.parse(validLeaderboard.data[0]);
+    const entry = duelPressEntry(player, europe, "2026-01-01T00:00:00Z"); expect(entry.snapshot).toEqual(player); expect(entry.snapshot).not.toBe(player); expect(entry.key).toBe(watchlistV3Key("duel-press-v1", player.id, europe)); expect(entry.key).not.toBe(watchlistV3Key("legacy-v1", player.id, europe));
   });
 });

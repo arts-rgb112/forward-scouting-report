@@ -1,0 +1,11 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import validLeaderboard from "../../../docs/fixtures/duel_press_v1/valid_leaderboard.json";
+import validDetail from "../../../docs/fixtures/duel_press_v1/valid_player_detail.json";
+import { fetchDuelPressDetail, fetchDuelPressLeaderboard } from "./duelPressApi";
+const config = { baseUrl: "https://api.test", season: "2025/2026", scope: 8 as const, limit: 1000 }; const dataset = { season: "2025/2026", mode: "league" as const, scope: 8 as const, competition: "all" as const }; const search = { page: 1, pageSize: 50 as const, q: "Kane", role: "all" as const, position: "ALL", ageBand: "all" as const, minutesBand: "all" as const, sort: "combinedDuel" as const, direction: "desc" as const };
+afterEach(() => vi.unstubAllGlobals());
+describe("duel-press transport", () => {
+  it("parses the exact envelope and sends order plus filters", async () => { const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...validLeaderboard, meta: { ...validLeaderboard.meta, applied: { ...validLeaderboard.meta.applied, q: "Kane", sort: "combinedDuel", order: "desc" } } }), { status: 200 })); vi.stubGlobal("fetch", fetcher); const payload = await fetchDuelPressLeaderboard(config, dataset, search, new AbortController().signal); expect(payload.players[0].score).toBe(validLeaderboard.data[0].score); const url = new URL(fetcher.mock.calls[0][0]); expect(url.searchParams.get("order")).toBe("desc"); expect(url.searchParams.get("q")).toBe("Kane"); expect(url.searchParams.has("direction")).toBe(false); });
+  it("never accepts a legacy or wrong-discriminator response", async () => { vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...validLeaderboard, metricTaxonomyVersion: "legacy-v1" }), { status: 200 }))); await expect(fetchDuelPressLeaderboard(config, dataset, { ...search, q: "" }, new AbortController().signal)).rejects.toMatchObject({ kind: "schema" }); });
+  it("validates detail identity and context", async () => { vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(validDetail), { status: 200 }))); await expect(fetchDuelPressDetail(config, validDetail.context.playerId, dataset, new AbortController().signal)).resolves.toMatchObject({ id: validDetail.context.playerId, idNamespace: "fotmob" }); });
+});

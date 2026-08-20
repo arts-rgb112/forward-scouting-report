@@ -4,7 +4,9 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { adaptDuelPressPlayerCore } from "../../api/duelPressAdapter";
 import { DuelPressDetailMetrics } from "./DuelPressDetailMetrics";
-const wire = { id: 7, idNamespace: "fotmob" as const, rank: 9, score: 87.25, stats: { outsideShot: 1, boxThreat: 2, dangerZone: 3, combinedDuel: 4, spaceControl: 5, forwardPress: 6 }, components: { combinedDuelVolume: 7, combinedDuelEfficiency: 8, recoveries: 9, finalThirdPossessionsWon: 10 }, pressingRawMetrics: { recoveries: 0, recoveriesPer90: 0, recoveriesSource: "player_season_total" as const, finalThirdPossessionsWon: null, finalThirdPossessionsWonPer90: null, finalThirdPossessionsWonSource: null } };
+import validLeaderboard from "../../../../docs/fixtures/duel_press_v1/valid_leaderboard.json";
+import { duelPressPlayerSchema } from "../../api/duelPressContracts";
+const wire = duelPressPlayerSchema.parse({ ...validLeaderboard.data[0], rank: 9, score: 87.25, pressingRawMetrics: { recoveries: 0, recoveriesPer90: 0, recoveriesSource: "player_season_total", finalThirdPossessionsWon: null, finalThirdPossessionsWonPer90: null, finalThirdPossessionsWonSource: null } });
 describe("DuelPressDetailMetrics", () => {
   it("copies server score/rank/stats without recomputation", () => { const player = adaptDuelPressPlayerCore(wire); expect(player).toMatchObject({ score: 87.25, rank: 9, stats: wire.stats }); expect(player.stats).not.toBe(wire.stats); });
   it("renders measured zero separately from unavailable raw data with 3x2 metrics", () => {
