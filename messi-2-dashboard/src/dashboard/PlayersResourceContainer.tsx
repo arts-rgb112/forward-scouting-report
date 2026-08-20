@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 
 import { MessiConfigError, type ConfigErrorCategory, parseMessiApiConfig, type MessiApiConfig } from "../api/env";
 import { MessiApiError, isAbortError } from "../api/errors";
+import { leaderboardTaxonomyMode } from "../api/duelPressFeatureGate";
 import { fetchLeaderboard, fetchLeaderboardOptions } from "../api/leaderboardsApi";
 import { datasetFromSearch, datasetKeyOf, leaderboardHref, leaderboardSearchFromSearch } from "./datasetRoute";
 import { ConfigErrorFallback } from "./components/ConfigErrorFallback";
@@ -10,6 +11,7 @@ import { DashboardLoading } from "./components/DashboardLoading";
 import MessiScoutingDashboard from "./MessiScoutingDashboard";
 import { playersResourceReducer, stablePayload } from "./playersResourceState";
 import type { DatasetMeta, DatasetRouteState, LeaderboardOptions, LeaderboardSearch, PositionFilterCapability } from "./types";
+import { DuelPressPlayersResourceContainer } from "./DuelPressPlayersResourceContainer";
 
 type ParsedConfig = { config?: MessiApiConfig; category?: ConfigErrorCategory };
 const fallbackRoute = (config: MessiApiConfig): DatasetRouteState => ({ season: config.season, mode: "league", scope: 8, competition: "all" });
@@ -26,6 +28,11 @@ export function bandWasApplied(meta: DatasetMeta, key: "ageBand" | "minutesBand"
 }
 
 export function PlayersResourceContainer() {
+  if (leaderboardTaxonomyMode(import.meta.env, import.meta.env.MODE) === "duel-press-v1") return <DuelPressPlayersResourceContainer />;
+  return <LegacyPlayersResourceContainer />;
+}
+
+function LegacyPlayersResourceContainer() {
   const [state, dispatch] = useReducer(playersResourceReducer, { type: "idle" });
   const [options, setOptions] = useState<LeaderboardOptions>();
   const [optionsResolved, setOptionsResolved] = useState(false);

@@ -19,8 +19,8 @@ export function LeaderboardPagination({ page, total, pageSize, pending = false, 
         {index > 0 && value - numbered[index - 1] > 1 && <span aria-hidden="true" className="px-1 text-zinc-500">…</span>}
         <button type="button" aria-label={`Page ${value}`} className={button} aria-current={value === page ? "page" : undefined} disabled={unavailable} onClick={() => onPageChange(value)}>{value}</button>
       </span>)}
-      <button type="button" aria-label="Next page" className={button} disabled={unavailable || page === pages} onClick={() => onPageChange(page + 1)}>Next</button>
-      <button type="button" aria-label="Last page" className={button} disabled={unavailable || page === pages} onClick={() => onPageChange(pages)}>Last</button>
+      <button type="button" aria-label="Next page" className={button} disabled={unavailable || page >= pages} onClick={() => onPageChange(page + 1)}>Next</button>
+      <button type="button" aria-label="Last page" className={button} disabled={unavailable || page >= pages} onClick={() => onPageChange(pages)}>Last</button>
     </div>
     <span className="shrink-0 whitespace-nowrap px-1 text-xs text-zinc-500">Page {page} of {pages}</span>
   </nav>;

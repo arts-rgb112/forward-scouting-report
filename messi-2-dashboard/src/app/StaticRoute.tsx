@@ -4,6 +4,10 @@ import { DataQualityIdentityError, fetchPlayerDataQuality } from "../api/dataQua
 import { parseMessiApiConfig, type MessiApiConfig } from "../api/env";
 import { MessiApiError } from "../api/errors";
 import { fetchComparison, fetchLeaderboardOptions, fetchPlayerDetail, fetchTacticalQuadrant } from "../api/leaderboardsApi";
+import { fetchDuelPressDetail, DuelPressApiError } from "../api/duelPressApi";
+import { leaderboardTaxonomyMode } from "../api/duelPressFeatureGate";
+import type { DuelPressPlayerCore } from "../api/duelPressTypes";
+import { DuelPressDetailMetrics } from "../dashboard/components/DuelPressDetailMetrics";
 import { DataQualityBadge } from "../dashboard/components/DataQualityBadge";
 import { metricIsImputed, qualityDisplay, type QualityDisplay } from "../dashboard/dataQualityViewModel";
 import { datasetFromSearch, datasetHref } from "../dashboard/datasetRoute";
@@ -163,7 +167,19 @@ export function StaticRoute() {
   const dataset = currentDataset(config);
   if (path === "/about/messi") return <Page><FocusTitle>M.E.S.S.I. metrics</FocusTitle><p className="mt-3 text-zinc-400">The index combines outside-box shooting, in-box shooting, dribbling, aerial and ground duels, and off-the-ball movement. Scores remain the existing algorithm; dashboard labels improve readability only.</p><a href="/" className="mt-6 inline-flex min-h-11 items-center text-lime-300 hover:underline">Browse leaderboard</a></Page>;
   if (path === "/compare") return <CompareRoute dataset={dataset} config={config} ids={idsFromUrl()} />;
-  return <PlayerDetailRoute id={Number(path.split("/")[2])} dataset={dataset} config={config} />;
+  const playerId = Number(path.split("/")[2]);
+  const duelPressRequested = new URLSearchParams(window.location.search).get("taxonomy") === "duel-press-v1";
+  const duelPressEnabled = leaderboardTaxonomyMode(import.meta.env, import.meta.env.MODE) === "duel-press-v1";
+  if (duelPressRequested && duelPressEnabled) return <DuelPressPlayerDetailRoute id={playerId} dataset={dataset} config={config} />;
+  return <PlayerDetailRoute id={playerId} dataset={dataset} config={config} />;
+}
+
+function DuelPressPlayerDetailRoute({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {
+  const [player, setPlayer] = useState<DuelPressPlayerCore>(); const [error, setError] = useState<string>(); const [retry, setRetry] = useState(0);
+  useEffect(() => { if (!Number.isSafeInteger(id) || id <= 0) { setError("Player not found."); return; } if (!config) { setError("API configuration is unavailable."); return; } const controller = new AbortController(); setPlayer(undefined); setError(undefined); void fetchDuelPressDetail(config, id, dataset, controller.signal).then(setPlayer).catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof DuelPressApiError && cause.kind === "not-found" ? "Player not found in this saved context." : "Duel-press detail could not be loaded."); }); return () => controller.abort(); }, [config, dataset.competition, dataset.mode, dataset.scope, dataset.season, id, retry]);
+  if (error) return <Page><ContextBadge dataset={dataset}/><FocusTitle>Duel-press detail unavailable</FocusTitle><p role="alert" className="mt-3 text-zinc-400">{error}</p><button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-5 min-h-11 text-lime-300">Retry</button></Page>;
+  if (!player) return <Page><ContextBadge dataset={dataset}/><FocusTitle>Loading duel-press detail</FocusTitle></Page>;
+  return <Page><ContextBadge dataset={dataset}/><FocusTitle>{player.name}</FocusTitle><p className="mt-2 text-sm text-zinc-400">#{player.rank} · {player.club.name} · server score {player.score}</p><div className="mt-6"><DuelPressDetailMetrics player={player}/></div><div className="mt-6"><BackLink dataset={dataset}/></div></Page>;
 }
 
 function PlayerDetailRoute({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {

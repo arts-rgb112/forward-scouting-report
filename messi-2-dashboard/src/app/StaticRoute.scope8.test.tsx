@@ -3,10 +3,11 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const transport = vi.hoisted(() => ({ detail: vi.fn(), comparison: vi.fn(), quadrant: vi.fn(), quality: vi.fn(), options: vi.fn() }));
+const transport = vi.hoisted(() => ({ detail: vi.fn(), duelDetail: vi.fn(), comparison: vi.fn(), quadrant: vi.fn(), quality: vi.fn(), options: vi.fn() }));
 vi.mock("../api/env", () => ({ parseMessiApiConfig: vi.fn(() => ({ baseUrl: "https://api.example.test", season: "2025/2026", scope: 7, limit: 1000 })) }));
 vi.mock("../api/leaderboardsApi", () => ({ fetchPlayerDetail: transport.detail, fetchComparison: transport.comparison, fetchTacticalQuadrant: transport.quadrant, fetchLeaderboardOptions: transport.options }));
 vi.mock("../api/dataQualityApi", () => ({ fetchPlayerDataQuality: transport.quality, DataQualityIdentityError: class DataQualityIdentityError extends Error {} }));
+vi.mock("../api/duelPressApi", async (original) => ({ ...await original<typeof import("../api/duelPressApi")>(), fetchDuelPressDetail: transport.duelDetail }));
 
 import { StaticRoute } from "./StaticRoute";
 import { samplePlayers } from "../test/fixtures/players";
@@ -20,7 +21,7 @@ beforeEach(() => {
   transport.comparison.mockResolvedValue({ players: [], meta: {} });
   transport.quadrant.mockResolvedValue({}); transport.quality.mockRejectedValue(new Error("quality unavailable"));
 });
-afterEach(() => { vi.useRealTimers(); cleanup(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); cleanup(); });
 
 describe("scope-8 direct-route capability gate", () => {
   it("allows a direct player route only after authoritative options include scope 8", async () => {
@@ -81,5 +82,20 @@ describe("scope-8 direct-route capability gate", () => {
     render(<StaticRoute />);
     await waitFor(() => expect(transport.detail).toHaveBeenCalledTimes(1));
     expect(transport.options).not.toHaveBeenCalled();
+  });
+
+  it("cannot bypass an explicit false rollout flag with a companion taxonomy URL", async () => {
+    vi.stubEnv("VITE_DUEL_PRESS_LEADERBOARD_ENABLED", "false");
+    window.history.replaceState(null, "", "/players/1?scope=7&taxonomy=duel-press-v1");
+    render(<StaticRoute />);
+    await waitFor(() => expect(transport.detail).toHaveBeenCalledTimes(1));
+    expect(transport.duelDetail).not.toHaveBeenCalled();
+  });
+
+  it("keeps companion direct URLs disabled when the flag is unset in tests", async () => {
+    window.history.replaceState(null, "", "/players/1?scope=7&taxonomy=duel-press-v1");
+    render(<StaticRoute />);
+    await waitFor(() => expect(transport.detail).toHaveBeenCalledTimes(1));
+    expect(transport.duelDetail).not.toHaveBeenCalled();
   });
 });

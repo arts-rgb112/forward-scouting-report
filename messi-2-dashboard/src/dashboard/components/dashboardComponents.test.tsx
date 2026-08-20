@@ -16,6 +16,7 @@ import { ScoreLegend } from "./ScoreLegend";
 import { WatchlistTable } from "./WatchlistTable";
 import { WatchlistCardList } from "./WatchlistCardList";
 import { metricConfig } from "../scoutingConfig";
+import { duelPressDetailHref } from "../duelPressRoute";
 import type { LeaderboardOptions } from "../types";
 import { entryFromPlayer } from "../watchlistStorage";
 import { watchlistRows } from "../watchlistViewModel";
@@ -231,6 +232,36 @@ describe("dashboard contract UI", () => {
     expect(input).toHaveAttribute("aria-activedescendant", option.id);
     expect(option).toHaveAttribute("aria-selected", "true");
     expect(container.querySelectorAll("[role='option'] a, [role='option'] button")).toHaveLength(0);
+  });
+
+  it("delegates companion autocomplete selection for mouse and keyboard navigation", () => {
+    const select = vi.fn();
+    const props = { query: "", role: "ALL", watchOnly: false, watchCount: 0, hasFilters: false, players: samplePlayers, dataset: { season: "2025/2026", mode: "league" as const, scope: 8 as const, competition: "all" as const }, onPlayerSuggestionSelect: select, onQueryChange: vi.fn(), onRoleChange: vi.fn(), onWatchOnlyChange: vi.fn(), onReset: vi.fn() };
+    const mouse = render(<DashboardToolbar {...props} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Search players" }), { target: { value: "Erling" } });
+    fireEvent.click(screen.getByRole("option", { name: /Erling Haaland/ }));
+    expect(select).toHaveBeenLastCalledWith(samplePlayers[0]);
+    mouse.unmount();
+
+    render(<DashboardToolbar {...props} />);
+    const input = screen.getByRole("combobox", { name: "Search players" });
+    fireEvent.change(input, { target: { value: "Erling" } });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(select).toHaveBeenCalledTimes(2);
+    expect(duelPressDetailHref(samplePlayers[0].id, props.dataset)).toBe(`/players/${samplePlayers[0].id}?season=2025%2F2026&mode=league&scope=8&taxonomy=duel-press-v1`);
+  });
+
+  it("disables unavailable companion watch actions with an accessible explanation", () => {
+    const open = vi.fn(); const switchMode = vi.fn();
+    render(<DashboardToolbar query="" role="ALL" watchOnly={false} watchCount={0} watchAvailable={false} hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 8, competition: "all" }} onQueryChange={vi.fn()} onRoleChange={vi.fn()} onWatchOnlyChange={vi.fn()} onOpenWatchlist={open} onViewModeChange={switchMode} onReset={vi.fn()} />);
+    const watch = screen.getByRole("button", { name: "Watchlist 0" });
+    const compare = screen.getByRole("button", { name: "Manage / Compare" });
+    expect(watch).toBeDisabled(); expect(compare).toBeDisabled();
+    expect(watch).toHaveAccessibleDescription("Watchlist 및 비교는 준비 중입니다.");
+    expect(compare).toHaveAccessibleDescription("Watchlist 및 비교는 준비 중입니다.");
+    fireEvent.click(watch); fireEvent.click(compare);
+    expect(switchMode).not.toHaveBeenCalled(); expect(open).not.toHaveBeenCalled();
   });
 
   it("exposes M.E.S.S.I. score sorting through the header with exact aria-sort", () => {
