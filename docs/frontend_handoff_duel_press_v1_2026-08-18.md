@@ -1,5 +1,11 @@
 # M.E.S.S.I. v2 frontend handoff — combined duels and forward pressing
 
+> Superseded for wire-contract details by
+> `docs/frontend_handoff_duel_press_contract_v1_2026-08-20.md`.
+> The newer document fixes the discriminator at the response root, adds detail
+> context echo, and freezes pageSize at 50. Use this file only for metric/UI
+> rationale.
+
 ## Goal
 
 Replace the two separate `aerial` and `groundDuel` dashboard sectors with:

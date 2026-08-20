@@ -17,7 +17,7 @@ from .schemas import (
     AgeBand, AssetRef, CompareMeta, ContinuousCoreAnalysis, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, ShotmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
     DuelPressAppliedFilters, DuelPressComponents, DuelPressLeaderboardEnvelope,
     DuelPressLeaderboardSort, DuelPressPlayerEnvelope, DuelPressPlayerResponse,
-    DuelPressPlayerStats, DuelPressRawMetrics,
+    DuelPressPlayerStats, DuelPressRawMetrics, DuelPressRequestContext,
     LeaderboardPageEnvelope, MessiDataQuality, MessiScoreAnalysis, PlayerAnalysis,
     LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDataQuality, PlayerDetailResponse, PlayerResponse,
@@ -423,6 +423,8 @@ def duel_press_leaderboard_envelope(
     age_band: AgeBand = "all", minutes_band: MinutesBand = "all",
     query: str | None, sort: DuelPressLeaderboardSort, order: SortOrder,
 ) -> DuelPressLeaderboardEnvelope:
+    if page_size != 50:
+        raise ValueError("duel-press-v1 requires pageSize=50")
     applied = DuelPressAppliedFilters(
         role=role,
         position=(position.strip() or None) if position is not None else None,
@@ -478,7 +480,16 @@ def find_duel_press_player(
         row for row in build_duel_press_players(season, mode, scope, competition)
         if row.id == player_id
     ), None)
-    return DuelPressPlayerEnvelope(data=player) if player is not None else None
+    if player is None:
+        return None
+    context = DuelPressRequestContext(
+        playerId=player_id,
+        season=season,
+        mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+    )
+    return DuelPressPlayerEnvelope(context=context, data=player)
 
 
 VOLUME_RADAR_AXES = (

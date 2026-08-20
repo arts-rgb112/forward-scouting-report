@@ -1,0 +1,41 @@
+{
+  "metricTaxonomyVersion": "duel-press-v1",
+  "data": [
+    {
+      "id": 194165,
+      "rank": 2,
+      "name": "Harry Kane",
+      "position": "Striker",
+      "archetype": "Type A",
+      "age": 33,
+      "minutes": 2382,
+      "tier": {"code": "diamond", "level": 1, "label": "Diamond", "taxonomyVersion": "crystal-v2"},
+      "score": 83.88,
+      "face": "https://images.fotmob.com/image_resources/playerimages/194165.png",
+      "nation": null,
+      "league": {"id": 54, "name": "Bundesliga", "icon": "https://images.fotmob.com/image_resources/logo/leaguelogo/54.png"},
+      "club": {"id": 9823, "name": "Bayern München", "icon": "https://images.fotmob.com/image_resources/logo/teamlogo/9823.png"},
+      "stats": {"outsideShot": 93.3, "boxThreat": 93.3, "dangerZone": 84.72, "combinedDuel": 71.92, "spaceControl": 87.35, "forwardPress": 42.25},
+      "idNamespace": "fotmob",
+      "components": {"combinedDuelVolume": 60.75, "combinedDuelEfficiency": 83.1, "recoveries": 28.3, "finalThirdPossessionsWon": 56.2},
+      "pressingRawMetrics": {"recoveries": 77.0, "recoveriesPer90": 2.9093198992443323, "recoveriesSource": "player_season_total", "finalThirdPossessionsWon": 15.0, "finalThirdPossessionsWonPer90": 0.5667506297229219, "finalThirdPossessionsWonSource": "player_season_total"}
+    }
+  ],
+  "meta": {
+    "schemaVersion": "1.1.0",
+    "season": "2025/2026",
+    "mode": "league",
+    "scope": 8,
+    "competition": null,
+    "population": 1057,
+    "returned": 1,
+    "page": 1,
+    "pageSize": 50,
+    "totalItems": 1057,
+    "totalPages": 22,
+    "hasNextPage": true,
+    "applied": {"role": null, "position": null, "q": null, "ageBand": "all", "minutesBand": "all", "sort": "rank", "order": "asc"},
+    "generatedAt": "2026-08-18T14:05:51Z",
+    "source": "messi-static-cohort"
+  }
+}
