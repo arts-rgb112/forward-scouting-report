@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.datastructures import Headers
+from starlette.responses import PlainTextResponse
 
 from .schemas import (
     AgeBand, ApiErrorEnvelope, DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
     DuelPressLeaderboardEnvelope, DuelPressLeaderboardSort, DuelPressPlayerEnvelope,
+    MetricRanksEnvelope, MetricRanksRequest,
     LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDataQualityEnvelope, PlayerDetailEnvelope,
     PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
@@ -22,6 +26,7 @@ from .service import (
     build_player_detail, build_tactical_quadrant_analysis, compare_players, find_v2_player, leaderboard_options,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
+    resolve_metric_rank_entries,
     ShotmapContractViolation,
 )
 
@@ -40,6 +45,7 @@ PROTECTED_WATCHLIST_POST_PATHS = {
     "/api/v2/watchlist/resolve",
     "/api/v2/watchlist/data-quality",
 }
+METRIC_RANKS_POST_PATH = "/api/v2/metric-ranks"
 
 DUEL_PRESS_ERROR_RESPONSES = {
     404: {
@@ -68,6 +74,41 @@ DUEL_PRESS_ERROR_RESPONSES = {
     },
 }
 
+METRIC_RANKS_ERROR_RESPONSES = {
+    413: {
+        "model": ApiErrorEnvelope,
+        "description": "Request body exceeds the 64 KiB companion API limit.",
+    },
+    422: {
+        "description": (
+            "Request validation error: malformed or extra fields, an unsupported taxonomy, "
+            "duplicate keys, or more than 50 entries."
+        ),
+    },
+}
+
+
+class ScopedCORSMiddleware(CORSMiddleware):
+    """Keep legacy Watchlist writes restricted to the fixed production origin.
+
+    Immutable preview origins are intentionally available to the companion API,
+    but must not gain access to the older Watchlist POST surface merely because
+    an application-wide CORS regex is used for read endpoints.
+    """
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope["type"] == "http"
+            and scope["method"] == "OPTIONS"
+            and scope["path"] in PROTECTED_WATCHLIST_POST_PATHS
+        ):
+            origin = Headers(scope=scope).get("origin")
+            if origin and origin != WATCHLIST_ALLOWED_ORIGIN:
+                response = PlainTextResponse("Disallowed CORS origin", status_code=403)
+                await response(scope, receive, send)
+                return
+        await super().__call__(scope, receive, send)
+
 
 def cors_origins() -> list[str]:
     """Use an exact comma-separated allowlist; deployment origins are configured externally."""
@@ -80,6 +121,14 @@ def cors_origin_regex() -> str:
     return VERCEL_PREVIEW_ORIGIN_REGEX
 
 
+def is_metric_ranks_origin_allowed(origin: str | None) -> bool:
+    """POST batch ranks only from the production dashboard or this project's previews."""
+    return bool(origin) and (
+        origin == WATCHLIST_ALLOWED_ORIGIN
+        or re.fullmatch(VERCEL_PREVIEW_ORIGIN_REGEX, origin) is not None
+    )
+
+
 def validate_duel_press_context(mode: str, competition: str) -> None:
     if mode == "league" and competition != "all":
         raise HTTPException(
@@ -90,17 +139,18 @@ def validate_duel_press_context(mode: str, competition: str) -> None:
 
 app = FastAPI(
     title="M.E.S.S.I. 2.0 Scouting API",
-    version="2.3.0",
+    version="2.4.0",
     description=(
         "M.E.S.S.I. scouting API. Existing v2 responses remain stable; the opt-in "
         "duel-press-v1 companion contract combines ground/aerial duels and adds "
-        "forward pressing from recoveries and final-third possession wins."
+        "forward pressing from recoveries and final-third possession wins. "
+        "metric-ranks-v1 provides batch all-cohort ranks for the same taxonomy."
     ),
     docs_url="/docs",
     redoc_url="/redoc",
 )
 app.add_middleware(
-    CORSMiddleware,
+    ScopedCORSMiddleware,
     allow_origins=cors_origins(),
     allow_origin_regex=cors_origin_regex(),
     allow_credentials=False,
@@ -120,11 +170,18 @@ async def shotmap_contract_error(_: Request, exc: ShotmapContractViolation) -> J
 
 @app.middleware("http")
 async def guard_watchlist_resolution(request: Request, call_next):
-    """Bound the stateless resolver and give POST access only to production."""
-    if request.url.path not in PROTECTED_WATCHLIST_POST_PATHS:
+    """Bound client-owned batch posts and reject hostile browser origins."""
+    path = request.url.path
+    if request.method != "POST" or path not in (*PROTECTED_WATCHLIST_POST_PATHS, METRIC_RANKS_POST_PATH):
         return await call_next(request)
-    if request.headers.get("origin") != WATCHLIST_ALLOWED_ORIGIN:
-        return JSONResponse(status_code=403, content={"detail": "Origin is not allowed for watchlist resolution"})
+    origin = request.headers.get("origin")
+    origin_allowed = (
+        origin == WATCHLIST_ALLOWED_ORIGIN
+        if path in PROTECTED_WATCHLIST_POST_PATHS
+        else is_metric_ranks_origin_allowed(origin)
+    )
+    if not origin_allowed:
+        return JSONResponse(status_code=403, content={"detail": "Origin is not allowed for this companion API"})
     content_length = request.headers.get("content-length")
     try:
         if content_length is not None and int(content_length) > WATCHLIST_MAX_BODY_BYTES:
@@ -310,6 +367,22 @@ def get_duel_press_player(
     if player is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     return player
+
+
+@app.post(
+    "/api/v2/metric-ranks",
+    response_model=MetricRanksEnvelope,
+    tags=["leaderboards"],
+    responses=METRIC_RANKS_ERROR_RESPONSES,
+)
+def metric_ranks(request: MetricRanksRequest) -> MetricRanksEnvelope:
+    """Batch exact all-cohort ranks without changing leaderboard/detail DTOs.
+
+    Result order always mirrors the request. A syntactically valid but absent
+    season/competition is ``invalid_context``; a valid context without that
+    player is ``unavailable``. Neither condition aborts sibling entries.
+    """
+    return MetricRanksEnvelope(results=resolve_metric_rank_entries(request.entries))
 
 
 @app.get(

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0.0",
+  "results": [
+    {
+      "key": "fotmob:194165|season:2025/2026|mode:league|scope:8|competition:all",
+      "player": {"idNamespace": "fotmob", "playerId": 194165},
+      "metricTaxonomyVersion": "duel-press-v1",
+      "context": {"season": "2025/2026", "mode": "league", "scope": 8, "competition": "all"},
+      "status": "resolved",
+      "metrics": {
+        "outsideShot": {"rank": 14, "population": 673},
+        "boxThreat": {"rank": 2, "population": 673},
+        "dangerZone": {"rank": 22, "population": 673},
+        "combinedDuel": {"rank": 41, "population": 673},
+        "spaceControl": {"rank": 31, "population": 673},
+        "forwardPress": {"rank": 17, "population": 673}
+      }
+    }
+  ]
+}

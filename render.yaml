@@ -9,6 +9,6 @@ services:
     autoDeployTrigger: commit
     envVars:
       - key: MESSI_CORS_ORIGINS
-        value: http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173
+        value: http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173,https://forward-scouting-report-6dn7-tau.vercel.app
       - key: PYTHONUNBUFFERED
         value: "1"
