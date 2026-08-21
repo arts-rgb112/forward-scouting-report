@@ -492,7 +492,7 @@ def messi_rank_tier(rank: Optional[int], population: int) -> str:
     return "⚙️ 아이언 5"
 
 
-@functools.lru_cache(maxsize=32)
+@functools.lru_cache(maxsize=8)
 def get_spear_leaderboard(
     league_id: int, season_name: str, comparison_scope: int = 0,
 ) -> pd.DataFrame:
@@ -624,6 +624,15 @@ def get_spear_leaderboard(
             "league_id": metric.league_id,
             "team_id": metric.team_id,
             "minutes_played": metric.minutes_played,
+            # Keep the six unscaled volume inputs on the cached leaderboard.
+            # Companion benchmarks reuse these exact eligible rows rather than
+            # approximating an average from the rendered 0-100 sector score.
+            "out_box_shots_raw": metric.out_box_shots,
+            "in_box_shots_raw": metric.in_box_shots,
+            "dribble_attempts_raw": metric.dribble_attempts,
+            "aerial_duel_attempts_raw": metric.aerial_duel_attempts,
+            "ground_duel_attempts_raw": metric.ground_duel_attempts,
+            "cca_area_pct": row.get("cca_area_pct") if row is not None else None,
             "recoveries": metric.recoveries,
             "recoveries_per90": metric.recoveries_per90,
             "recoveries_source": metric.recoveries_source,
@@ -770,7 +779,7 @@ def get_league_metric_medians(
     return medians
 
 
-@functools.lru_cache(maxsize=64)
+@functools.lru_cache(maxsize=16)
 def get_tactical_matrix(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
     minimum_final_third_ratio: int = 0, comparison_scope: int = 0,
