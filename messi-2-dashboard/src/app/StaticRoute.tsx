@@ -13,6 +13,7 @@ import { metricIsImputed, qualityDisplay, type QualityDisplay } from "../dashboa
 import { datasetFromSearch, datasetHref } from "../dashboard/datasetRoute";
 import { metricConfig, metricKeys } from "../dashboard/scoutingConfig";
 import type { DatasetRouteState, MetricKey, PlayerAnalysis, PlayerComparison, PlayerDetail, RadarAxis, TacticalQuadrant } from "../dashboard/types";
+import { PlayerDetailRoute as NativePlayerDetailRoute } from "../playerDetail/PlayerDetailRoute";
 
 function currentDataset(config?: MessiApiConfig): DatasetRouteState { return datasetFromSearch(window.location.search, { season: config?.season ?? "2025/2026", mode: "league", scope: config?.scope ?? 8, competition: "all" }); }
 function ContextBadge({ dataset }: { dataset: DatasetRouteState }) { return <span className="inline-flex rounded border border-lime-300/30 bg-lime-300/10 px-2 py-1 text-[10px] font-bold text-lime-200">{dataset.mode === "europe" ? `Europe · ${dataset.competition.toUpperCase()}` : `League · ${dataset.scope} leagues`} · {dataset.season}</span>; }
@@ -174,19 +175,19 @@ export function StaticRoute() {
   const playerId = Number(path.split("/")[2]);
   const duelPressRequested = new URLSearchParams(window.location.search).get("taxonomy") === "duel-press-v1";
   const duelPressEnabled = leaderboardTaxonomyMode(import.meta.env, import.meta.env.MODE) === "duel-press-v1";
-  if (duelPressRequested && duelPressEnabled) return <DuelPressPlayerDetailRoute id={playerId} dataset={dataset} config={config} />;
-  return <PlayerDetailRoute id={playerId} dataset={dataset} config={config} />;
+  return <NativePlayerDetailRoute id={playerId} dataset={dataset} config={config} afterPanels={duelPressRequested && duelPressEnabled ? <DuelPressCompanionPanel id={playerId} dataset={dataset} config={config} /> : undefined} />;
 }
 
-function DuelPressPlayerDetailRoute({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {
-  const [player, setPlayer] = useState<DuelPressPlayerCore>(); const [error, setError] = useState<string>(); const [retry, setRetry] = useState(0);
-  useEffect(() => { if (!Number.isSafeInteger(id) || id <= 0) { setError("Player not found."); return; } if (!config) { setError("API configuration is unavailable."); return; } const controller = new AbortController(); setPlayer(undefined); setError(undefined); void fetchDuelPressDetail(config, id, dataset, controller.signal).then(setPlayer).catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof DuelPressApiError && cause.kind === "not-found" ? "Player not found in this saved context." : "Duel-press detail could not be loaded."); }); return () => controller.abort(); }, [config, dataset.competition, dataset.mode, dataset.scope, dataset.season, id, retry]);
-  if (error) return <Page><ContextBadge dataset={dataset}/><FocusTitle>Duel-press detail unavailable</FocusTitle><p role="alert" className="mt-3 text-zinc-400">{error}</p><button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-5 min-h-11 text-lime-300">Retry</button></Page>;
-  if (!player) return <Page><ContextBadge dataset={dataset}/><FocusTitle>Loading duel-press detail</FocusTitle></Page>;
-  return <Page><ContextBadge dataset={dataset}/><FocusTitle>{player.name}</FocusTitle><p className="mt-2 text-sm text-zinc-400">#{player.rank} · {player.club.name} · server score {player.score}</p><div className="mt-6"><DuelPressDetailMetrics player={player}/></div><div className="mt-6"><BackLink dataset={dataset}/></div></Page>;
+/** A strict taxonomy companion. It never owns or replaces the native player detail route. */
+export function DuelPressCompanionPanel({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {
+  const [player, setPlayer] = useState<DuelPressPlayerCore>(); const [error, setError] = useState<string>(); const [retry, setRetry] = useState(0); const generation = useRef(0);
+  useEffect(() => { if (!Number.isSafeInteger(id) || id <= 0) { setError("Player not found."); return; } if (!config) { setError("API configuration is unavailable."); return; } const controller = new AbortController(); const current = ++generation.current; const live = () => generation.current === current && !controller.signal.aborted; setPlayer(undefined); setError(undefined); void fetchDuelPressDetail(config, id, dataset, controller.signal).then((value) => { if (live()) setPlayer(value); }).catch((cause: unknown) => { if (live()) setError(cause instanceof DuelPressApiError && cause.kind === "not-found" ? "Player not found in this saved context." : "Duel-press detail could not be loaded."); }); return () => controller.abort(); }, [config, dataset.competition, dataset.mode, dataset.scope, dataset.season, id, retry]);
+  if (error) return <section aria-label="Duel and pressing companion" className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4"><h2 className="text-sm font-black">Duel / Press companion unavailable</h2><p role="alert" className="mt-2 text-sm text-zinc-300">{error}</p><button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-4 min-h-11 rounded border border-lime-300/40 px-4 text-lime-300">Retry duel / press companion</button></section>;
+  if (!player) return <section aria-label="Duel and pressing companion" aria-busy="true" className="mt-4 rounded-xl border border-white/10 bg-[#101415] p-4"><h2 className="text-sm font-black">Duel / Press companion</h2><div className="mt-3 h-20 animate-pulse rounded bg-white/10" /></section>;
+  return <section aria-label="Duel and pressing companion" className="mt-4 rounded-xl border border-white/10 bg-[#101415] p-4"><h2 className="text-sm font-black">Duel / Press companion</h2><p className="mt-1 text-xs text-zinc-400">Server-provided duel and pressing taxonomy for this exact context.</p><div className="mt-4"><DuelPressDetailMetrics player={player}/></div></section>;
 }
 
-function PlayerDetailRoute({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {
+function LegacyPlayerDetailRoute({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {
   const [detail, setDetail] = useState<PlayerDetail>(); const [quadrant, setQuadrant] = useState<TacticalQuadrant>(); const [error, setError] = useState<"network" | "not-found" | "config">(); const [retry, setRetry] = useState(0); const [quality, setQuality] = useState<QualityDisplay>({ kind: "idle" });
   const scope8Capability = useScope8Capability(config, dataset);
   useEffect(() => {

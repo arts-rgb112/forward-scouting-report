@@ -228,7 +228,7 @@ describe("dashboard contract UI", () => {
     fireEvent.change(input, { target: { value: "Erling" } });
     fireEvent.keyDown(input, { key: "ArrowDown" });
     const link = screen.getByRole("link", { name: /Erling Haaland/ });
-    expect(link).toHaveAttribute("href", expect.stringContaining(import.meta.env.VITE_LEGACY_HANDOFF_ENABLED === "true" ? "streamlit.app" : "/players/1"));
+    expect(link).toHaveAttribute("href", expect.stringContaining(import.meta.env.VITE_LEGACY_DETAIL_HANDOFF_ENABLED === "true" ? "streamlit.app" : "/players/1"));
     expect(input).toHaveAttribute("aria-expanded", "true");
     expect(link).toHaveFocus();
     expect(fireEvent.keyDown(link, { key: "Enter" })).toBe(true);

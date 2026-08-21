@@ -19,6 +19,10 @@ export type LegacyCompareEntry = {
 export function legacyHandoffEnabled(env: Record<string, string | boolean | undefined> = import.meta.env): boolean {
   return env.VITE_LEGACY_HANDOFF_ENABLED === "true";
 }
+/** Player detail is independently migrated. Only this explicit opt-in restores Streamlit detail links. */
+export function legacyDetailHandoffEnabled(env: Record<string, string | boolean | undefined> = import.meta.env): boolean {
+  return env.VITE_LEGACY_DETAIL_HANDOFF_ENABLED === "true";
+}
 
 export function legacySeason(season: string): string | null {
   const match = /^(\d{4})\/(\d{4})$/.exec(season);
@@ -76,6 +80,14 @@ export function legacyAboutHref(): string { return legacyUrl(new URLSearchParams
  */
 export function resolveLegacyOrInternalHref(legacyHref: string | null, internalHref: string, env?: Record<string, string | boolean | undefined>): string {
   if (!legacyHandoffEnabled(env) || !legacyHref) return internalHref;
+  try {
+    const url = new URL(legacyHref);
+    return url.protocol === "https:" && url.origin === LEGACY_ORIGIN ? url.href : internalHref;
+  } catch { return internalHref; }
+}
+/** Detail links deliberately do not inherit the global Compare/About handoff flag. */
+export function resolveLegacyDetailOrInternalHref(legacyHref: string | null, internalHref: string, env?: Record<string, string | boolean | undefined>): string {
+  if (!legacyDetailHandoffEnabled(env) || !legacyHref) return internalHref;
   try {
     const url = new URL(legacyHref);
     return url.protocol === "https:" && url.origin === LEGACY_ORIGIN ? url.href : internalHref;

@@ -14,7 +14,7 @@ import { TaxonomyWatchlistView } from "./components/TaxonomyWatchlistView";
 import { WatchlistV3Drawer } from "./components/WatchlistV3Drawer";
 import { WatchlistV3SortControls } from "./components/WatchlistV3SortControls";
 import { duelPressDetailHref } from "./duelPressRoute";
-import { legacyDetailHref, resolveLegacyOrInternalHref } from "../navigation/legacyHandoff";
+import { legacyDetailHref, resolveLegacyDetailOrInternalHref as resolveLegacyOrInternalHref } from "../navigation/legacyHandoff";
 import type { AgeBand, DatasetDisplayMeta, DatasetRouteState, LeaderboardOptions, MinutesBand } from "./types";
 import { useOptionalWatchlistV3, WATCHLIST_V3_ENABLED } from "./useWatchlistV3";
 import { useVisibleDuelWatchlistResolution } from "./useVisibleDuelWatchlistResolution";

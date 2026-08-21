@@ -19,7 +19,7 @@ describe("Watchlist V3 drawer", () => {
     function Drawer() { const [saved, setSaved] = useState(entries); const [selected, setSelected] = useState<string[]>([]); return <WatchlistV3Drawer open entries={saved} selectedKeys={selected} feedback="" onClose={close} onRemove={(key) => { setSaved((rows) => rows.filter((row) => row.key !== key)); setSelected((keys) => keys.filter((item) => item !== key)); }} onToggleSelection={(key) => setSelected((keys) => keys.includes(key) ? keys.filter((item) => item !== key) : keys.length >= 2 ? keys : [...keys, key])} />; }
     render(<Drawer />);
     const details = screen.getAllByRole("link", { name: "View detail" });
-    expect(details[0]).toHaveAttribute("href", expect.stringContaining(import.meta.env.VITE_LEGACY_HANDOFF_ENABLED === "true" ? "streamlit.app" : "/players/1"));
+    expect(details[0]).toHaveAttribute("href", expect.stringContaining(import.meta.env.VITE_LEGACY_DETAIL_HANDOFF_ENABLED === "true" ? "streamlit.app" : "/players/1"));
     fireEvent.click(screen.getAllByRole("button", { name: "Select for compare" })[1]);
     fireEvent.click(screen.getAllByRole("button", { name: "Select for compare" })[0]);
     expect(screen.getByText("Position 1")).toBeInTheDocument();

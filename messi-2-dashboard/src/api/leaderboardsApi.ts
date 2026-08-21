@@ -85,6 +85,7 @@ export async function fetchPlayerDetail(config: MessiApiConfig, id: number, stat
   url.search = new URLSearchParams({ ...contextParams(state), includeAnalysis: "true" }).toString();
   try {
     const parsed = playerDetailEnvelopeSchema.parse(await getJson(url.toString(), signal));
+    if (parsed.data.id !== id) throw new MessiApiError("schema", "Player detail identity did not match request");
     return { player: adaptPlayer(parsed.data, parsed.tierTaxonomyVersion), analysis: parsed.data.analysis ? adaptAnalysis(parsed.data.analysis) : undefined };
   } catch (error) { return parseError("Player detail response was invalid", error); }
 }

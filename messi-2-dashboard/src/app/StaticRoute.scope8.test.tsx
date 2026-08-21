@@ -9,8 +9,9 @@ vi.mock("../api/leaderboardsApi", () => ({ fetchPlayerDetail: transport.detail, 
 vi.mock("../api/dataQualityApi", () => ({ fetchPlayerDataQuality: transport.quality, DataQualityIdentityError: class DataQualityIdentityError extends Error {} }));
 vi.mock("../api/duelPressApi", async (original) => ({ ...await original<typeof import("../api/duelPressApi")>(), fetchDuelPressDetail: transport.duelDetail }));
 
-import { StaticRoute } from "./StaticRoute";
+import { DuelPressCompanionPanel, StaticRoute } from "./StaticRoute";
 import { samplePlayers } from "../test/fixtures/players";
+import validDuelPressDetail from "../../../docs/fixtures/duel_press_v1/valid_player_detail.json";
 
 const optionsWithScope8 = { seasons: ["2025/2026"], scopes: [{ value: 8 as const, label: "8 leagues", leagueIds: [1] }], competitions: { all: { code: "all" as const, label: "All", available: true, reason: null }, ucl: { code: "ucl" as const, label: "UCL", available: true, reason: null }, uel: { code: "uel" as const, label: "UEL", available: true, reason: null }, uecl: { code: "uecl" as const, label: "UECL", available: true, reason: null } } };
 const optionsWithoutScope8 = { ...optionsWithScope8, scopes: [{ value: 7 as const, label: "7 leagues", leagueIds: [1] }] };
@@ -18,6 +19,7 @@ const optionsWithoutScope8 = { ...optionsWithScope8, scopes: [{ value: 7 as cons
 beforeEach(() => {
   vi.clearAllMocks();
   transport.detail.mockResolvedValue({ player: samplePlayers[0] });
+  transport.duelDetail.mockResolvedValue(validDuelPressDetail.data);
   transport.comparison.mockResolvedValue({ players: [], meta: {} });
   transport.quadrant.mockResolvedValue({}); transport.quality.mockRejectedValue(new Error("quality unavailable"));
 });
@@ -90,6 +92,8 @@ describe("scope-8 direct-route capability gate", () => {
     render(<StaticRoute />);
     await waitFor(() => expect(transport.detail).toHaveBeenCalledTimes(1));
     expect(transport.duelDetail).not.toHaveBeenCalled();
+    expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Duel and pressing companion" })).not.toBeInTheDocument();
   });
 
   it("keeps companion direct URLs disabled when the flag is unset in tests", async () => {
@@ -97,5 +101,42 @@ describe("scope-8 direct-route capability gate", () => {
     render(<StaticRoute />);
     await waitFor(() => expect(transport.detail).toHaveBeenCalledTimes(1));
     expect(transport.duelDetail).not.toHaveBeenCalled();
+  });
+
+  it("keeps the native detail and its volume benchmark, then appends the enabled taxonomy companion for the exact context", async () => {
+    vi.stubEnv("VITE_DUEL_PRESS_LEADERBOARD_ENABLED", "true");
+    window.history.replaceState(null, "", "/players/1?season=2024%2F2025&mode=league&scope=5&competition=all&taxonomy=duel-press-v1");
+    render(<StaticRoute />);
+    expect(await screen.findByRole("heading", { name: samplePlayers[0].name })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Duel and pressing companion" })).toHaveTextContent("Duel / Press companion");
+    expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
+    expect(transport.duelDetail).toHaveBeenCalledWith(expect.anything(), 1, { season: "2024/2025", mode: "league", scope: 5, competition: "all" }, expect.any(AbortSignal));
+  });
+
+  it("keeps the native detail visible when its taxonomy companion fails", async () => {
+    vi.stubEnv("VITE_DUEL_PRESS_LEADERBOARD_ENABLED", "true");
+    transport.duelDetail.mockRejectedValueOnce(new Error("companion unavailable"));
+    window.history.replaceState(null, "", "/players/1?scope=7&taxonomy=duel-press-v1");
+    render(<StaticRoute />);
+    expect(await screen.findByRole("heading", { name: samplePlayers[0].name })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Duel-press detail could not be loaded.");
+    expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
+  });
+
+  it("drops a late companion response after the selected player context changes", async () => {
+    const stale = { ...validDuelPressDetail.data, stats: { ...validDuelPressDetail.data.stats, outsideShot: 99.99 } };
+    const current = { ...validDuelPressDetail.data, stats: { ...validDuelPressDetail.data.stats, outsideShot: 12.34 } };
+    let resolveStale!: (value: typeof validDuelPressDetail.data) => void;
+    transport.duelDetail.mockImplementationOnce(() => new Promise<typeof validDuelPressDetail.data>((resolve) => { resolveStale = resolve; })).mockResolvedValueOnce(current);
+    const config = { baseUrl: "https://api.example.test", season: "2025/2026", scope: 7 as const, limit: 1000 };
+    const oldContext = { season: "2025/2026", mode: "league" as const, scope: 7 as const, competition: "all" as const };
+    const nextContext = { season: "2024/2025", mode: "league" as const, scope: 5 as const, competition: "all" as const };
+    const view = render(<DuelPressCompanionPanel id={1} dataset={oldContext} config={config} />);
+    await waitFor(() => expect(transport.duelDetail).toHaveBeenCalledTimes(1));
+    view.rerender(<DuelPressCompanionPanel id={1} dataset={nextContext} config={config} />);
+    await waitFor(() => expect(transport.duelDetail).toHaveBeenCalledTimes(2));
+    expect(await screen.findByLabelText(/12.34 out of 100/)).toBeInTheDocument();
+    await act(async () => { resolveStale(stale); await Promise.resolve(); });
+    expect(screen.queryByLabelText(/99.99 out of 100/)).not.toBeInTheDocument();
   });
 });

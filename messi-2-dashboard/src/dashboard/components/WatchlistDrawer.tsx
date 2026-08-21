@@ -4,7 +4,7 @@ import { datasetHref, leaderboardHref } from "../datasetRoute";
 import type { DatasetRouteState } from "../types";
 import type { WatchlistEntry } from "../watchlistStorage";
 import { handoffDatasetStateFromWatchlistEntry } from "../watchlistViewModel";
-import { legacyCompareHref, legacyDetailHref, resolveLegacyOrInternalHref } from "../../navigation/legacyHandoff";
+import { legacyCompareHref, legacyDetailHref, resolveLegacyDetailOrInternalHref, resolveLegacyOrInternalHref } from "../../navigation/legacyHandoff";
 import { AssetImage } from "./AssetImage";
 
 type Props = {
@@ -62,7 +62,7 @@ export function WatchlistDrawer({ open, entries, selectedKeys, onClose, onRemove
         {!entries.length && <p className="rounded border border-dashed border-white/15 p-4 text-sm text-zinc-400">No saved players yet. Watch a player from any leaderboard context to keep its snapshot here.</p>}
         <ul className="space-y-3">{entries.map((entry) => {
           const selected = selectedKeys.includes(entry.key); const state = stateFromEntry(entry); const handoff = handoffDatasetStateFromWatchlistEntry(entry);
-          const detailHref = resolveLegacyOrInternalHref(legacyDetailHref(entry.playerId, { name: entry.snapshot.name, clubName: entry.snapshot.clubName }, handoff as Parameters<typeof legacyDetailHref>[2]), datasetHref(`/players/${entry.playerId}`, state));
+          const detailHref = resolveLegacyDetailOrInternalHref(legacyDetailHref(entry.playerId, { name: entry.snapshot.name, clubName: entry.snapshot.clubName }, handoff as Parameters<typeof legacyDetailHref>[2]), datasetHref(`/players/${entry.playerId}`, state));
           return <li key={entry.key} className="rounded-lg border border-white/10 bg-black/20 p-3"><div className="flex gap-3"><AssetImage src={entry.snapshot.face ?? null} alt="" kind="face" fallbackLabel={entry.snapshot.name} width={44} height={44} className="h-11 w-11 rounded object-cover" /><div className="min-w-0 flex-1"><b className="block truncate text-sm">{entry.snapshot.name}</b><p className="truncate text-xs text-zinc-400">{entry.snapshot.position} · {entry.snapshot.clubName}</p><span className="mt-2 inline-flex rounded border border-lime-300/25 bg-lime-300/10 px-2 py-1 text-[10px] font-bold text-lime-100">{contextLabel(entry)}</span></div></div><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => onToggleSelection(entry.key)} aria-pressed={selected} className="min-h-11 rounded border border-white/10 px-2 text-xs">{selected ? "Selected for compare" : "Select for compare"}</button><button type="button" onClick={() => onRemove(entry.key)} className="min-h-11 rounded border border-white/10 px-2 text-xs text-zinc-300">Remove</button><a href={detailHref} className="inline-flex min-h-11 items-center justify-center rounded border border-white/10 px-2 text-xs">View detail</a><a href={leaderboardHref(state)} className="inline-flex min-h-11 items-center justify-center rounded border border-white/10 px-2 text-xs">Open source leaderboard</a></div></li>;
         })}</ul>
       </div>

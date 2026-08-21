@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import { legacyCompareHref, legacyDetailHref, resolveLegacyOrInternalHref, type LegacyCompareEntry } from "../../navigation/legacyHandoff";
+import { legacyCompareHref, legacyDetailHref, resolveLegacyDetailOrInternalHref, resolveLegacyOrInternalHref, type LegacyCompareEntry } from "../../navigation/legacyHandoff";
 import { datasetHref } from "../datasetRoute";
 import { duelPressDetailHref } from "../duelPressRoute";
 import type { WatchlistV3Entry } from "../watchlistV3Contracts";
@@ -12,7 +12,7 @@ function detailHref(entry: WatchlistV3Entry) {
   const dataset = datasetFor(entry);
   const player = entry.taxonomy === "legacy-v1" ? { name: entry.snapshot.name, clubName: entry.snapshot.clubName } : { name: entry.snapshot.name, clubName: entry.snapshot.club.name };
   const internal = entry.taxonomy === "legacy-v1" ? datasetHref(`/players/${entry.playerId}`, dataset) : duelPressDetailHref(entry.playerId, dataset);
-  return resolveLegacyOrInternalHref(legacyDetailHref(entry.playerId, player, dataset), internal);
+  return resolveLegacyDetailOrInternalHref(legacyDetailHref(entry.playerId, player, dataset), internal);
 }
 function compareEntry(entry: WatchlistV3Entry): LegacyCompareEntry {
   const snapshot = entry.taxonomy === "legacy-v1" ? { name: entry.snapshot.name, clubName: entry.snapshot.clubName } : { name: entry.snapshot.name, clubName: entry.snapshot.club.name };
