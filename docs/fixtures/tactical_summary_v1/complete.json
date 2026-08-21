@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0.0",
+  "data": {
+    "playerId": 194165,
+    "idNamespace": "fotmob",
+    "season": "2025/2026",
+    "sourceContext": {"mode": "league", "scope": 8, "competition": null},
+    "available": true,
+    "reason": "complete",
+    "lines": [
+      {"id": "positioning", "text": "박스 중심 위치선정형 · 반복 활동의 38.0%가 박스 안에 분포합니다.", "imputed": false},
+      {"id": "movement", "text": "중앙 침투형 · 주 활동 레인은 전체 반복 활동의 31.0%를 차지합니다.", "imputed": false},
+      {"id": "activity", "text": "핵심 반경 균형형 · 최고 밀도 50%의 연속 활동 면적은 피치의 24.9%입니다.", "imputed": false}
+    ]
+  }
+}

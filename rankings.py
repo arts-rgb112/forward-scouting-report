@@ -633,6 +633,17 @@ def get_spear_leaderboard(
             "aerial_duel_attempts_raw": metric.aerial_duel_attempts,
             "ground_duel_attempts_raw": metric.ground_duel_attempts,
             "cca_area_pct": row.get("cca_area_pct") if row is not None else None,
+            # Ratio-companion raw values use the exact same fully eligible
+            # domestic eight-league rows as the cached M.E.S.S.I. table.
+            # They are additive internal columns; public leaderboard DTOs do
+            # not expose or reinterpret them.
+            "shot_quality_per90_raw": metric.shot_quality_per90,
+            "in_box_finishing_per90_raw": metric.in_box_finishing_per90,
+            "deep_box_zone_score": row.get("deep_box_zone_score") if row is not None else None,
+            "dribble_margin_per90_raw": metric.dribble_margin_per90,
+            "danger_zone_density": row.get("danger_zone_density") if row is not None else None,
+            "aerial_margin_per90_raw": metric.aerial_margin_per90,
+            "duel_margin_per90_raw": metric.duel_margin_per90,
             "recoveries": metric.recoveries,
             "recoveries_per90": metric.recoveries_per90,
             "recoveries_source": metric.recoveries_source,

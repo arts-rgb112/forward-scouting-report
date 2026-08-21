@@ -30,6 +30,8 @@ from .schemas import (
     TrueCoreAnalysis, TrueCoreZone,
     WatchlistDataQualityResult, WatchlistResolveResult, WatchlistResolvedContext,
     WatchlistResolvedPlayer,
+    RatioBenchmarkAxis, RatioBenchmarkData,
+    TacticalSummaryData, TacticalSummaryLine,
     VolumeBenchmarkAxis, VolumeBenchmarkData,
     VolumeBenchmarkSourceContext,
 )
@@ -601,6 +603,14 @@ VOLUME_BENCHMARK_AXES = (
     ("groundDuel", "Ground duel attempts", "ground_duel_attempts_raw", "ground_duel_attempts"),
     ("spaceControl", "Core activity radius", "cca_area_pct", "tactical:cca_area_pct"),
 )
+RATIO_BENCHMARK_AXES = (
+    ("outsideShot", "Outside-box shot quality", "shot_quality_per90_raw", "shot_quality_per90", "single"),
+    ("boxThreat", "Deep-box finishing", "deep_box_zone_score", "tactical:deep_box_zone_score", "box"),
+    ("dangerZone", "Danger-zone progression", "danger_zone_density", "tactical:danger_zone_density", "danger"),
+    ("aerial", "Aerial duel margin", "aerial_margin_per90_raw", "aerial_margin_per90", "single"),
+    ("groundDuel", "Ground duel margin", "duel_margin_per90_raw", "duel_margin_per90", "single"),
+    ("spaceControl", "Space-control efficiency", "danger_zone_density", "tactical:danger_zone_density", "single"),
+)
 RATIO_RADAR_AXES = (
     ("outsideShot", "Outside-box shot quality", "spear_shot_quality_top_percent", "shot_quality_per90", "spear_shot_quality_rank"),
     ("boxThreat", "Deep-box finishing", "micro_zoning_finishing_top_percent", "tactical:deep_box_zone_score", "micro_zoning_finishing_rank"),
@@ -762,6 +772,254 @@ def build_volume_benchmark(
     return VolumeBenchmarkData(
         playerId=player_id, season=season, sourceContext=source_context,
         available=True, reason="partial_source_imputed" if imputed else "complete", axes=axes,
+    )
+
+
+@lru_cache(maxsize=8)
+def _ratio_benchmark_records(season: str) -> tuple[dict[str, object], ...] | None:
+    """Return canonical fully eligible domestic 8-league rows for Ratio scoring."""
+    frame = get_spear_leaderboard(47, season, 8)
+    if frame.empty:
+        return None
+    return tuple(frame.to_dict(orient="records"))
+
+
+def _ratio_population_values(records: tuple[dict[str, object], ...], field: str) -> tuple[float, ...]:
+    return tuple(
+        value for record in records
+        if (value := _finite_number(record.get(field))) is not None
+    )
+
+
+def _ratio_component_score(value: float | None, population: tuple[float, ...]) -> float | None:
+    if value is None or not population:
+        return None
+    return _volume_score_and_rank(value, population)[0]
+
+
+def _ratio_axis_scores(
+    records: tuple[dict[str, object], ...], axis_kind: str,
+) -> tuple[float, ...]:
+    """Mirror existing RATIO_RADAR_AXES factor formulas on the fixed cohort."""
+    if axis_kind == "single":
+        raise ValueError("single-axis scores require their raw field")
+    if axis_kind == "box":
+        primary_field, secondary_field, primary_weight = (
+            "in_box_finishing_per90_raw", "deep_box_zone_score", 0.70,
+        )
+    elif axis_kind == "danger":
+        primary_field, secondary_field, primary_weight = (
+            "dribble_margin_per90_raw", "danger_zone_density", 0.70,
+        )
+    else:
+        raise ValueError(f"unknown Ratio axis kind: {axis_kind}")
+    primary_values = _ratio_population_values(records, primary_field)
+    secondary_values = _ratio_population_values(records, secondary_field)
+    if not primary_values or not secondary_values:
+        return ()
+    scores: list[float] = []
+    for record in records:
+        primary = _ratio_component_score(_finite_number(record.get(primary_field)), primary_values)
+        secondary = _ratio_component_score(_finite_number(record.get(secondary_field)), secondary_values)
+        if primary is not None and secondary is not None:
+            scores.append(round(primary_weight * primary + (1.0 - primary_weight) * secondary, 2))
+    return tuple(scores)
+
+
+def _ratio_player_score(
+    axis_kind: str,
+    raw: float | None,
+    metrics: object,
+    tactical: dict[str, object] | None,
+    records: tuple[dict[str, object], ...],
+    raw_frame_attr: str,
+) -> tuple[float, int | None, tuple[float, ...]]:
+    """Score selected league/Europe metrics on the existing domestic Ratio scale."""
+    if axis_kind == "single":
+        values = _ratio_population_values(records, raw_frame_attr)
+        score_values = tuple(_volume_score_and_rank(value, values)[0] for value in values)
+        player_score, player_rank = _volume_score_and_rank(raw, values)
+        return player_score, player_rank, score_values
+    if axis_kind == "box":
+        primary = _raw_value(metrics, tactical, "in_box_finishing_per90")
+        primary_values = _ratio_population_values(records, "in_box_finishing_per90_raw")
+        secondary_values = _ratio_population_values(records, "deep_box_zone_score")
+    elif axis_kind == "danger":
+        primary = _raw_value(metrics, tactical, "dribble_margin_per90")
+        primary_values = _ratio_population_values(records, "dribble_margin_per90_raw")
+        secondary_values = _ratio_population_values(records, "danger_zone_density")
+    else:
+        raise ValueError(f"unknown Ratio axis kind: {axis_kind}")
+    primary_score = _ratio_component_score(primary, primary_values)
+    secondary_score = _ratio_component_score(raw, secondary_values)
+    scores = _ratio_axis_scores(records, axis_kind)
+    if primary_score is None or secondary_score is None or not scores:
+        return 20.0, None, scores
+    score = round(0.70 * primary_score + 0.30 * secondary_score, 2)
+    rank = 1 + sum(candidate > score for candidate in scores)
+    return score, rank, scores
+
+
+@lru_cache(maxsize=128)
+def build_ratio_benchmark(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> RatioBenchmarkData | None:
+    """Project selected-context Ratio inputs onto the fixed domestic 8-league scale."""
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    source_context = VolumeBenchmarkSourceContext(
+        mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+    )
+    records = _ratio_benchmark_records(season)
+    metrics = _context_source_metrics(player, player_id, season, mode, competition)
+    if records is None or metrics is None:
+        return RatioBenchmarkData(
+            playerId=player_id, season=season, sourceContext=source_context,
+            available=False, reason="benchmark_source_unavailable", axes=[],
+        )
+
+    tactical = get_tactical_ratio_for_session(
+        player_id, getattr(metrics, "league_name", "") or player.league.name, season,
+    )
+    axes: list[RatioBenchmarkAxis] = []
+    imputed = False
+    for axis_id, label, frame_attr, raw_attr, axis_kind in RATIO_BENCHMARK_AXES:
+        raw = _raw_value(metrics, tactical, raw_attr)
+        player_score, player_rank, score_values = _ratio_player_score(
+            axis_kind, raw, metrics, tactical, records, frame_attr,
+        )
+        raw_values = _ratio_population_values(records, frame_attr)
+        if not score_values or not raw_values:
+            return RatioBenchmarkData(
+                playerId=player_id, season=season, sourceContext=source_context,
+                available=False, reason="benchmark_source_unavailable", axes=[],
+            )
+        axis_imputed = raw is None or player_rank is None
+        imputed = imputed or axis_imputed
+        axes.append(RatioBenchmarkAxis(
+            id=axis_id,
+            label=label,
+            playerScore=player_score,
+            averageScore=round(sum(score_values) / len(score_values), 2),
+            playerRawValue=raw,
+            averageRawValue=round(sum(raw_values) / len(raw_values), 4),
+            playerRank=player_rank,
+            population=len(score_values),
+            tier=_radar_tier(player_score),
+            imputed=axis_imputed,
+        ))
+    return RatioBenchmarkData(
+        playerId=player_id, season=season, sourceContext=source_context,
+        available=True, reason="partial_source_imputed" if imputed else "complete", axes=axes,
+    )
+
+
+def _summary_missing_line(line_id: str) -> TacticalSummaryLine:
+    return TacticalSummaryLine(
+        id=line_id,
+        text="공간 활동 원천값이 일부 없어 이 항목은 보강 중입니다.",
+        imputed=True,
+    )
+
+
+def _build_tactical_summary_lines(tactical: dict[str, object]) -> list[TacticalSummaryLine]:
+    """Apply the documented tactical-summary-v1 rule set to static spatial data.
+
+    Positioning uses in-box activity share, movement uses the dominant five-lane
+    share, and activity uses the continuous 50%-density core area.  These are
+    location summaries only; no client-side median or percentile inference is
+    required.
+    """
+    in_box = _finite_number(tactical.get("in_box_ratio"))
+    if in_box is None:
+        positioning = _summary_missing_line("positioning")
+    elif in_box >= 30.0:
+        positioning = TacticalSummaryLine(
+            id="positioning",
+            text=f"박스 중심 위치선정형 · 반복 활동의 {in_box:.1f}%가 박스 안에 분포합니다.",
+            imputed=False,
+        )
+    else:
+        positioning = TacticalSummaryLine(
+            id="positioning",
+            text=f"박스 외곽 연계형 · 반복 활동의 {in_box:.1f}%가 박스 안에 분포합니다.",
+            imputed=False,
+        )
+
+    lanes = {lane: _finite_number(tactical.get(f"lane_{lane}_ratio")) for lane in range(1, 6)}
+    lane_values = {lane: value for lane, value in lanes.items() if value is not None}
+    if len(lane_values) != 5:
+        movement = _summary_missing_line("movement")
+    else:
+        dominant_lane = max(lane_values, key=lambda lane: (lane_values[lane], lane))
+        lane_copy = {
+            1: "우측 와이드 침투형",
+            2: "우측 하프스페이스 타격형",
+            3: "중앙 침투형",
+            4: "좌측 하프스페이스 타격형",
+            5: "좌측 와이드 침투형",
+        }[dominant_lane]
+        movement = TacticalSummaryLine(
+            id="movement",
+            text=f"{lane_copy} · 주 활동 레인은 전체 반복 활동의 {lane_values[dominant_lane]:.1f}%를 차지합니다.",
+            imputed=False,
+        )
+
+    core_area = _finite_number(tactical.get("cca_area_pct"))
+    if core_area is None:
+        activity = _summary_missing_line("activity")
+    else:
+        activity_copy = (
+            "핵심 반경 집중형" if core_area <= 20.0
+            else "핵심 반경 균형형" if core_area <= 35.0
+            else "넓은 활동 반경형"
+        )
+        activity = TacticalSummaryLine(
+            id="activity",
+            text=f"{activity_copy} · 최고 밀도 50%의 연속 활동 면적은 피치의 {core_area:.1f}%입니다.",
+            imputed=False,
+        )
+    return [positioning, movement, activity]
+
+
+@lru_cache(maxsize=128)
+def build_tactical_summary(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> TacticalSummaryData | None:
+    """Return three display-ready tactical lines without changing PlayerAnalysis."""
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    source_context = VolumeBenchmarkSourceContext(
+        mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+    )
+    metrics = _context_source_metrics(player, player_id, season, mode, competition)
+    if metrics is None:
+        return TacticalSummaryData(
+            playerId=player_id, season=season, sourceContext=source_context,
+            available=False, reason="summary_source_unavailable", lines=[],
+        )
+    tactical = get_tactical_ratio_for_session(
+        player_id, getattr(metrics, "league_name", "") or player.league.name, season,
+    )
+    if tactical is None:
+        return TacticalSummaryData(
+            playerId=player_id, season=season, sourceContext=source_context,
+            available=False, reason="summary_source_unavailable", lines=[],
+        )
+    lines = _build_tactical_summary_lines(tactical)
+    return TacticalSummaryData(
+        playerId=player_id,
+        season=season,
+        sourceContext=source_context,
+        available=True,
+        reason="partial_source_imputed" if any(line.imputed for line in lines) else "complete",
+        lines=lines,
     )
 
 
