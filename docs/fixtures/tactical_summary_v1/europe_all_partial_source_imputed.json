@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0.0",
+  "data": {
+    "playerId": 1,
+    "idNamespace": "fotmob",
+    "season": "2025/2026",
+    "sourceContext": {"mode": "europe", "scope": null, "competition": "all"},
+    "available": true,
+    "reason": "partial_source_imputed",
+    "lines": [
+      {"id": "positioning", "text": "Authoritative Europe-all positioning line.", "imputed": false},
+      {"id": "movement", "text": "Authoritative Europe-all source-imputed movement line.", "imputed": true},
+      {"id": "activity", "text": "Authoritative Europe-all activity line.", "imputed": false}
+    ]
+  }
+}
