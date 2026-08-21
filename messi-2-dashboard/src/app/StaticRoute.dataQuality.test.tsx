@@ -11,7 +11,7 @@ vi.mock("../api/dataQualityApi", () => ({
   DataQualityIdentityError: class DataQualityIdentityError extends Error {},
 }));
 
-import { StaticRoute } from "./StaticRoute";
+import { StaticRoute, displayRadarAxisLabel } from "./StaticRoute";
 import { samplePlayers } from "../test/fixtures/players";
 
 const axes = (kind: "volume" | "ratio") => ["outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"].map((id) => ({ id, label: id === "spaceControl" ? "Space control" : id, score: id === "spaceControl" ? 20 : 80, percentile: 50, rank: 10, population: 100, rawValue: 1, tier: "B" as const, imputed: false, kind }));
@@ -23,6 +23,15 @@ const analysis = {
   spatial: { available: false, source: "messi-static-cohort" as const, heatmapPointCount: 0, heatmapPoints: [], shotmapPointCount: 0, shotmapPoints: [], shotmapSnapshotAvailable: false, continuousCore: emptyContinuousCore, inBoxRatio: null, outBoxFinalRatio: null, midThirdRatio: null, finalThirdRatio: null, ccaAreaPct: null, laneRatios: [], depthRatios: [], positionalGrid: [], trueCore: emptyTrueCore, dangerZoneDensity: null, deepBoxZoneScore: null },
 };
 const incomplete = { qualityVersion: "messi-quality-v1" as const, spatialAvailable: false, messiScoreComplete: false, reason: "spatial_session_missing" as const, imputedMetrics: ["spaceControl" as const], imputedComponents: ["spaceControl.volume"], observedWeightPct: 62.5, fallbackComponentScore: 20 as const };
+
+describe("radar composite label compatibility", () => {
+  it("normalizes only the danger-zone composite axis, never raw labels", () => {
+    expect(displayRadarAxisLabel({ id: "dangerZone", label: "Dribbling" })).toBe("온볼 전개 영향력");
+    expect(displayRadarAxisLabel({ id: "dangerZone", label: "드리블 능력" })).toBe("온볼 전개 영향력");
+    expect(displayRadarAxisLabel({ id: "dangerZone", label: "A future server label" })).toBe("온볼 전개 영향력");
+    expect(displayRadarAxisLabel({ id: "other", label: "Dribbling" })).toBe("Dribbling");
+  });
+});
 
 beforeEach(() => {
   vi.clearAllMocks();

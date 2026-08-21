@@ -12,7 +12,9 @@ export type WatchlistRow = {
   key: string; entry: WatchlistEntry; player?: Player; profile: WatchlistProfile;
   source: "current" | "snapshot" | "legacy-partial"; status?: ResolvedWatchlistEntry["status"];
 };
-export type WatchlistFilters = { query: string; role: string; position: string; ageBand?: AgeBand; minutesBand?: MinutesBand; sort: SortState };
+export type WatchlistSortKey = SortState["key"] | "minutes";
+export type WatchlistSortState = { key: WatchlistSortKey; direction: "asc" | "desc" };
+export type WatchlistFilters = { query: string; role: string; position: string; ageBand?: AgeBand; minutesBand?: MinutesBand; sort: WatchlistSortState };
 
 export function datasetStateFromWatchlistEntry(entry: WatchlistEntry): DatasetRouteState {
   return entry.context.mode === "league"
@@ -83,7 +85,9 @@ export function filterAndSortWatchlistRows(rows: readonly WatchlistRow[], filter
   const minutesBand = filters.minutesBand ?? "all";
   const needle = filters.query.trim().toLocaleLowerCase();
   const filtered = rows.filter((row) => {
-    const profile = row.profile;
+    // Resolve overlays are display-only. Filtering/sorting/pagination must remain stable
+    // against immutable saved values so a refreshed profile cannot move another context.
+    const profile = profileFromSnapshot(row.entry.snapshot);
     const searchable = [profile.name, profile.clubName, profile.leagueName, profile.position].map(text).join(" ");
     if (needle && !searchable.includes(needle)) return false;
     if (filters.role !== "ALL" && profile.archetype !== filters.role) return false;
@@ -92,12 +96,13 @@ export function filterAndSortWatchlistRows(rows: readonly WatchlistRow[], filter
   });
   // Array.sort is stable in supported browsers; preserve the incoming storage order on ties.
   return filtered.map((row, index) => ({ row, index })).sort((left, right) => {
-    const a = left.row.profile; const b = right.row.profile;
+    const a = profileFromSnapshot(left.row.entry.snapshot); const b = profileFromSnapshot(right.row.entry.snapshot);
     let comparison: number;
     if (filters.sort.key === "name") comparison = a.name.localeCompare(b.name) * (filters.sort.direction === "asc" ? 1 : -1);
     else if (filters.sort.key === "age") comparison = compareNullable(a.age, b.age, filters.sort.direction);
+    else if (filters.sort.key === "minutes") comparison = compareNullable(a.minutes, b.minutes, filters.sort.direction);
     else comparison = compareNullable(filters.sort.key === "score" ? a.score : a.stats?.[filters.sort.key], filters.sort.key === "score" ? b.score : b.stats?.[filters.sort.key], filters.sort.direction);
-    return comparison || left.index - right.index;
+    return comparison || left.row.entry.key.localeCompare(right.row.entry.key);
   }).map(({ row }) => row);
 }
 

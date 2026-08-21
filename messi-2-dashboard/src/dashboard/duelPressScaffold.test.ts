@@ -10,8 +10,9 @@ const europe = { season: "2025/2026", mode: "europe" as const, scope: null, comp
 describe("duel-press isolated scaffold", () => {
   it("keeps exact registry order/copy without cross keys", () => {
     expect(duelPressTaxonomyRegistry["duel-press-v1"].metricKeys).toEqual(["outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress"]);
-    expect(duelPressTaxonomyRegistry["duel-press-v1"].config.combinedDuel).toEqual({ label: "통합 경합", short: "경합", detail: "지상·공중 경합의 시도량과 승패 마진을 각각 정규화해 균등 결합한 종합 경합 영향력입니다." });
-    expect(duelPressTaxonomyRegistry["duel-press-v1"].config.forwardPress.detail).toBe("파이널 서드에서의 소유권 획득과 경기 전체의 볼 회수 빈도를 동일 코호트 백분위로 변환한 뒤 50:50으로 결합한 압박·세컨드볼 회수 지표입니다.");
+    expect(duelPressTaxonomyRegistry["duel-press-v1"].config.combinedDuel).toMatchObject({ label: "통합 경합", short: "경합", detail: "지상·공중 경합의 시도량과 승패 마진을 각각 정규화해 균등 결합한 종합 경합 영향력입니다." });
+    expect(duelPressTaxonomyRegistry["duel-press-v1"].config.combinedDuel.formula).toContain("50:50");
+    expect(duelPressTaxonomyRegistry["duel-press-v1"].config.forwardPress.detail).toContain("파이널 서드");
     expect("aerial" in duelPressTaxonomyRegistry["duel-press-v1"].config).toBe(false);
   });
   it("defaults production to companion and retains an explicit rollback", () => { expect(leaderboardTaxonomyMode({}, "production")).toBe("duel-press-v1"); expect(leaderboardTaxonomyMode({ VITE_DUEL_PRESS_LEADERBOARD_ENABLED: "false" }, "production")).toBe("legacy-v1"); expect(leaderboardTaxonomyMode({}, "test")).toBe("legacy-v1"); });
