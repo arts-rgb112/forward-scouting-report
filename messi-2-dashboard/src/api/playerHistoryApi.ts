@@ -1,5 +1,5 @@
 import { adaptPlayer } from "./adapter";
-import { playerDetailEnvelopeSchema } from "./contracts";
+import { playerSummaryEnvelopeSchema } from "./contracts";
 import type { MessiApiConfig } from "./env";
 import { MessiApiError } from "./errors";
 import { fetchLeaderboardOptions } from "./leaderboardsApi";
@@ -23,7 +23,7 @@ export async function fetchPlayerSummary(config: MessiApiConfig, id: number, con
   if (!response.ok) throw new MessiApiError("http", `API returned ${response.status}`, response.status);
   let json: unknown; try { json = await response.json(); } catch { throw new MessiApiError("schema", "Response was not valid JSON"); }
   try {
-    const parsed = playerDetailEnvelopeSchema.parse(json);
+    const parsed = playerSummaryEnvelopeSchema.parse(json);
     if (parsed.data.id !== id) throw new MessiApiError("schema", "Player summary identity did not match request");
     const entry = { player: adaptPlayer(parsed.data, parsed.tierTaxonomyVersion), context };
     cache.set(key, entry); return entry;
