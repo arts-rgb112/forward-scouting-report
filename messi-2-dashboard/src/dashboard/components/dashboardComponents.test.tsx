@@ -90,7 +90,7 @@ describe("dashboard contract UI", () => {
     expect(first).not.toHaveBeenCalled();
     const changed = vi.fn();
     view.rerender(<DashboardToolbar {...props} onQueryChange={changed} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "Search players" }), { target: { value: "Erling" } });
+    fireEvent.change(screen.getByLabelText("Search players"), { target: { value: "Erling" } });
     act(() => { vi.advanceTimersByTime(349); });
     expect(changed).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(1); });
@@ -102,7 +102,7 @@ describe("dashboard contract UI", () => {
     vi.useFakeTimers();
     const commit = vi.fn();
     render(<DashboardToolbar query="" role="ALL" watchOnly={false} watchCount={0} hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={commit} onRoleChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={vi.fn()} />);
-    const input = screen.getByRole("combobox", { name: "Search players" });
+    const input = screen.getByLabelText("Search players");
     fireEvent.compositionStart(input);
     fireEvent.change(input, { target: { value: "김" } });
     fireEvent.keyDown(input, { key: "Enter", isComposing: true });
@@ -125,9 +125,9 @@ describe("dashboard contract UI", () => {
     const commit = vi.fn();
     const props = { query: "", role: "ALL", watchOnly: false, watchCount: 0, hasFilters: false, players: samplePlayers, dataset: { season: "2025/2026", mode: "league" as const, scope: 7 as const, competition: "all" as const }, onQueryChange: commit, onRoleChange: vi.fn(), onWatchOnlyChange: vi.fn(), onReset: vi.fn() };
     const view = render(<DashboardToolbar {...props} viewMode="leaderboard" />);
-    fireEvent.change(screen.getByRole("combobox", { name: "Search players" }), { target: { value: "pending leaderboard draft" } });
+    fireEvent.change(screen.getByLabelText("Search players"), { target: { value: "pending leaderboard draft" } });
     view.rerender(<DashboardToolbar {...props} viewMode="watchlist" />);
-    expect(screen.getByRole("combobox", { name: "Search saved contexts" })).toHaveValue("");
+    expect(screen.getByLabelText("Search saved contexts")).toHaveValue("");
     act(() => { vi.advanceTimersByTime(350); });
     expect(commit).not.toHaveBeenCalled();
   });
@@ -137,7 +137,7 @@ describe("dashboard contract UI", () => {
     const commit = vi.fn();
     const props = { query: "", role: "ALL", watchOnly: false, watchCount: 0, players: samplePlayers, dataset: { season: "2025/2026", mode: "league" as const, scope: 7 as const, competition: "all" as const }, onQueryChange: commit, onRoleChange: vi.fn(), onWatchOnlyChange: vi.fn(), onReset: vi.fn() };
     const view = render(<DashboardToolbar {...props} hasFilters={false} />);
-    const input = screen.getByRole("combobox", { name: "Search players" });
+    const input = screen.getByLabelText("Search players");
     fireEvent.change(input, { target: { value: "Haaland" } });
     view.rerender(<DashboardToolbar {...props} role="Type A" hasFilters />);
     expect(input).toHaveValue("Haaland");
@@ -152,13 +152,13 @@ describe("dashboard contract UI", () => {
     vi.useFakeTimers();
     const commit = vi.fn(); const reset = vi.fn();
     render(<DashboardToolbar query="" role="Type A" watchOnly={false} watchCount={0} hasFilters players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={commit} onRoleChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={reset} />);
-    const input = screen.getByRole("combobox", { name: "Search players" });
+    const input = screen.getByLabelText("Search players");
     fireEvent.change(input, { target: { value: "Erling" } });
     fireEvent.keyDown(input, { key: "ArrowDown" });
-    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Player suggestions" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
     expect(input).toHaveValue("");
-    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Player suggestions" })).not.toBeInTheDocument();
     expect(reset).toHaveBeenCalledOnce();
     act(() => { vi.advanceTimersByTime(350); });
     expect(commit).not.toHaveBeenCalled();
@@ -222,37 +222,31 @@ describe("dashboard contract UI", () => {
     expect(container.querySelectorAll("[aria-hidden] button, [aria-hidden] a, [aria-hidden] input, [aria-hidden] select")).toHaveLength(0);
   });
 
-  it("communicates the active autocomplete option through combobox ARIA", () => {
+  it("renders autocomplete suggestions as ordinary direct anchors", async () => {
     const { container } = render(<DashboardToolbar query="" role="ALL" sort="score" watchOnly={false} watchCount={0} resultLabel="2 shown · 2 results" hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={vi.fn()} onRoleChange={vi.fn()} onSortChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={vi.fn()} />);
-    const input = screen.getByRole("combobox", { name: "Search players" });
+    const input = screen.getByLabelText("Search players");
     fireEvent.change(input, { target: { value: "Erling" } });
     fireEvent.keyDown(input, { key: "ArrowDown" });
-    const option = screen.getByRole("option", { name: /Erling Haaland/ });
-    expect(screen.getByRole("listbox")).toBeInTheDocument();
-    expect(input).toHaveAttribute("aria-activedescendant", option.id);
-    expect(option).toHaveAttribute("aria-selected", "true");
-    expect(container.querySelectorAll("[role='option'] a, [role='option'] button")).toHaveLength(0);
+    const link = screen.getByRole("link", { name: /Erling Haaland/ });
+    expect(link).toHaveAttribute("href", expect.stringContaining(import.meta.env.VITE_LEGACY_HANDOFF_ENABLED === "true" ? "streamlit.app" : "/players/1"));
+    expect(input).toHaveAttribute("aria-expanded", "true");
+    expect(link).toHaveFocus();
+    expect(fireEvent.keyDown(link, { key: "Enter" })).toBe(true);
+    fireEvent.keyDown(link, { key: "Escape" });
+    expect(input).toHaveFocus();
+    expect(container.querySelectorAll("[role='option']")).toHaveLength(0);
   });
 
-  it("delegates companion autocomplete selection for mouse and keyboard navigation", () => {
-    const select = vi.fn();
-    const props = { query: "", role: "ALL", watchOnly: false, watchCount: 0, hasFilters: false, players: samplePlayers, dataset: { season: "2025/2026", mode: "league" as const, scope: 8 as const, competition: "all" as const }, onPlayerSuggestionSelect: select, onQueryChange: vi.fn(), onRoleChange: vi.fn(), onWatchOnlyChange: vi.fn(), onReset: vi.fn() };
+  it("uses a supplied direct href without a navigation callback", () => {
+    const props = { query: "", role: "ALL", watchOnly: false, watchCount: 0, hasFilters: false, players: samplePlayers, dataset: { season: "2025/2026", mode: "league" as const, scope: 8 as const, competition: "all" as const }, playerSuggestionHref: (player: typeof samplePlayers[number]) => duelPressDetailHref(player.id, { season: "2025/2026", mode: "league", scope: 8, competition: "all" }), onQueryChange: vi.fn(), onRoleChange: vi.fn(), onWatchOnlyChange: vi.fn(), onReset: vi.fn() };
     const mouse = render(<DashboardToolbar {...props} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "Search players" }), { target: { value: "Erling" } });
-    fireEvent.click(screen.getByRole("option", { name: /Erling Haaland/ }));
-    expect(select).toHaveBeenLastCalledWith(samplePlayers[0]);
+    fireEvent.change(screen.getByLabelText("Search players"), { target: { value: "Erling" } });
+    expect(screen.getByRole("link", { name: /Erling Haaland/ })).toHaveAttribute("href", duelPressDetailHref(samplePlayers[0].id, props.dataset));
     mouse.unmount();
-
-    render(<DashboardToolbar {...props} />);
-    const input = screen.getByRole("combobox", { name: "Search players" });
-    fireEvent.change(input, { target: { value: "Erling" } });
-    fireEvent.keyDown(input, { key: "ArrowDown" });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(select).toHaveBeenCalledTimes(2);
     expect(duelPressDetailHref(samplePlayers[0].id, props.dataset)).toBe(`/players/${samplePlayers[0].id}?season=2025%2F2026&mode=league&scope=8&taxonomy=duel-press-v1`);
   });
 
-  it("disables unavailable companion watch actions with an accessible explanation", () => {
+  it("disables unavailable companion watch actions", () => {
     const open = vi.fn(); const switchMode = vi.fn();
     render(<DashboardToolbar query="" role="ALL" watchOnly={false} watchCount={0} watchAvailable={false} hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 8, competition: "all" }} onQueryChange={vi.fn()} onRoleChange={vi.fn()} onWatchOnlyChange={vi.fn()} onOpenWatchlist={open} onViewModeChange={switchMode} onReset={vi.fn()} />);
     const watch = screen.getByRole("button", { name: "Watchlist 0" });

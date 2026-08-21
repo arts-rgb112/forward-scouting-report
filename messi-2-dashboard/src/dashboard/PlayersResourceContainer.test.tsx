@@ -65,12 +65,12 @@ describe("PlayersResourceContainer URL-backed pages", () => {
     render(<PlayersResourceContainer />);
     await waitFor(() => expect(calls).toHaveLength(1));
     await act(async () => { calls[0].request.resolve({ players: [{ ...samplePlayers[0], name: "Previous row" }], meta: { ...sampleMeta, population: 123, totalItems: 123, returned: 1 }, serverPage: { page: 1, pageSize: 50, totalPages: 3, hasNextPage: true } }); });
-    const input = screen.getByRole("combobox", { name: "Search players" });
+    const input = screen.getByLabelText("Search players");
     const row = screen.getAllByText("Previous row")[0];
     fireEvent.change(input, { target: { value: "Haaland" } });
     await waitFor(() => expect(calls).toHaveLength(2), { timeout: 1_000 });
     expect(calls[1].search).toMatchObject({ q: "Haaland", page: 1, pageSize: 50 });
-    expect(screen.getByRole("combobox", { name: "Search players" })).toBe(input);
+    expect(screen.getByLabelText("Search players")).toBe(input);
     expect(screen.getAllByText("Previous row")).toContain(row);
     expect(document.getElementById("main-content")).toHaveAttribute("aria-busy", "true");
     expect(screen.getByText("Refreshing results…")).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe("PlayersResourceContainer URL-backed pages", () => {
     render(<PlayersResourceContainer />);
     await waitFor(() => expect(calls).toHaveLength(1));
     await act(async () => { calls[0].resolve({ players: [{ ...samplePlayers[0], name: "Dataset A row" }], meta: { ...sampleMeta, totalItems: 1 }, serverPage: { page: 1, pageSize: 50, totalPages: 1, hasNextPage: false } }); });
-    fireEvent.change(screen.getByRole("combobox", { name: "Search players" }), { target: { value: "missing" } });
+    fireEvent.change(screen.getByLabelText("Search players"), { target: { value: "missing" } });
     await waitFor(() => expect(calls).toHaveLength(2), { timeout: 1_000 });
     await act(async () => { calls[1].reject(new Error("refresh failed")); });
     expect(screen.getAllByText("Dataset A row")).not.toHaveLength(0);

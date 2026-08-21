@@ -34,4 +34,14 @@ describe("WatchlistDrawer legacy Compare handoff", () => {
     expect(params.get("right_scope")).toBe("5");
     expect(params.has("right_competition")).toBe(false);
   });
+
+  it("keeps malformed saved contexts internal and still provides a nonempty compare fallback", () => {
+    const malformed: WatchlistEntry[] = [
+      { ...entries[0], key: "bad-league", context: { ...entries[0].context, scope: null } },
+      { ...entries[1], key: "bad-europe", context: { ...entries[1].context, competition: null } },
+    ];
+    render(<WatchlistDrawer {...props} entries={malformed} selectedKeys={["bad-league", "bad-europe"]} />);
+    expect(screen.getAllByRole("link", { name: "View detail" }).map((link) => link.getAttribute("href"))).toEqual([expect.stringContaining("/players/101"), expect.stringContaining("/players/202")]);
+    expect(screen.getByRole("link", { name: "Open comparison page" })).toHaveAttribute("href", "/compare");
+  });
 });

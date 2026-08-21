@@ -15,6 +15,12 @@ export type WatchlistRow = {
 export type WatchlistSortKey = SortState["key"] | "minutes";
 export type WatchlistSortState = { key: WatchlistSortKey; direction: "asc" | "desc" };
 export type WatchlistFilters = { query: string; role: string; position: string; ageBand?: AgeBand; minutesBand?: MinutesBand; sort: WatchlistSortState };
+export type WatchlistHandoffDatasetState = { season: string; mode: "league" | "europe"; scope: 3 | 5 | 7 | 8 | null; competition: "all" | "ucl" | "uel" | "uecl" | null };
+
+/** Preserve persisted invalidity for outbound serializers; UI fallbacks normalize separately. */
+export function handoffDatasetStateFromWatchlistEntry(entry: WatchlistEntry): WatchlistHandoffDatasetState {
+  return { season: entry.context.season, mode: entry.context.mode, scope: entry.context.scope, competition: entry.context.competition };
+}
 
 export function datasetStateFromWatchlistEntry(entry: WatchlistEntry): DatasetRouteState {
   return entry.context.mode === "league"
