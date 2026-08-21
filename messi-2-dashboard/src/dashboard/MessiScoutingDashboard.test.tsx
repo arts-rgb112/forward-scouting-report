@@ -30,7 +30,7 @@ describe("MessiScoutingDashboard watchlist resolver lifecycle", () => {
     await waitFor(() => expect(resolver.resolveWatchlistEntries).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("button", { name: /Resolving/ })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove Erling Haaland saved context" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove Erling Haaland saved context" })[0]);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Resolve saved contexts" })).toBeEnabled());
   });

@@ -44,7 +44,7 @@ describe("watchlist data-quality batches", () => {
   it("posts one exact resolved visible page and replaces an in-flight batch on page change", async () => {
     const players = Array.from({ length: 51 }, (_, index) => ({ ...samplePlayers[index % samplePlayers.length], id: index + 1, rank: index + 1, name: `Saved ${index + 1}` }));
     const entries = players.map((player) => entryFromPlayer(player, context));
-    const sortedEntries = [...entries].sort((left, right) => (players.find((player) => player.id === right.playerId)?.score ?? 0) - (players.find((player) => player.id === left.playerId)?.score ?? 0));
+    const sortedEntries = [...entries].sort((left, right) => ((players.find((player) => player.id === right.playerId)?.score ?? 0) - (players.find((player) => player.id === left.playerId)?.score ?? 0)) || left.key.localeCompare(right.key));
     save(entries);
     transport.resolve.mockResolvedValue(entries.map((entry) => ({ key: entry.key, status: "resolved", player: players.find((player) => player.id === entry.playerId) })));
     const calls: Array<{ entries: WatchlistEntry[]; signal: AbortSignal }> = [];

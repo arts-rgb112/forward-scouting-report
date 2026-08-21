@@ -1,5 +1,17 @@
 import type { WatchlistV3CommonSort } from "../watchlistV3ViewModel";
 
+/** One global mobile-safe control. Values always come from immutable saved snapshots. */
 export function WatchlistV3SortControls({ sort, direction, onChange }: { sort: WatchlistV3CommonSort; direction: "asc" | "desc"; onChange(sort: WatchlistV3CommonSort, direction: "asc" | "desc"): void }) {
-  return <div className="mb-3 flex min-h-11 flex-wrap items-center gap-2" aria-label="Saved context sorting"><label className="text-xs text-zinc-400">Sort saved contexts <select aria-label="Sort saved contexts" value={sort} onChange={(event) => onChange(event.target.value as WatchlistV3CommonSort, direction)} className="ml-2 min-h-11 rounded border border-white/10 bg-[#111516] px-3 text-xs text-zinc-200"><option value="savedAt">Saved time</option><option value="name">Player name</option><option value="score">M.E.S.S.I. score</option><option value="age">Age</option></select></label><button type="button" aria-label={`Sort direction ${direction === "asc" ? "ascending" : "descending"}`} onClick={() => onChange(sort, direction === "asc" ? "desc" : "asc")} className="min-h-11 rounded border border-white/10 px-3 text-xs">{direction === "asc" ? "Ascending ↑" : "Descending ↓"}</button><span className="text-[10px] text-zinc-500">Taxonomy-specific metric sorting is available only within its source leaderboard.</span></div>;
+  return <div className="mb-3 flex min-h-11 flex-wrap items-center gap-2" aria-label="Saved context sorting">
+    <label className="text-xs text-zinc-400">저장된 컨텍스트 정렬
+      <select aria-label="Watchlist 정렬 기준" value={sort} onChange={(event) => onChange(event.target.value as WatchlistV3CommonSort, direction)} className="ml-2 min-h-11 rounded border border-white/10 bg-[#111516] px-3 text-xs text-zinc-200">
+        <option value="savedAt">저장 시점</option><option value="name">선수 이름</option><option value="score">M.E.S.S.I. 점수</option>
+        <option value="outsideShot">박스 밖 슈팅</option><option value="boxThreat">박스 안 슈팅</option><option value="dangerZone">온볼 전개 영향력</option>
+        <option value="aerial">공중 경합 (레거시)</option><option value="groundDuel">지상 경합 (레거시)</option><option value="combinedDuel">통합 경합</option>
+        <option value="spaceControl">오프 더 볼</option><option value="forwardPress">전방 압박 효율</option><option value="minutes">출전 시간</option><option value="age">나이</option>
+      </select>
+    </label>
+    <button type="button" aria-label={`Sort direction ${direction === "asc" ? "ascending" : "descending"}`} onClick={() => onChange(sort, direction === "asc" ? "desc" : "asc")} className="min-h-11 rounded border border-white/10 px-3 text-xs">{direction === "asc" ? "오름차순 ↑" : "내림차순 ↓"}</button>
+    <span className="text-[10px] text-zinc-500">저장 시점 스냅샷 값을 기준으로 정렬합니다. 각 택소노미에 없는 지표는 마지막에 표시됩니다.</span>
+  </div>;
 }
