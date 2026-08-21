@@ -796,10 +796,16 @@ class VolumeBenchmarkData(BaseModel):
     def validate_axes(self) -> "VolumeBenchmarkData":
         expected = ["outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"]
         actual = [axis.id for axis in self.axes]
-        if self.available and actual != expected:
-            raise ValueError("available volume benchmark must return the six canonical axes in order")
-        if not self.available and actual:
-            raise ValueError("unavailable volume benchmark must return an empty axes array")
+        if self.available:
+            if self.reason not in {"complete", "partial_source_imputed"}:
+                raise ValueError("available volume benchmark requires a complete or imputed source reason")
+            if actual != expected:
+                raise ValueError("available volume benchmark must return the six canonical axes in order")
+        else:
+            if self.reason != "benchmark_source_unavailable":
+                raise ValueError("unavailable volume benchmark requires benchmark_source_unavailable")
+            if actual:
+                raise ValueError("unavailable volume benchmark must return an empty axes array")
         return self
 
 
