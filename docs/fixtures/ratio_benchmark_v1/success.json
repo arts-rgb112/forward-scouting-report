@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0.0",
+  "data": {
+    "playerId": 194165,
+    "idNamespace": "fotmob",
+    "season": "2025/2026",
+    "sourceContext": {"mode": "league", "scope": 8, "competition": null},
+    "benchmark": {"label": "8-league avg", "mode": "league", "scope": 8, "kind": "ratio"},
+    "available": true,
+    "reason": "complete",
+    "axes": [
+      {"id":"outsideShot","label":"Outside-box shot quality","playerScore":82.0,"averageScore":51.0,"playerRawValue":0.25,"averageRawValue":0.12,"playerRank":12,"population":673,"tier":"A","imputed":false},
+      {"id":"boxThreat","label":"Deep-box finishing","playerScore":81.0,"averageScore":50.9,"playerRawValue":48.0,"averageRawValue":25.0,"playerRank":13,"population":673,"tier":"A","imputed":false},
+      {"id":"dangerZone","label":"Danger-zone progression","playerScore":66.0,"averageScore":50.3,"playerRawValue":17.0,"averageRawValue":12.0,"playerRank":90,"population":673,"tier":"B","imputed":false},
+      {"id":"aerial","label":"Aerial duel margin","playerScore":60.0,"averageScore":50.1,"playerRawValue":0.30,"averageRawValue":0.10,"playerRank":120,"population":673,"tier":"C","imputed":false},
+      {"id":"groundDuel","label":"Ground duel margin","playerScore":55.0,"averageScore":49.9,"playerRawValue":0.20,"averageRawValue":0.10,"playerRank":150,"population":673,"tier":"C","imputed":false},
+      {"id":"spaceControl","label":"Space-control efficiency","playerScore":74.0,"averageScore":50.5,"playerRawValue":19.0,"averageRawValue":12.0,"playerRank":68,"population":673,"tier":"B","imputed":false}
+    ]
+  }
+}

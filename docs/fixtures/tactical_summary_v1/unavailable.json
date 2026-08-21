@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0.0",
+  "data": {
+    "playerId": 1,
+    "idNamespace": "fotmob",
+    "season": "2025/2026",
+    "sourceContext": {"mode": "league", "scope": 8, "competition": null},
+    "available": false,
+    "reason": "summary_source_unavailable",
+    "lines": []
+  }
+}

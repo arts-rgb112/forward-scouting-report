@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0.0",
+  "data": {
+    "playerId": 1,
+    "idNamespace": "fotmob",
+    "season": "2025/2026",
+    "sourceContext": {"mode": "europe", "scope": null, "competition": "ucl"},
+    "available": true,
+    "reason": "partial_source_imputed",
+    "lines": [
+      {"id": "positioning", "text": "박스 외곽 연계형 · 반복 활동의 10.0%가 박스 안에 분포합니다.", "imputed": false},
+      {"id": "movement", "text": "공간 활동 원천값이 일부 없어 이 항목은 보강 중입니다.", "imputed": true},
+      {"id": "activity", "text": "핵심 반경 집중형 · 최고 밀도 50%의 연속 활동 면적은 피치의 15.0%입니다.", "imputed": false}
+    ]
+  }
+}

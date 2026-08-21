@@ -816,6 +816,145 @@ class VolumeBenchmarkEnvelope(BaseModel):
     data: VolumeBenchmarkData
 
 
+RatioBenchmarkReason = Literal[
+    "complete", "partial_source_imputed", "benchmark_source_unavailable",
+]
+
+
+class RatioBenchmarkDescriptor(VolumeBenchmarkDescriptor):
+    """Fixed domestic benchmark identity for the Ratio radar companion."""
+
+    kind: Literal["ratio"] = "ratio"
+
+
+class RatioBenchmarkAxis(VolumeBenchmarkAxis):
+    """Ratio-axis payload; field semantics intentionally match Volume v1."""
+
+
+class RatioBenchmarkData(BaseModel):
+    """Ratio axes projected onto the exact domestic eight-league cohort."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    idNamespace: Literal["fotmob"] = "fotmob"
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    sourceContext: VolumeBenchmarkSourceContext
+    benchmark: RatioBenchmarkDescriptor = Field(default_factory=RatioBenchmarkDescriptor)
+    available: bool
+    reason: RatioBenchmarkReason
+    axes: list[RatioBenchmarkAxis] = Field(max_length=6)
+
+    @model_validator(mode="after")
+    def validate_axes(self) -> "RatioBenchmarkData":
+        expected = ["outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"]
+        actual = [axis.id for axis in self.axes]
+        if self.available:
+            if self.reason not in {"complete", "partial_source_imputed"}:
+                raise ValueError("available ratio benchmark requires a complete or imputed source reason")
+            if actual != expected:
+                raise ValueError("available ratio benchmark must return the six canonical axes in order")
+        else:
+            if self.reason != "benchmark_source_unavailable":
+                raise ValueError("unavailable ratio benchmark requires benchmark_source_unavailable")
+            if actual:
+                raise ValueError("unavailable ratio benchmark must return an empty axes array")
+        return self
+
+
+class RatioBenchmarkEnvelope(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [{
+                "schemaVersion": "1.0.0",
+                "data": {
+                    "playerId": 194165, "idNamespace": "fotmob", "season": "2025/2026",
+                    "sourceContext": {"mode": "league", "scope": 8, "competition": None},
+                    "benchmark": {"label": "8-league avg", "mode": "league", "scope": 8, "kind": "ratio"},
+                    "available": False, "reason": "benchmark_source_unavailable", "axes": [],
+                },
+            }],
+        },
+    )
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    data: RatioBenchmarkData
+
+
+TacticalSummaryReason = Literal[
+    "complete", "partial_source_imputed", "summary_source_unavailable",
+]
+TacticalSummaryLineId = Literal["positioning", "movement", "activity"]
+
+
+class TacticalSummaryLine(BaseModel):
+    """Server-authored display copy from tactical-summary-v1 rules."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: TacticalSummaryLineId
+    text: str = Field(min_length=1, max_length=280)
+    imputed: bool
+
+
+class TacticalSummaryData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    idNamespace: Literal["fotmob"] = "fotmob"
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    sourceContext: VolumeBenchmarkSourceContext
+    available: bool
+    reason: TacticalSummaryReason
+    lines: list[TacticalSummaryLine] = Field(max_length=3)
+
+    @model_validator(mode="after")
+    def validate_lines(self) -> "TacticalSummaryData":
+        expected = ["positioning", "movement", "activity"]
+        actual = [line.id for line in self.lines]
+        if self.available:
+            if self.reason not in {"complete", "partial_source_imputed"}:
+                raise ValueError("available tactical summary requires a complete or imputed source reason")
+            if actual != expected:
+                raise ValueError("available tactical summary must return three canonical lines in order")
+            imputed = [line.imputed for line in self.lines]
+            if self.reason == "complete" and any(imputed):
+                raise ValueError("complete tactical summary cannot contain imputed lines")
+            if self.reason == "partial_source_imputed" and not any(imputed):
+                raise ValueError("partial tactical summary requires an imputed line")
+        else:
+            if self.reason != "summary_source_unavailable":
+                raise ValueError("unavailable tactical summary requires summary_source_unavailable")
+            if actual:
+                raise ValueError("unavailable tactical summary must return an empty lines array")
+        return self
+
+
+class TacticalSummaryEnvelope(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [{
+                "schemaVersion": "1.0.0",
+                "data": {
+                    "playerId": 194165, "idNamespace": "fotmob", "season": "2025/2026",
+                    "sourceContext": {"mode": "league", "scope": 8, "competition": None},
+                    "available": True, "reason": "complete",
+                    "lines": [
+                        {"id": "positioning", "text": "박스 중심 위치선정형", "imputed": False},
+                        {"id": "movement", "text": "중앙 침투형", "imputed": False},
+                        {"id": "activity", "text": "핵심 반경 균형형", "imputed": False},
+                    ],
+                },
+            }],
+        },
+    )
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    data: TacticalSummaryData
+
+
 class DuelSpatialAnalysis(BaseModel):
     """Opt-in contract; kept outside strict PlayerAnalysis for v2 compatibility."""
 
