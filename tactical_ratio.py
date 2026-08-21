@@ -6,6 +6,7 @@ import csv
 import functools
 import json
 import re
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -241,8 +242,36 @@ def load_tactical_ratios() -> dict[str, dict[str, float]]:
     return _load_tactical_ratios(str(data_path), version)
 
 
+@functools.lru_cache(maxsize=4)
+def _tactical_ratios_by_player(
+    data_path_text: str, version: tuple[int, int],
+) -> dict[str, tuple[dict[str, float], ...]]:
+    """Index static tactical rows once instead of scanning every row per player.
+
+    S.P.E.A.R. cohort construction resolves a tactical row for every eligible
+    player.  Re-filtering the complete multi-season CSV for each lookup turns a
+    cold history request into a quadratic scan and can exceed Render's browser
+    request budget.  The index retains the existing session checks below; it
+    only narrows each lookup to that player's own rows.
+    """
+    indexed: dict[str, list[dict[str, float]]] = {}
+    for row in _load_tactical_ratios(data_path_text, version).values():
+        player_id = str(row.get("fotmob_player_id", "")).strip()
+        if player_id:
+            indexed.setdefault(player_id, []).append(row)
+    return {player_id: tuple(rows) for player_id, rows in indexed.items()}
+
+
+def _tactical_rows_for_player(player_id: str | int) -> tuple[dict[str, float], ...]:
+    data_path = THREE_ZONE_DATA_PATH if THREE_ZONE_DATA_PATH.exists() else LEGACY_DATA_PATH
+    version = _file_version(data_path)
+    if version is None:
+        return ()
+    return _tactical_ratios_by_player(str(data_path), version).get(str(player_id), ())
+
+
 def get_tactical_ratio(player_id: str | int) -> Optional[dict[str, float]]:
-    matches = [row for row in load_tactical_ratios().values() if str(row.get("fotmob_player_id")) == str(player_id)]
+    matches = _tactical_rows_for_player(player_id)
     return _with_current_spatial_definition(matches[0]) if matches else None
 
 
@@ -256,9 +285,8 @@ def get_tactical_ratio_by_name(player_name: str) -> Optional[dict[str, float]]:
 def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, season_label: str) -> Optional[dict[str, float]]:
     """Return one player's one competition-season row; never blend sessions."""
     candidates = [
-        row for row in load_tactical_ratios().values()
-        if str(row.get("fotmob_player_id")) == str(player_id)
-        and _same_competition(row.get("competition_name") or TOURNAMENT_NAMES.get(str(row.get("tournament_id")), ""), competition_name)
+        row for row in _tactical_rows_for_player(player_id)
+        if _same_competition(row.get("competition_name") or TOURNAMENT_NAMES.get(str(row.get("tournament_id")), ""), competition_name)
         and (not row.get("season_name") or _same_season(row.get("season_name"), season_label))
     ]
     if not candidates:
@@ -289,50 +317,133 @@ def load_heatmap_points() -> dict[str, list[list[float]]]:
     return _load_heatmap_points(str(HEATMAP_POINTS_PATH), version)
 
 
-@functools.lru_cache(maxsize=64)
-def _load_heatmap_points_for_key(
-    path_text: str, _version: tuple[int, int], heatmap_key: str,
-) -> tuple[tuple[float, ...], ...]:
-    """Read a single JSON object member without materialising every season point.
+_HEATMAP_INDEX_LOCK = threading.Lock()
+_HEATMAP_OFFSET_VERSIONS: dict[tuple[str, tuple[int, int]], dict[str, int]] = {}
 
-    The committed heatmap file is a large object keyed by ``heatmap_key``.
-    Parsing that full object for a single detail request creates a large
-    transient Python object graph and can exhaust the 512 MB web instance.
-    Keys are canonical, plain identifiers, so a streaming exact JSON-key scan
-    followed by a balanced-array read is both safe and enough for this store.
-    Offline jobs continue to use ``load_heatmap_points`` when they genuinely
-    need the full collection.
+
+def _skip_json_value(data: bytes, start: int) -> int:
+    """Return the byte immediately after one JSON array/object value.
+
+    Stored heatmap values are arrays, but handling quoted strings and nested
+    JSON containers keeps the offset index safe if a future snapshot includes
+    metadata.  This runs once per deployed file version, not once per player.
     """
-    path = Path(path_text)
-    needle = (json.dumps(str(heatmap_key), ensure_ascii=False) + ":").encode("utf-8")
-    trailing = b""
-    collecting = False
+    if start >= len(data) or data[start] not in (ord("["), ord("{")):
+        return start
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(data)):
+        byte = data[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif byte == ord("\\"):
+                escaped = True
+            elif byte == ord('"'):
+                in_string = False
+            continue
+        if byte == ord('"'):
+            in_string = True
+        elif byte in (ord("["), ord("{")):
+            depth += 1
+        elif byte in (ord("]"), ord("}")):
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    return start
+
+
+def _parse_heatmap_value_offsets(data: bytes) -> dict[str, int]:
+    """Parse the outer object once and retain only its member offsets."""
+    offsets: dict[str, int] = {}
+    index = 0
+    length = len(data)
+    whitespace = b" \t\r\n"
+    try:
+        while index < length and data[index] in whitespace:
+            index += 1
+        if index >= length or data[index] != ord("{"):
+            return {}
+        index += 1
+        while index < length:
+            while index < length and data[index] in whitespace + b",":
+                index += 1
+            if index >= length or data[index] == ord("}"):
+                break
+            if data[index] != ord('"'):
+                return {}
+            key_start = index
+            index += 1
+            escaped = False
+            while index < length:
+                byte = data[index]
+                index += 1
+                if escaped:
+                    escaped = False
+                elif byte == ord("\\"):
+                    escaped = True
+                elif byte == ord('"'):
+                    break
+            key = json.loads(data[key_start:index].decode("utf-8"))
+            while index < length and data[index] in whitespace:
+                index += 1
+            if index >= length or data[index] != ord(":"):
+                return {}
+            index += 1
+            while index < length and data[index] in whitespace:
+                index += 1
+            value_start = index
+            value_end = _skip_json_value(data, value_start)
+            if value_end == value_start:
+                return {}
+            if isinstance(key, str) and data[value_start] == ord("["):
+                offsets[key] = value_start
+            index = value_end
+    except (UnicodeDecodeError, ValueError):
+        return {}
+    return offsets
+
+
+@functools.lru_cache(maxsize=1)
+def _heatmap_value_offsets(
+    path_text: str, version: tuple[int, int],
+) -> dict[str, int]:
+    """Build a compact key → byte-offset index for the heatmap snapshot.
+
+    The previous request path streamed the 19.5 MB JSON document from byte
+    zero for *every* eligible player during a cold leaderboard build.  That
+    made four historical summary requests contend for disk/CPU on Render.
+    This index reads the document once per version, retains only key offsets,
+    and leaves individual point arrays lazily decoded below.
+    """
+    cache_key = (path_text, version)
+    with _HEATMAP_INDEX_LOCK:
+        existing = _HEATMAP_OFFSET_VERSIONS.get(cache_key)
+        if existing is not None:
+            return existing
+        try:
+            data = Path(path_text).read_bytes()
+        except OSError:
+            return {}
+        offsets = _parse_heatmap_value_offsets(data)
+        # Only one deployed file version is normally live.  Drop obsolete
+        # offset maps so a data refresh cannot accumulate process memory.
+        _HEATMAP_OFFSET_VERSIONS.clear()
+        _HEATMAP_OFFSET_VERSIONS[cache_key] = offsets
+        return offsets
+
+
+def _read_heatmap_array_at_offset(path: Path, offset: int) -> tuple[tuple[float, ...], ...]:
     array = bytearray()
     depth = 0
     in_string = False
     escaped = False
-
     try:
         with path.open("rb") as handle:
+            handle.seek(offset)
             while chunk := handle.read(64 * 1024):
-                data = trailing + chunk
-                trailing = b""
-                if not collecting:
-                    index = data.find(needle)
-                    if index < 0:
-                        trailing = data[-max(1, len(needle) - 1):]
-                        continue
-                    data = data[index + len(needle):]
-                    start = next((offset for offset, byte in enumerate(data) if byte not in b" \t\r\n"), None)
-                    if start is None:
-                        trailing = data
-                        continue
-                    if data[start] != ord("["):
-                        return ()
-                    collecting = True
-                    data = data[start:]
-
-                for offset, byte in enumerate(data):
+                for byte in chunk:
                     array.append(byte)
                     if in_string:
                         if escaped:
@@ -352,14 +463,23 @@ def _load_heatmap_points_for_key(
                             payload = json.loads(array.decode("utf-8"))
                             if not isinstance(payload, list):
                                 return ()
-                            rows: list[tuple[float, ...]] = []
-                            for point in payload:
-                                if isinstance(point, (list, tuple)):
-                                    rows.append(tuple(point))
-                            return tuple(rows)
+                            return tuple(
+                                tuple(point) for point in payload
+                                if isinstance(point, (list, tuple))
+                            )
     except (OSError, UnicodeDecodeError, ValueError):
         return ()
     return ()
+
+
+@functools.lru_cache(maxsize=256)
+def _load_heatmap_points_for_key(
+    path_text: str, version: tuple[int, int], heatmap_key: str,
+) -> tuple[tuple[float, ...], ...]:
+    offset = _heatmap_value_offsets(path_text, version).get(str(heatmap_key))
+    if offset is None:
+        return ()
+    return _read_heatmap_array_at_offset(Path(path_text), offset)
 
 
 def get_heatmap_points(player_id: str | int, heatmap_key: str | None = None) -> list[list[float]]:

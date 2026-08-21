@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import re
+import time
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import PlainTextResponse
 
 from .schemas import (
@@ -24,7 +29,7 @@ from .schemas import (
 from .service import (
     build_duel_spatial_analysis, build_player_data_quality, build_players,
     duel_press_leaderboard_envelope, find_duel_press_player,
-    build_player_detail, build_tactical_quadrant_analysis, compare_players, find_v2_player, leaderboard_options,
+    build_player_detail, build_tactical_quadrant_analysis, compare_players, find_v2_player_summary_timed, leaderboard_options,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
     resolve_metric_rank_entries,
@@ -48,6 +53,9 @@ PROTECTED_WATCHLIST_POST_PATHS = {
     "/api/v2/watchlist/data-quality",
 }
 METRIC_RANKS_POST_PATH = "/api/v2/metric-ranks"
+PLAYER_SUMMARY_DEADLINE_SECONDS = 8.0
+_PLAYER_SUMMARY_INFLIGHT: dict[tuple[int, str, str, int, str], asyncio.Task[object]] = {}
+PLAYER_SUMMARY_LOG = logging.getLogger("messi.player_summary")
 
 DUEL_PRESS_ERROR_RESPONSES = {
     404: {
@@ -318,17 +326,43 @@ def list_leaderboards(
     return envelope
 
 
+def _history_summary_task(
+    key: tuple[int, str, str, int, str],
+) -> tuple[asyncio.Task[object], bool]:
+    """Share same-context static work while keeping unrelated contexts independent."""
+    existing = _PLAYER_SUMMARY_INFLIGHT.get(key)
+    if existing is not None:
+        return existing, True
+    task: asyncio.Task[object] = asyncio.create_task(
+        run_in_threadpool(find_v2_player_summary_timed, *key)
+    )
+    _PLAYER_SUMMARY_INFLIGHT[key] = task
+
+    def clear_finished(done: asyncio.Task[object]) -> None:
+        if _PLAYER_SUMMARY_INFLIGHT.get(key) is done:
+            _PLAYER_SUMMARY_INFLIGHT.pop(key, None)
+
+    task.add_done_callback(clear_finished)
+    return task, False
+
+
 @app.get(
     "/api/v2/players/{player_id}", response_model=PlayerEnvelope | PlayerDetailEnvelope,
     tags=["players"],
     responses={
+        504: {
+            "model": ApiErrorEnvelope,
+            "description": "A static player summary exceeded the bounded server lookup deadline.",
+        },
         500: {
             "model": ShotmapServiceErrorEnvelope,
-            "description": "The stored shotmap snapshot exists but violates the strict shotmap contract.",
+            "description": "The stored player shotmap snapshot exists but violates the strict shotmap contract.",
         },
     },
 )
-def get_player(
+async def get_player(
+    request: Request,
+    response: Response,
     player_id: int,
     season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
     mode: Literal["league", "europe"] = Query(default="league"),
@@ -339,9 +373,43 @@ def get_player(
     if season not in supported_seasons():
         raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
     if not includeAnalysis:
-        player = find_v2_player(player_id, season, mode, int(scope), competition)
+        request_id = request.headers.get("X-Request-Id") or uuid4().hex
+        key = (player_id, season, mode, int(scope), competition)
+        total_started = time.perf_counter()
+        task, shared = _history_summary_task(key)
+        try:
+            resolved = await asyncio.wait_for(
+                asyncio.shield(task), timeout=PLAYER_SUMMARY_DEADLINE_SECONDS,
+            )
+        except TimeoutError as exc:
+            total_ms = round((time.perf_counter() - total_started) * 1000.0, 2)
+            PLAYER_SUMMARY_LOG.warning(
+                "player_summary_timeout request_id=%s player_id=%s season=%s mode=%s scope=%s competition=%s "
+                "phase=cohort_index total_ms=%s deadline_ms=%s shared_inflight=%s",
+                request_id, player_id, season, mode, scope, competition, total_ms,
+                int(PLAYER_SUMMARY_DEADLINE_SECONDS * 1000), shared,
+            )
+            raise HTTPException(
+                status_code=504,
+                detail="Player summary lookup exceeded the 8-second server deadline.",
+                headers={
+                    "X-Request-Id": request_id,
+                    "Retry-After": "2",
+                    "Server-Timing": f"player-summary;dur={total_ms:.2f}",
+                },
+            ) from exc
+        player, timing = resolved  # type: ignore[misc]
+        total_ms = round((time.perf_counter() - total_started) * 1000.0, 2)
+        PLAYER_SUMMARY_LOG.info(
+            "player_summary_complete request_id=%s player_id=%s season=%s mode=%s scope=%s competition=%s "
+            "phase_cohort_index_ms=%s index_cache=%s shared_inflight=%s schema_envelope_ms=0 total_ms=%s",
+            request_id, player_id, season, mode, scope, competition,
+            timing["phaseCohortIndexMs"], timing["indexCache"], shared, total_ms,
+        )
         if player is None:
             raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+        response.headers["X-Request-Id"] = request_id
+        response.headers["Server-Timing"] = f"player-summary;dur={total_ms:.2f}"
         return PlayerEnvelope(data=player)
     player = build_player_detail(player_id, season, mode, int(scope), competition)
     if player is None:
