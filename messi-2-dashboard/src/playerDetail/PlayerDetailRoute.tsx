@@ -19,6 +19,26 @@ const contextLabel = (context: DatasetRouteState) => context.mode === "league" ?
 const validId = (id: number) => Number.isSafeInteger(id) && id > 0;
 const dossierGradient = (code: string) => ({ diamond: "from-violet-300/25 via-violet-950/25 to-[#101415]", emerald: "from-emerald-300/25 via-emerald-950/25 to-[#101415]", platinum: "from-cyan-300/25 via-cyan-950/25 to-[#101415]", gold: "from-amber-300/25 via-amber-950/25 to-[#101415]", silver: "from-slate-200/20 via-slate-800/30 to-[#101415]", bronze: "from-orange-300/25 via-orange-950/25 to-[#101415]" }[code] ?? "from-zinc-300/15 via-zinc-900/30 to-[#101415]");
 export type PlayerHistoryState = { loading: boolean; entries: PlayerHistoryEntry[]; failed: number; requestedSeasons: number };
+export const HISTORY_SUMMARY_TIMEOUT_MS = 10_000;
+
+async function fetchBoundedPlayerSummary(config: MessiApiConfig, id: number, context: DatasetRouteState, parentSignal: AbortSignal): Promise<PlayerHistoryEntry> {
+  if (parentSignal.aborted) throw parentSignal.reason ?? new DOMException("Player history request aborted", "AbortError");
+  const child = new AbortController();
+  const abortChild = () => child.abort(parentSignal.reason);
+  let rejectAbort!: (reason?: unknown) => void;
+  const aborted = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
+  const rejectFromChild = () => rejectAbort(child.signal.reason ?? new DOMException("Player history request aborted", "AbortError"));
+  child.signal.addEventListener("abort", rejectFromChild, { once: true });
+  if (parentSignal.aborted) abortChild(); else parentSignal.addEventListener("abort", abortChild, { once: true });
+  const timeout = window.setTimeout(() => child.abort(new DOMException("Player history request timed out", "TimeoutError")), HISTORY_SUMMARY_TIMEOUT_MS);
+  try {
+    return await Promise.race([fetchPlayerSummary(config, id, context, child.signal), aborted]);
+  } finally {
+    window.clearTimeout(timeout);
+    parentSignal.removeEventListener("abort", abortChild);
+    child.signal.removeEventListener("abort", rejectFromChild);
+  }
+}
 
 function useScope8(config: MessiApiConfig | undefined, dataset: DatasetRouteState) {
   const [state, setState] = useState<"checking" | "supported" | "unsupported">(dataset.mode === "league" && dataset.scope === 8 ? "checking" : "supported");
@@ -42,11 +62,15 @@ function useHistory(config: MessiApiConfig | undefined, id: number, selected: Da
       const contexts: DatasetRouteState[] = seasons.flatMap((season) => [
         { season, mode: "league" as const, scope: 8 as const, competition: "all" as const }, { season, mode: "europe" as const, scope: 8 as const, competition: "all" as const },
       ]);
-      const results: PromiseSettledResult<PlayerHistoryEntry>[] = [];
-      for (let start = 0; start < contexts.length; start += 4) results.push(...await Promise.allSettled(contexts.slice(start, start + 4).map((context) => fetchPlayerSummary(config, id, context, controller.signal))));
-      if (controller.signal.aborted) return;
-      const entries = results.filter((result): result is PromiseFulfilledResult<PlayerHistoryEntry> => result.status === "fulfilled").map((result) => result.value);
-      setState({ loading: false, entries, failed: results.length - entries.length, requestedSeasons: seasons.length });
+      if (!contexts.length) { if (!controller.signal.aborted) setState({ loading: false, entries: [], failed: 0, requestedSeasons: 0 }); return; }
+      const entries: PlayerHistoryEntry[] = []; let failed = 0;
+      for (let start = 0; start < contexts.length; start += 4) {
+        const batch = await Promise.allSettled(contexts.slice(start, start + 4).map((context) => fetchBoundedPlayerSummary(config, id, context, controller.signal)));
+        if (controller.signal.aborted) return;
+        entries.push(...batch.filter((result): result is PromiseFulfilledResult<PlayerHistoryEntry> => result.status === "fulfilled").map((result) => result.value));
+        failed += batch.filter((result) => result.status === "rejected").length;
+        setState({ loading: false, entries: [...entries], failed, requestedSeasons: seasons.length });
+      }
     }).catch(() => { if (!controller.signal.aborted) setState({ loading: false, entries: [], failed: 1, requestedSeasons: 0 }); });
     return () => controller.abort();
   }, [config, enabled, id, selected.season]);

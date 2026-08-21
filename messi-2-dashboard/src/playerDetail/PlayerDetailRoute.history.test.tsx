@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const transport = vi.hoisted(() => ({ detail: vi.fn(), quality: vi.fn(), quadrant: vi.fn(), options: vi.fn(), summary: vi.fn() }));
@@ -9,7 +9,7 @@ vi.mock("../api/leaderboardsApi", () => ({ fetchPlayerDetail: transport.detail, 
 vi.mock("../api/playerHistoryApi", () => ({ fetchHistoryLeaderboardOptions: transport.options, fetchPlayerSummary: transport.summary }));
 vi.mock("./useVolumeBenchmark", () => ({ useVolumeBenchmark: () => ({ state: { kind: "disabled" as const }, retry: vi.fn() }) }));
 
-import { PlayerDetailRoute } from "./PlayerDetailRoute";
+import { HISTORY_SUMMARY_TIMEOUT_MS, PlayerDetailRoute } from "./PlayerDetailRoute";
 import { samplePlayers } from "../test/fixtures/players";
 
 const config = { baseUrl: "https://authoritative.example.test", season: "2025/2026", scope: 7 as const, limit: 1000 };
@@ -28,10 +28,12 @@ beforeEach(() => {
   transport.options.mockResolvedValue({ seasons: historicalSeasons, scopes: [], competitions: {} });
   transport.summary.mockImplementation((_config: unknown, _id: number, context: DeferredSummary["context"], signal: AbortSignal) => new Promise((resolve) => {
     inFlight += 1; maxInFlight = Math.max(maxInFlight, inFlight);
-    pending.push({ context, signal, resolve: (entry) => { inFlight -= 1; resolve(entry); } });
+    let active = true; const finish = () => { if (active) { active = false; inFlight -= 1; } };
+    signal.addEventListener("abort", finish, { once: true });
+    pending.push({ context, signal, resolve: (entry) => { finish(); signal.removeEventListener("abort", finish); resolve(entry); } });
   }));
 });
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("player detail historical rail transport", () => {
   it("limits deferred requests to four and displays four distinct non-selected seasons", async () => {
@@ -46,15 +48,31 @@ describe("player detail historical rail transport", () => {
   });
 
   it("aborts old history on context change and unmount, ignoring deferred stale responses", async () => {
-    const view = render(<PlayerDetailRoute id={samplePlayers[0].id} dataset={firstDataset} config={config} />);
-    await screen.findByRole("heading", { name: samplePlayers[0].name }); await waitFor(() => expect(pending).toHaveLength(4));
+    vi.useFakeTimers(); const view = render(<PlayerDetailRoute id={samplePlayers[0].id} dataset={firstDataset} config={config} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); }); expect(pending).toHaveLength(4);
     const oldRequests = pending.slice(); const nextDataset = { ...firstDataset, season: "2024/2025" };
     view.rerender(<PlayerDetailRoute id={samplePlayers[0].id} dataset={nextDataset} config={config} />);
-    await waitFor(() => expect(oldRequests.every((request) => request.signal.aborted)).toBe(true)); await waitFor(() => expect(pending).toHaveLength(8));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); }); expect(oldRequests.every((request) => request.signal.aborted)).toBe(true);
+    const currentRequests = pending.slice(oldRequests.length).filter((request) => !request.signal.aborted); expect(currentRequests).toHaveLength(4); expect(maxInFlight).toBeLessThanOrEqual(4);
     oldRequests.forEach((request) => request.resolve(resultFor(request, 99.9)));
-    await Promise.resolve(); expect(screen.queryByText("99.9")).not.toBeInTheDocument();
-    const nextRequests = pending.slice(4); view.unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); }); expect(screen.queryByText("99.9")).not.toBeInTheDocument();
+    const nextRequests = pending.slice(oldRequests.length); view.unmount();
     expect(nextRequests.every((request) => request.signal.aborted)).toBe(true);
-    nextRequests.forEach((request) => request.resolve(resultFor(request, 99.9)));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); }); expect(vi.getTimerCount()).toBe(0); nextRequests.forEach((request) => request.resolve(resultFor(request, 99.9)));
+  });
+
+  it("times out a non-cooperative summary, commits successful siblings, and proceeds to the next batch", async () => {
+    vi.useFakeTimers(); render(<PlayerDetailRoute id={samplePlayers[0].id} dataset={firstDataset} config={config} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(pending).toHaveLength(4); const neverResolving = pending[0];
+    pending.slice(1, 4).forEach((request, index) => request.resolve(resultFor(request, 71 + index)));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); }); expect(pending).toHaveLength(4);
+    await act(async () => { await vi.advanceTimersByTimeAsync(HISTORY_SUMMARY_TIMEOUT_MS); });
+    expect(neverResolving.signal.aborted).toBe(true); expect(pending).toHaveLength(8); expect(maxInFlight).toBeLessThanOrEqual(4);
+    const rail = screen.getByRole("region", { name: "Season score rail" });
+    expect(rail).toHaveTextContent("71.0"); expect(rail).toHaveTextContent("Partial history: 1 context unavailable"); expect(rail.querySelector(".animate-pulse")).toBeNull();
+    pending.slice(4).forEach((request, index) => request.resolve(resultFor(request, 81 + index)));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(rail.querySelector(".animate-pulse")).toBeNull(); expect(rail).toHaveTextContent("top 4 of 4 historical seasons"); expect(maxInFlight).toBeLessThanOrEqual(4); expect(vi.getTimerCount()).toBe(0);
   });
 });
