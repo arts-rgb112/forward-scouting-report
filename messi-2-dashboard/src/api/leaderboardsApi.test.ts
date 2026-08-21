@@ -15,7 +15,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("leaderboard API pagination", () => {
   it("rejects a primary detail response whose player identity differs from the URL", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: { ...player, id: 2, analysis } }), { headers: { "Content-Type": "application/json" } }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: { ...player, id: 2, idNamespace: "fotmob", analysis } }), { headers: { "Content-Type": "application/json" } }));
     await expect(fetchPlayerDetail(config, 1, { season: "2025/2026", mode: "league", scope: 7, competition: "all" }, new AbortController().signal)).rejects.toMatchObject({ kind: "schema" });
   });
   it("accepts a league competition=all request when the server meta correctly returns competition=null", async () => {

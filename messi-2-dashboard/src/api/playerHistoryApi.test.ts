@@ -3,7 +3,7 @@ import { clearPlayerHistoryCache, fetchPlayerSummary } from "./playerHistoryApi"
 
 const config = { baseUrl: "https://api.example.test", season: "2025/2026", scope: 8 as const, limit: 1000 };
 const context = { season: "2024/2025", mode: "league" as const, scope: 8 as const, competition: "all" as const };
-const player = { id: 1, rank: 1, name: "Player", position: "CF", archetype: "Type A", age: null, minutes: 100, tier: { code: "diamond", level: 1, label: "Diamond" }, score: 90, face: null, nation: null, league: { id: 1, name: "League", icon: null }, club: { id: 2, name: "Club", icon: null }, stats: { outsideShot: 1, boxThreat: 2, dangerZone: 3, aerial: 4, groundDuel: 5, spaceControl: 6 } };
+const player = { id: 1, idNamespace: "fotmob", rank: 1, name: "Player", position: "CF", archetype: "Type A", age: null, minutes: 100, tier: { code: "diamond", level: 1, label: "Diamond" }, score: 90, face: null, nation: null, league: { id: 1, name: "League", icon: null }, club: { id: 2, name: "Club", icon: null }, stats: { outsideShot: 1, boxThreat: 2, dangerZone: 3, aerial: 4, groundDuel: 5, spaceControl: 6 } };
 afterEach(() => { vi.restoreAllMocks(); clearPlayerHistoryCache(); });
 describe("player history transport", () => {
   it("caches successful summaries but skips 404 failures", async () => {
