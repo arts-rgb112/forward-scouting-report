@@ -13,9 +13,10 @@ const analysis = { score: { value: 81.99, rank: null, topPercent: null, populati
 
 describe("native player detail panels", () => {
   it("floors the card score and exposes exactly six fixed metric abbreviations", () => {
-    render(<PlayerTierCard player={player} analysis={analysis} quality={{ kind: "idle" }} />);
+    const { container } = render(<PlayerTierCard player={player} analysis={analysis} quality={{ kind: "idle" }} />);
     expect(screen.getByText("81")).toBeInTheDocument();
     expect(["OTS", "BOX", "OBP", "AER", "GND", "OTB"].map((name) => screen.getByText(name))).toHaveLength(6);
+    expect(container.querySelector('svg[aria-hidden="true"]')).toHaveClass("right-0", "sm:-right-8");
   });
   it("keeps tactical summary at exactly three lines even without spatial data", () => {
     render(<TacticalSummary player={player} analysis={analysis} quality={{ kind: "idle" }} />);
