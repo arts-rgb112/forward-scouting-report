@@ -69,4 +69,17 @@ export function legacyCompareHref(entries?: readonly LegacyCompareEntry[]): stri
   return legacyUrl(query);
 }
 export function legacyAboutHref(): string { return legacyUrl(new URLSearchParams({ page: "about" })); }
+/**
+ * Returns a Streamlit handoff only for an explicitly enabled, fixed-origin URL.
+ * Callers always supply a usable same-app destination, so malformed or incomplete
+ * serializer output can never leave an empty link in the UI.
+ */
+export function resolveLegacyOrInternalHref(legacyHref: string | null, internalHref: string, env?: Record<string, string | boolean | undefined>): string {
+  if (!legacyHandoffEnabled(env) || !legacyHref) return internalHref;
+  try {
+    const url = new URL(legacyHref);
+    return url.protocol === "https:" && url.origin === LEGACY_ORIGIN ? url.href : internalHref;
+  } catch { return internalHref; }
+}
+/** @deprecated Use resolveLegacyOrInternalHref with a nonempty internal fallback. */
 export function enabledLegacyHref(href: string, env?: Record<string, string | boolean | undefined>): string | null { return legacyHandoffEnabled(env) ? href : null; }

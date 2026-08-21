@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { LEGACY_ORIGIN, enabledLegacyHref, legacyAboutHref, legacyCompareHref, legacyDetailHref, legacyHandoffEnabled, legacySeason } from "./legacyHandoff";
+import { LEGACY_ORIGIN, enabledLegacyHref, legacyAboutHref, legacyCompareHref, legacyDetailHref, legacyHandoffEnabled, legacySeason, resolveLegacyOrInternalHref } from "./legacyHandoff";
 
 const dataset = { season: "2025/2026", mode: "europe" as const, scope: 7 as const, competition: "ucl" as const };
 describe("legacy handoff", () => {
@@ -33,6 +33,15 @@ describe("legacy handoff", () => {
     expect(params.get("mode")).toBe("league");
     expect(params.get("scope")).toBe("5");
     expect(params.has("competition")).toBe(false);
+  });
+  it("always resolves malformed or non-fixed handoffs to a nonempty internal destination", () => {
+    const fallback = "/players/7?season=2025%2F2026";
+    expect(resolveLegacyOrInternalHref(`${LEGACY_ORIGIN}/?page=detail`, fallback, { VITE_LEGACY_HANDOFF_ENABLED: "true" })).toContain(LEGACY_ORIGIN);
+    expect(resolveLegacyOrInternalHref(`${LEGACY_ORIGIN}/?page=detail`, fallback, { VITE_LEGACY_HANDOFF_ENABLED: "false" })).toBe(fallback);
+    expect(resolveLegacyOrInternalHref(null, fallback, { VITE_LEGACY_HANDOFF_ENABLED: "true" })).toBe(fallback);
+    expect(resolveLegacyOrInternalHref("not a URL", fallback, { VITE_LEGACY_HANDOFF_ENABLED: "true" })).toBe(fallback);
+    expect(resolveLegacyOrInternalHref("https://share.streamlit.io/example", fallback, { VITE_LEGACY_HANDOFF_ENABLED: "true" })).toBe(fallback);
+    expect(resolveLegacyOrInternalHref("https://example.test/", fallback, { VITE_LEGACY_HANDOFF_ENABLED: "true" })).toBe(fallback);
   });
   it("preserves scope 8 in the fixed Streamlit handoff", () => {
     const href = legacyDetailHref(1, { name: "x", clubName: "y" }, { season: "2025/2026", mode: "league", scope: 8, competition: "all" })!;

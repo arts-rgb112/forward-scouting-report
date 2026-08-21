@@ -3,6 +3,7 @@ import { DUEL_PRESS_METRIC_KEYS } from "../../api/duelPressTypes";
 import { duelPressMetricConfig } from "../duelPressRegistry";
 import { duelPressDetailHref } from "../duelPressRoute";
 import type { DatasetRouteState } from "../types";
+import { legacyDetailHref, resolveLegacyOrInternalHref } from "../../navigation/legacyHandoff";
 import { LeaderboardPlayerCardList, LeaderboardPlayerTable, type PresentationSort, type WatchPresentation } from "./LeaderboardPresentation";
 import type { MetricRankMap } from "../useMetricRanks";
 
@@ -14,8 +15,8 @@ type Props = {
 };
 const unavailableWatch = { available: false, isWatched: () => false, onToggle: () => undefined, unavailableLabel: "준비 중" } as const;
 export function DuelPressPlayerTable(props: Props) {
-  return <LeaderboardPlayerTable players={props.players} dataset={props.dataset} metricKeys={DUEL_PRESS_METRIC_KEYS} metricRegistry={duelPressMetricConfig} sort={props.sort} onMetricSort={props.onMetricSort} detailHref={(player) => duelPressDetailHref(player.id, props.dataset)} watch={props.watch ?? unavailableWatch} metricRanksByPlayerId={props.metricRanksByPlayerId} />;
+  return <LeaderboardPlayerTable players={props.players} dataset={props.dataset} metricKeys={DUEL_PRESS_METRIC_KEYS} metricRegistry={duelPressMetricConfig} sort={props.sort} onMetricSort={props.onMetricSort} detailHref={(player) => resolveLegacyOrInternalHref(legacyDetailHref(player.id, { name: player.name, clubName: player.club.name }, props.dataset), duelPressDetailHref(player.id, props.dataset))} watch={props.watch ?? unavailableWatch} metricRanksByPlayerId={props.metricRanksByPlayerId} />;
 }
 export function DuelPressPlayerCardList(props: Props) {
-  return <LeaderboardPlayerCardList players={props.players} dataset={props.dataset} metricKeys={DUEL_PRESS_METRIC_KEYS} metricRegistry={duelPressMetricConfig} sort={props.sort} onMetricSort={props.onMetricSort} detailHref={(player) => duelPressDetailHref(player.id, props.dataset)} watch={props.watch ?? unavailableWatch} metricRanksByPlayerId={props.metricRanksByPlayerId} />;
+  return <LeaderboardPlayerCardList players={props.players} dataset={props.dataset} metricKeys={DUEL_PRESS_METRIC_KEYS} metricRegistry={duelPressMetricConfig} sort={props.sort} onMetricSort={props.onMetricSort} detailHref={(player) => resolveLegacyOrInternalHref(legacyDetailHref(player.id, { name: player.name, clubName: player.club.name }, props.dataset), duelPressDetailHref(player.id, props.dataset))} watch={props.watch ?? unavailableWatch} metricRanksByPlayerId={props.metricRanksByPlayerId} />;
 }

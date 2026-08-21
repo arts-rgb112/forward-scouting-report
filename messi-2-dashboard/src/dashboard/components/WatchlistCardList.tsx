@@ -1,8 +1,8 @@
 import { metricConfig, metricKeys, resolveTierPresentation } from "../scoutingConfig";
 import type { SortState } from "../types";
 import type { WatchlistRow } from "../watchlistViewModel";
-import { datasetStateFromWatchlistEntry, watchlistContextLabel } from "../watchlistViewModel";
-import { enabledLegacyHref, legacyDetailHref } from "../../navigation/legacyHandoff";
+import { datasetStateFromWatchlistEntry, handoffDatasetStateFromWatchlistEntry, watchlistContextLabel } from "../watchlistViewModel";
+import { legacyDetailHref, resolveLegacyOrInternalHref } from "../../navigation/legacyHandoff";
 import { datasetHref } from "../datasetRoute";
 import type { QualityDisplay } from "../dataQualityViewModel";
 import { DataQualityBadge } from "./DataQualityBadge";
@@ -10,7 +10,7 @@ import { MetricScore } from "./MetricScore";
 import { TierBadge } from "./TierBadge";
 
 type Props = { rows: readonly WatchlistRow[]; qualityByKey?: Readonly<Record<string, QualityDisplay>>; onRemove(key: string): void; onRetry(): void; sort?: SortState; onScoreSort?(): void };
-function profileHref(row: WatchlistRow) { const state = datasetStateFromWatchlistEntry(row.entry); return enabledLegacyHref(legacyDetailHref(row.entry.playerId, { name: row.profile.name, clubName: row.profile.clubName }, state) ?? "") ?? datasetHref(`/players/${row.entry.playerId}`, state); }
+function profileHref(row: WatchlistRow) { const fallback = datasetStateFromWatchlistEntry(row.entry); const handoff = handoffDatasetStateFromWatchlistEntry(row.entry); return resolveLegacyOrInternalHref(legacyDetailHref(row.entry.playerId, { name: row.profile.name, clubName: row.profile.clubName }, handoff as Parameters<typeof legacyDetailHref>[2]), datasetHref(`/players/${row.entry.playerId}`, fallback)); }
 function sourceBadge(row: WatchlistRow) { const legacy = row.profile.tier && resolveTierPresentation(row.profile.tier).taxonomy === "legacy-v1" ? " · Legacy tiers" : ""; if (row.source === "current") return null; if (row.source === "snapshot") return <span title="Stored score at save time; current rank is not recomputed." className="rounded border border-amber-300/25 bg-amber-300/10 px-2 py-1 text-[9px] font-bold text-amber-100">저장 시점 스냅샷{legacy}</span>; return <span className="rounded border border-white/15 px-2 py-1 text-[9px] font-bold text-zinc-400">이전 형식 저장</span>; }
 export function WatchlistCardList({ rows, qualityByKey = {}, onRemove, onRetry, sort = { key: "score", direction: "desc" }, onScoreSort }: Props) {
   const scoreOrder = sort.key === "score" && sort.direction === "asc" ? "ascending" : "descending";

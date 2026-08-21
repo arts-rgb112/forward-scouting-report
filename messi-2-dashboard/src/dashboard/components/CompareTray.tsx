@@ -1,12 +1,14 @@
 import { datasetHref } from "../datasetRoute";
 import type { DatasetRouteState, Player } from "../types";
 import { AssetImage } from "./AssetImage";
+import { legacyCompareHref, resolveLegacyOrInternalHref } from "../../navigation/legacyHandoff";
 
 type Props = { players: readonly Player[]; dataset: DatasetRouteState; onRemove(playerId: number): void; onClear(): void };
 
 export function CompareTray({ players, dataset, onRemove, onClear }: Props) {
   if (!players.length) return null;
-  const compareHref = `${datasetHref("/compare", dataset)}&players=${players.map((player) => player.id).join(",")}`;
+  const internalCompareHref = `${datasetHref("/compare", dataset)}&players=${players.map((player) => player.id).join(",")}`;
+  const compareHref = players.length === 2 ? resolveLegacyOrInternalHref(legacyCompareHref(players.map((player) => ({ playerId: player.id, snapshot: { name: player.name, clubName: player.club.name }, context: dataset }))), internalCompareHref) : internalCompareHref;
   return <aside aria-label="Comparison selection" className="fixed inset-x-0 bottom-0 z-[60] border-t border-[#8cff68]/25 bg-[#090d0b]/95 shadow-[0_-16px_50px_rgba(0,0,0,.55)] backdrop-blur-xl">
     <div className="mx-auto max-w-[1580px] px-3 py-3 sm:px-6 lg:px-8"><div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="min-w-0 flex-1"><div className="mb-2 flex items-center gap-2"><b className="text-xs">Compare <span className="text-[#a7ff5b]">{players.length}/2</span></b><span className="text-[10px] text-zinc-500">{players.length < 2 ? "Select one more player to continue." : "Selections are ready for the comparison page."}</span></div>

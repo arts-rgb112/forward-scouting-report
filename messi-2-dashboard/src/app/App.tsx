@@ -3,14 +3,14 @@ import { useEffect, useState } from "react";
 import { PlayersResourceContainer } from "../dashboard/PlayersResourceContainer";
 import { DashboardErrorBoundary } from "../dashboard/components/DashboardErrorBoundary";
 import { StaticRoute } from "./StaticRoute";
-import { enabledLegacyHref, legacyAboutHref, legacyCompareHref } from "../navigation/legacyHandoff";
+import { legacyAboutHref, legacyCompareHref, resolveLegacyOrInternalHref } from "../navigation/legacyHandoff";
 import { WatchlistV3Provider } from "../dashboard/WatchlistV3Provider";
 
 function GlobalNavigation({ pathname }: { pathname: string }) {
   const active = pathname === "/compare" ? "compare" : pathname === "/about/messi" ? "about" : "leaderboard";
   const item = "min-h-11 rounded-md px-3 py-2 text-xs font-bold text-zinc-400 hover:text-lime-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300";
-  const compareHref = enabledLegacyHref(legacyCompareHref()) ?? "/compare";
-  const aboutHref = enabledLegacyHref(legacyAboutHref()) ?? "/about/messi";
+  const compareHref = resolveLegacyOrInternalHref(legacyCompareHref(), "/compare");
+  const aboutHref = resolveLegacyOrInternalHref(legacyAboutHref(), "/about/messi");
   return <header className="border-b border-white/10 bg-[#080b0c]/95">
     <a href="#main-content" className="sr-only z-[100] rounded bg-lime-300 px-3 py-2 font-bold text-black focus:not-sr-only focus:absolute focus:left-3 focus:top-3">본문으로 건너뛰기</a>
     <div className="mx-auto flex max-w-[1580px] items-center justify-between gap-3 px-3 sm:px-6 lg:px-8">

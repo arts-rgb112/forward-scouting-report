@@ -2,8 +2,8 @@ import { metricConfig, metricKeys, resolveTierPresentation } from "../scoutingCo
 import type { MetricKey, SortKey } from "../types";
 import type { WatchlistSortState } from "../watchlistViewModel";
 import type { WatchlistRow } from "../watchlistViewModel";
-import { datasetStateFromWatchlistEntry, watchlistContextLabel } from "../watchlistViewModel";
-import { enabledLegacyHref, legacyDetailHref } from "../../navigation/legacyHandoff";
+import { datasetStateFromWatchlistEntry, handoffDatasetStateFromWatchlistEntry, watchlistContextLabel } from "../watchlistViewModel";
+import { legacyDetailHref, resolveLegacyOrInternalHref } from "../../navigation/legacyHandoff";
 import { datasetHref } from "../datasetRoute";
 import type { QualityDisplay } from "../dataQualityViewModel";
 import { AssetImage } from "./AssetImage";
@@ -12,7 +12,7 @@ import { MetricScore } from "./MetricScore";
 import { TierBadge } from "./TierBadge";
 
 type Props = { rows: readonly WatchlistRow[]; qualityByKey?: Readonly<Record<string, QualityDisplay>>; sort: WatchlistSortState; onMetricSort(key: SortKey): void; onMinutesSort(): void; onRemove(key: string): void; onRetry(): void };
-function detailHref(row: WatchlistRow) { const state = datasetStateFromWatchlistEntry(row.entry); return enabledLegacyHref(legacyDetailHref(row.entry.playerId, { name: row.profile.name, clubName: row.profile.clubName }, state) ?? "") ?? datasetHref(`/players/${row.entry.playerId}`, state); }
+function detailHref(row: WatchlistRow) { const fallback = datasetStateFromWatchlistEntry(row.entry); const handoff = handoffDatasetStateFromWatchlistEntry(row.entry); return resolveLegacyOrInternalHref(legacyDetailHref(row.entry.playerId, { name: row.profile.name, clubName: row.profile.clubName }, handoff as Parameters<typeof legacyDetailHref>[2]), datasetHref(`/players/${row.entry.playerId}`, fallback)); }
 function sourceBadge(row: WatchlistRow) { const legacy = row.profile.tier && resolveTierPresentation(row.profile.tier).taxonomy === "legacy-v1" ? " · Legacy tiers" : ""; return row.source === "current" ? null : <span title="Stored score at save time; current rank is not recomputed." className="rounded border border-amber-300/25 bg-amber-300/10 px-1.5 py-0.5 text-[9px] font-bold text-amber-100">Saved snapshot{legacy}</span>; }
 const order = (sort: WatchlistSortState, key: SortKey | "minutes") => sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none";
 function SortMetric({ metric, sort, onMetricSort }: { metric: MetricKey; sort: WatchlistSortState; onMetricSort(key: SortKey): void }) { const active = sort.key === metric; return <button type="button" aria-label={`Sort by ${metricConfig[metric].label}${active ? ` ${order(sort, metric)}` : ""}`} onClick={() => onMetricSort(metric)} className="min-h-11 px-1 text-[9px] uppercase tracking-wider hover:text-lime-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300">{metricConfig[metric].label}{active ? (sort.direction === "asc" ? " ↑" : " ↓") : ""}</button>; }
