@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 import math
 from pathlib import Path
+import time
 from pydantic import ValidationError
 
 from rankings import (
@@ -229,6 +230,20 @@ def build_v2_players(season: str, mode: str, scope: int, competition: str) -> tu
     return _players_from_frame(
         get_spear_leaderboard(target, season, scope), require_complete_profiles=False,
     )
+
+
+@lru_cache(maxsize=16)
+def _v2_player_summary_index(
+    season: str, mode: str, scope: int, competition: str,
+) -> dict[int, PlayerResponse]:
+    """Index one static summary context after its canonical cohort is built.
+
+    The public summary response is unchanged; this avoids a repeated linear
+    scan when history rails and direct player links ask for the same context.
+    The underlying ``build_v2_players`` cache remains the sole cohort source,
+    so no score or context can be fabricated by the index.
+    """
+    return {player.id: player for player in build_v2_players(season, mode, scope, competition)}
 
 
 @lru_cache(maxsize=16)
@@ -1342,7 +1357,27 @@ def leaderboard_options() -> dict[str, object]:
 
 
 def find_v2_player(player_id: int, season: str, mode: str, scope: int, competition: str) -> PlayerResponse | None:
-    return next((player for player in build_v2_players(season, mode, scope, competition) if player.id == player_id), None)
+    return _v2_player_summary_index(season, mode, scope, competition).get(player_id)
+
+
+def find_v2_player_summary_timed(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> tuple[PlayerResponse | None, dict[str, object]]:
+    """Resolve an unchanged PlayerEnvelope row and expose only safe timing metadata.
+
+    Timing is intentionally service-side instrumentation rather than a public
+    DTO field.  It lets Render logs distinguish a cached context lookup from a
+    cohort/index build without leaking source payloads or user credentials.
+    """
+    before = _v2_player_summary_index.cache_info()
+    started = time.perf_counter()
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
+    after = _v2_player_summary_index.cache_info()
+    return player, {
+        "phaseCohortIndexMs": elapsed_ms,
+        "indexCache": "miss" if after.misses > before.misses else "hit",
+    }
 
 
 def resolve_watchlist_entries(entries: list[dict[str, object]]) -> list[WatchlistResolveResult]:
