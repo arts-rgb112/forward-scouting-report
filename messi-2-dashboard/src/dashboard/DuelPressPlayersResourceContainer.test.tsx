@@ -37,7 +37,7 @@ describe("companion main dashboard integration", () => {
   it("keeps identity assets, taxonomy links, disabled watch slots, legend, footer and pagination", async () => {
     const { container } = render(<PlayersResourceContainer/>); await screen.findAllByText("Harry Kane");
     const links = screen.getAllByRole("link", { name: "Harry Kane" }); expect(links).toHaveLength(2);
-    for (const link of links) expect(link).toHaveAttribute("href", import.meta.env.VITE_LEGACY_HANDOFF_ENABLED === "true" ? expect.stringContaining("streamlit.app") : "/players/194165?season=2025%2F2026&mode=league&scope=8&taxonomy=duel-press-v1");
+    for (const link of links) expect(link).toHaveAttribute("href", import.meta.env.VITE_LEGACY_DETAIL_HANDOFF_ENABLED === "true" ? expect.stringContaining("streamlit.app") : "/players/194165?season=2025%2F2026&mode=league&scope=8&taxonomy=duel-press-v1");
     expect(screen.queryByRole("navigation", { name: "Duel-press player details" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /detail/i })).not.toBeInTheDocument();
     expect(screen.getAllByRole("img", { name: "Harry Kane portrait" })).toHaveLength(2);

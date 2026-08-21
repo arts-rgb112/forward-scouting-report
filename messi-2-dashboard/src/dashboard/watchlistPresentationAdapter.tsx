@@ -3,7 +3,7 @@ import { datasetHref } from "./datasetRoute";
 import type { QualityDisplay } from "./dataQualityViewModel";
 import { duelPressDetailHref } from "./duelPressRoute";
 import type { LegacyMetricKey, Player, Tier } from "./types";
-import { legacyDetailHref, resolveLegacyOrInternalHref } from "../navigation/legacyHandoff";
+import { legacyDetailHref, resolveLegacyDetailOrInternalHref } from "../navigation/legacyHandoff";
 import type { DuelWatchlistResolution } from "./duelPressWatchlistResolver";
 import type { LegacyWatchlistResolution } from "./useLegacyWatchlistResolution";
 import type { DuelPressV3Entry, LegacyV3Entry, WatchlistV3Context, WatchlistV3Entry } from "./watchlistV3Contracts";
@@ -24,7 +24,7 @@ export function watchlistV3ContextLabel(entry: WatchlistV3Entry) {
 }
 function legacyHref(entry: LegacyV3Entry) {
   const dataset = datasetFromWatchlistV3Context(entry.context);
-  return resolveLegacyOrInternalHref(legacyDetailHref(entry.playerId, { name: entry.snapshot.name, clubName: entry.snapshot.clubName }, dataset), datasetHref(`/players/${entry.playerId}`, dataset));
+  return resolveLegacyDetailOrInternalHref(legacyDetailHref(entry.playerId, { name: entry.snapshot.name, clubName: entry.snapshot.clubName }, dataset), datasetHref(`/players/${entry.playerId}`, dataset));
 }
 function contextBadge(entry: WatchlistV3Entry) { return <span className="rounded border border-lime-300/25 bg-lime-300/10 px-1.5 py-0.5 font-bold text-lime-100">{watchlistV3ContextLabel(entry)}</span>; }
 function statusBadge(label: string | null) { return label ? <span className="rounded border border-amber-300/25 bg-amber-300/10 px-1.5 py-0.5 font-bold text-amber-100">{label}</span> : null; }
@@ -84,7 +84,7 @@ export function duelWatchlistPresentationRow(entry: DuelPressV3Entry, result: Du
   const current = result?.status === "current" && result.player ? result.player : undefined;
   const showingCurrent = props.preference !== "saved" && current !== undefined; const effective = showingCurrent ? current : entry.snapshot; const status = duelStatus(result, showingCurrent, current !== undefined);
   return {
-    key: entry.key, source: entry, playerId: entry.playerId, identity: { kind: "full", player: effective }, identityDomId: null, detailHref: resolveLegacyOrInternalHref(legacyDetailHref(entry.playerId, { name: entry.snapshot.name, clubName: entry.snapshot.club.name }, datasetFromWatchlistV3Context(entry.context)), duelPressDetailHref(entry.playerId, datasetFromWatchlistV3Context(entry.context))),
+    key: entry.key, source: entry, playerId: entry.playerId, identity: { kind: "full", player: effective }, identityDomId: null, detailHref: resolveLegacyDetailOrInternalHref(legacyDetailHref(entry.playerId, { name: entry.snapshot.name, clubName: entry.snapshot.club.name }, datasetFromWatchlistV3Context(entry.context)), duelPressDetailHref(entry.playerId, datasetFromWatchlistV3Context(entry.context))),
     rank: { hidden: true }, tier: effective.tier, tierAccessory: <span>{effective.rank ? `${showingCurrent ? "현재 서버 순위" : "저장 시점 순위"} ${effective.rank}` : `${showingCurrent ? "현재 서버 순위" : "저장 시점 순위"} 정보 없음`}</span>, score: effective.score, stats: effective.stats, minutes: effective.minutes, age: effective.age, metricSnapshot: !showingCurrent, metricRanks: showingCurrent ? metricRanks : undefined,
     profileAccessory: <>{contextBadge(entry)}{statusBadge(status)}{current && <span className="hidden md:inline-flex">{selector(entry, effective.name, props.preference, props.onPreference, false)}</span>}</>,
     mobileAccessory: <>{contextBadge(entry)}{statusBadge(status)}</>, mobileAction: current ? selector(entry, effective.name, props.preference, props.onPreference, true) : savedOnlyAction(),

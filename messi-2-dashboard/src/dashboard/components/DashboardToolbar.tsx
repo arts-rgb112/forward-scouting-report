@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import { legacyDetailHref, resolveLegacyOrInternalHref } from "../../navigation/legacyHandoff";
+import { legacyDetailHref, resolveLegacyDetailOrInternalHref } from "../../navigation/legacyHandoff";
 import { datasetHref, positionFilterValues } from "../datasetRoute";
 import type { AgeBand, DatasetRouteState, MinutesBand, Player, PositionFilterCapability } from "../types";
 import { Icon } from "./Icon";
@@ -26,7 +26,7 @@ export function DashboardToolbar(props: Props) {
   useEffect(() => () => cancelCommit(), []); // eslint-disable-line react-hooks/exhaustive-deps
   const candidates = needle.trim() ? props.players.filter((player) => `${player.name} ${player.club.name} ${player.league.name}`.toLocaleLowerCase().includes(needle.toLocaleLowerCase())).slice(0, 8) : [];
   useEffect(() => { if (open && active >= 0) suggestionRefs.current[active]?.focus(); }, [active, open]);
-  const suggestionHref = (player: ToolbarPlayer) => props.playerSuggestionHref?.(player) ?? resolveLegacyOrInternalHref(legacyDetailHref(player.id, { name: player.name, clubName: player.club.name }, props.dataset), datasetHref(`/players/${player.id}`, props.dataset));
+  const suggestionHref = (player: ToolbarPlayer) => props.playerSuggestionHref?.(player) ?? resolveLegacyDetailOrInternalHref(legacyDetailHref(player.id, { name: player.name, clubName: player.club.name }, props.dataset), datasetHref(`/players/${player.id}`, props.dataset));
   const focusSuggestion = (index: number) => { if (!candidates.length) return; const next = Math.max(0, Math.min(index, candidates.length - 1)); setOpen(true); setActive(next); suggestionRefs.current[next]?.focus(); };
   const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => { if (event.key === "Enter" && (composingRef.current || event.nativeEvent.isComposing)) return; if (event.key === "ArrowDown") { event.preventDefault(); focusSuggestion(active + 1); } else if (event.key === "ArrowUp") { event.preventDefault(); focusSuggestion(active <= 0 ? 0 : active - 1); } else if (event.key === "Enter") { event.preventDefault(); commitNow(needle); } else if (event.key === "Escape") { setOpen(false); setActive(-1); } };
   const onSuggestionKeyDown = (event: React.KeyboardEvent<HTMLAnchorElement>, index: number) => { if (event.key === "ArrowDown") { event.preventDefault(); focusSuggestion(index + 1); } else if (event.key === "ArrowUp") { event.preventDefault(); focusSuggestion(index - 1); } else if (event.key === "Escape") { event.preventDefault(); setOpen(false); setActive(-1); inputRef.current?.focus(); } };

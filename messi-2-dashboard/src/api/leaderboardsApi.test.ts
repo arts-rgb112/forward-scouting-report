@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchComparison, fetchLeaderboard, fetchTacticalQuadrant } from "./leaderboardsApi";
+import { fetchComparison, fetchLeaderboard, fetchPlayerDetail, fetchTacticalQuadrant } from "./leaderboardsApi";
 
 const config = { baseUrl: "https://api.example.test", season: "2025/2026", scope: 7 as const, limit: 1000 };
 const player = { id: 1, rank: 1, name: "Player", position: "CF", archetype: "Type A", age: null, minutes: 100, tier: { code: "diamond", level: 1, label: "Diamond" }, score: 90, face: null, nation: null, league: { id: 1, name: "League", icon: null }, club: { id: 2, name: "Club", icon: null }, stats: { outsideShot: 1, boxThreat: 2, dangerZone: 3, aerial: 4, groundDuel: 5, spaceControl: 6 } };
@@ -14,6 +14,10 @@ const comparisonPayload = { data: [{ ...player, analysis }, { ...player, id: 2, 
 afterEach(() => vi.restoreAllMocks());
 
 describe("leaderboard API pagination", () => {
+  it("rejects a primary detail response whose player identity differs from the URL", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: { ...player, id: 2, analysis } }), { headers: { "Content-Type": "application/json" } }));
+    await expect(fetchPlayerDetail(config, 1, { season: "2025/2026", mode: "league", scope: 7, competition: "all" }, new AbortController().signal)).rejects.toMatchObject({ kind: "schema" });
+  });
   it("accepts a league competition=all request when the server meta correctly returns competition=null", async () => {
     const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(payload), { headers: { "Content-Type": "application/json" } }));
     const result = await fetchLeaderboard(config, { season: "2025/2026", mode: "league", scope: 7, competition: "all" }, { page: 1, pageSize: 250, q: "", role: "all", position: "ALL", ageBand: "all", minutesBand: "all", sort: "score", direction: "desc" }, new AbortController().signal);

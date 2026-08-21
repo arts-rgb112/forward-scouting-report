@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { LEGACY_ORIGIN, enabledLegacyHref, legacyAboutHref, legacyCompareHref, legacyDetailHref, legacyHandoffEnabled, legacySeason, resolveLegacyOrInternalHref } from "./legacyHandoff";
+import { LEGACY_ORIGIN, enabledLegacyHref, legacyAboutHref, legacyCompareHref, legacyDetailHandoffEnabled, legacyDetailHref, legacyHandoffEnabled, legacySeason, resolveLegacyDetailOrInternalHref, resolveLegacyOrInternalHref } from "./legacyHandoff";
 
 const dataset = { season: "2025/2026", mode: "europe" as const, scope: 7 as const, competition: "ucl" as const };
 describe("legacy handoff", () => {
@@ -33,6 +33,15 @@ describe("legacy handoff", () => {
     expect(params.get("mode")).toBe("league");
     expect(params.get("scope")).toBe("5");
     expect(params.has("competition")).toBe(false);
+  });
+  it("keeps player detail native unless its own literal rollback flag is enabled", () => {
+    const fallback = "/players/7?season=2025%2F2026&scope=8";
+    const detail = `${LEGACY_ORIGIN}/?page=detail`;
+    expect(legacyDetailHandoffEnabled({ VITE_LEGACY_HANDOFF_ENABLED: "true" })).toBe(false);
+    expect(resolveLegacyDetailOrInternalHref(detail, fallback, { VITE_LEGACY_HANDOFF_ENABLED: "true" })).toBe(fallback);
+    expect(resolveLegacyDetailOrInternalHref(detail, fallback, { VITE_LEGACY_DETAIL_HANDOFF_ENABLED: "false" })).toBe(fallback);
+    expect(resolveLegacyDetailOrInternalHref(detail, fallback, { VITE_LEGACY_DETAIL_HANDOFF_ENABLED: "true" })).toContain(LEGACY_ORIGIN);
+    expect(resolveLegacyOrInternalHref(legacyCompareHref(), "/compare", { VITE_LEGACY_HANDOFF_ENABLED: "true" })).toContain(LEGACY_ORIGIN);
   });
   it("always resolves malformed or non-fixed handoffs to a nonempty internal destination", () => {
     const fallback = "/players/7?season=2025%2F2026";

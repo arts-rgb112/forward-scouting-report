@@ -13,6 +13,7 @@ import { metricIsImputed, qualityDisplay, type QualityDisplay } from "../dashboa
 import { datasetFromSearch, datasetHref } from "../dashboard/datasetRoute";
 import { metricConfig, metricKeys } from "../dashboard/scoutingConfig";
 import type { DatasetRouteState, MetricKey, PlayerAnalysis, PlayerComparison, PlayerDetail, RadarAxis, TacticalQuadrant } from "../dashboard/types";
+import { PlayerDetailRoute as NativePlayerDetailRoute } from "../playerDetail/PlayerDetailRoute";
 
 function currentDataset(config?: MessiApiConfig): DatasetRouteState { return datasetFromSearch(window.location.search, { season: config?.season ?? "2025/2026", mode: "league", scope: config?.scope ?? 8, competition: "all" }); }
 function ContextBadge({ dataset }: { dataset: DatasetRouteState }) { return <span className="inline-flex rounded border border-lime-300/30 bg-lime-300/10 px-2 py-1 text-[10px] font-bold text-lime-200">{dataset.mode === "europe" ? `Europe · ${dataset.competition.toUpperCase()}` : `League · ${dataset.scope} leagues`} · {dataset.season}</span>; }
@@ -175,7 +176,7 @@ export function StaticRoute() {
   const duelPressRequested = new URLSearchParams(window.location.search).get("taxonomy") === "duel-press-v1";
   const duelPressEnabled = leaderboardTaxonomyMode(import.meta.env, import.meta.env.MODE) === "duel-press-v1";
   if (duelPressRequested && duelPressEnabled) return <DuelPressPlayerDetailRoute id={playerId} dataset={dataset} config={config} />;
-  return <PlayerDetailRoute id={playerId} dataset={dataset} config={config} />;
+  return <NativePlayerDetailRoute id={playerId} dataset={dataset} config={config} />;
 }
 
 function DuelPressPlayerDetailRoute({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {
@@ -186,7 +187,7 @@ function DuelPressPlayerDetailRoute({ id, dataset, config }: { id: number; datas
   return <Page><ContextBadge dataset={dataset}/><FocusTitle>{player.name}</FocusTitle><p className="mt-2 text-sm text-zinc-400">#{player.rank} · {player.club.name} · server score {player.score}</p><div className="mt-6"><DuelPressDetailMetrics player={player}/></div><div className="mt-6"><BackLink dataset={dataset}/></div></Page>;
 }
 
-function PlayerDetailRoute({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {
+function LegacyPlayerDetailRoute({ id, dataset, config }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig }) {
   const [detail, setDetail] = useState<PlayerDetail>(); const [quadrant, setQuadrant] = useState<TacticalQuadrant>(); const [error, setError] = useState<"network" | "not-found" | "config">(); const [retry, setRetry] = useState(0); const [quality, setQuality] = useState<QualityDisplay>({ kind: "idle" });
   const scope8Capability = useScope8Capability(config, dataset);
   useEffect(() => {
