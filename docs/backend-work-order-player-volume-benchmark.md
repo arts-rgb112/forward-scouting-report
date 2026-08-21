@@ -1,5 +1,23 @@
 # 백엔드 업무 요청서 — 선수 상세 8대 리그 평균 레이더
 
+## 긴급 선행 조치 — 운영 선수 상세 API 502 복구 (P0)
+
+2026-08-21 프론트엔드 Vercel Preview 브라우저 QA 중 아래 운영 API가 반복해서 HTTP 502를 반환했습니다.
+
+```http
+GET https://forward-scouting-report.onrender.com/api/v2/players/194165?season=2025%2F2026&mode=league&scope=8&competition=all&includeAnalysis=true
+```
+
+이 장애가 지속되는 동안 네이티브 선수 상세 페이지는 정상적으로 데이터를 수신할 수 없으므로 Production 활성화를 진행하지 않습니다. 백엔드/인프라 팀은 다음을 우선 확인해 주세요.
+
+1. Render 서비스 health, startup/runtime logs, worker timeout 및 메모리 사용량 확인
+2. 동일 URL의 비인증 GET이 HTTP 200과 기존 strict player-detail envelope를 반환하는지 확인
+3. Production 및 immutable Vercel Preview Origin에서 CORS 응답 확인
+4. `scope=8`, `competition=all`, `includeAnalysis=true` 조합의 회귀 테스트 추가
+5. 복구된 Render 배포 버전, OpenAPI URL, 재현/원인/조치 내용을 프론트엔드에 인계
+
+완료 기준은 위 URL이 연속 3회 HTTP 200을 반환하고, Vercel Preview에서 선수 상세의 프로필·시즌 점수·전술 요약·히트맵/슈팅맵·6개 카테고리·레이더가 실제 데이터로 렌더링되는 것입니다.
+
 ## 목적
 
 M.E.S.S.I. 2.0 네이티브 선수 상세 페이지의 Volume 레이더에 선수와 같은 기준으로 정규화된 `8-league avg` 폴리곤을 제공합니다.
