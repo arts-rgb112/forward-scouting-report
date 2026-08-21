@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from functools import lru_cache
+import math
 from pathlib import Path
 from pydantic import ValidationError
 
@@ -29,6 +30,8 @@ from .schemas import (
     TrueCoreAnalysis, TrueCoreZone,
     WatchlistDataQualityResult, WatchlistResolveResult, WatchlistResolvedContext,
     WatchlistResolvedPlayer,
+    VolumeBenchmarkAxis, VolumeBenchmarkData,
+    VolumeBenchmarkSourceContext,
 )
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
 
@@ -215,7 +218,7 @@ def leaderboard_target(mode: str, scope: int, competition: str) -> int:
     }[competition]
 
 
-@lru_cache(maxsize=64)
+@lru_cache(maxsize=16)
 def build_v2_players(season: str, mode: str, scope: int, competition: str) -> tuple[PlayerResponse, ...]:
     """Return only rows backed by the static snapshot; no synthetic competition data."""
     target = leaderboard_target(mode, scope, competition)
@@ -226,7 +229,7 @@ def build_v2_players(season: str, mode: str, scope: int, competition: str) -> tu
     )
 
 
-@lru_cache(maxsize=64)
+@lru_cache(maxsize=16)
 def build_duel_press_players(
     season: str, mode: str, scope: int, competition: str,
 ) -> tuple[DuelPressPlayerResponse, ...]:
@@ -500,7 +503,7 @@ DUEL_PRESS_METRIC_FIELDS = (
 )
 
 
-@lru_cache(maxsize=64)
+@lru_cache(maxsize=16)
 def _duel_press_metric_rank_maps(
     season: str, mode: str, scope: int, competition: str,
 ) -> dict[int, DuelPressMetricRanks] | None:
@@ -589,6 +592,15 @@ VOLUME_RADAR_AXES = (
     ("groundDuel", "Ground duel volume", "ground_duel_attempts_volume_top_percent", "ground_duel_attempts", "ground_duel_attempts_volume_rank"),
     ("spaceControl", "Central activity area", "cca_area_top_percent", "tactical:cca_area_pct", "cca_area_rank"),
 )
+
+VOLUME_BENCHMARK_AXES = (
+    ("outsideShot", "Outside-box shot attempts", "out_box_shots_raw", "out_box_shots"),
+    ("boxThreat", "Box hits", "in_box_shots_raw", "in_box_shots"),
+    ("dangerZone", "Dribble attempts", "dribble_attempts_raw", "dribble_attempts"),
+    ("aerial", "Aerial duel attempts", "aerial_duel_attempts_raw", "aerial_duel_attempts"),
+    ("groundDuel", "Ground duel attempts", "ground_duel_attempts_raw", "ground_duel_attempts"),
+    ("spaceControl", "Core activity radius", "cca_area_pct", "tactical:cca_area_pct"),
+)
 RATIO_RADAR_AXES = (
     ("outsideShot", "Outside-box shot quality", "spear_shot_quality_top_percent", "shot_quality_per90", "spear_shot_quality_rank"),
     ("boxThreat", "Deep-box finishing", "micro_zoning_finishing_top_percent", "tactical:deep_box_zone_score", "micro_zoning_finishing_rank"),
@@ -654,7 +666,110 @@ def _raw_metrics(metrics: object) -> RawMetrics:
     return RawMetrics(**{key: round(float(value), 4) if (value := getattr(metrics, attr, None)) is not None else None for key, attr in field_map.items()})
 
 
-def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> SpatialAnalysis:
+def _finite_number(value: object) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _volume_score_and_rank(value: float | None, values: tuple[float, ...]) -> tuple[float, int | None]:
+    """Use the existing higher-is-better radar scale without a 50-point fallback."""
+    if value is None or not values:
+        return 20.0, None
+    rank = 1 + sum(candidate > value for candidate in values)
+    score = round(max(0.0, min(100.0, 100.0 - (rank / len(values)) * 100.0)), 2)
+    return score, rank
+
+
+@lru_cache(maxsize=8)
+def _volume_benchmark_populations(season: str) -> dict[str, tuple[float, ...]] | None:
+    """Return raw values for the exact eligible domestic eight-league cohort.
+
+    ``get_spear_leaderboard(47, season, 8)`` is the shared 8-league cohort
+    builder. Its cached rows contain the raw volume values so a benchmark does
+    not perform a second tactical/heatmap scan for every player.
+    """
+    frame = get_spear_leaderboard(47, season, 8)
+    if frame.empty:
+        return None
+    records = frame.to_dict(orient="records")
+    populations = {
+        axis_id: tuple(
+            value for record in records
+            if (value := _finite_number(record.get(frame_attr))) is not None
+        )
+        for axis_id, _, frame_attr, _ in VOLUME_BENCHMARK_AXES
+    }
+    return populations if all(populations.values()) else None
+
+
+def _context_source_metrics(
+    player: PlayerResponse, player_id: int, season: str, mode: str, competition: str,
+) -> object | None:
+    """Read raw metrics from the selected domestic or European context."""
+    source_league = leaderboard_target(mode, 8, competition) if mode == "europe" else player.league.id
+    source = load_spear_cohort().get((source_league, season), {}).get(str(player_id))
+    return source[1] if source is not None else None
+
+
+@lru_cache(maxsize=128)
+def build_volume_benchmark(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> VolumeBenchmarkData | None:
+    """Project one selected context onto the fixed domestic 8-league volume scale."""
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    source_context = VolumeBenchmarkSourceContext(
+        mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+    )
+    populations = _volume_benchmark_populations(season)
+    metrics = _context_source_metrics(player, player_id, season, mode, competition)
+    if populations is None or metrics is None:
+        return VolumeBenchmarkData(
+            playerId=player_id, season=season, sourceContext=source_context,
+            available=False, reason="benchmark_source_unavailable", axes=[],
+        )
+
+    tactical = get_tactical_ratio_for_session(
+        player_id, getattr(metrics, "league_name", "") or player.league.name, season,
+    )
+    axes: list[VolumeBenchmarkAxis] = []
+    imputed = False
+    for axis_id, label, _, raw_attr in VOLUME_BENCHMARK_AXES:
+        raw = _raw_value(metrics, tactical, raw_attr)
+        values = populations[axis_id]
+        player_score, player_rank = _volume_score_and_rank(raw, values)
+        average_scores = [_volume_score_and_rank(value, values)[0] for value in values]
+        axis_imputed = raw is None
+        imputed = imputed or axis_imputed
+        axes.append(VolumeBenchmarkAxis(
+            id=axis_id,
+            label=label,
+            playerScore=player_score,
+            averageScore=round(sum(average_scores) / len(average_scores), 2),
+            playerRawValue=raw,
+            averageRawValue=round(sum(values) / len(values), 4),
+            playerRank=player_rank,
+            population=len(values),
+            tier=_radar_tier(player_score),
+            imputed=axis_imputed,
+        ))
+    return VolumeBenchmarkData(
+        playerId=player_id, season=season, sourceContext=source_context,
+        available=True, reason="partial_source_imputed" if imputed else "complete", axes=axes,
+    )
+
+
+def _spatial_analysis(
+    player_id: int,
+    tactical: dict[str, object] | None,
+    season: str | None = None,
+) -> SpatialAnalysis:
     points = get_heatmap_points(player_id, str(tactical.get("heatmap_key")) if tactical and tactical.get("heatmap_key") else None)
     valid_points: list[HeatmapPoint] = []
     for point in points:
@@ -668,7 +783,9 @@ def _spatial_analysis(player_id: int, tactical: dict[str, object] | None) -> Spa
             valid_points.append(HeatmapPoint(x=x, y=y))
     heatmap_key = str(tactical.get("heatmap_key")) if tactical and tactical.get("heatmap_key") else None
     try:
-        snapshot_available, shot_rows = get_shotmap_snapshot(heatmap_key)
+        # Detail traffic is always season-specific. Passing it through avoids
+        # deserialising every historical shotmap shard on the Render instance.
+        snapshot_available, shot_rows = get_shotmap_snapshot(heatmap_key, season)
     except ShotmapSnapshotError as exc:
         raise ShotmapContractViolation("Stored shotmap snapshot could not be loaded or validated.") from exc
     valid_shots: list[ShotmapPoint] = []
@@ -780,7 +897,7 @@ def _messi_data_quality(metrics: object, tactical: dict[str, object] | None) -> 
     )
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=32)
 def build_player_data_quality(
     player_id: int, season: str, mode: str, scope: int, competition: str,
 ) -> PlayerDataQuality | None:
@@ -805,8 +922,11 @@ def build_player_data_quality(
     )
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=16)
 def build_player_detail(player_id: int, season: str, mode: str, scope: int, competition: str) -> PlayerDetailResponse | None:
+    # Detail payloads embed all heatmap and shotmap points.  Keeping hundreds
+    # of them resident makes the 512 MB Render instance restart under normal
+    # browsing, so this deliberately remains a small hot-cache.
     player = find_v2_player(player_id, season, mode, scope, competition)
     if player is None:
         return None
@@ -828,7 +948,7 @@ def build_player_detail(player_id: int, season: str, mode: str, scope: int, comp
         ),
         volumeRadar=_radar("volume", VOLUME_RADAR_AXES, rank, metrics, tactical),
         ratioRadar=_radar("ratio", RATIO_RADAR_AXES, rank, metrics, tactical),
-        rawMetrics=_raw_metrics(metrics), spatial=_spatial_analysis(player_id, tactical),
+        rawMetrics=_raw_metrics(metrics), spatial=_spatial_analysis(player_id, tactical, season),
     )
     return PlayerDetailResponse(**player.model_dump(), analysis=analysis)
 
@@ -854,7 +974,7 @@ def build_duel_spatial_analysis(
     )
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=64)
 def build_tactical_quadrant_analysis(
     player_id: int, season: str, mode: str, scope: int, competition: str,
 ) -> TacticalQuadrantAnalysis | None:

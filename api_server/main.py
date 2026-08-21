@@ -14,6 +14,7 @@ from .schemas import (
     AgeBand, ApiErrorEnvelope, DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
     DuelPressLeaderboardEnvelope, DuelPressLeaderboardSort, DuelPressPlayerEnvelope,
     MetricRanksEnvelope, MetricRanksRequest,
+    VolumeBenchmarkEnvelope,
     LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDataQualityEnvelope, PlayerDetailEnvelope,
     PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
@@ -27,6 +28,7 @@ from .service import (
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
     resolve_metric_rank_entries,
+    build_volume_benchmark,
     ShotmapContractViolation,
 )
 
@@ -383,6 +385,34 @@ def metric_ranks(request: MetricRanksRequest) -> MetricRanksEnvelope:
     player is ``unavailable``. Neither condition aborts sibling entries.
     """
     return MetricRanksEnvelope(results=resolve_metric_rank_entries(request.entries))
+
+
+@app.get(
+    "/api/v2/players/{playerId}/volume-benchmark",
+    response_model=VolumeBenchmarkEnvelope,
+    tags=["players"],
+    responses=DUEL_PRESS_ERROR_RESPONSES,
+)
+def get_volume_benchmark(
+    request: Request,
+    playerId: int,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+    benchmarkScope: Literal["8"] = Query(...),
+) -> VolumeBenchmarkEnvelope:
+    """Return an actual domestic eight-league average polygon for Volume radar."""
+    del benchmarkScope  # Required Literal validation fixes the public benchmark cohort.
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    if mode == "europe" and "scope" in request.query_params:
+        raise HTTPException(status_code=422, detail="scope must be null/omitted when mode is 'europe'")
+    validate_duel_press_context(mode, competition)
+    benchmark = build_volume_benchmark(playerId, season, mode, int(scope), competition)
+    if benchmark is None:
+        raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+    return VolumeBenchmarkEnvelope(data=benchmark)
 
 
 @app.get(

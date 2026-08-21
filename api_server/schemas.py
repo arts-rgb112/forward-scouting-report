@@ -723,6 +723,99 @@ class PlayerDetailEnvelope(BaseModel):
     data: PlayerDetailResponse
 
 
+VolumeBenchmarkReason = Literal[
+    "complete", "partial_source_imputed", "benchmark_source_unavailable",
+]
+VolumeBenchmarkAxisId = Literal[
+    "outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl",
+]
+
+
+class VolumeBenchmarkSourceContext(BaseModel):
+    """Echo the selected player context, not the domestic benchmark context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7, 8] | None = None
+    competition: CompetitionCode | None = None
+
+    @model_validator(mode="after")
+    def validate_context(self) -> "VolumeBenchmarkSourceContext":
+        if self.mode == "league" and (self.scope is None or self.competition is not None):
+            raise ValueError("league source context requires scope and null competition")
+        if self.mode == "europe" and (self.scope is not None or self.competition is None):
+            raise ValueError("europe source context requires null scope and competition")
+        return self
+
+
+class VolumeBenchmarkDescriptor(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: Literal["8-league avg"] = "8-league avg"
+    mode: Literal["league"] = "league"
+    scope: Literal[8] = 8
+
+
+class VolumeBenchmarkAxis(BaseModel):
+    """One volume axis projected onto the domestic eight-league population."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: VolumeBenchmarkAxisId
+    label: str = Field(min_length=1)
+    playerScore: float = Field(ge=0, le=100)
+    averageScore: float = Field(ge=0, le=100)
+    playerRawValue: float | None = None
+    averageRawValue: float | None = None
+    playerRank: int | None = Field(default=None, ge=1)
+    population: int = Field(ge=0)
+    tier: Literal["S", "A", "B", "C", "D"]
+    imputed: bool
+
+    @model_validator(mode="after")
+    def validate_rank(self) -> "VolumeBenchmarkAxis":
+        if self.playerRank is not None and self.playerRank > self.population:
+            raise ValueError("playerRank must not exceed population")
+        return self
+
+
+class VolumeBenchmarkData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    idNamespace: Literal["fotmob"] = "fotmob"
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    sourceContext: VolumeBenchmarkSourceContext
+    benchmark: VolumeBenchmarkDescriptor = Field(default_factory=VolumeBenchmarkDescriptor)
+    available: bool
+    reason: VolumeBenchmarkReason
+    axes: list[VolumeBenchmarkAxis] = Field(max_length=6)
+
+    @model_validator(mode="after")
+    def validate_axes(self) -> "VolumeBenchmarkData":
+        expected = ["outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"]
+        actual = [axis.id for axis in self.axes]
+        if self.available:
+            if self.reason not in {"complete", "partial_source_imputed"}:
+                raise ValueError("available volume benchmark requires a complete or imputed source reason")
+            if actual != expected:
+                raise ValueError("available volume benchmark must return the six canonical axes in order")
+        else:
+            if self.reason != "benchmark_source_unavailable":
+                raise ValueError("unavailable volume benchmark requires benchmark_source_unavailable")
+            if actual:
+                raise ValueError("unavailable volume benchmark must return an empty axes array")
+        return self
+
+
+class VolumeBenchmarkEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    data: VolumeBenchmarkData
+
+
 class DuelSpatialAnalysis(BaseModel):
     """Opt-in contract; kept outside strict PlayerAnalysis for v2 compatibility."""
 
