@@ -271,7 +271,7 @@ def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, 
     return _with_current_spatial_definition(candidates[0]) if len(heatmap_keys) == 1 else None
 
 
-@functools.lru_cache(maxsize=4)
+@functools.lru_cache(maxsize=1)
 def _load_heatmap_points(
     path_text: str, _version: tuple[int, int],
 ) -> dict[str, list[list[float]]]:
@@ -289,7 +289,85 @@ def load_heatmap_points() -> dict[str, list[list[float]]]:
     return _load_heatmap_points(str(HEATMAP_POINTS_PATH), version)
 
 
+@functools.lru_cache(maxsize=64)
+def _load_heatmap_points_for_key(
+    path_text: str, _version: tuple[int, int], heatmap_key: str,
+) -> tuple[tuple[float, ...], ...]:
+    """Read a single JSON object member without materialising every season point.
+
+    The committed heatmap file is a large object keyed by ``heatmap_key``.
+    Parsing that full object for a single detail request creates a large
+    transient Python object graph and can exhaust the 512 MB web instance.
+    Keys are canonical, plain identifiers, so a streaming exact JSON-key scan
+    followed by a balanced-array read is both safe and enough for this store.
+    Offline jobs continue to use ``load_heatmap_points`` when they genuinely
+    need the full collection.
+    """
+    path = Path(path_text)
+    needle = (json.dumps(str(heatmap_key), ensure_ascii=False) + ":").encode("utf-8")
+    trailing = b""
+    collecting = False
+    array = bytearray()
+    depth = 0
+    in_string = False
+    escaped = False
+
+    try:
+        with path.open("rb") as handle:
+            while chunk := handle.read(64 * 1024):
+                data = trailing + chunk
+                trailing = b""
+                if not collecting:
+                    index = data.find(needle)
+                    if index < 0:
+                        trailing = data[-max(1, len(needle) - 1):]
+                        continue
+                    data = data[index + len(needle):]
+                    start = next((offset for offset, byte in enumerate(data) if byte not in b" \t\r\n"), None)
+                    if start is None:
+                        trailing = data
+                        continue
+                    if data[start] != ord("["):
+                        return ()
+                    collecting = True
+                    data = data[start:]
+
+                for offset, byte in enumerate(data):
+                    array.append(byte)
+                    if in_string:
+                        if escaped:
+                            escaped = False
+                        elif byte == ord("\\"):
+                            escaped = True
+                        elif byte == ord('"'):
+                            in_string = False
+                        continue
+                    if byte == ord('"'):
+                        in_string = True
+                    elif byte == ord("["):
+                        depth += 1
+                    elif byte == ord("]"):
+                        depth -= 1
+                        if depth == 0:
+                            payload = json.loads(array.decode("utf-8"))
+                            if not isinstance(payload, list):
+                                return ()
+                            rows: list[tuple[float, ...]] = []
+                            for point in payload:
+                                if isinstance(point, (list, tuple)):
+                                    rows.append(tuple(point))
+                            return tuple(rows)
+    except (OSError, UnicodeDecodeError, ValueError):
+        return ()
+    return ()
+
+
 def get_heatmap_points(player_id: str | int, heatmap_key: str | None = None) -> list[list[float]]:
+    if heatmap_key:
+        version = _file_version(HEATMAP_POINTS_PATH)
+        if version is not None:
+            points = _load_heatmap_points_for_key(str(HEATMAP_POINTS_PATH), version, str(heatmap_key))
+            return [list(point) for point in points]
     points = load_heatmap_points().get(heatmap_key or str(player_id), [])
     return points if isinstance(points, list) else []
 

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0.0",
+  "data": {
+    "playerId": 194165,
+    "idNamespace": "fotmob",
+    "season": "2025/2026",
+    "sourceContext": {"mode": "europe", "scope": null, "competition": "ucl"},
+    "benchmark": {"label": "8-league avg", "mode": "league", "scope": 8},
+    "available": false,
+    "reason": "benchmark_source_unavailable",
+    "axes": []
+  }
+}
