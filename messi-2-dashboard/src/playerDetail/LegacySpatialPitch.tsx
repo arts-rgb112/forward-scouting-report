@@ -16,10 +16,20 @@ const spatialIntegrity = (spatial: Spatial | undefined): Integrity => ({
 
 function HeatmapCanvas({ points, enabled }: { points: readonly ActivityPoint[]; enabled: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const paintedRef = useRef(false);
   const normalized = useMemo(() => normalizeDensity(legacyDensityGrid(points)), [points]);
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !enabled || !points.length) return;
+    if (!canvas) return;
+    if (!enabled || !points.length) {
+      if (paintedRef.current) canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+      // Resetting the backing store guarantees that a previously painted
+      // raster cannot survive a populated -> unavailable/invalid/zero switch.
+      canvas.width = 0;
+      canvas.height = 0;
+      paintedRef.current = false;
+      return;
+    }
     const draw = () => {
       const rect = canvas.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
@@ -30,6 +40,7 @@ function HeatmapCanvas({ points, enabled }: { points: readonly ActivityPoint[]; 
       if (!context) return;
       context.clearRect(0, 0, width, height);
       renderLegacyHeatmap(context, width, height, normalized);
+      paintedRef.current = true;
     };
     draw();
     const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(draw);
