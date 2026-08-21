@@ -4,9 +4,11 @@ import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
+from pydantic import ValidationError
 
 from api_server.main import app
-from api_server.schemas import VolumeBenchmarkAxis, VolumeBenchmarkData
+from api_server.schemas import VolumeBenchmarkAxis, VolumeBenchmarkData, VolumeBenchmarkEnvelope
 
 
 CLIENT = TestClient(app)
@@ -25,7 +27,7 @@ def benchmark_params(**overrides: str) -> dict[str, str]:
 
 def test_strict_fixtures_cover_success_unavailable_and_zero_vs_null() -> None:
     for name in ("success.json", "unavailable.json", "observed_zero.json"):
-        VolumeBenchmarkData.model_validate(json.loads((FIXTURES / name).read_text(encoding="utf-8"))["data"])
+        VolumeBenchmarkEnvelope.model_validate(json.loads((FIXTURES / name).read_text(encoding="utf-8")))
 
 
 def test_scope_8_volume_benchmark_has_six_actual_average_axes() -> None:
@@ -89,6 +91,12 @@ def test_invalid_scope_and_benchmark_scope_are_422() -> None:
     )
     assert invalid_benchmark.status_code == 422
 
+    missing_benchmark = CLIENT.get(
+        "/api/v2/players/194165/volume-benchmark",
+        params={key: value for key, value in benchmark_params().items() if key != "benchmarkScope"},
+    )
+    assert missing_benchmark.status_code == 422
+
     europe_with_scope = CLIENT.get(
         "/api/v2/players/194165/volume-benchmark",
         params=benchmark_params(mode="europe", scope="8", competition="ucl"),
@@ -138,3 +146,21 @@ def test_unavailable_contract_has_empty_axes() -> None:
         "available": False, "reason": "benchmark_source_unavailable", "axes": [],
     })
     assert unavailable.axes == []
+
+
+def test_available_reason_and_unavailable_reason_cannot_be_mixed() -> None:
+    base = {
+        "playerId": 1,
+        "idNamespace": "fotmob",
+        "season": "2025/2026",
+        "sourceContext": {"mode": "europe", "scope": None, "competition": "ucl"},
+        "benchmark": {"label": "8-league avg", "mode": "league", "scope": 8},
+    }
+    with pytest.raises(ValidationError):
+        VolumeBenchmarkData.model_validate({
+            **base, "available": False, "reason": "complete", "axes": [],
+        })
+    with pytest.raises(ValidationError):
+        VolumeBenchmarkData.model_validate({
+            **base, "available": True, "reason": "benchmark_source_unavailable", "axes": [],
+        })

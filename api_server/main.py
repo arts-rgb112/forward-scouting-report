@@ -400,10 +400,10 @@ def get_volume_benchmark(
     mode: Literal["league", "europe"] = Query(default="league"),
     scope: Literal["3", "5", "7", "8"] = Query(default="8"),
     competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
-    benchmarkScope: Literal["8"] = Query(default="8"),
+    benchmarkScope: Literal["8"] = Query(...),
 ) -> VolumeBenchmarkEnvelope:
     """Return an actual domestic eight-league average polygon for Volume radar."""
-    del benchmarkScope  # Literal validation is the public contract; scope is fixed in the payload.
+    del benchmarkScope  # Required Literal validation fixes the public benchmark cohort.
     if season not in supported_seasons():
         raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
     if mode == "europe" and "scope" in request.query_params:
