@@ -29,9 +29,8 @@ describe("native player detail panels", () => {
     render(<PercentileProfile player={player} analysis={analysis} quality={{ kind: "idle" }} />); const section = screen.getByRole("region", { name: "Percentile profile" });
     expect(within(section).getAllByRole("heading", { level: 3 })).toHaveLength(6); expect(within(section).getAllByText(/score (80|70)/)).toHaveLength(12);
   });
-  it("renders six-axis player radar and explicitly withholds the unavailable violet benchmark", () => {
-    render(<VolumeBenchmarkRadar player={player} analysis={analysis} />); const section = screen.getByRole("region", { name: "Volume benchmark radar" });
-    expect(within(section).getByRole("img")).toHaveAccessibleName(/Six-axis player volume radar/); expect(section).toHaveTextContent(`Player: ${player.name}`); expect(section).toHaveTextContent("8-league average benchmark unavailable; server endpoint not yet shipped");
-    expect(section.querySelectorAll("polygon.fill-violet-300")).toHaveLength(0); expect(section.querySelectorAll("polygon.fill-lime-300\\/25")).toHaveLength(1);
+  it("keeps the benchmark shell disabled behind its fail-closed feature flag", () => {
+    render(<VolumeBenchmarkRadar player={player} dataset={{season:"2025/2026",mode:"league",scope:8,competition:"all"}} />); const section = screen.getByRole("region", { name: "Volume benchmark radar" });
+    expect(section).toHaveTextContent("8-league benchmark is not enabled"); expect(section.querySelectorAll("[data-series]")).toHaveLength(0);
   });
 });

@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv { readonly VITE_WATCHLIST_V3_ENABLED?: string; readonly VITE_LEGACY_HANDOFF_ENABLED?: string }
+interface ImportMetaEnv { readonly VITE_WATCHLIST_V3_ENABLED?: string; readonly VITE_LEGACY_HANDOFF_ENABLED?: string; readonly VITE_VOLUME_BENCHMARK_ENABLED?: string }
 interface ImportMeta { readonly env: ImportMetaEnv }
 
 interface ImportMetaEnv {

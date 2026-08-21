@@ -1,0 +1,3 @@
+import { volumeBenchmarkAxisIds } from "../api/volumeBenchmarkContracts";
+export const benchmarkAxes = volumeBenchmarkAxisIds.map((id, index) => ({ id, label: id, playerScore: index ? 70 : 0, averageScore: 50, playerRawValue: index ? null : 0, averageRawValue: null, playerRank: 1, population: 10, tier: "B" as const, imputed: id === "spaceControl" }));
+export const benchmarkEnvelope = { schemaVersion: "1.0.0" as const, data: { playerId: 1, idNamespace: "fotmob" as const, season: "2025/2026", sourceContext: { mode: "league" as const, scope: 8 as const, competition: null }, benchmark: { label: "8-league avg" as const, mode: "league" as const, scope: 8 as const }, available: true as const, reason: "complete" as const, axes: benchmarkAxes } };
