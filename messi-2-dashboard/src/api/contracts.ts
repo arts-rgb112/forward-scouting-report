@@ -57,6 +57,8 @@ const analysisSchema = z.object({ score: z.object({ value: score, rank: z.number
 // Keep this schema private to the detail envelope so a detail-only field cannot
 // silently widen the shared player/leaderboard contract.
 const playerDetailDtoSchema = playerDtoSchema.extend({ idNamespace: z.literal("fotmob") }).strict();
+/** Summary responses intentionally use the namespace-free leaderboard player shape. */
+export const playerSummaryEnvelopeSchema = z.object({ data: playerDtoSchema, tierTaxonomyVersion: tierTaxonomyVersionSchema.optional() }).strict();
 export const playerDetailEnvelopeSchema = z.object({ data: playerDetailDtoSchema.extend({ analysis: analysisSchema.optional() }), tierTaxonomyVersion: tierTaxonomyVersionSchema.optional() }).strict();
 const tacticalQuadrantPointSchema = z.object({ playerId: z.number().int().positive(), playerName: z.string().min(1), teamName: z.string(), netProgressionPer90: z.number().finite(), inBoxXgotMinusXg: z.number().finite(), selected: z.boolean() }).strict();
 export const tacticalQuadrantEnvelopeSchema = z.object({ data: z.object({ playerId: z.number().int().positive(), season: z.string().min(1), mode: z.enum(["league", "europe"]), scope: scopeSchema.nullable(), competition: competitionSchema.nullable(), available: z.boolean(), reason: z.enum(["complete", "axis_metric_missing", "cohort_unavailable"]), source: z.literal("messi-static-cohort"), cohortPopulation: z.number().int().nonnegative(), xAxis: z.literal("netProgressionPer90"), yAxis: z.literal("inBoxXgotMinusXg"), xMedian: z.number().finite().nullable(), yMedian: z.number().finite().nullable(), selectedPoint: tacticalQuadrantPointSchema.nullable(), points: z.array(tacticalQuadrantPointSchema) }).strict() }).strict();
