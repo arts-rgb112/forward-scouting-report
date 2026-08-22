@@ -2404,23 +2404,12 @@ def _build_final_third_shot_map_cached(
         scope=scope if mode == "league" else None,
         competition=competition if mode == "europe" else None,
     )
-    # The committed shot event snapshots are player *league-season* sessions.
-    # Europe contexts cannot safely reuse domestic events, so they are honest
-    # unavailable responses until competition-scoped source snapshots exist.
-    if mode != "league":
-        reason = "competition_scoped_shot_event_snapshot_unavailable"
-        return FinalThirdShotEnvelope(
-            context=context,
-            data=FinalThirdShotData(
-                available=False, completeness="unavailable", reason=reason,
-                qualityScale=FinalThirdQualityScale(),
-                markerSizeScale=FinalThirdMarkerSizeScale(),
-                goalMouthCoordinates=FinalThirdGoalMouthCoordinates(),
-                zones=_final_third_unavailable_zones(reason), shots=[],
-                endpointUnavailableCount=0, endpointUnavailableShotIds=[], partialCoverage=[],
-            ),
-        )
-
+    # Each tactical row has its own immutable heatmap key.  The snapshot
+    # builder retains both domestic and UEFA competition records under those
+    # keys, so the selected player context below remains the sole source of
+    # events.  Crucially, this is not a domestic fallback for Europe: when an
+    # exact competition snapshot is absent, the normal unavailable branch
+    # returns an explicit no-data envelope instead.
     tactical = get_tactical_ratio_for_session(player_id, player.league.name, season)
     heatmap_key = str(tactical.get("heatmap_key")) if tactical and tactical.get("heatmap_key") else None
     try:

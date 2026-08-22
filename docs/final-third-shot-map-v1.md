@@ -40,9 +40,11 @@ average(xGOT) - average(xG)
 Missing xGOT/xG is never coerced to zero. The affected zone's quality field is
 `partial` or `unavailable`, and `partialCoverage` names the zone and cause.
 No selected-context snapshot returns an unavailable envelope and ten
-unavailable tiles, never a fabricated zero-volume result. Current committed
-shot snapshots are domestic league-season sessions; Europe responses are thus
-explicitly unavailable until competition-scoped event snapshots are loaded.
+unavailable tiles, never a fabricated zero-volume result. Snapshot keys are
+competition-scoped: a Europe request may only read the matching UEFA-session
+key, never a domestic league-season key. If that exact source snapshot is not
+committed, the API returns the explicit unavailable envelope rather than a
+fallback dataset.
 
 ## Goal-mouth coordinates and identifiers
 
@@ -75,3 +77,13 @@ mtime/size revision. A static refresh invalidates the aggregate without
 provider fan-out. The endpoint uses the existing exact production/immutable
 preview CORS allowlist with `allow_credentials=false`; hostile origins receive
 no `Access-Control-Allow-Origin` header.
+
+## Snapshot coverage audit
+
+`scripts/audit_final_third_shotmap_coverage.py` reads only committed tactical
+rows and shotmap shards. It writes
+`data/final_third_shotmap_coverage.csv` (coverage by exact API context family)
+and `data/final_third_shotmap_unavailable_contexts.csv` (player/context keys
+that still have no source snapshot). Domestic scope entries are repeated only
+where that league is eligible for the requested comparison scope; European
+entries retain their exact `ucl`, `uel`, or `uecl` competition code.

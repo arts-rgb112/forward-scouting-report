@@ -1,0 +1,301 @@
+player_id,player_name,season_name,mode,scope,competition,competition_name,heatmap_key,reason
+1089731,Pedro Gonçalves,2021/2022,europe,,ucl,UEFA Champions League,1089731:7:36886,snapshot_missing
+1636513,Souza,2021/2022,europe,,ucl,UEFA Champions League,1636513:7:36886,snapshot_missing
+313121,Amahl Pellegrino,2021/2022,europe,,uecl,UEFA Europa Conference League,313121:17015:37074,snapshot_missing
+201939,Cédric Bakambu,2021/2022,europe,,uecl,UEFA Europa Conference League,201939:17015:37074,snapshot_missing
+166717,Denis Popovič,2021/2022,europe,,uecl,UEFA Europa Conference League,166717:17015:37074,snapshot_missing
+741561,Erik Botheim,2021/2022,europe,,uecl,UEFA Europa Conference League,741561:17015:37074,snapshot_missing
+187294,Filip Valenčič,2021/2022,europe,,uecl,UEFA Europa Conference League,187294:17015:37074,snapshot_missing
+580604,Gerson,2021/2022,europe,,uecl,UEFA Europa Conference League,580604:17015:37074,snapshot_missing
+1042020,Gulzhigit Alykulov,2021/2022,europe,,uecl,UEFA Europa Conference League,1042020:17015:37074,snapshot_missing
+212896,Henrik Ojamaa,2021/2022,europe,,uecl,UEFA Europa Conference League,212896:17015:37074,snapshot_missing
+837064,Hugo Vetlesen,2021/2022,europe,,uecl,UEFA Europa Conference League,837064:17015:37074,snapshot_missing
+643663,Ibrahima Wadji,2021/2022,europe,,uecl,UEFA Europa Conference League,643663:17015:37074,snapshot_missing
+573663,José Kanté,2021/2022,europe,,uecl,UEFA Europa Conference League,573663:17015:37074,snapshot_missing
+16511,Konstantin Vassiljev,2021/2022,europe,,uecl,UEFA Europa Conference League,16511:17015:37074,snapshot_missing
+574868,Lucas Lingman,2021/2022,europe,,uecl,UEFA Europa Conference League,574868:17015:37074,snapshot_missing
+841927,Markus Poom,2021/2022,europe,,uecl,UEFA Europa Conference League,841927:17015:37074,snapshot_missing
+783581,Martin Miller,2021/2022,europe,,uecl,UEFA Europa Conference League,783581:17015:37074,snapshot_missing
+917779,Ola Solbakken,2021/2022,europe,,uecl,UEFA Europa Conference League,917779:17015:37074,snapshot_missing
+530635,Patrick Berg,2021/2022,europe,,uecl,UEFA Europa Conference League,530635:17015:37074,snapshot_missing
+431841,Rauno Sappinen,2021/2022,europe,,uecl,UEFA Europa Conference League,431841:17015:37074,snapshot_missing
+66753,Riku Riski,2021/2022,europe,,uecl,UEFA Europa Conference League,66753:17015:37074,snapshot_missing
+77872,Sergei Zenjov,2021/2022,europe,,uecl,UEFA Europa Conference League,77872:17015:37074,snapshot_missing
+310763,Ulrik Saltnes,2021/2022,europe,,uecl,UEFA Europa Conference League,310763:17015:37074,snapshot_missing
+1000428,Ísak Bergmann Jóhannesson,2021/2022,europe,,uecl,UEFA Europa Conference League,1000428:17015:37074,snapshot_missing
+1650431,Ally Samatta,2021/2022,europe,,uel,UEFA Europa League,1650431:679:37725,snapshot_missing
+845763,André Castro,2021/2022,europe,,uel,UEFA Europa League,845763:679:37725,snapshot_missing
+826089,Kyogo Furuhashi,2021/2022,europe,,uel,UEFA Europa League,826089:679:37725,snapshot_missing
+1721789,Allan,2021/2022,league,3,all,Premier League,1721789:17:37036,snapshot_missing
+1721789,Allan,2021/2022,league,5,all,Premier League,1721789:17:37036,snapshot_missing
+1721789,Allan,2021/2022,league,7,all,Premier League,1721789:17:37036,snapshot_missing
+388523,André Silva,2021/2022,league,7,all,Primeira Liga,388523:238:37358,snapshot_missing
+648362,Felipe Pires,2021/2022,league,7,all,Primeira Liga,648362:238:37358,snapshot_missing
+1521239,Hélder Ferreira,2021/2022,league,7,all,Primeira Liga,1521239:238:37358,snapshot_missing
+41171,Marcus Pedersen,2021/2022,league,7,all,Eredivisie,41171:37:36890,snapshot_missing
+1089731,Pedro Gonçalves,2021/2022,league,7,all,Primeira Liga,1089731:238:37358,snapshot_missing
+1721789,Allan,2021/2022,league,8,all,Premier League,1721789:17:37036,snapshot_missing
+1650431,Ally Samatta,2021/2022,league,8,all,Belgian Pro League,1650431:38:36894,source_history_unavailable
+388523,André Silva,2021/2022,league,8,all,Primeira Liga,388523:238:37358,snapshot_missing
+648362,Felipe Pires,2021/2022,league,8,all,Primeira Liga,648362:238:37358,snapshot_missing
+967065,Habib Gueye,2021/2022,league,8,all,Belgian Pro League,967065:38:36894,source_history_unavailable
+1521239,Hélder Ferreira,2021/2022,league,8,all,Primeira Liga,1521239:238:37358,snapshot_missing
+41171,Marcus Pedersen,2021/2022,league,8,all,Eredivisie,41171:37:36890,snapshot_missing
+1089731,Pedro Gonçalves,2021/2022,league,8,all,Primeira Liga,1089731:238:37358,snapshot_missing
+1655748,Vinícius Souza,2021/2022,league,8,all,Belgian Pro League,1655748:38:36894,invalid_player_mapping
+974753,Julián Alvarez,2022/2023,europe,,ucl,UEFA Champions League,974753:7:41897,snapshot_missing
+900433,Khvicha Kvaratskhelia,2022/2023,europe,,ucl,UEFA Champions League,900433:7:41897,snapshot_missing
+1089731,Pedro Gonçalves,2022/2023,europe,,ucl,UEFA Champions League,1089731:7:41897,snapshot_missing
+1207581,David Datro Fofana,2022/2023,europe,,uecl,UEFA Europa Conference League,1207581:17015:42224,snapshot_missing
+962795,Emil Breivik,2022/2023,europe,,uecl,UEFA Europa Conference League,962795:17015:42224,snapshot_missing
+848295,Emmanuel Banda,2022/2023,europe,,uecl,UEFA Europa Conference League,848295:17015:42224,snapshot_missing
+664731,Fabien Ourega,2022/2023,europe,,uecl,UEFA Europa Conference League,664731:17015:42224,snapshot_missing
+679352,Francis Kyeremeh,2022/2023,europe,,uecl,UEFA Europa Conference League,679352:17015:42224,snapshot_missing
+1368557,Gift Orban,2022/2023,europe,,uecl,UEFA Europa Conference League,1368557:17015:42224,snapshot_missing
+200267,Gustav Wikheim,2022/2023,europe,,uecl,UEFA Europa Conference League,200267:17015:42224,snapshot_missing
+916335,Hampus Finndell,2022/2023,europe,,uecl,UEFA Europa Conference League,916335:17015:42224,snapshot_missing
+49289,Haris Radetinac,2022/2023,europe,,uecl,UEFA Europa Conference League,49289:17015:42224,snapshot_missing
+748381,Joel Asoro,2022/2023,europe,,uecl,UEFA Europa Conference League,748381:17015:42224,snapshot_missing
+1369689,Justin Ferizaj,2022/2023,europe,,uecl,UEFA Europa Conference League,1369689:17015:42224,snapshot_missing
+185389,Magnus Wolff Eikrem,2022/2023,europe,,uecl,UEFA Europa Conference League,185389:17015:42224,snapshot_missing
+1185309,Malik Abubakari,2022/2023,europe,,uecl,UEFA Europa Conference League,1185309:17015:42224,snapshot_missing
+1168520,Mayckel Lahdo,2022/2023,europe,,uecl,UEFA Europa Conference League,1168520:17015:42224,snapshot_missing
+504033,Milan Gajić,2022/2023,europe,,uecl,UEFA Europa Conference League,504033:17015:42224,snapshot_missing
+837066,Ola Brynhildsen,2022/2023,europe,,uecl,UEFA Europa Conference League,837066:17015:42224,snapshot_missing
+118142,Rasmus Schüller,2022/2023,europe,,uecl,UEFA Europa Conference League,118142:17015:42224,snapshot_missing
+570772,Sean Kavanagh,2022/2023,europe,,uecl,UEFA Europa Conference League,570772:17015:42224,snapshot_missing
+658222,Victor Edvardsen,2022/2023,europe,,uecl,UEFA Europa Conference League,658222:17015:42224,snapshot_missing
+837064,Hugo Vetlesen,2022/2023,europe,,uel,UEFA Europa League,837064:679:44509,snapshot_missing
+1176214,Luiz Henrique,2022/2023,europe,,uel,UEFA Europa League,1176214:679:44509,snapshot_missing
+530635,Patrick Berg,2022/2023,europe,,uel,UEFA Europa League,530635:679:44509,snapshot_missing
+1089731,Pedro Gonçalves,2022/2023,europe,,uel,UEFA Europa League,1089731:679:44509,snapshot_missing
+631369,Santeri Hostikka,2022/2023,europe,,uel,UEFA Europa League,631369:679:44509,snapshot_missing
+1035208,Victor Okoh Boniface,2022/2023,europe,,uel,UEFA Europa League,1035208:679:44509,snapshot_missing
+1061249,Vitinha,2022/2023,europe,,uel,UEFA Europa League,1061249:679:44509,snapshot_missing
+547710,Adama Traoré,2022/2023,league,3,all,Premier League,547710:17:41886,snapshot_missing
+1655748,Vinícius Souza,2022/2023,league,3,all,LaLiga,1655748:8:42409,snapshot_missing
+547710,Adama Traoré,2022/2023,league,5,all,Premier League,547710:17:41886,snapshot_missing
+1655748,Vinícius Souza,2022/2023,league,5,all,LaLiga,1655748:8:42409,snapshot_missing
+547710,Adama Traoré,2022/2023,league,7,all,Premier League,547710:17:41886,snapshot_missing
+388523,André Silva,2022/2023,league,7,all,Primeira Liga,388523:238:42655,snapshot_missing
+41171,Marcus Pedersen,2022/2023,league,7,all,Eredivisie,41171:37:42256,snapshot_missing
+1089731,Pedro Gonçalves,2022/2023,league,7,all,Primeira Liga,1089731:238:42655,snapshot_missing
+1655748,Vinícius Souza,2022/2023,league,7,all,LaLiga,1655748:8:42409,snapshot_missing
+547710,Adama Traoré,2022/2023,league,8,all,Premier League,547710:17:41886,snapshot_missing
+1650431,Ally Samatta,2022/2023,league,8,all,Belgian Pro League,1650431:38:42404,source_history_unavailable
+388523,André Silva,2022/2023,league,8,all,Primeira Liga,388523:238:42655,snapshot_missing
+967065,Habib Gueye,2022/2023,league,8,all,Belgian Pro League,967065:38:42404,source_history_unavailable
+41171,Marcus Pedersen,2022/2023,league,8,all,Eredivisie,41171:37:42256,snapshot_missing
+1089731,Pedro Gonçalves,2022/2023,league,8,all,Primeira Liga,1089731:238:42655,snapshot_missing
+1655748,Vinícius Souza,2022/2023,league,8,all,LaLiga,1655748:8:42409,snapshot_missing
+495234,Abzal Beysebekov,2023/2024,europe,,uecl,UEFA Europa Conference League,495234:17015:52327,snapshot_missing
+1133381,Albert Grønbæk,2023/2024,europe,,uecl,UEFA Europa Conference League,1133381:17015:52327,snapshot_missing
+313121,Amahl Pellegrino,2023/2024,europe,,uecl,UEFA Europa Conference League,313121:17015:52327,snapshot_missing
+907046,Bojan Radulović,2023/2024,europe,,uecl,UEFA Europa Conference League,907046:17015:52327,snapshot_missing
+1116903,Dembo Darboe,2023/2024,europe,,uecl,UEFA Europa Conference League,1116903:17015:52327,snapshot_missing
+1066269,Elkhan Astanov,2023/2024,europe,,uecl,UEFA Europa Conference League,1066269:17015:52327,snapshot_missing
+952325,Faris Moumbagna,2023/2024,europe,,uecl,UEFA Europa Conference League,952325:17015:52327,snapshot_missing
+120432,Fredrik Gulbrandsen,2023/2024,europe,,uecl,UEFA Europa Conference League,120432:17015:52327,snapshot_missing
+635942,Gísli Eyjólfsson,2023/2024,europe,,uecl,UEFA Europa Conference League,635942:17015:52327,snapshot_missing
+837064,Hugo Vetlesen,2023/2024,europe,,uecl,UEFA Europa Conference League,837064:17015:52327,snapshot_missing
+261659,Höskuldur Gunnlaugsson,2023/2024,europe,,uecl,UEFA Europa Conference League,261659:17015:52327,snapshot_missing
+91935,Kristinn Steindorsson,2023/2024,europe,,uecl,UEFA Europa Conference League,91935:17015:52327,snapshot_missing
+974755,Lucas Beltrán,2023/2024,europe,,uecl,UEFA Europa Conference League,974755:17015:52327,snapshot_missing
+574868,Lucas Lingman,2023/2024,europe,,uecl,UEFA Europa Conference League,574868:17015:52327,snapshot_missing
+1065615,Nino Žugelj,2023/2024,europe,,uecl,UEFA Europa Conference League,1065615:17015:52327,snapshot_missing
+530635,Patrick Berg,2023/2024,europe,,uecl,UEFA Europa Conference League,530635:17015:52327,snapshot_missing
+39487,Përparim Hetemaj,2023/2024,europe,,uecl,UEFA Europa Conference League,39487:17015:52327,snapshot_missing
+1350129,Rwan Cruz,2023/2024,europe,,uecl,UEFA Europa Conference League,1350129:17015:52327,snapshot_missing
+1131349,Santiago Hezze,2023/2024,europe,,uecl,UEFA Europa Conference League,1131349:17015:52327,snapshot_missing
+1034990,Takuro Kaneko,2023/2024,europe,,uecl,UEFA Europa Conference League,1034990:17015:52327,snapshot_missing
+1261804,Topi Keskinen,2023/2024,europe,,uecl,UEFA Europa Conference League,1261804:17015:52327,snapshot_missing
+310763,Ulrik Saltnes,2023/2024,europe,,uecl,UEFA Europa Conference League,310763:17015:52327,snapshot_missing
+495418,Árni Frederiksberg,2023/2024,europe,,uecl,UEFA Europa Conference League,495418:17015:52327,snapshot_missing
+469806,Amor Layouni,2023/2024,europe,,uel,UEFA Europa League,469806:679:53654,snapshot_missing
+848296,Edward Chilufya,2023/2024,europe,,uel,UEFA Europa League,848296:679:53654,snapshot_missing
+1389450,Eguinaldo,2023/2024,europe,,uel,UEFA Europa League,1389450:679:53654,snapshot_missing
+952325,Faris Moumbagna,2023/2024,europe,,uel,UEFA Europa League,952325:679:53654,snapshot_missing
+185389,Magnus Wolff Eikrem,2023/2024,europe,,uel,UEFA Europa League,185389:679:53654,snapshot_missing
+1174663,Marcos Leonardo,2023/2024,europe,,uel,UEFA Europa League,1174663:679:53654,snapshot_missing
+88999,Mikkel Rygaard,2023/2024,europe,,uel,UEFA Europa League,88999:679:53654,snapshot_missing
+1089731,Pedro Gonçalves,2023/2024,europe,,uel,UEFA Europa League,1089731:679:53654,snapshot_missing
+1655748,Vinícius Souza,2023/2024,league,3,all,Premier League,1655748:17:52186,snapshot_missing
+1655748,Vinícius Souza,2023/2024,league,5,all,Premier League,1655748:17:52186,snapshot_missing
+388523,André Silva,2023/2024,league,7,all,Primeira Liga,388523:238:52769,snapshot_missing
+1089731,Pedro Gonçalves,2023/2024,league,7,all,Primeira Liga,1089731:238:52769,snapshot_missing
+1655748,Vinícius Souza,2023/2024,league,7,all,Premier League,1655748:17:52186,snapshot_missing
+388523,André Silva,2023/2024,league,8,all,Primeira Liga,388523:238:52769,snapshot_missing
+1089731,Pedro Gonçalves,2023/2024,league,8,all,Primeira Liga,1089731:238:52769,snapshot_missing
+1655748,Vinícius Souza,2023/2024,league,8,all,Premier League,1655748:17:52186,snapshot_missing
+1089731,Pedro Gonçalves,2024/2025,europe,,ucl,UEFA Champions League,1089731:7:61644,snapshot_missing
+1044460,Ari Sigurpálsson,2024/2025,europe,,uecl,UEFA Europa Conference League,1044460:17015:61648,snapshot_missing
+1312274,Armandas Kučys,2024/2025,europe,,uecl,UEFA Europa Conference League,1312274:17015:61648,snapshot_missing
+1227813,Atsuki Ito,2024/2025,europe,,uecl,UEFA Europa Conference League,1227813:17015:61648,snapshot_missing
+1311533,August Priske,2024/2025,europe,,uecl,UEFA Europa Conference League,1311533:17015:61648,snapshot_missing
+619365,Besard Sabović,2024/2025,europe,,uecl,UEFA Europa Conference League,619365:17015:61648,snapshot_missing
+909448,Charalampos Charalampous,2024/2025,europe,,uecl,UEFA Europa Conference League,909448:17015:61648,snapshot_missing
+628820,Daniel Stensson,2024/2025,europe,,uecl,UEFA Europa Conference League,628820:17015:61648,snapshot_missing
+614163,Deniz Hümmet,2024/2025,europe,,uecl,UEFA Europa Conference League,614163:17015:61648,snapshot_missing
+641044,Dylan Watts,2024/2025,europe,,uecl,UEFA Europa Conference League,641044:17015:61648,snapshot_missing
+1705611,Edmilson,2024/2025,europe,,uecl,UEFA Europa Conference League,1705611:17015:61648,snapshot_missing
+962795,Emil Breivik,2024/2025,europe,,uecl,UEFA Europa Conference League,962795:17015:61648,snapshot_missing
+1166548,Frederik Ihler,2024/2025,europe,,uecl,UEFA Europa Conference League,1166548:17015:61648,snapshot_missing
+1383059,Gisli Thordarson,2024/2025,europe,,uecl,UEFA Europa Conference League,1383059:17015:61648,snapshot_missing
+301367,Graham Burke,2024/2025,europe,,uecl,UEFA Europa Conference League,301367:17015:61648,snapshot_missing
+1521239,Hélder Ferreira,2024/2025,europe,,uecl,UEFA Europa Conference League,1521239:17015:61648,snapshot_missing
+1239600,Johnny Kenny,2024/2025,europe,,uecl,UEFA Europa Conference League,1239600:17015:61648,snapshot_missing
+1068590,Joshua Honohan,2024/2025,europe,,uecl,UEFA Europa Conference League,1068590:17015:61648,snapshot_missing
+558136,Karol Świderski,2024/2025,europe,,uecl,UEFA Europa Conference League,558136:17015:61648,snapshot_missing
+363351,Lee Erwin,2024/2025,europe,,uecl,UEFA Europa Conference League,363351:17015:61648,snapshot_missing
+1185549,Mads Enggård,2024/2025,europe,,uecl,UEFA Europa Conference League,1185549:17015:61648,snapshot_missing
+185389,Magnus Wolff Eikrem,2024/2025,europe,,uecl,UEFA Europa Conference League,185389:17015:61648,snapshot_missing
+863652,Neil Farrugia,2024/2025,europe,,uecl,UEFA Europa Conference League,863652:17015:61648,snapshot_missing
+837066,Ola Brynhildsen,2024/2025,europe,,uecl,UEFA Europa Conference League,837066:17015:61648,snapshot_missing
+1000834,Oskar Fallenius,2024/2025,europe,,uecl,UEFA Europa Conference League,1000834:17015:61648,snapshot_missing
+850356,Pêpê,2024/2025,europe,,uecl,UEFA Europa Conference League,850356:17015:61648,snapshot_missing
+277793,Tokmac Chol Nguen,2024/2025,europe,,uecl,UEFA Europa Conference League,277793:17015:61648,snapshot_missing
+1062357,Adam Markhiev,2024/2025,europe,,uel,UEFA Europa League,1062357:679:61645,snapshot_missing
+127209,Anders Christiansen,2024/2025,europe,,uel,UEFA Europa League,127209:679:61645,snapshot_missing
+615292,Andreas Helmersen,2024/2025,europe,,uel,UEFA Europa League,615292:679:61645,snapshot_missing
+635789,Darko Lemajić,2024/2025,europe,,uel,UEFA Europa League,635789:679:61645,snapshot_missing
+1459656,Erick Marcus,2024/2025,europe,,uel,UEFA Europa League,1459656:679:61645,snapshot_missing
+741561,Erik Botheim,2024/2025,europe,,uel,UEFA Europa League,741561:679:61645,snapshot_missing
+1351569,Hugo Bolin,2024/2025,europe,,uel,UEFA Europa League,1351569:679:61645,snapshot_missing
+632870,Håkon Evjen,2024/2025,europe,,uel,UEFA Europa League,632870:679:61645,snapshot_missing
+741397,Jens Petter Hauge,2024/2025,europe,,uel,UEFA Europa League,741397:679:61645,snapshot_missing
+463803,Jānis Ikaunieks,2024/2025,europe,,uel,UEFA Europa League,463803:679:61645,snapshot_missing
+1419540,Lasha Odisharia,2024/2025,europe,,uel,UEFA Europa League,1419540:679:61645,snapshot_missing
+1035206,Lasse Berg Johnsen,2024/2025,europe,,uel,UEFA Europa League,1035206:679:61645,snapshot_missing
+1386775,Lucas Bergvall,2024/2025,europe,,uel,UEFA Europa League,1386775:679:61645,snapshot_missing
+856684,Michael Baidoo,2024/2025,europe,,uel,UEFA Europa League,856684:679:61645,snapshot_missing
+200189,Oliver Berg,2024/2025,europe,,uel,UEFA Europa League,200189:679:61645,snapshot_missing
+848573,Ousseynou Niang,2024/2025,europe,,uel,UEFA Europa League,848573:679:61645,snapshot_missing
+530635,Patrick Berg,2024/2025,europe,,uel,UEFA Europa League,530635:679:61645,snapshot_missing
+449279,Philip Zinckernagel,2024/2025,europe,,uel,UEFA Europa League,449279:679:61645,snapshot_missing
+1252132,Promise David,2024/2025,europe,,uel,UEFA Europa League,1252132:679:61645,snapshot_missing
+427223,Sergio Peña,2024/2025,europe,,uel,UEFA Europa League,427223:679:61645,snapshot_missing
+315032,Simon Hedlund,2024/2025,europe,,uel,UEFA Europa League,315032:679:61645,snapshot_missing
+702428,Stefan Panić,2024/2025,europe,,uel,UEFA Europa League,702428:679:61645,snapshot_missing
+955271,Thiago Almada,2024/2025,europe,,uel,UEFA Europa League,955271:679:61645,snapshot_missing
+310763,Ulrik Saltnes,2024/2025,europe,,uel,UEFA Europa League,310763:679:61645,snapshot_missing
+1061249,Vitinha,2024/2025,league,3,all,Serie A,1061249:23:63515,snapshot_missing
+1061249,Vitinha,2024/2025,league,5,all,Serie A,1061249:23:63515,snapshot_missing
+174531,Dudu,2024/2025,league,7,all,Primeira Liga,174531:238:63670,snapshot_missing
+1328484,Gabriel Martínez,2024/2025,league,7,all,Primeira Liga,1328484:238:63670,snapshot_missing
+165262,Joel Silva,2024/2025,league,7,all,Primeira Liga,165262:238:63670,snapshot_missing
+1693593,Pablo Felipe,2024/2025,league,7,all,Primeira Liga,1693593:238:63670,snapshot_missing
+1089731,Pedro Gonçalves,2024/2025,league,7,all,Primeira Liga,1089731:238:63670,snapshot_missing
+118237,Vinícius Lopes,2024/2025,league,7,all,Primeira Liga,118237:238:63670,snapshot_missing
+1061249,Vitinha,2024/2025,league,7,all,Serie A,1061249:23:63515,snapshot_missing
+174531,Dudu,2024/2025,league,8,all,Primeira Liga,174531:238:63670,snapshot_missing
+1328484,Gabriel Martínez,2024/2025,league,8,all,Primeira Liga,1328484:238:63670,snapshot_missing
+165262,Joel Silva,2024/2025,league,8,all,Primeira Liga,165262:238:63670,snapshot_missing
+1693593,Pablo Felipe,2024/2025,league,8,all,Primeira Liga,1693593:238:63670,snapshot_missing
+1089731,Pedro Gonçalves,2024/2025,league,8,all,Primeira Liga,1089731:238:63670,snapshot_missing
+118237,Vinícius Lopes,2024/2025,league,8,all,Primeira Liga,118237:238:63670,snapshot_missing
+1061249,Vitinha,2024/2025,league,8,all,Serie A,1061249:23:63515,snapshot_missing
+615292,Andreas Helmersen,2025/2026,europe,,ucl,UEFA Champions League,615292:7:76953,snapshot_missing
+1127007,Chiquinho,2025/2026,europe,,ucl,UEFA Champions League,1127007:7:76953,snapshot_missing
+1359647,Daniel Bassi,2025/2026,europe,,ucl,UEFA Champions League,1359647:7:76953,snapshot_missing
+1684584,Dastan Satpaev,2025/2026,europe,,ucl,UEFA Champions League,1684584:7:76953,snapshot_missing
+1580774,Estêvão,2025/2026,europe,,ucl,UEFA Champions League,1580774:7:76953,snapshot_missing
+626164,Ezequiel Fernández,2025/2026,europe,,ucl,UEFA Champions League,626164:7:76953,snapshot_missing
+1607566,Franco Mastantuono,2025/2026,europe,,ucl,UEFA Champions League,1607566:7:76953,snapshot_missing
+632870,Håkon Evjen,2025/2026,europe,,ucl,UEFA Champions League,632870:7:76953,snapshot_missing
+741397,Jens Petter Hauge,2025/2026,europe,,ucl,UEFA Champions League,741397:7:76953,snapshot_missing
+1179483,Jug Stanojev,2025/2026,europe,,ucl,UEFA Champions League,1179483:7:76953,snapshot_missing
+1082058,Kevin Rodriguez,2025/2026,europe,,ucl,UEFA Champions League,1082058:7:76953,snapshot_missing
+1358378,Lorenzo Scipioni,2025/2026,europe,,ucl,UEFA Champions League,1358378:7:76953,snapshot_missing
+530635,Patrick Berg,2025/2026,europe,,ucl,UEFA Champions League,530635:7:76953,snapshot_missing
+1089731,Pedro Gonçalves,2025/2026,europe,,ucl,UEFA Champions League,1089731:7:76953,snapshot_missing
+850356,Pêpê,2025/2026,europe,,ucl,UEFA Champions League,850356:7:76953,snapshot_missing
+1174630,Richard Ríos,2025/2026,europe,,ucl,UEFA Champions League,1174630:7:76953,snapshot_missing
+1160076,Sondre Auklend,2025/2026,europe,,ucl,UEFA Champions League,1160076:7:76953,snapshot_missing
+310763,Ulrik Saltnes,2025/2026,europe,,ucl,UEFA Champions League,310763:7:76953,snapshot_missing
+1681812,Youssoupha Sanyang,2025/2026,europe,,ucl,UEFA Champions League,1681812:7:76953,snapshot_missing
+1485532,Adrian Svanback,2025/2026,europe,,uecl,UEFA Europa Conference League,1485532:17015:76960,snapshot_missing
+932181,Daniel Grant,2025/2026,europe,,uecl,UEFA Europa Conference League,932181:17015:76960,snapshot_missing
+641044,Dylan Watts,2025/2026,europe,,uecl,UEFA Europa Conference League,641044:17015:76960,snapshot_missing
+860756,Franko Kovačević,2025/2026,europe,,uecl,UEFA Europa Conference League,860756:17015:76960,snapshot_missing
+301367,Graham Burke,2025/2026,europe,,uecl,UEFA Europa Conference League,301367:17015:76960,snapshot_missing
+1521239,Hélder Ferreira,2025/2026,europe,,uecl,UEFA Europa Conference League,1521239:17015:76960,snapshot_missing
+261659,Höskuldur Gunnlaugsson,2025/2026,europe,,uecl,UEFA Europa Conference League,261659:17015:76960,snapshot_missing
+791835,Jonathan Lunney,2025/2026,europe,,uecl,UEFA Europa Conference League,791835:17015:76960,snapshot_missing
+1297852,Joslyn Luyeye-Lutumba,2025/2026,europe,,uecl,UEFA Europa Conference League,1297852:17015:76960,snapshot_missing
+1483508,Kauã Elias,2025/2026,europe,,uecl,UEFA Europa Conference League,1483508:17015:76960,snapshot_missing
+91935,Kristinn Steindorsson,2025/2026,europe,,uecl,UEFA Europa Conference League,91935:17015:76960,snapshot_missing
+1694887,Luca Meirelles,2025/2026,europe,,uecl,UEFA Europa Conference League,1694887:17015:76960,snapshot_missing
+937444,Mario Ćuže,2025/2026,europe,,uecl,UEFA Europa Conference League,937444:17015:76960,snapshot_missing
+88999,Mikkel Rygaard,2025/2026,europe,,uecl,UEFA Europa Conference League,88999:17015:76960,snapshot_missing
+1383478,Niilo Kujasalo,2025/2026,europe,,uecl,UEFA Europa Conference League,1383478:17015:76960,snapshot_missing
+1347994,Otto Ruoppi,2025/2026,europe,,uecl,UEFA Europa Conference League,1347994:17015:76960,snapshot_missing
+243433,Piotr Parzyszek,2025/2026,europe,,uecl,UEFA Europa Conference League,243433:17015:76960,snapshot_missing
+187593,Rory Gaffney,2025/2026,europe,,uecl,UEFA Europa Conference League,187593:17015:76960,snapshot_missing
+737084,Samuel Leach Holm,2025/2026,europe,,uecl,UEFA Europa Conference League,737084:17015:76960,snapshot_missing
+1425101,Silas Andersen,2025/2026,europe,,uecl,UEFA Europa Conference League,1425101:17015:76960,snapshot_missing
+438572,Simon Gustafson,2025/2026,europe,,uecl,UEFA Europa Conference League,438572:17015:76960,snapshot_missing
+1260156,Valentín Gasc,2025/2026,europe,,uecl,UEFA Europa Conference League,1260156:17015:76960,snapshot_missing
+1716409,Victor Ozhianvuna,2025/2026,europe,,uecl,UEFA Europa Conference League,1716409:17015:76960,snapshot_missing
+1307326,Yannick Agnero,2025/2026,europe,,uecl,UEFA Europa Conference League,1307326:17015:76960,snapshot_missing
+945841,Emil Kornvig,2025/2026,europe,,uel,UEFA Europa League,945841:679:76984,snapshot_missing
+414245,Federico Bernardeschi,2025/2026,europe,,uel,UEFA Europa League,414245:679:76984,snapshot_missing
+1328484,Gabriel Martínez,2025/2026,europe,,uel,UEFA Europa League,1328484:679:76984,snapshot_missing
+1082102,Igor Jesus,2025/2026,europe,,uel,UEFA Europa League,1082102:679:76984,snapshot_missing
+738046,Jacob Lungi Sørensen,2025/2026,europe,,uel,UEFA Europa League,738046:679:76984,snapshot_missing
+1228408,Jusef Erabi,2025/2026,europe,,uel,UEFA Europa League,1228408:679:76984,snapshot_missing
+861811,Júnior Brumado,2025/2026,europe,,uel,UEFA Europa League,861811:679:76984,snapshot_missing
+1390339,Kenan Busuladžić,2025/2026,europe,,uel,UEFA Europa League,1390339:679:76984,snapshot_missing
+1035206,Lasse Berg Johnsen,2025/2026,europe,,uel,UEFA Europa League,1035206:679:76984,snapshot_missing
+46469,Olivier Giroud,2025/2026,europe,,uel,UEFA Europa League,46469:679:76984,snapshot_missing
+1317611,Otto Rosengren,2025/2026,europe,,uel,UEFA Europa League,1317611:679:76984,snapshot_missing
+921919,Sebastian Tounekti,2025/2026,europe,,uel,UEFA Europa League,921919:679:76984,snapshot_missing
+1338846,Sota Kitano,2025/2026,europe,,uel,UEFA Europa League,1338846:679:76984,snapshot_missing
+1135782,Taha Abdi Ali,2025/2026,europe,,uel,UEFA Europa League,1135782:679:76984,snapshot_missing
+1837419,Theodor Lundbergh,2025/2026,europe,,uel,UEFA Europa League,1837419:679:76984,snapshot_missing
+1280328,Vicente Taborda,2025/2026,europe,,uel,UEFA Europa League,1280328:679:76984,snapshot_missing
+1320176,Wesley,2025/2026,europe,,uel,UEFA Europa League,1320176:679:76984,snapshot_missing
+1285599,Giovane,2025/2026,league,3,all,Serie A,1285599:23:76457,snapshot_missing
+41171,Marcus Pedersen,2025/2026,league,3,all,Serie A,41171:23:76457,snapshot_missing
+1585393,Raúl Jiménez,2025/2026,league,3,all,Premier League,1585393:17:76986,snapshot_missing
+1320176,Wesley,2025/2026,league,3,all,LaLiga,1320176:8:77559,snapshot_missing
+1650431,Ally Samatta,2025/2026,league,5,all,Ligue 1,1650431:34:77356,snapshot_missing
+1966055,Andrej Ilić,2025/2026,league,5,all,Bundesliga,1966055:35:77333,snapshot_missing
+626164,Ezequiel Fernández,2025/2026,league,5,all,Bundesliga,626164:35:77333,snapshot_missing
+1285599,Giovane,2025/2026,league,5,all,Serie A,1285599:23:76457,snapshot_missing
+41171,Marcus Pedersen,2025/2026,league,5,all,Serie A,41171:23:76457,snapshot_missing
+2130462,Pape Diop,2025/2026,league,5,all,Ligue 1,2130462:34:77356,snapshot_missing
+1585393,Raúl Jiménez,2025/2026,league,5,all,Premier League,1585393:17:76986,snapshot_missing
+1655748,Vinícius Souza,2025/2026,league,5,all,Bundesliga,1655748:35:77333,snapshot_missing
+1320176,Wesley,2025/2026,league,5,all,LaLiga,1320176:8:77559,snapshot_missing
+1650431,Ally Samatta,2025/2026,league,7,all,Ligue 1,1650431:34:77356,snapshot_missing
+1966055,Andrej Ilić,2025/2026,league,7,all,Bundesliga,1966055:35:77333,snapshot_missing
+626164,Ezequiel Fernández,2025/2026,league,7,all,Bundesliga,626164:35:77333,snapshot_missing
+1328484,Gabriel Martínez,2025/2026,league,7,all,Primeira Liga,1328484:238:77806,snapshot_missing
+1285599,Giovane,2025/2026,league,7,all,Serie A,1285599:23:76457,snapshot_missing
+165262,Joel Silva,2025/2026,league,7,all,Primeira Liga,165262:238:77806,snapshot_missing
+1708430,José Tavares,2025/2026,league,7,all,Primeira Liga,1708430:238:77806,snapshot_missing
+41171,Marcus Pedersen,2025/2026,league,7,all,Serie A,41171:23:76457,snapshot_missing
+521912,Nenê,2025/2026,league,7,all,Primeira Liga,521912:238:77806,snapshot_missing
+1693593,Pablo Felipe,2025/2026,league,7,all,Primeira Liga,1693593:238:77806,snapshot_missing
+2130462,Pape Diop,2025/2026,league,7,all,Ligue 1,2130462:34:77356,snapshot_missing
+1089731,Pedro Gonçalves,2025/2026,league,7,all,Primeira Liga,1089731:238:77806,snapshot_missing
+1585393,Raúl Jiménez,2025/2026,league,7,all,Premier League,1585393:17:76986,snapshot_missing
+118237,Vinícius Lopes,2025/2026,league,7,all,Primeira Liga,118237:238:77806,snapshot_missing
+1655748,Vinícius Souza,2025/2026,league,7,all,Bundesliga,1655748:35:77333,snapshot_missing
+1320176,Wesley,2025/2026,league,7,all,LaLiga,1320176:8:77559,snapshot_missing
+1650431,Ally Samatta,2025/2026,league,8,all,Ligue 1,1650431:34:77356,snapshot_missing
+1966055,Andrej Ilić,2025/2026,league,8,all,Bundesliga,1966055:35:77333,snapshot_missing
+626164,Ezequiel Fernández,2025/2026,league,8,all,Bundesliga,626164:35:77333,snapshot_missing
+1328484,Gabriel Martínez,2025/2026,league,8,all,Primeira Liga,1328484:238:77806,snapshot_missing
+1285599,Giovane,2025/2026,league,8,all,Serie A,1285599:23:76457,snapshot_missing
+165262,Joel Silva,2025/2026,league,8,all,Primeira Liga,165262:238:77806,snapshot_missing
+1708430,José Tavares,2025/2026,league,8,all,Primeira Liga,1708430:238:77806,snapshot_missing
+41171,Marcus Pedersen,2025/2026,league,8,all,Serie A,41171:23:76457,snapshot_missing
+521912,Nenê,2025/2026,league,8,all,Primeira Liga,521912:238:77806,snapshot_missing
+1693593,Pablo Felipe,2025/2026,league,8,all,Primeira Liga,1693593:238:77806,snapshot_missing
+2130462,Pape Diop,2025/2026,league,8,all,Ligue 1,2130462:34:77356,snapshot_missing
+1089731,Pedro Gonçalves,2025/2026,league,8,all,Primeira Liga,1089731:238:77806,snapshot_missing
+1585393,Raúl Jiménez,2025/2026,league,8,all,Premier League,1585393:17:76986,snapshot_missing
+118237,Vinícius Lopes,2025/2026,league,8,all,Primeira Liga,118237:238:77806,snapshot_missing
+1655748,Vinícius Souza,2025/2026,league,8,all,Bundesliga,1655748:35:77333,snapshot_missing
+1320176,Wesley,2025/2026,league,8,all,LaLiga,1320176:8:77559,snapshot_missing
