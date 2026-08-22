@@ -1,0 +1,17 @@
+const ids = {
+  outsideShot: ["outsideBoxShots", "outsideBoxXg", "outsideBoxXgot", "outsideBoxShotQualityGoals"], boxThreat: ["inBoxShots", "inBoxXg", "inBoxXgot", "inBoxFinishingGoals", "inBoxFinishingPer90", "deepBoxZoneScore"], dangerZone: ["successfulDribblesPer90", "failedDribblesPer90", "dribbleMarginPer90", "dribbleAttempts", "dribbleSuccessRate", "dangerZoneDensity"], combinedDuel: ["groundDuelAttempts", "groundWonPer90", "groundLostPer90", "duelMarginPer90", "groundDuelWinRate", "aerialDuelAttempts", "aerialWonPer90", "aerialLostPer90", "aerialMarginPer90", "aerialDuelWinRate"], spaceControl: ["ccaAreaPct", "dangerZoneDensity"], forwardPress: ["recoveries", "recoveriesPer90", "finalThirdPossessionsWon", "finalThirdPossessionsWonPer90"],
+} as const;
+const comparison = { state: "available", median: 1, rank: 2, percentile: 88, population: 20 } as const;
+const derived = new Set(["outsideBoxShotQualityGoals", "inBoxFinishingGoals", "inBoxFinishingPer90", "successfulDribblesPer90", "failedDribblesPer90", "dribbleMarginPer90", "groundWonPer90", "groundLostPer90", "duelMarginPer90", "aerialWonPer90", "aerialLostPer90", "aerialMarginPer90"]);
+const unit = (id: string) => id.includes("Rate") || id === "ccaAreaPct" ? "percent" : id.includes("Per90") || id.includes("Margin") || id.includes("WonPer90") || id.includes("LostPer90") ? "per90" : id.includes("Xg") || id.includes("Goals") ? "goals" : id.includes("Score") || id.includes("Density") ? "score" : "count";
+const direction = (id: string) => ["failedDribblesPer90", "groundLostPer90", "aerialLostPer90"].includes(id) ? "lower_is_better" : "higher_is_better";
+export const detailReadoutFixture = {
+  metricTaxonomyVersion: "duel-press-v1", readoutVersion: "detail-readout-v1",
+  context: { playerId: 194165, idNamespace: "fotmob", season: "2025/2026", mode: "league", scope: 8, competition: null },
+  player: { id: 194165, idNamespace: "fotmob", name: "Harry Kane", position: "CF", club: { id: 1, name: "Bayern", icon: "https://assets.test/club.png" }, league: { id: 2, name: "Bundesliga", icon: "https://assets.test/league.png" } },
+  categories: Object.entries(ids).map(([id, readoutIds], index) => ({ id, label: id, score: index === 0 ? 0 : 80, scoreState: "observed", imputedComponents: [], comparison, readouts: readoutIds.map((readoutId, readoutIndex) => ({ id: readoutId, label: readoutId, value: readoutId === "outsideBoxShots" ? 0 : readoutIndex + 1, unit: unit(readoutId), direction: direction(readoutId), source: derived.has(readoutId) ? "server_derived" : "player_season_total", state: derived.has(readoutId) ? "server_derived" : "observed", comparison, formulaId: derived.has(readoutId) ? `${readoutId}-v1` : null, formulaVersion: derived.has(readoutId) ? "1" : null, missingComponents: null })) })),
+  contextIndicators: [
+    { id: "netProgressionPer90", label: "순수 전진 /90", value: 2.1, unit: "per90", direction: "neutral", source: "server_derived", state: "server_derived", comparison, formulaId: "net-progression-v1", formulaVersion: "1", missingComponents: null },
+    { id: "shootingLuckOrGoalkeeperImpact", label: "득점 운 · 상대 선방", value: null, unit: "goals", direction: "neutral", source: "unavailable", state: "unavailable", comparison: { state: "unavailable", median: 0, rank: null, percentile: null, population: 20 }, formulaId: "goals-minus-xgot-v1", formulaVersion: "1", missingComponents: null },
+  ],
+} as const;

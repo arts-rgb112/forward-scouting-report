@@ -175,7 +175,7 @@ export function StaticRoute() {
   const playerId = Number(path.split("/")[2]);
   const duelPressRequested = new URLSearchParams(window.location.search).get("taxonomy") === "duel-press-v1";
   const duelPressEnabled = leaderboardTaxonomyMode(import.meta.env, import.meta.env.MODE) === "duel-press-v1";
-  return <NativePlayerDetailRoute id={playerId} dataset={dataset} config={config} afterPanels={duelPressRequested && duelPressEnabled ? <DuelPressCompanionPanel id={playerId} dataset={dataset} config={config} /> : undefined} />;
+  return <NativePlayerDetailRoute id={playerId} dataset={dataset} config={config} duelPressDetailRequested={duelPressRequested && duelPressEnabled} />;
 }
 
 /** A strict taxonomy companion. It never owns or replaces the native player detail route. */
