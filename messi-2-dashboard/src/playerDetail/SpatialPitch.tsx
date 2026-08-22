@@ -10,6 +10,25 @@ const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow
 export const POSITIONAL_DEPTH_BOUNDARIES = [0, 16.67, 33.33, 50, 66.67, 83.33, 100] as const;
 export const POSITIONAL_LANE_BOUNDARIES = [0, 21.82, 37, 63, 78.18, 100] as const;
 
+/** Visual segments traced from the legacy positional-grid-pitch asset. */
+export const LEGACY_POSITIONAL_SEGMENTS = [
+  { axis: "depth", boundary: 0, start: { x: 0, y: 0 }, end: { x: 0, y: 100 } },
+  { axis: "depth", boundary: 16.67, start: { x: 16.67, y: 0 }, end: { x: 16.67, y: 100 } },
+  { axis: "depth", boundary: 33.33, start: { x: 33.33, y: 0 }, end: { x: 33.33, y: 21.82 } },
+  { axis: "depth", boundary: 33.33, start: { x: 33.33, y: 78.18 }, end: { x: 33.33, y: 100 } },
+  { axis: "depth", boundary: 50, start: { x: 50, y: 0 }, end: { x: 50, y: 100 } },
+  { axis: "depth", boundary: 66.67, start: { x: 66.67, y: 0 }, end: { x: 66.67, y: 21.82 } },
+  { axis: "depth", boundary: 66.67, start: { x: 66.67, y: 78.18 }, end: { x: 66.67, y: 100 } },
+  { axis: "depth", boundary: 83.33, start: { x: 83.33, y: 0 }, end: { x: 83.33, y: 100 } },
+  { axis: "depth", boundary: 100, start: { x: 100, y: 0 }, end: { x: 100, y: 100 } },
+  { axis: "lane", boundary: 0, start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+  { axis: "lane", boundary: 21.82, start: { x: 0, y: 21.82 }, end: { x: 100, y: 21.82 } },
+  { axis: "lane", boundary: 37, start: { x: 16.67, y: 37 }, end: { x: 83.33, y: 37 } },
+  { axis: "lane", boundary: 63, start: { x: 16.67, y: 63 }, end: { x: 83.33, y: 63 } },
+  { axis: "lane", boundary: 78.18, start: { x: 0, y: 78.18 }, end: { x: 100, y: 78.18 } },
+  { axis: "lane", boundary: 100, start: { x: 0, y: 100 }, end: { x: 100, y: 100 } },
+] as const;
+
 type PitchPoint = { x: number; y: number };
 type ScreenPoint = { x: number; y: number };
 type Projection = (point: PitchPoint) => ScreenPoint;
@@ -24,9 +43,9 @@ const clamp = (value: number) => Math.min(100, Math.max(0, value));
 export function projectPerspective(point: PitchPoint): ScreenPoint {
   const x = clamp(point.x) / 100;
   const y = clamp(point.y) / 100;
-  const left = 30 + (190 - 30) * y;
-  const right = 970 + (810 - 970) * y;
-  return { x: left + (right - left) * x, y: 560 + (90 - 560) * y };
+  const left = 20 + (205 - 20) * y;
+  const right = 980 + (795 - 980) * y;
+  return { x: left + (right - left) * x, y: 585 + (235 - 585) * y };
 }
 
 export function projectPlan(point: PitchPoint): ScreenPoint {
@@ -67,31 +86,39 @@ function projectedCircle(projection: Projection, center: PitchPoint, radiusX: nu
 }
 
 function PitchMarkings({ projection }: { projection: Projection }) {
-  const pitch = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
-  const boxes = [
-    [{ x: 0, y: 21.8 }, { x: 16.5, y: 21.8 }, { x: 16.5, y: 78.2 }, { x: 0, y: 78.2 }],
-    [{ x: 83.5, y: 21.8 }, { x: 100, y: 21.8 }, { x: 100, y: 78.2 }, { x: 83.5, y: 78.2 }],
+  const sixYardBoxes = [
+    [{ x: 0, y: 37 }, { x: 5.5, y: 37 }, { x: 5.5, y: 63 }, { x: 0, y: 63 }],
+    [{ x: 94.5, y: 37 }, { x: 100, y: 37 }, { x: 100, y: 63 }, { x: 94.5, y: 63 }],
   ];
-  return <g data-layer="pitch-markings" fill="none" stroke="#d7eadf" strokeWidth="2.1" vectorEffect="non-scaling-stroke">
-    <path d={polygonPath(projection, pitch)} />
-    <path d={pathBetween(projection, { x: 50, y: 0 }, { x: 50, y: 100 })} />
+  return <g data-layer="pitch-markings" fill="none" stroke="#fb923c" strokeWidth="1.5" vectorEffect="non-scaling-stroke">
     <path d={projectedCircle(projection, { x: 50, y: 50 }, 9.15, 13.45)} />
-    {boxes.map((box, index) => <path key={index} d={polygonPath(projection, box)} />)}
+    {sixYardBoxes.map((box, index) => <path key={index} d={polygonPath(projection, box)} />)}
+    {[{ x: 11, y: 50 }, { x: 50, y: 50 }, { x: 89, y: 50 }].map((spot, index) => { const point = projection(spot); return <circle key={index} cx={point.x} cy={point.y} r="2" fill="#fb923c" stroke="none"/>; })}
   </g>;
 }
 
 function PositionalGrid({ projection }: { projection: Projection }) {
   return <g data-layer="positional-grid">
     <g fill="none" stroke="#fb923c" strokeOpacity=".92" strokeWidth="1.35" vectorEffect="non-scaling-stroke">
-      {POSITIONAL_DEPTH_BOUNDARIES.map((depth) => <path key={`depth-${depth}`} data-grid-axis="depth" data-boundary={depth} d={pathBetween(projection, { x: depth, y: 0 }, { x: depth, y: 100 })} />)}
-      {POSITIONAL_LANE_BOUNDARIES.map((lane) => <path key={`lane-${lane}`} data-grid-axis="lane" data-boundary={lane} d={pathBetween(projection, { x: 0, y: lane }, { x: 100, y: lane })} />)}
+      {LEGACY_POSITIONAL_SEGMENTS.map((segment, index) => <path key={`${segment.axis}-${segment.boundary}-${index}`} data-grid-segment={index} data-grid-axis={segment.axis} data-boundary={segment.boundary} data-start={`${segment.start.x},${segment.start.y}`} data-end={`${segment.end.x},${segment.end.y}`} d={pathBetween(projection, segment.start, segment.end)} />)}
     </g>
-    <g className="hidden sm:inline" fill="#fed7aa" fillOpacity=".76" fontSize="18" fontWeight="700" textAnchor="middle" aria-hidden="true">
-      {POSITIONAL_DEPTH_BOUNDARIES.slice(0, -1).flatMap((depth, depthIndex) => POSITIONAL_LANE_BOUNDARIES.slice(0, -1).map((lane, laneIndex) => {
-        const center = projection({ x: (depth + POSITIONAL_DEPTH_BOUNDARIES[depthIndex + 1]) / 2, y: (lane + POSITIONAL_LANE_BOUNDARIES[laneIndex + 1]) / 2 });
-        return <text key={`${depthIndex}-${laneIndex}`} data-zone-label={`depth${depthIndex + 1}_lane${laneIndex + 1}`} x={center.x} y={center.y}>D{depthIndex + 1}·L{laneIndex + 1}</text>;
-      }))}
-    </g>
+  </g>;
+}
+
+function GoalFrames({ projection }: { projection: Projection }) {
+  return <g data-layer="goals" fill="none" stroke="#f8fafc" strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke">
+    {([0, 100] as const).map((end) => {
+      const near = projection({ x: end, y: 37 });
+      const far = projection({ x: end, y: 63 });
+      const outward = end === 0 ? -24 : 24;
+      const lift = end === 0 ? 24 : 20;
+      const backNear = { x: near.x + outward, y: near.y + 4 };
+      const backFar = { x: far.x + outward, y: far.y + 4 };
+      return <g key={end} data-goal={end === 0 ? "defending" : "attacking"}>
+        <path data-goal-frame d={`M ${near.x} ${near.y} L ${near.x} ${near.y - lift} L ${far.x} ${far.y - lift} L ${far.x} ${far.y}`} />
+        <path data-goal-net d={`M ${near.x} ${near.y - lift} L ${backNear.x} ${backNear.y - lift * .75} L ${backFar.x} ${backFar.y - lift * .75} L ${far.x} ${far.y - lift} M ${backNear.x} ${backNear.y - lift * .75} L ${backNear.x} ${backNear.y} L ${backFar.x} ${backFar.y} L ${backFar.x} ${backFar.y - lift * .75} M ${near.x} ${near.y} L ${backNear.x} ${backNear.y} M ${far.x} ${far.y} L ${backFar.x} ${backFar.y}`} strokeOpacity=".72" />
+      </g>;
+    })}
   </g>;
 }
 
@@ -161,6 +188,7 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId }: {
   return <svg ref={rendered.ref} viewBox="0 0 1000 650" preserveAspectRatio="xMidYMid meet" className="block h-auto w-full rounded-lg bg-[#070b0d]" role="img" aria-label={`${perspective ? "Perspective" : "Two-dimensional"} attacking pitch with exact 6-depth by 5-lane positional grid. ${heatState}. ${shotState}. Visible shot outcomes: ${outcomeSummary(visibleGroups)}. Outcome controls change markers only.`}>
     <defs><filter id={filterId} x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation={perspective ? "9" : "11"}/></filter><linearGradient id={`${filterId}-grass`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#0f6f42"/><stop offset="1" stopColor="#06432e"/></linearGradient></defs>
     <path d={pitchShape} fill={`url(#${filterId}-grass)`} stroke="#143d2f" strokeWidth="9" />
+    <GoalFrames projection={projection}/>
     <HeatLayer points={heat} projection={projection} filterId={filterId}/>
     <PitchMarkings projection={projection}/>
     <PositionalGrid projection={projection}/>
@@ -189,6 +217,6 @@ export function SpatialPitch({ analysis, contextIdentity = "" }: { analysis?: Pl
     <div className="mt-3 min-w-0 overflow-hidden rounded-lg border border-white/10">{mode === "plan" ? <LegacySpatialPitchFigure analysis={analysis} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} showCounts={false}/> : <figure><PitchSvg spatial={spatial} mode={mode} filterId={`spatial-heat-${rawId}`} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId}/><figcaption className="border-t border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300">{heatState}. {shotState}. Heat glows, the authoritative CCA contour, and shot anchors share the server 0–100 coordinate transform; outcome controls affect markers only.</figcaption></figure>}</div>
     <div className="mt-3 grid gap-2 text-xs text-zinc-400 sm:grid-cols-2"><p aria-live="polite">{heatState}. Thirty tactical cells are visual guides; no browser-side score or zone value is calculated.</p><p aria-live="polite">{shotState}. Unavailable and available-with-zero are kept distinct.</p></div>
     {controller.integrity ? <ul aria-label="Shot outcome legend" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-300"><li>◇ Goals {counts.goal}</li><li>● On target {counts.on_target}</li><li>× Off target {counts.off_target}</li><li>■ Blocked {counts.blocked}</li></ul> : <p className="mt-2 text-xs text-zinc-500">Outcome totals are unavailable because no valid shot snapshot exists for this context.</p>}
-    <details className="mt-3 rounded-lg border border-white/10 bg-black/20 text-xs text-zinc-300"><summary className="min-h-11 cursor-pointer px-3 py-3 font-bold focus-visible:ring-2 focus-visible:ring-orange-200">30-zone and shot details</summary><div className="border-t border-white/10 p-3"><p>Depth runs D1→D6 with the attack; Lane 1 is right/near and Lane 5 is left/far. The exact non-uniform boundaries remain visible on the pitch.</p><ul data-zone-key aria-label="Thirty positional zone labels" className="mt-2 grid grid-cols-5 gap-1 text-center text-[10px] sm:grid-cols-10">{Array.from({ length: 30 }, (_, index) => <li key={index} className="rounded bg-white/5 px-1 py-1">D{Math.floor(index / 5) + 1}·L{index % 5 + 1}</li>)}</ul>{!controller.integrity ? <p className="mt-3">Shot event details unavailable.</p> : spatial!.shotmapPoints.length === 0 ? <p className="mt-3">Verified zero shot events.</p> : <ol aria-label="Authoritative shot events" className="mt-3 max-h-48 space-y-1 overflow-y-auto pr-1">{spatial!.shotmapPoints.map((shot, index) => <li key={index} className="rounded bg-white/5 px-2 py-1">{index + 1}. {outcomeLabel[shot.outcome]} · xG {shot.xg == null ? "unavailable" : shot.xg.toFixed(2)} · xGOT {shot.xgot == null ? "unavailable" : shot.xgot.toFixed(2)} · ({shot.x.toFixed(1)}, {shot.y.toFixed(1)})</li>)}</ol>}</div></details>
+    <details className="mt-3 rounded-lg border border-white/10 bg-black/20 text-xs text-zinc-300"><summary className="min-h-11 cursor-pointer px-3 py-3 font-bold focus-visible:ring-2 focus-visible:ring-orange-200">Pitch and shot details</summary><div className="border-t border-white/10 p-3"><p>The perspective view uses the same segmented positional-play grid and source-coordinate direction as the 2D legacy pitch.</p>{!controller.integrity ? <p className="mt-3">Shot event details unavailable.</p> : spatial!.shotmapPoints.length === 0 ? <p className="mt-3">Verified zero shot events.</p> : <ol aria-label="Authoritative shot events" className="mt-3 max-h-48 space-y-1 overflow-y-auto pr-1">{spatial!.shotmapPoints.map((shot, index) => <li key={index} className="rounded bg-white/5 px-2 py-1">{index + 1}. {outcomeLabel[shot.outcome]} · xG {shot.xg == null ? "unavailable" : shot.xg.toFixed(2)} · xGOT {shot.xgot == null ? "unavailable" : shot.xgot.toFixed(2)} · ({shot.x.toFixed(1)}, {shot.y.toFixed(1)})</li>)}</ol>}</div></details>
   </section>;
 }

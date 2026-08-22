@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PlayerAnalysis } from "../dashboard/types";
-import { POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES, projectPerspective, SpatialPitch } from "./SpatialPitch";
+import { LEGACY_POSITIONAL_SEGMENTS, POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES, projectPerspective, SpatialPitch } from "./SpatialPitch";
 
 const analysisWith = (spatial: Partial<PlayerAnalysis["spatial"]>): PlayerAnalysis => ({
   score: { value: 80, rank: 1, topPercent: 1, population: 100, archetype: "Type A" },
@@ -31,17 +31,31 @@ describe("perspective spatial pitch", () => {
     const leftDefensive = projectPerspective({ x: 0, y: 100 });
     expect(rightAttacking.x).toBeGreaterThan(rightDefensive.x);
     expect(rightDefensive.y).toBeGreaterThan(leftDefensive.y);
-    expect(rightDefensive).toEqual({ x: 30, y: 560 });
-    expect(leftDefensive).toEqual({ x: 190, y: 90 });
+    expect(rightDefensive).toEqual({ x: 20, y: 585 });
+    expect(leftDefensive).toEqual({ x: 205, y: 235 });
+    expect(rightDefensive.y - leftDefensive.y).toBe(350);
   });
 
-  it("draws the exact non-uniform 6-depth by 5-lane contract and all 30 labels", () => {
+  it("projects the legacy asset's segmented positional geometry without zone labels", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({})}/>);
-    expect(container.querySelectorAll('[data-grid-axis="depth"]')).toHaveLength(POSITIONAL_DEPTH_BOUNDARIES.length);
-    expect(container.querySelectorAll('[data-grid-axis="lane"]')).toHaveLength(POSITIONAL_LANE_BOUNDARIES.length);
-    expect(container.querySelector('[data-grid-axis="depth"][data-boundary="16.67"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-grid-axis="lane"][data-boundary="21.82"]')).toBeInTheDocument();
-    expect(container.querySelectorAll("[data-zone-label]")).toHaveLength(30);
+    const segments = [...container.querySelectorAll("[data-grid-segment]")];
+    expect(segments).toHaveLength(LEGACY_POSITIONAL_SEGMENTS.length);
+    expect(segments.map((segment) => ({ axis: segment.getAttribute("data-grid-axis"), boundary: Number(segment.getAttribute("data-boundary")), start: segment.getAttribute("data-start"), end: segment.getAttribute("data-end") }))).toEqual(LEGACY_POSITIONAL_SEGMENTS.map((segment) => ({ axis: segment.axis, boundary: segment.boundary, start: `${segment.start.x},${segment.start.y}`, end: `${segment.end.x},${segment.end.y}` })));
+    expect(container.querySelector('[data-grid-axis="lane"][data-boundary="37"]')).toHaveAttribute("data-start", "16.67,37");
+    expect(container.querySelector('[data-grid-axis="lane"][data-boundary="37"]')).toHaveAttribute("data-end", "83.33,37");
+    expect(container.querySelectorAll('[data-grid-axis="depth"][data-boundary="33.33"]')).toHaveLength(2);
+    expect(container.querySelectorAll("[data-zone-label], [data-zone-key]")).toHaveLength(0);
+    expect(screen.queryByText(/D1|L1/)).not.toBeInTheDocument();
+    expect(new Set(LEGACY_POSITIONAL_SEGMENTS.filter(({ axis }) => axis === "depth").map(({ boundary }) => boundary))).toEqual(new Set(POSITIONAL_DEPTH_BOUNDARIES));
+    expect(new Set(LEGACY_POSITIONAL_SEGMENTS.filter(({ axis }) => axis === "lane").map(({ boundary }) => boundary))).toEqual(new Set(POSITIONAL_LANE_BOUNDARIES));
+  });
+
+  it("adds both goal frames and nets but no inferred shot trajectory", () => {
+    const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 80, y: 50, outcome: "goal" }] })}/>);
+    expect(container.querySelectorAll("[data-goal]")).toHaveLength(2);
+    expect(container.querySelector('[data-goal="defending"] [data-goal-frame]')).toBeInTheDocument();
+    expect(container.querySelector('[data-goal="attacking"] [data-goal-net]')).toBeInTheDocument();
+    expect(container.querySelector("[data-shot-trajectory]")).not.toBeInTheDocument();
   });
 
   it("uses one projection for populated heat and shot source coordinates", () => {
@@ -118,7 +132,7 @@ describe("perspective spatial pitch", () => {
   it("fails closed on an invalid snapshot without disturbing the 30-zone pitch", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 2, shotmapPoints: [{ x: 80, y: 20, outcome: "goal" }] })}/>);
     expect(screen.queryByRole("group", { name: "Shot outcome visibility" })).not.toBeInTheDocument(); expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
-    expect(screen.getAllByText(/Shot snapshot integrity mismatch/).length).toBeGreaterThan(0); expect(container.querySelectorAll('[data-grid-axis="depth"]')).toHaveLength(POSITIONAL_DEPTH_BOUNDARIES.length); expect(container.querySelectorAll("[data-zone-label]")).toHaveLength(30);
+    expect(screen.getAllByText(/Shot snapshot integrity mismatch/).length).toBeGreaterThan(0); expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(LEGACY_POSITIONAL_SEGMENTS.length); expect(container.querySelectorAll("[data-zone-label]")).toHaveLength(0);
   });
 
   it("shows accessible null-metric tooltip with one roving tab stop in Perspective", () => {
