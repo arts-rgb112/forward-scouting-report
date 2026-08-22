@@ -397,10 +397,18 @@ def test_v2_stat_pairs_are_server_owned_and_share_one_snapshot(monkeypatch) -> N
     assert outside[1].per90.direction == "higher_is_better"
     danger = detail.categories[2].groups[0].metrics
     assert danger[2].total.direction == "lower_is_better"
+    assert danger[3].id == "netProgressionPer90"
     combined = detail.categories[3].groups
-    assert combined[0].metrics[0].id == "combinedDuelAttempts"
+    assert [metric.id for metric in combined[0].metrics] == [
+        "combinedDuelAttempts", "combinedDuelWins", "combinedDuelLosses",
+        "combinedDuelWinRate", "combinedDuelSuccessMarginPer90",
+    ]
     assert combined[1].metrics[2].id == "groundDuelLosses"
+    assert combined[1].metrics[4].id == "groundDuelSuccessMarginPer90"
     assert combined[2].metrics[2].id == "aerialDuelLosses"
+    assert combined[2].metrics[4].id == "aerialDuelSuccessMarginPer90"
+    assert combined[1].metrics[3].value.comparison.median is not None
+    assert combined[2].metrics[3].value.comparison.median is not None
     assert all(category.percentileScore == 99 for category in detail.categories)
     assert detail.contextIndicators[0].aggregate is False
     assert detail.contextIndicators[0].metric.value.direction == "higher_is_better"
@@ -660,6 +668,8 @@ def test_yamal_2025_2026_static_source_absence_is_audited_and_visible_in_v2() ->
     assert all(item.pairState == "unavailable" for item in aerial_metrics[:3])
     assert aerial_metrics[3].id == "aerialDuelWinRate"
     assert aerial_metrics[3].value is not None and aerial_metrics[3].value.state == "unavailable"
+    assert aerial_metrics[4].id == "aerialDuelSuccessMarginPer90"
+    assert aerial_metrics[4].value is not None and aerial_metrics[4].value.state == "unavailable"
     assert profile.data.stats.combinedDuel.scoreState == expected["scoreState"]
 
 
@@ -704,7 +714,7 @@ def test_v2_explicit_zero_attempt_duels_are_observed_but_losses_use_server_floor
     expected = fixture["expected"]
     combined = next(item for item in detail.categories if item.id == "combinedDuel")
     for group in combined.groups[1:]:
-        attempts, wins, losses, rate = group.metrics
+        attempts, wins, losses, rate, margin = group.metrics
         assert attempts.total is not None and attempts.total.value == expected["value"]
         assert attempts.per90 is not None and attempts.per90.value == expected["value"]
         assert wins.total is not None and wins.total.value == expected["value"]
@@ -720,6 +730,9 @@ def test_v2_explicit_zero_attempt_duels_are_observed_but_losses_use_server_floor
         assert rate.value.state == expected["state"]
         assert rate.value.source == expected["source"]
         assert rate.value.formulaId == expected["formulaId"]
+        assert margin.value is not None and margin.value.value == expected["value"]
+        assert margin.value.comparison.state == expected["comparisonState"]
+        assert margin.value.percentileScore == expected["lossPercentileScore"]
 
 
 def test_v2_source_audit_distinguishes_derivable_rate_from_missing_wins_or_attempts(tmp_path) -> None:

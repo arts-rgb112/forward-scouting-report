@@ -19,9 +19,10 @@
     "category": "combinedDuel",
     "scoreState": "imputed",
     "imputedComponents": [
-      "combined_duel_attempts_raw",
-      "aerial_duels_won_raw",
-      "aerial_duel_losses_raw"
+      "combined_duel_attempts_per90",
+      "combined_duel_win_rate",
+      "combined_duel_margin_per90",
+      "aerial_duel_win_rate"
     ],
     "unavailableMetrics": [
       "aerialDuelAttempts",

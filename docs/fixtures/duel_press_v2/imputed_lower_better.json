@@ -325,7 +325,7 @@
         },
         {
           "comparison": {
-            "median": 46.0,
+            "median": 40.0,
             "percentileScore": 99,
             "population": 1,
             "rank": 1,
@@ -462,6 +462,31 @@
                     "value": null
                   },
                   "value": null
+                },
+                {
+                  "id": "netProgressionPer90",
+                  "label": "Net progression /90",
+                  "pairReason": null,
+                  "pairState": "scalar",
+                  "per90": null,
+                  "total": null,
+                  "value": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  }
                 }
               ]
             }
@@ -469,10 +494,11 @@
           "id": "dangerZone",
           "imputedComponents": [
             "dribble_attempts_raw",
-            "dribbles_failed_raw"
+            "dribbles_failed_raw",
+            "net_progression_per90"
           ],
           "label": "dangerZone",
-          "percentileScore": 46,
+          "percentileScore": 40,
           "scoreState": "imputed"
         },
         {
@@ -532,6 +558,138 @@
                     "value": 106.6667
                   },
                   "value": null
+                },
+                {
+                  "id": "combinedDuelWins",
+                  "label": "Combined duel wins",
+                  "pairReason": null,
+                  "pairState": "complete",
+                  "per90": {
+                    "comparison": {
+                      "median": 3.5,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "per90-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "per90",
+                    "value": 3.5
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 70.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "combined-duel-wins-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "count",
+                    "value": 70.0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "combinedDuelLosses",
+                  "label": "Combined duel losses",
+                  "pairReason": null,
+                  "pairState": "complete",
+                  "per90": {
+                    "comparison": {
+                      "median": 1.8333,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "lower_is_better",
+                    "formulaId": "per90-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "per90",
+                    "value": 1.8333
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 36.6667,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "lower_is_better",
+                    "formulaId": "combined-duel-losses-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "count",
+                    "value": 36.6667
+                  },
+                  "value": null
+                },
+                {
+                  "id": "combinedDuelWinRate",
+                  "label": "Combined duel success rate",
+                  "pairReason": null,
+                  "pairState": "scalar",
+                  "per90": null,
+                  "total": null,
+                  "value": {
+                    "comparison": {
+                      "median": 65.625,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "provider_wins_attempts_derived_rate",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "provider_wins_attempts_derived_rate",
+                    "state": "observed",
+                    "unit": "percent",
+                    "value": 65.625
+                  }
+                },
+                {
+                  "id": "combinedDuelSuccessMarginPer90",
+                  "label": "Combined duel success margin /90",
+                  "pairReason": null,
+                  "pairState": "scalar",
+                  "per90": null,
+                  "total": null,
+                  "value": {
+                    "comparison": {
+                      "median": 1.6667,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "combined-duel-margin-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "per90",
+                    "value": 1.6667
+                  }
                 }
               ]
             },
@@ -687,6 +845,31 @@
                     "unit": "percent",
                     "value": 66.0
                   }
+                },
+                {
+                  "id": "groundDuelSuccessMarginPer90",
+                  "label": "Ground duel success margin /90",
+                  "pairReason": null,
+                  "pairState": "scalar",
+                  "per90": null,
+                  "total": null,
+                  "value": {
+                    "comparison": {
+                      "median": 1.0667,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "ground-duel-margin-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "per90",
+                    "value": 1.0667
+                  }
                 }
               ]
             },
@@ -841,6 +1024,31 @@
                     "state": "observed",
                     "unit": "percent",
                     "value": 65.0
+                  }
+                },
+                {
+                  "id": "aerialDuelSuccessMarginPer90",
+                  "label": "Aerial duel success margin /90",
+                  "pairReason": null,
+                  "pairState": "scalar",
+                  "per90": null,
+                  "total": null,
+                  "value": {
+                    "comparison": {
+                      "median": 0.6,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "aerial-duel-margin-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "per90",
+                    "value": 0.6
                   }
                 }
               ]
@@ -1404,7 +1612,7 @@
         "name": "Harry Kane",
         "position": "Striker"
       },
-      "ratingSnapshotId": "stat-pairs-v2:098a7f9925be04a8",
+      "ratingSnapshotId": "stat-pairs-v2:a08c6984a69cae0c",
       "ratingVersion": "stat-pairs-v2",
       "readoutVersion": "detail-readout-v2",
       "schemaVersion": "2.0.0"
@@ -1439,7 +1647,7 @@
           "nation": null,
           "overallRating": {
             "comparison": {
-              "median": 91.0,
+              "median": 90.0,
               "percentileScore": 99,
               "population": 1,
               "rank": 1,
@@ -1449,7 +1657,7 @@
             "formulaId": "stat-pairs-overall-v2",
             "formulaVersion": "stat-pairs-v2",
             "percentileScore": 99,
-            "rawValue": 91.0,
+            "rawValue": 90.0,
             "state": "imputed"
           },
           "position": "Striker",
@@ -1471,9 +1679,10 @@
               "direction": "higher_is_better",
               "imputedComponents": [
                 "dribble_attempts_raw",
-                "dribbles_failed_raw"
+                "dribbles_failed_raw",
+                "net_progression_per90"
               ],
-              "percentileScore": 46,
+              "percentileScore": 40,
               "scoreState": "imputed"
             },
             "forwardPress": {
@@ -1514,7 +1723,7 @@
           "sort": "rank"
         },
         "competition": null,
-        "generatedAt": "2026-08-22T11:59:26.489426Z",
+        "generatedAt": "2026-08-22T18:26:46.943992Z",
         "hasNextPage": false,
         "mode": "league",
         "page": 1,
@@ -1529,7 +1738,7 @@
         "totalPages": 1
       },
       "metricTaxonomyVersion": "duel-press-v2",
-      "ratingSnapshotId": "stat-pairs-v2:098a7f9925be04a8",
+      "ratingSnapshotId": "stat-pairs-v2:a08c6984a69cae0c",
       "ratingVersion": "stat-pairs-v2",
       "readoutVersion": "detail-readout-v2",
       "schemaVersion": "2.0.0"
@@ -1565,7 +1774,7 @@
         "nation": null,
         "overallRating": {
           "comparison": {
-            "median": 91.0,
+            "median": 90.0,
             "percentileScore": 99,
             "population": 1,
             "rank": 1,
@@ -1575,7 +1784,7 @@
           "formulaId": "stat-pairs-overall-v2",
           "formulaVersion": "stat-pairs-v2",
           "percentileScore": 99,
-          "rawValue": 91.0,
+          "rawValue": 90.0,
           "state": "imputed"
         },
         "position": "Striker",
@@ -1597,9 +1806,10 @@
             "direction": "higher_is_better",
             "imputedComponents": [
               "dribble_attempts_raw",
-              "dribbles_failed_raw"
+              "dribbles_failed_raw",
+              "net_progression_per90"
             ],
-            "percentileScore": 46,
+            "percentileScore": 40,
             "scoreState": "imputed"
           },
           "forwardPress": {
@@ -1629,7 +1839,7 @@
         }
       },
       "metricTaxonomyVersion": "duel-press-v2",
-      "ratingSnapshotId": "stat-pairs-v2:098a7f9925be04a8",
+      "ratingSnapshotId": "stat-pairs-v2:a08c6984a69cae0c",
       "ratingVersion": "stat-pairs-v2",
       "readoutVersion": "detail-readout-v2",
       "schemaVersion": "2.0.0"

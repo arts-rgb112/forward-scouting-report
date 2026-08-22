@@ -14,6 +14,10 @@ the focused coverage is in `tests/test_duel_press_detail_readouts.py`:
 - observed zero versus unavailable rate-derived fields;
 - an imputed category score and conservative missing-component floor;
 - ground/aerial and combined duel pairs;
+- combined duel attempts, wins, losses, success rate, and success margin;
+- ground and aerial win-rate medians plus success-margin-per-90 readouts;
+- net progression per 90 in both its on-ball category score and its separate
+  contextual explanation (one server formula, never a browser calculation);
 - `league_per90_fallback` press provenance;
 - context indicators with raw tooltip inputs;
 - 50-row board pagination/filter/sort metadata and snapshot parity;
@@ -53,5 +57,9 @@ the existing production plus immutable Vercel Preview CORS GET/OPTIONS policy
 observed/derived total and unavailable `/90` with
 `pairReason: "minutes_unavailable_or_nonpositive"`; `unavailable` has both
 values unavailable and `pairReason: "source_unavailable"`.  Scalar metrics use
-`pairState: "scalar"`.  Every numeric datum and displayed rating exposes a
+`pairState: "scalar"`.  A duel rate or margin based on an explicitly observed
+zero-attempt sample is kept as numeric zero, but has
+`comparison.state: "zero_attempts_floor"` and percentile score `0`; it is
+never promoted by the lower-is-better loss rule. Every numeric datum and
+displayed rating exposes a
 server-authored `percentileScore` in the inclusive 0–99 range.
