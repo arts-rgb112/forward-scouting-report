@@ -188,6 +188,7 @@ describe("perspective spatial pitch", () => {
     expect(heat).toHaveAttribute("fill", `rgb(${red} ${green} ${blue})`);
     expect(heat).toHaveAttribute("fill-opacity", String(alpha * HEATMAP_OPACITY));
     expect(heat.closest("[data-layer=heat]")).toHaveAttribute("clip-path");
+    expect(heat.closest("[data-layer=heat]")).not.toHaveAttribute("style");
     expect(shot).toHaveAttribute("data-screen-x", String(projectPerspective(point).x));
     expect(shot).toHaveAttribute("data-screen-y", String(projectPerspective(point).y));
     expect(shot).toHaveAttribute("data-marker-symbol", "star");
@@ -212,11 +213,14 @@ describe("perspective spatial pitch", () => {
     const shotmapPoints = Array.from({ length: 150 }, (_, index) => ({ x: 70 + index % 30, y: 25 + index % 50, outcome: "on_target" as const, xg: .1, xgot: .2 }));
     const { container } = render(<SpatialPitch analysis={analysisWith({ heatmapPointCount: heatmapPoints.length, heatmapPoints, shotmapSnapshotAvailable: true, shotmapPointCount: shotmapPoints.length, shotmapPoints })}/>);
     const before = [...container.querySelectorAll("[data-density-cell]")];
+    const heatLayer = container.querySelector("[data-layer=heat]")!;
+    const meshBuilds = heatLayer.getAttribute("data-density-mesh-builds");
     expect(before).toHaveLength(HEATMAP_ROWS * HEATMAP_COLUMNS);
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     const viewport = container.querySelector("svg[role=img]")!;
     fireEvent.keyDown(viewport, { key: "ArrowRight" });
     expect([...container.querySelectorAll("[data-density-cell]")]).toEqual(before);
+    expect(heatLayer).toHaveAttribute("data-density-mesh-builds", meshBuilds);
     expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(150);
     expect(container.querySelectorAll('[data-shot-marker][tabindex="0"]')).toHaveLength(1);
     expect(within(screen.getByRole("list", { name: "Authoritative shot events" })).getAllByRole("listitem")).toHaveLength(150);
@@ -235,7 +239,7 @@ describe("perspective spatial pitch", () => {
 
   it("controls exact Perspective viewBoxes and resets pan on escape, context, and view transitions", () => {
     vi.spyOn(SVGSVGElement.prototype, "getBoundingClientRect").mockImplementation(() => svgBounds(1000, 650));
-    const analysis = analysisWith({});
+    const analysis = analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 50, y: 50 }], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 80, y: 50, outcome: "goal" }] });
     const { container, rerender } = render(<SpatialPitch analysis={analysis} contextIdentity="one"/>);
     const viewport = () => container.querySelector("svg[role=img]")!;
     expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
@@ -246,13 +250,21 @@ describe("perspective spatial pitch", () => {
     expect(screen.getByRole("button", { name: "Zoom in" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
     expect(viewport()).toHaveAttribute("viewBox", "250 162.5 500 325");
-    fireEvent.pointerDown(viewport(), { pointerId: 1, clientX: 500, clientY: 325 });
+    const densityCell = container.querySelector("[data-density-cell]")!;
+    fireEvent.pointerDown(densityCell, { pointerId: 1, clientX: 500, clientY: 325 });
     fireEvent.pointerMove(viewport(), { pointerId: 1, clientX: 0, clientY: 0 });
     expect(viewport()).toHaveAttribute("viewBox", "500 325 500 325");
     fireEvent.pointerCancel(viewport(), { pointerId: 1 });
     fireEvent.pointerMove(viewport(), { pointerId: 1, clientX: 500, clientY: 325 });
     expect(viewport()).toHaveAttribute("viewBox", "500 325 500 325");
     fireEvent.keyDown(viewport(), { key: "Escape" });
+    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    const marker = container.querySelector("[data-shot-marker]")!;
+    fireEvent.pointerDown(marker, { pointerId: 2, clientX: 500, clientY: 325 });
+    fireEvent.pointerMove(viewport(), { pointerId: 2, clientX: 0, clientY: 0 });
+    expect(viewport()).toHaveAttribute("viewBox", "250 162.5 500 325");
+    fireEvent.keyDown(marker, { key: "Escape" });
     expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     fireEvent.click(screen.getByRole("button", { name: "2D plan" }));

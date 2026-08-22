@@ -49,6 +49,7 @@ type Projection = (point: PitchPoint) => ScreenPoint;
 type ViewMode = "perspective" | "plan";
 type ZoomLevel = 1 | 2 | 3;
 type Viewport = { x: number; y: number };
+type DensityMeshCell = { index: number; row: number; column: number; normalized: number; fill: string; fillOpacity: number; d: string };
 
 const BASE_VIEWPORT = { width: 1000, height: 650 } as const;
 const EMPTY_HEAT: PitchPoint[] = [];
@@ -141,16 +142,20 @@ function GoalFrames({ projection }: { projection: Projection }) {
   </g>;
 }
 
-function HeatLayer({ normalized, projection, clipId }: { normalized: Float64Array; projection: Projection; clipId: string }) {
-  return <g data-layer="heat" clipPath={`url(#${clipId})`} style={{ mixBlendMode: "screen" }} aria-hidden="true">
-    {Array.from({ length: HEATMAP_ROWS * HEATMAP_COLUMNS }, (_, index) => {
+function prepareDensityMesh(normalized: Float64Array, projection: Projection): DensityMeshCell[] {
+  return Array.from({ length: HEATMAP_ROWS * HEATMAP_COLUMNS }, (_, index) => {
       const row = Math.floor(index / HEATMAP_COLUMNS), column = index % HEATMAP_COLUMNS;
       const value = normalized[index] ?? 0;
       const [red, green, blue, alpha] = legacyHeatmapColor(value);
       const x0 = column * 100 / HEATMAP_COLUMNS, x1 = (column + 1) * 100 / HEATMAP_COLUMNS;
       const y0 = row * 100 / HEATMAP_ROWS, y1 = (row + 1) * 100 / HEATMAP_ROWS;
-      return <path key={index} data-density-cell={index} data-density-row={row} data-density-column={column} data-density-normalized={value} d={polygonPath(projection, [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }])} fill={`rgb(${red} ${green} ${blue})`} fillOpacity={alpha * HEATMAP_OPACITY} />;
-    })}
+      return { index, row, column, normalized: value, fill: `rgb(${red} ${green} ${blue})`, fillOpacity: alpha * HEATMAP_OPACITY, d: polygonPath(projection, [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]) };
+    });
+}
+
+function HeatLayer({ mesh, clipId, buildCount }: { mesh: readonly DensityMeshCell[]; clipId: string; buildCount: number }) {
+  return <g data-layer="heat" data-density-mesh-builds={buildCount} clipPath={`url(#${clipId})`} aria-hidden="true">
+    {mesh.map((cell) => <path key={cell.index} data-density-cell={cell.index} data-density-row={cell.row} data-density-column={cell.column} data-density-normalized={cell.normalized} d={cell.d} fill={cell.fill} fillOpacity={cell.fillOpacity} />)}
   </g>;
 }
 
@@ -186,6 +191,12 @@ const centeredViewport = (from: Viewport, fromZoom: ZoomLevel, toZoom: ZoomLevel
   return clampViewport({ x: from.x + previous.width / 2 - next.width / 2, y: from.y + previous.height / 2 - next.height / 2 }, toZoom);
 };
 
+function isInteractivePitchTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false;
+  if (target.closest("[data-shot-trajectory]")) return false;
+  return Boolean(target.closest("[data-shot-marker], [data-marker-hit], [role=tooltip], button, a, input, select, textarea"));
+}
+
 function ShotGlyph({ shot, sourceIndex, projection, perspective, pixelScale, id, active, tooltipId, registerRef, onActivate, onDeactivate, onNavigate }: {
   shot: ShotmapPoint; sourceIndex: number; projection: Projection; perspective: boolean; pixelScale: number; id: string; active: boolean; tooltipId: string;
   registerRef(element: SVGGElement | null): void; onActivate(id: string): void; onDeactivate(id: string): void; onNavigate(direction: 1 | -1): void;
@@ -220,6 +231,8 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
   const heatState = !spatial?.available ? "Activity heatmap unavailable" : !heatValid ? "Activity heatmap integrity mismatch" : heat.length ? `${heat.length} activity points` : "Verified zero activity points";
   const shotState = !spatial?.shotmapSnapshotAvailable ? "Shot snapshot unavailable" : !shotsValid ? "Shot snapshot integrity mismatch" : spatial.shotmapPoints.length ? `${spatial.shotmapPoints.length} shots` : "Verified zero shots";
   const normalized = useMemo(() => normalizeDensity(legacyDensityGrid(heat)), [heat]);
+  const meshBuildCount = useRef(0);
+  const densityMesh = useMemo(() => { meshBuildCount.current += 1; return prepareDensityMesh(normalized, projection); }, [normalized, projection]);
   const contour = heatValid && spatial?.continuousCore.available && spatial.continuousCore.gridColumns === HEATMAP_COLUMNS && spatial.continuousCore.gridRows === HEATMAP_ROWS && Number.isFinite(spatial.continuousCore.thresholdOfPeak) && spatial.continuousCore.thresholdOfPeak > 0 ? marchingSquares(normalized, spatial.continuousCore.thresholdOfPeak) : [];
   const pitchShape = polygonPath(projection, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
   const markerRefs = useRef(new Map<string, SVGGElement>()), tooltipId = `${filterId}-shot-tooltip`;
@@ -239,11 +252,11 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
   const tooltipEntry = shots.find(({ sourceIndex }) => `${filterId}-shot-${sourceIndex}` === tooltipIdState);
   const navigate = (visibleIndex: number, direction: 1 | -1) => { if (!shots.length) return; const next = shots[(visibleIndex + direction + shots.length) % shots.length]; const id = `${filterId}-shot-${next.sourceIndex}`; setActiveId(id); setTooltipIdState(id); markerRefs.current.get(id)?.focus(); };
   const visibleGroups = outcomeOrder.filter((outcome) => visibleOutcomes.has(outcome) && spatial?.shotmapPoints.some((shot) => shot.outcome === outcome));
-  return <><div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/25 px-2 py-2"><div role="group" aria-label="Perspective zoom controls" className="flex flex-wrap items-center gap-1"><button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-11 min-w-11 rounded border border-white/15 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-orange-200">−</button><button type="button" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-11 min-w-11 rounded border border-white/15 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-orange-200">+</button><button type="button" aria-label="Reset zoom and pan" disabled={zoom === 1 && viewport.x === 0 && viewport.y === 0} onClick={resetViewport} className="min-h-11 min-w-11 rounded border border-white/15 px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-orange-200">Reset</button></div><p aria-live="polite" className="text-xs text-zinc-300">Perspective zoom {zoom}×</p></div><svg ref={rendered.ref} viewBox={viewBox} preserveAspectRatio="xMidYMid meet" className="block h-auto w-full rounded-b-lg bg-[#070b0d] touch-pan-y" role="img" tabIndex={0} aria-label={`${perspective ? "Perspective" : "Two-dimensional"} attacking pitch with exact 6-depth by 5-lane positional grid. ${heatState}. ${shotState}. Visible shot outcomes: ${outcomeSummary(visibleGroups)}. Outcome controls change markers only.`} onPointerDown={(event) => { if (zoom === 1 || event.defaultPrevented || event.target !== event.currentTarget) return; pointerPan.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport }; event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { const start = pointerPan.current; if (!start || start.pointerId !== event.pointerId) return; const bounds = event.currentTarget.getBoundingClientRect(); if (!bounds.width || !bounds.height) return; setViewport(clampViewport({ x: start.viewport.x - (event.clientX - start.clientX) * visibleViewport.width / bounds.width, y: start.viewport.y - (event.clientY - start.clientY) * visibleViewport.height / bounds.height }, zoom)); }} onPointerUp={(event) => { if (pointerPan.current?.pointerId !== event.pointerId) return; pointerPan.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onPointerCancel={() => { pointerPan.current = null; }} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={(event) => { if (event.defaultPrevented || event.target !== event.currentTarget) return; if (event.key === "Escape") { event.preventDefault(); resetViewport(); return; } if (zoom === 1) return; const step = Math.min(48, visibleViewport.width / 5); if (event.key === "ArrowLeft") { event.preventDefault(); panBy(-step, 0); } else if (event.key === "ArrowRight") { event.preventDefault(); panBy(step, 0); } else if (event.key === "ArrowUp") { event.preventDefault(); panBy(0, -step); } else if (event.key === "ArrowDown") { event.preventDefault(); panBy(0, step); } }}>
+  return <><div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/25 px-2 py-2"><div role="group" aria-label="Perspective zoom controls" className="flex flex-wrap items-center gap-1"><button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-11 min-w-11 rounded border border-white/15 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-orange-200">−</button><button type="button" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-11 min-w-11 rounded border border-white/15 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-orange-200">+</button><button type="button" aria-label="Reset zoom and pan" disabled={zoom === 1 && viewport.x === 0 && viewport.y === 0} onClick={resetViewport} className="min-h-11 min-w-11 rounded border border-white/15 px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-orange-200">Reset</button></div><p aria-live="polite" className="text-xs text-zinc-300">Perspective zoom {zoom}×</p></div><svg ref={rendered.ref} viewBox={viewBox} preserveAspectRatio="xMidYMid meet" className="block h-auto w-full rounded-b-lg bg-[#070b0d] touch-pan-y" role="img" tabIndex={0} aria-label={`${perspective ? "Perspective" : "Two-dimensional"} attacking pitch with exact 6-depth by 5-lane positional grid. ${heatState}. ${shotState}. Visible shot outcomes: ${outcomeSummary(visibleGroups)}. Outcome controls change markers only.`} onPointerDown={(event) => { if (zoom === 1 || event.defaultPrevented || isInteractivePitchTarget(event.target)) return; pointerPan.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport }; event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { const start = pointerPan.current; if (!start || start.pointerId !== event.pointerId) return; const bounds = event.currentTarget.getBoundingClientRect(); if (!bounds.width || !bounds.height) return; setViewport(clampViewport({ x: start.viewport.x - (event.clientX - start.clientX) * visibleViewport.width / bounds.width, y: start.viewport.y - (event.clientY - start.clientY) * visibleViewport.height / bounds.height }, zoom)); }} onPointerUp={(event) => { if (pointerPan.current?.pointerId !== event.pointerId) return; pointerPan.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onPointerCancel={(event) => { if (pointerPan.current?.pointerId !== event.pointerId) return; pointerPan.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); resetViewport(); return; } if (event.defaultPrevented || event.target !== event.currentTarget) return; if (zoom === 1) return; const step = Math.min(48, visibleViewport.width / 5); if (event.key === "ArrowLeft") { event.preventDefault(); panBy(-step, 0); } else if (event.key === "ArrowRight") { event.preventDefault(); panBy(step, 0); } else if (event.key === "ArrowUp") { event.preventDefault(); panBy(0, -step); } else if (event.key === "ArrowDown") { event.preventDefault(); panBy(0, step); } }}>
     <defs><clipPath id={`${filterId}-pitch-clip`}><path d={pitchShape}/></clipPath><linearGradient id={`${filterId}-grass`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#0f6f42"/><stop offset="1" stopColor="#06432e"/></linearGradient></defs>
     <path d={pitchShape} fill={`url(#${filterId}-grass)`} stroke="#143d2f" strokeWidth="9" />
     <GoalFrames projection={projection}/>
-    <HeatLayer normalized={normalized} projection={projection} clipId={`${filterId}-pitch-clip`}/>
+    <HeatLayer mesh={densityMesh} clipId={`${filterId}-pitch-clip`} buildCount={meshBuildCount.current}/>
     <PitchMarkings projection={projection}/>
     <PositionalGrid projection={projection}/>
     {contour.length > 0 && <g data-layer="cca-contour" fill="none" stroke="#c044ff" strokeWidth="3" vectorEffect="non-scaling-stroke">{contour.map(([x1, y1, x2, y2], index) => <path key={index} d={pathBetween(projection, { x: x1, y: 100 - y1 }, { x: x2, y: 100 - y2 })}/>)}</g>}
