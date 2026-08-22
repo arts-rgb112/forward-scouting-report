@@ -130,7 +130,7 @@ def test_contextual_schema_rejects_stale_duel_readout_context_or_identity() -> N
     assert isinstance(identity_player, dict)
     identity_player["id"] = 194166
 
-    with pytest.raises(ValidationError, match="duel-press readout player identity must match"):
+    with pytest.raises(ValidationError, match="player identity must match context playerId"):
         ContextualCompareEnvelope.model_validate(identity_mismatch)
 
 
