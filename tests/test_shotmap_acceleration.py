@@ -283,3 +283,4 @@ def test_workflow_serializes_backfills_and_defaults_to_three_workers() -> None:
     assert "cancel-in-progress: false" in workflow
     assert 'default: "3"' in workflow
     assert '--workers "${{ inputs.workers }}"' in workflow
+    assert "pip install -r requirements.txt -r requirements-api.txt" in workflow
