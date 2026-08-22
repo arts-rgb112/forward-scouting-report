@@ -652,6 +652,19 @@ def test_v2_lower_is_better_score_is_inverted_and_zero_to_99() -> None:
     assert (worst.rank, worst.percentileScore) == (fixture["worst"]["rank"], fixture["worst"]["percentileScore"])
 
 
+def test_v2_official_rating_rounding_is_exact_half_up_and_order_independent() -> None:
+    """Published M.E.S.S.I. scores must never depend on float expression order."""
+    categories = {
+        "outsideShot": 21, "boxThreat": 85, "dangerZone": 50,
+        "combinedDuel": 86, "spaceControl": 70, "forwardPress": 22,
+    }
+    reordered = dict(reversed(list(categories.items())))
+    assert service._v2_round_half_up(117, 2) == 59
+    assert service._v2_overall_rating(categories) == 59
+    assert service._v2_overall_rating(reordered) == 59
+    assert service._v2_round_half_up(175, 2) == 88
+
+
 def test_v2_openapi_exposes_separate_strict_endpoint_trio() -> None:
     schema = TestClient(app).get("/openapi.json").json()
     assert "/api/v2/leaderboards/duel-press-v2" in schema["paths"]
