@@ -7,7 +7,7 @@ These strict request and response fixtures cover the native two-side comparison 
 - `complete_league_europe_response.json` is a schema-valid mixed League + Europe response; its Europe side carries an exact summary and explicitly marks domestic-only analysis companions unavailable.
 - `historical_league_response.json` is the authoritative Render response captured for
   `historical_league_request.json`; it keeps two historical contexts independently
-  addressable without relabelling nested analytical provenance.
+  addressable, including the left duel-press readout with matching historical provenance.
 - `unavailable_sibling_response.json` proves one unavailable side cannot contaminate its resolved sibling.
 - `observed_zero_imputed_fallback_response.json` pins the distinct zero, imputed, and fallback readout states.
 - `invalid_request_error.json` is the strict error-envelope example for a rejected request.

@@ -102,6 +102,11 @@ def test_historical_contexts_are_resolved_from_their_own_cohorts() -> None:
     assert [payload[side_name]["status"] for side_name in ("left", "right")] == ["resolved", "resolved"]
     assert payload["left"]["detail"]["league"]["name"] == "Premier League"
     assert payload["right"]["detail"]["league"]["name"] == "Bundesliga"
+    assert payload["left"]["duelPressDetailReadout"]["context"] == {
+        "playerId": payload["left"]["player"]["playerId"],
+        "idNamespace": payload["left"]["player"]["idNamespace"],
+        **payload["left"]["context"],
+    }
     # This immutable fixture is an actual service response for its matching
     # request, not a compact response with manually relabelled provenance.
     assert payload == fixture("historical_league_response.json")
@@ -268,7 +273,9 @@ def test_committed_strict_response_fixtures_cover_frontend_parser_states() -> No
     assert complete.right.context.mode == "europe"
     assert historical.left.context.season == "2022/2023"
     assert historical.right.context.season == "2024/2025"
-    assert historical.left.duelPressDetailReadout is None
+    assert historical.left.duelPressDetailReadout is not None
+    assert historical.left.duelPressDetailReadout.context.season == "2022/2023"
+    assert historical.left.duelPressDetailReadout.context.scope == 3
     assert unavailable.left.status == "resolved"
     assert unavailable.right.status == "unavailable"
     assert unavailable.right.detail is None
