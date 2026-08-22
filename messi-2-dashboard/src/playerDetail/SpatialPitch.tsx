@@ -9,6 +9,20 @@ const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow
 
 export const POSITIONAL_DEPTH_BOUNDARIES = [0, 16.67, 33.33, 50, 66.67, 83.33, 100] as const;
 export const POSITIONAL_LANE_BOUNDARIES = [0, 21.82, 37, 63, 78.18, 100] as const;
+export const PITCH_WIDTH_METERS = 68;
+export const GOAL_WIDTH_METERS = 7.32;
+export const GOAL_CROSSBAR_HEIGHT_METERS = 2.44;
+export const SIX_YARD_BOX_EXTENSION_METERS = 5.5;
+export const GOAL_POST_Y = [
+  ((PITCH_WIDTH_METERS / 2 - GOAL_WIDTH_METERS / 2) / PITCH_WIDTH_METERS) * 100,
+  ((PITCH_WIDTH_METERS / 2 + GOAL_WIDTH_METERS / 2) / PITCH_WIDTH_METERS) * 100,
+] as const;
+export const SIX_YARD_BOX_Y = [
+  ((PITCH_WIDTH_METERS / 2 - GOAL_WIDTH_METERS / 2 - SIX_YARD_BOX_EXTENSION_METERS) / PITCH_WIDTH_METERS) * 100,
+  ((PITCH_WIDTH_METERS / 2 + GOAL_WIDTH_METERS / 2 + SIX_YARD_BOX_EXTENSION_METERS) / PITCH_WIDTH_METERS) * 100,
+] as const;
+/** The attacking goal's viewBox lift; trajectory heights are tied directly to it. */
+export const ATTACKING_GOAL_FRAME_LIFT = 20;
 
 /** Visual segments traced from the legacy positional-grid-pitch asset. */
 export const LEGACY_POSITIONAL_SEGMENTS = [
@@ -87,8 +101,8 @@ function projectedCircle(projection: Projection, center: PitchPoint, radiusX: nu
 
 function PitchMarkings({ projection }: { projection: Projection }) {
   const sixYardBoxes = [
-    [{ x: 0, y: 37 }, { x: 5.5, y: 37 }, { x: 5.5, y: 63 }, { x: 0, y: 63 }],
-    [{ x: 94.5, y: 37 }, { x: 100, y: 37 }, { x: 100, y: 63 }, { x: 94.5, y: 63 }],
+    [{ x: 0, y: SIX_YARD_BOX_Y[0] }, { x: 5.5, y: SIX_YARD_BOX_Y[0] }, { x: 5.5, y: SIX_YARD_BOX_Y[1] }, { x: 0, y: SIX_YARD_BOX_Y[1] }],
+    [{ x: 94.5, y: SIX_YARD_BOX_Y[0] }, { x: 100, y: SIX_YARD_BOX_Y[0] }, { x: 100, y: SIX_YARD_BOX_Y[1] }, { x: 94.5, y: SIX_YARD_BOX_Y[1] }],
   ];
   return <g data-layer="pitch-markings" fill="none" stroke="#fb923c" strokeWidth="1.5" vectorEffect="non-scaling-stroke">
     <path d={projectedCircle(projection, { x: 50, y: 50 }, 9.15, 13.45)} />
@@ -108,13 +122,13 @@ function PositionalGrid({ projection }: { projection: Projection }) {
 function GoalFrames({ projection }: { projection: Projection }) {
   return <g data-layer="goals" fill="none" stroke="#f8fafc" strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke">
     {([0, 100] as const).map((end) => {
-      const near = projection({ x: end, y: 37 });
-      const far = projection({ x: end, y: 63 });
+      const near = projection({ x: end, y: GOAL_POST_Y[0] });
+      const far = projection({ x: end, y: GOAL_POST_Y[1] });
       const outward = end === 0 ? -24 : 24;
-      const lift = end === 0 ? 24 : 20;
+      const lift = end === 0 ? 24 : ATTACKING_GOAL_FRAME_LIFT;
       const backNear = { x: near.x + outward, y: near.y + 4 };
       const backFar = { x: far.x + outward, y: far.y + 4 };
-      return <g key={end} data-goal={end === 0 ? "defending" : "attacking"}>
+      return <g key={end} data-goal={end === 0 ? "defending" : "attacking"} data-goal-post-near-y={GOAL_POST_Y[0]} data-goal-post-far-y={GOAL_POST_Y[1]} data-goal-frame-lift={lift} data-goal-crossbar-height-meters={GOAL_CROSSBAR_HEIGHT_METERS}>
         <path data-goal-frame d={`M ${near.x} ${near.y} L ${near.x} ${near.y - lift} L ${far.x} ${far.y - lift} L ${far.x} ${far.y}`} />
         <path data-goal-net d={`M ${near.x} ${near.y - lift} L ${backNear.x} ${backNear.y - lift * .75} L ${backFar.x} ${backFar.y - lift * .75} L ${far.x} ${far.y - lift} M ${backNear.x} ${backNear.y - lift * .75} L ${backNear.x} ${backNear.y} L ${backFar.x} ${backFar.y} L ${backFar.x} ${backFar.y - lift * .75} M ${near.x} ${near.y} L ${backNear.x} ${backNear.y} M ${far.x} ${far.y} L ${backFar.x} ${backFar.y}`} strokeOpacity=".72" />
       </g>;
@@ -162,12 +176,16 @@ function ShotGlyph({ shot, sourceIndex, projection, perspective, pixelScale, id,
   const markerY = perspective ? anchor.y - (8 + markerSize * .55) * pixelScale : anchor.y;
   const trajectory = perspective ? shot.trajectory : null;
   const endpointGround = trajectory ? projection({ x: trajectory.endX, y: trajectory.endY }) : null;
-  const heightLift = trajectory?.endpointKind === "goal_mouth" ? Math.min(36, (trajectory.endZMeters ?? 0) * 9) * pixelScale : 0;
+  // Height is source data in metres. It shares the attacking frame's own
+  // viewBox lift, so the crossbar is always exactly 2.44m above the ground.
+  const heightLift = trajectory?.endpointKind === "goal_mouth" && trajectory.endZMeters != null
+    ? ATTACKING_GOAL_FRAME_LIFT * trajectory.endZMeters / GOAL_CROSSBAR_HEIGHT_METERS
+    : 0;
   const endpoint = endpointGround ? { x: endpointGround.x, y: endpointGround.y - heightLift } : null;
   const control = endpoint && trajectory ? { x: (anchor.x + endpoint.x) / 2, y: Math.min(anchor.y, endpoint.y) - (trajectory.endpointKind === "goal_mouth" ? Math.max(10 * pixelScale, heightLift * .55) : 4 * pixelScale) } : null;
   return <g ref={registerRef} id={id} role="img" tabIndex={active ? 0 : -1} aria-label={shotMarkerLabel(shot)} aria-describedby={tooltipId} data-shot-marker data-shot-index={sourceIndex} data-shot-outcome={shot.outcome} data-marker-symbol={outcomePresentation[shot.outcome].symbol} data-marker-size={markerSize} data-pitch-x={shot.x} data-pitch-y={shot.y} data-screen-x={anchor.x} data-screen-y={anchor.y} className="cursor-help" onFocus={() => onActivate(id)} onPointerEnter={() => onActivate(id)} onPointerLeave={(event) => { if (document.activeElement !== event.currentTarget) onDeactivate(id); }} onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); onNavigate(1); } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); onNavigate(-1); } }}>
     <title>{shotMarkerLabel(shot)}</title>
-    {trajectory && endpointGround && endpoint && control && <path data-shot-trajectory data-trajectory-kind={trajectory.endpointKind} data-end-pitch-x={trajectory.endX} data-end-pitch-y={trajectory.endY} data-end-ground-x={endpointGround.x} data-end-ground-y={endpointGround.y} data-end-render-x={endpoint.x} data-end-render-y={endpoint.y} d={`M ${anchor.x} ${anchor.y} Q ${control.x} ${control.y} ${endpoint.x} ${endpoint.y}`} fill="none" stroke={outcomePresentation[shot.outcome].color} strokeOpacity={trajectory.endpointKind === "blocked" ? ".62" : ".82"} strokeWidth={trajectory.endpointKind === "blocked" ? "1.4" : "1.8"} strokeDasharray={trajectory.endpointKind === "blocked" ? "4 4" : undefined} vectorEffect="non-scaling-stroke" pointerEvents="none"/>}
+    {trajectory && endpointGround && endpoint && control && <path data-shot-trajectory data-trajectory-kind={trajectory.endpointKind} data-end-pitch-x={trajectory.endX} data-end-pitch-y={trajectory.endY} data-end-goal-mouth={trajectory.endpointKind === "goal_mouth" ? trajectory.endY >= GOAL_POST_Y[0] && trajectory.endY <= GOAL_POST_Y[1] ? "inside" : "outside" : undefined} data-end-height-meters={trajectory.endZMeters ?? undefined} data-end-height-lift={heightLift} data-end-ground-x={endpointGround.x} data-end-ground-y={endpointGround.y} data-end-render-x={endpoint.x} data-end-render-y={endpoint.y} d={`M ${anchor.x} ${anchor.y} Q ${control.x} ${control.y} ${endpoint.x} ${endpoint.y}`} fill="none" stroke={outcomePresentation[shot.outcome].color} strokeOpacity={trajectory.endpointKind === "blocked" ? ".62" : ".82"} strokeWidth={trajectory.endpointKind === "blocked" ? "1.4" : "1.8"} strokeDasharray={trajectory.endpointKind === "blocked" ? "4 4" : undefined} vectorEffect="non-scaling-stroke" pointerEvents="none"/>}
     {perspective && <><line data-shot-anchor x1={anchor.x} y1={anchor.y} x2={anchor.x} y2={markerY} stroke={outcomePresentation[shot.outcome].color} strokeOpacity=".7" strokeWidth="1.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/><ellipse data-shot-shadow cx={anchor.x} cy={anchor.y} rx={markerSize * .9 * pixelScale} ry={markerSize * .28 * pixelScale} fill="#020617" fillOpacity=".55"/></>}
     <g data-marker-visual data-pixel-scale={pixelScale} transform={`translate(${anchor.x} ${markerY}) scale(${pixelScale})`}><LegacyShotShape shot={shot}/><circle data-marker-hit r="12" fill="transparent" pointerEvents="all" /></g>
   </g>;

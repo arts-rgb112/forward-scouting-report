@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PlayerAnalysis } from "../dashboard/types";
-import { LEGACY_POSITIONAL_SEGMENTS, POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES, projectPerspective, SpatialPitch } from "./SpatialPitch";
+import { ATTACKING_GOAL_FRAME_LIFT, GOAL_CROSSBAR_HEIGHT_METERS, GOAL_POST_Y, GOAL_WIDTH_METERS, LEGACY_POSITIONAL_SEGMENTS, PITCH_WIDTH_METERS, POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES, projectPerspective, SIX_YARD_BOX_Y, SpatialPitch } from "./SpatialPitch";
 
 const analysisWith = (spatial: Partial<PlayerAnalysis["spatial"]>): PlayerAnalysis => ({
   score: { value: 80, rank: 1, topPercent: 1, population: 100, archetype: "Type A" },
@@ -56,6 +56,85 @@ describe("perspective spatial pitch", () => {
     expect(container.querySelector('[data-goal="defending"] [data-goal-frame]')).toBeInTheDocument();
     expect(container.querySelector('[data-goal="attacking"] [data-goal-net]')).toBeInTheDocument();
     expect(container.querySelector("[data-shot-trajectory]")).not.toBeInTheDocument();
+  });
+
+  it("uses the regulation goal mouth, independently of six-yard and positional lane boundaries", () => {
+    const { container } = render(<SpatialPitch analysis={analysisWith({})}/>);
+    const [nearPost, farPost] = GOAL_POST_Y;
+    expect(nearPost).toBeCloseTo((34 - 3.66) / 68 * 100, 10);
+    expect(farPost).toBeCloseTo((34 + 3.66) / 68 * 100, 10);
+    expect(farPost - nearPost).toBeCloseTo(GOAL_WIDTH_METERS / PITCH_WIDTH_METERS * 100, 10);
+    expect(nearPost).toBeGreaterThan(37);
+    expect(farPost).toBeLessThan(63);
+    expect(SIX_YARD_BOX_Y[0]).toBeLessThan(nearPost);
+    expect(SIX_YARD_BOX_Y[1]).toBeGreaterThan(farPost);
+    expect(SIX_YARD_BOX_Y).not.toEqual(POSITIONAL_LANE_BOUNDARIES.slice(2, 4));
+    for (const goal of [...container.querySelectorAll("[data-goal]")]) {
+      expect(goal).toHaveAttribute("data-goal-post-near-y", String(nearPost));
+      expect(goal).toHaveAttribute("data-goal-post-far-y", String(farPost));
+    }
+  });
+
+  it("aligns source endpoint heights to the attacking crossbar without marker scaling", () => {
+    const heightCases = [0, 1.2, GOAL_CROSSBAR_HEIGHT_METERS, 3.66] as const;
+    const shots = heightCases.map((endZMeters, index) => ({ x: 80 - index, y: 50, outcome: "goal" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 50, endZMeters, source: "fotmob" as const } }));
+    const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
+    const paths = [...container.querySelectorAll('[data-trajectory-kind="goal_mouth"]')];
+    const attackingGoal = container.querySelector('[data-goal="attacking"]')!;
+    expect(attackingGoal).toHaveAttribute("data-goal-frame-lift", String(ATTACKING_GOAL_FRAME_LIFT));
+    expect(attackingGoal).toHaveAttribute("data-goal-crossbar-height-meters", String(GOAL_CROSSBAR_HEIGHT_METERS));
+    expect(paths).toHaveLength(heightCases.length);
+    for (const [index, path] of paths.entries()) {
+      const lift = Number(path.getAttribute("data-end-height-lift"));
+      const groundY = Number(path.getAttribute("data-end-ground-y"));
+      const renderY = Number(path.getAttribute("data-end-render-y"));
+      expect(lift).toBeCloseTo(ATTACKING_GOAL_FRAME_LIFT * heightCases[index] / GOAL_CROSSBAR_HEIGHT_METERS, 10);
+      expect(groundY - renderY).toBeCloseTo(lift, 10);
+    }
+    expect(Number(paths[0].getAttribute("data-end-render-y"))).toBe(Number(paths[0].getAttribute("data-end-ground-y")));
+    expect(Number(paths[1].getAttribute("data-end-height-lift"))).toBeLessThan(ATTACKING_GOAL_FRAME_LIFT);
+    expect(Number(paths[2].getAttribute("data-end-height-lift"))).toBeCloseTo(ATTACKING_GOAL_FRAME_LIFT, 10);
+    expect(Number(paths[3].getAttribute("data-end-height-lift"))).toBeGreaterThan(ATTACKING_GOAL_FRAME_LIFT);
+  });
+
+  it("keeps endpoint-to-crossbar height ratios fixed when responsive marker pixelScale changes", () => {
+    const rendered = { width: 1000, height: 650 };
+    vi.spyOn(SVGSVGElement.prototype, "getBoundingClientRect").mockImplementation(() => svgBounds(rendered.width, rendered.height));
+    const resizeCallbacks: Array<() => void> = [];
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) { resizeCallbacks.push(() => callback([], this as unknown as ResizeObserver)); }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    const shots = [{ x: 80, y: 20, outcome: "goal" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 50, endZMeters: 1.2, source: "fotmob" as const } }];
+    const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: shots })}/>);
+    const path = container.querySelector('[data-trajectory-kind="goal_mouth"]')!;
+    const marker = container.querySelector("[data-marker-visual]")!;
+    const frameLift = Number(container.querySelector('[data-goal="attacking"]')?.getAttribute("data-goal-frame-lift"));
+    const desktop = { markerScale: Number(marker.getAttribute("data-pixel-scale")), endpointY: path.getAttribute("data-end-render-y"), endpointLift: Number(path.getAttribute("data-end-height-lift")) };
+
+    rendered.width = 320;
+    rendered.height = 208;
+    act(() => resizeCallbacks[0]());
+
+    expect(Number(marker.getAttribute("data-pixel-scale"))).toBeCloseTo(3.125);
+    expect(path).toHaveAttribute("data-end-render-y", desktop.endpointY);
+    expect(Number(path.getAttribute("data-end-height-lift"))).toBeCloseTo(desktop.endpointLift, 10);
+    expect(desktop.endpointLift / frameLift).toBeCloseTo(1.2 / GOAL_CROSSBAR_HEIGHT_METERS, 10);
+  });
+
+  it("keeps unknown-height goal-mouth endpoints on the source ground coordinate and shows whether the source y is in the mouth", () => {
+    const shots = [
+      { x: 80, y: 20, outcome: "goal" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 50, endZMeters: null, source: "fotmob" as const } },
+      { x: 78, y: 22, outcome: "on_target" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 40, endZMeters: 1.2, source: "fotmob" as const } },
+    ];
+    const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
+    const [unknownHeight, outsideMouth] = [...container.querySelectorAll('[data-trajectory-kind="goal_mouth"]')];
+    expect(unknownHeight).toHaveAttribute("data-end-height-lift", "0");
+    expect(unknownHeight).toHaveAttribute("data-end-render-y", unknownHeight.getAttribute("data-end-ground-y"));
+    expect(unknownHeight).toHaveAttribute("data-end-goal-mouth", "inside");
+    expect(outsideMouth).toHaveAttribute("data-end-goal-mouth", "outside");
   });
 
   it("projects authoritative goal-mouth and blocked trajectories and exposes their direction accessibly", () => {
