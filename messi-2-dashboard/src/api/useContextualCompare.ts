@@ -17,6 +17,6 @@ export function useContextualCompare(config: MessiApiConfig | undefined, request
   }, [config, identity, request, retry]);
   // Compatibility presentation only: values are server summaries, never client
   // recalculated analysis. New consumers should use `value.left/right` directly.
-  const players = state.value ? [state.value.left, state.value.right].filter((side) => side.status === "resolved").map((side) => ({ player: side.summary, analysis: undefined })) : [];
+  const players = state.value ? [state.value.left, state.value.right].filter((side) => side.status === "resolved").map((side) => ({ player: side.summary!, analysis: undefined })) : [];
   return { ...state, players, retry: () => setRetry((value) => value + 1) };
 }
