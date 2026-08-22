@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { MessiConfigError, type ConfigErrorCategory, parseMessiApiConfig, type MessiApiConfig } from "../api/env";
 import { MessiApiError, isAbortError } from "../api/errors";
 import { leaderboardTaxonomyMode } from "../api/duelPressFeatureGate";
+import { duelPressV2Enabled } from "../api/duelPressV2FeatureGate";
 import { fetchLeaderboard, fetchLeaderboardOptions } from "../api/leaderboardsApi";
 import { datasetFromSearch, datasetKeyOf, leaderboardHref, leaderboardSearchFromSearch } from "./datasetRoute";
 import { ConfigErrorFallback } from "./components/ConfigErrorFallback";
@@ -28,6 +29,7 @@ export function bandWasApplied(meta: DatasetMeta, key: "ageBand" | "minutesBand"
 }
 
 export function PlayersResourceContainer() {
+  if (duelPressV2Enabled(import.meta.env)) return <DuelPressPlayersResourceContainer />;
   if (leaderboardTaxonomyMode(import.meta.env, import.meta.env.MODE) === "duel-press-v1") return <DuelPressPlayersResourceContainer />;
   return <LegacyPlayersResourceContainer />;
 }
