@@ -4,6 +4,11 @@ import type { MessiApiConfig } from "./env";
 import { fetchContextualComparison } from "./contextualCompareApi";
 
 export type ContextualCompareState = { state: "idle" | "loading" | "error" | "success"; value?: ContextualCompareResponse; error?: string };
+export type ContextualComparePanelState = { state: "idle" | "loading" | "error"; error?: string } | { state: "resolved" | "unavailable" | "invalid_context"; side: ContextualCompareResponse["left"] };
+function panelState(state: ContextualCompareState, key: "left" | "right"): ContextualComparePanelState {
+  if (state.state !== "success") return state.state === "error" ? { state: "error", error: state.error ?? "Comparison could not be loaded." } : { state: state.state };
+  const side = state.value![key]; return side.status === "resolved" ? { state: "resolved", side } : { state: side.status, side };
+}
 export function useContextualCompare(config: MessiApiConfig | undefined, request: ContextualCompareRequest | null) {
   const [retry, setRetry] = useState(0); const [state, setState] = useState<ContextualCompareState>({ state: "idle" }); const generation = useRef(0);
   const identity = useMemo(() => request ? JSON.stringify(request) : "", [request]);
@@ -18,5 +23,6 @@ export function useContextualCompare(config: MessiApiConfig | undefined, request
   // Compatibility presentation only: values are server summaries, never client
   // recalculated analysis. New consumers should use `value.left/right` directly.
   const players = state.value ? [state.value.left, state.value.right].filter((side) => side.status === "resolved").map((side) => ({ player: side.summary!, analysis: undefined })) : [];
-  return { ...state, players, retry: () => setRetry((value) => value + 1) };
+  const panels = { left: panelState(state, "left"), right: panelState(state, "right") };
+  return { ...state, panels, players, retry: () => setRetry((value) => value + 1) };
 }
