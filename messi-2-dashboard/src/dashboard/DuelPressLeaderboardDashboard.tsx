@@ -14,12 +14,13 @@ import { TaxonomyWatchlistView } from "./components/TaxonomyWatchlistView";
 import { WatchlistV3Drawer } from "./components/WatchlistV3Drawer";
 import { WatchlistV3SortControls } from "./components/WatchlistV3SortControls";
 import { duelPressDetailHref } from "./duelPressRoute";
+import { fetchDuelPressDetailByContext } from "../api/duelPressApi";
 import type { AgeBand, DatasetDisplayMeta, DatasetRouteState, LeaderboardOptions, MinutesBand } from "./types";
 import { useOptionalWatchlistV3, WATCHLIST_V3_ENABLED } from "./useWatchlistV3";
 import { useVisibleDuelWatchlistResolution } from "./useVisibleDuelWatchlistResolution";
 import { useLegacyWatchlistResolution } from "./useLegacyWatchlistResolution";
 import { useLegacyWatchlistQuality } from "./useLegacyWatchlistQuality";
-import type { DuelPressV3Entry, LegacyV3Entry } from "./watchlistV3Contracts";
+import { watchlistV3Key, type DuelPressV3Entry, type LegacyV3Entry } from "./watchlistV3Contracts";
 import { defaultWatchlistV3Filters, watchlistV3Page, type WatchlistV3Filters } from "./watchlistV3ViewModel";
 import { useMetricRanks, type MetricRankTarget } from "./useMetricRanks";
 
@@ -71,7 +72,23 @@ export default function DuelPressLeaderboardDashboard({ payload, apiConfig, data
   const metricRanks = useMetricRanks(apiConfig, isWatchlist ? watchlistRankTargets : leaderboardRankTargets, Boolean(apiConfig));
   const leaderboardMetricRanks = useMemo(() => Object.fromEntries(payload.players.map((player) => [player.id, metricRanks[leaderboardMetricRankKey(player.id)] ?? {}])), [metricRanks, payload.players]);
   const watchRange = visibleEntries.length ? `${watchView.start}–${watchView.end} of ${watchView.total} saved contexts` : `0 of ${watchView.total} saved contexts`;
-  const watch = enabled && !v2Source ? { available: true, isWatched: (player: DuelPressPlayerCore) => v3!.isWatched("duel-press-v1", player.id, context), onToggle: (player: DuelPressPlayerCore) => { v3!.toggleDuel(player, context); }, accessibleLabel: (player: DuelPressPlayerCore) => `${v3!.isWatched("duel-press-v1", player.id, context) ? "Remove" : "Save"} ${player.name}, ${context.season}, ${context.mode === "league" ? `${context.scope} leagues` : `Europe ${context.competition.toUpperCase()}`}, duel and press taxonomy` } : undefined;
+  const toggleWatch = async (player: DuelPressPlayerCore) => {
+    const watched = v3!.isWatched("duel-press-v1", player.id, context);
+    if (watched) return v3!.remove(watchlistV3Key("duel-press-v1", player.id, context));
+    if (!v2Source) return v3!.toggleDuel(player, context);
+    if (!apiConfig) { v3!.announce("Watchlist is unavailable until the player context can be resolved."); return false; }
+    try {
+      // v2 leaderboard rows are compact and intentionally omit v1 snapshot
+      // drill-down fields. Resolve the exact v1 detail context before saving;
+      // never synthesize component/raw values in the browser.
+      const snapshot = await fetchDuelPressDetailByContext(apiConfig, player.id, context, new AbortController().signal);
+      return v3!.toggleDuel(snapshot, context);
+    } catch {
+      v3!.announce(`${player.name} could not be saved because the exact context is unavailable.`);
+      return false;
+    }
+  };
+  const watch = enabled ? { available: true, isWatched: (player: DuelPressPlayerCore) => v3!.isWatched("duel-press-v1", player.id, context), onToggle: toggleWatch, accessibleLabel: (player: DuelPressPlayerCore) => `${v3!.isWatched("duel-press-v1", player.id, context) ? "Remove" : "Save"} ${player.name}, ${context.season}, ${context.mode === "league" ? `${context.scope} leagues` : `Europe ${context.competition.toUpperCase()}`}, duel and press taxonomy` } : undefined;
   return <main id="main-content" aria-busy={isWatchlist ? pending : refreshing} className="min-h-screen bg-[#080b0c] text-zinc-100"><StatusFeedback message={enabled ? v3!.feedback : ""} /><div className="mx-auto max-w-[1580px] px-3 py-5 sm:px-6 lg:px-8">
     <DatasetHeader meta={meta} visibleCount={isWatchlist ? watchView.total : payload.players.length} refreshing={isWatchlist ? pending : refreshing} onRefresh={isWatchlist ? () => setRetryEpoch((value) => value + 1) : onRefresh} state={dataset} options={options} onStateChange={onDatasetChange} watchlistMode={isWatchlist} />
     {!isWatchlist && warning}
