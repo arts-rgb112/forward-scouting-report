@@ -250,8 +250,18 @@ def test_europe_all_unions_exact_uefa_snapshots_and_marks_missing_source_partial
         service._build_final_third_shot_map_cached.cache_clear()
     assert partial is not None and partial.data.available is True
     assert partial.data.completeness == "partial"
-    assert len(partial.data.partialCoverage) == 10
-    assert all(issue.field == "volume" for issue in partial.data.partialCoverage)
+    assert len(partial.data.partialCoverage) == 30
+    assert {issue.field for issue in partial.data.partialCoverage} == {
+        "volume", "conversionRatePct", "qualityScore",
+    }
+    assert all(
+        zone.state == "partial"
+        and zone.fieldStates.volume.state == "partial"
+        and zone.fieldStates.conversionRatePct.state == "partial"
+        and zone.fieldStates.qualityScore.state == "partial"
+        and zone.reason and zone.reason.startswith("competition_snapshot_unavailable:")
+        for zone in partial.data.zones
+    )
 
 
 def test_europe_context_without_its_own_snapshot_stays_unavailable() -> None:

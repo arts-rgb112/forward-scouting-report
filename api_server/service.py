@@ -2476,13 +2476,17 @@ def _build_final_third_shot_map_cached(
 
     zone_points: dict[str, list[ShotmapPoint]] = {zone_id: [] for zone_id in FINAL_THIRD_ZONE_ORDER}
     shots: list[FinalThirdShot] = []
+    source_partial_reason = (
+        "competition_snapshot_unavailable:" + ",".join(missing_source_keys)
+        if missing_source_keys else None
+    )
     coverage: list[FinalThirdCoverageIssue] = [
         FinalThirdCoverageIssue(
-            zoneId=zone_id, field="volume",
-            reason=f"competition_snapshot_unavailable:{heatmap_key}",
+            zoneId=zone_id, field=field, reason=source_partial_reason,
         )
-        for heatmap_key in missing_source_keys
         for zone_id in FINAL_THIRD_ZONE_ORDER
+        for field in ("volume", "conversionRatePct", "qualityScore")
+        if source_partial_reason is not None
     ]
     snapshot_identity_occurrences: dict[str, int] = {}
     provider_event_occurrences: dict[str, int] = {}
@@ -2536,15 +2540,23 @@ def _build_final_third_shot_map_cached(
         depth, lane = int(zone_id[5]), int(zone_id[-1])
         shots_total = len(points)
         if shots_total == 0:
-            reason = "no_attempts_in_zone"
+            reason = source_partial_reason or "no_attempts_in_zone"
             zones.append(FinalThirdShotZone(
                 zoneId=zone_id, depth=depth, lane=lane, shotsTotal=0, goals=0,
                 conversionRatePct=None, qualityScore=None, qualityEligibleShots=0,
-                state="observed", source=FINAL_THIRD_SOURCE,
+                state="partial" if source_partial_reason else "observed",
+                reason=source_partial_reason, source=FINAL_THIRD_SOURCE,
                 fieldStates=FinalThirdZoneFieldStates(
-                    volume=_final_third_field("observed"),
-                    conversionRatePct=_final_third_field("unavailable", reason),
-                    qualityScore=_final_third_field("unavailable", reason, FINAL_THIRD_QUALITY_FORMULA),
+                    volume=_final_third_field(
+                        "partial" if source_partial_reason else "observed", source_partial_reason,
+                    ),
+                    conversionRatePct=_final_third_field(
+                        "partial" if source_partial_reason else "unavailable", reason,
+                    ),
+                    qualityScore=_final_third_field(
+                        "partial" if source_partial_reason else "unavailable",
+                        reason, FINAL_THIRD_QUALITY_FORMULA,
+                    ),
                 ),
             ))
             continue
@@ -2558,7 +2570,7 @@ def _build_final_third_shot_map_cached(
                 - sum(xg for xg, _ in eligible) / len(eligible),
                 4,
             )
-            quality_state = "partial" if missing_quality else "observed"
+            quality_state = "partial" if (missing_quality or source_partial_reason) else "observed"
             quality_reason = (
                 f"xgot_or_xg_unavailable_for_{missing_quality}_shots" if missing_quality else None
             )
@@ -2570,16 +2582,25 @@ def _build_final_third_shot_map_cached(
             coverage.append(FinalThirdCoverageIssue(
                 zoneId=zone_id, field="qualityScore", reason=quality_reason or "quality_source_unavailable",
             ))
+        if source_partial_reason and quality_reason:
+            quality_reason = f"{source_partial_reason};{quality_reason}"
+        elif source_partial_reason:
+            quality_reason = source_partial_reason
         zones.append(FinalThirdShotZone(
             zoneId=zone_id, depth=depth, lane=lane, shotsTotal=shots_total, goals=goals,
             conversionRatePct=conversion, qualityScore=quality,
             qualityEligibleShots=len(eligible),
-            state="partial" if missing_quality else "observed",
+            state="partial" if (missing_quality or source_partial_reason) else "observed",
             reason=quality_reason,
             source=FINAL_THIRD_SOURCE,
             fieldStates=FinalThirdZoneFieldStates(
-                volume=_final_third_field("observed"),
-                conversionRatePct=_final_third_field("observed", formula_version="goals-divided-by-shots-v1"),
+                volume=_final_third_field(
+                    "partial" if source_partial_reason else "observed", source_partial_reason,
+                ),
+                conversionRatePct=_final_third_field(
+                    "partial" if source_partial_reason else "observed",
+                    source_partial_reason, formula_version="goals-divided-by-shots-v1",
+                ),
                 qualityScore=_final_third_field(quality_state, quality_reason, FINAL_THIRD_QUALITY_FORMULA),
             ),
         ))
