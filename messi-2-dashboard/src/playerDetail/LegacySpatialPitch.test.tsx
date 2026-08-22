@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LegacySpatialPitch } from "./LegacySpatialPitch";
@@ -33,7 +33,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  cleanup(); vi.restoreAllMocks();
+  cleanup(); vi.restoreAllMocks(); vi.useRealTimers();
   globalThis.ResizeObserver = originalResizeObserver;
 });
 
@@ -59,17 +59,17 @@ describe("LegacySpatialPitch", () => {
 
   it("fails closed on heatmap or shot count integrity mismatches", () => {
     const { rerender, container } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, heatmapPointCount: 3 })} />);
-    expect(screen.getByText(/Activity heatmap integrity mismatch/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Activity heatmap integrity mismatch/)).toHaveLength(2);
     rerender(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, shotmapPointCount: 3 })} />);
-    expect(screen.getByText(/Shot snapshot integrity mismatch/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Shot snapshot integrity mismatch/)).toHaveLength(2);
     expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(0);
   });
 
   it("distinguishes unavailable snapshots from verified zero snapshots", () => {
     const { rerender } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, available: false, heatmapPointCount: 0, heatmapPoints: [], shotmapSnapshotAvailable: false, shotmapPointCount: 0, shotmapPoints: [] })} />);
-    expect(screen.getByText(/Activity heatmap unavailable.*Shot snapshot unavailable/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Activity heatmap unavailable.*Shot snapshot unavailable/)).toHaveLength(2);
     rerender(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, heatmapPointCount: 0, heatmapPoints: [], shotmapPointCount: 0, shotmapPoints: [] })} />);
-    expect(screen.getByText(/Verified zero activity points.*Verified zero shots/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Verified zero activity points.*Verified zero shots/)).toHaveLength(2);
   });
 
   it("clears the painted raster on populated to unavailable transitions", () => {
@@ -88,9 +88,24 @@ describe("LegacySpatialPitch", () => {
     const rectSpy = vi.spyOn(HTMLCanvasElement.prototype, "getBoundingClientRect");
     const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
     const canvas = container.querySelector("canvas")!;
-    expect(canvas.width).toBe(216); expect(canvas.height).toBe(142); expect(resizeCallbacks).toHaveLength(1);
+    expect(canvas.width).toBe(216); expect(canvas.height).toBe(142); expect(resizeCallbacks).toHaveLength(2);
     rectSpy.mockReturnValue(bounds(54, 35.45));
     act(() => resizeCallbacks[0]([], {} as ResizeObserver));
     expect(canvas.width).toBe(108); expect(canvas.height).toBe(71); expect(putImageData).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves legacy caption symbols while using legacy Plotly marker geometry", () => {
+    const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
+    expect(screen.getByText("2 activity points. 4 shots. Goal ◇ · on target ● · off target × · blocked ■.", { selector: "figcaption" })).toBeInTheDocument();
+    expect(container.querySelector('[data-shot-outcome="goal"]')).toHaveAttribute("data-marker-symbol", "star");
+    expect(container.querySelector('[data-shot-outcome="blocked"]')).toHaveAttribute("data-marker-symbol", "diamond-open");
+    fireEvent.focus(container.querySelector('[data-shot-outcome="goal"]')!); expect(screen.getByRole("tooltip")).toHaveTextContent("xG —"); expect(screen.getByRole("tooltip")).toHaveTextContent("xGOT —");
+  });
+
+  it("keeps one roving marker tab stop and 44px wrapping controls", () => {
+    const many = Array.from({ length: 119 }, (_, index) => ({ x: index % 100, y: index % 100, outcome: "goal" as const }));
+    const { container } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, shotmapPointCount: 119, shotmapPoints: many })} />);
+    expect(container.querySelectorAll('[data-shot-index][tabindex="0"]')).toHaveLength(1); expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(119);
+    const controls = screen.getByRole("group", { name: "Shot outcome visibility" }); expect(controls).toHaveClass("grid-cols-2"); expect(screen.getByRole("button", { name: /Goals, 119 shots/ })).toHaveClass("min-h-11", "min-w-11");
   });
 });
