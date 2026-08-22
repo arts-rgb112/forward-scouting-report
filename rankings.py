@@ -634,6 +634,16 @@ def get_spear_leaderboard(
             # no legacy leaderboard/player DTO is widened by these values.
             "goals_raw": metric.goals,
             "xgot_raw": metric.xgot,
+            # Preserve unrounded provider totals needed by the additive v2
+            # detail/leaderboard contract.  The v1 frame only retained a
+            # mixture of totals and /90 figures, which would force clients to
+            # reconstruct counts from rounded display values.
+            "dribbles_succeeded_raw": metric.dribbles_succeeded,
+            "duels_won_raw": metric.duels_won,
+            "aerial_duels_won_raw": metric.aerial_duels_won,
+            "fouls_won_raw": metric.fouls_won,
+            "penalties_awarded_raw": metric.penalties_awarded,
+            "dispossessed_raw": metric.dispossessed,
             "out_box_xg_raw": metric.out_box_xg,
             "out_box_xgot_raw": metric.out_box_xgot,
             "out_box_shot_quality_goals_raw": metric.out_box_shot_quality,
