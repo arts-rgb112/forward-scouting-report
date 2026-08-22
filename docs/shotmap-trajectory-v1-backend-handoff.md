@@ -88,3 +88,22 @@ endpoint-kind counts, and unenriched shot counts by season.
 
 Mass provider refresh, commit, push, PR, merge, and deployment were deliberately
 not performed as part of this local backend design/implementation task.
+
+## Bounded backfill acceleration
+
+The workflow defaults to three player-season workers, but every HTTP attempt
+shares a process-wide minimum 0.65-second request-start interval. HTTP 429
+`Retry-After` values extend a shared cooldown so already-waiting workers cannot
+continue hammering the provider. Retry count and timeout remain bounded.
+
+Workers return indexed immutable results. Only the main thread applies updates,
+in original target order, and writes an atomic checkpoint every 50 processed
+targets. Unexpected worker failures do not interrupt sibling results: successful
+results are checkpointed, then the snapshot step fails explicitly for review.
+Existing session keys are checked after every applied result and may not be
+removed.
+
+The workflow uses `concurrency.group=shotmap-refresh` with
+`cancel-in-progress=false`, preventing simultaneous season writers and git push
+conflicts. Worker count is restricted to 1 or 3; five-worker and parallel-season
+backfills are intentionally unsupported.
