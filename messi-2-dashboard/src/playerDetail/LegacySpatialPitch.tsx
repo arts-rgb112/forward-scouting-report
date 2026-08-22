@@ -66,7 +66,7 @@ function states(spatial: Spatial | undefined, integrity: Integrity) {
   return { heat, shots };
 }
 
-export function LegacySpatialPitch({ analysis }: { analysis?: PlayerAnalysis }) {
+export function LegacySpatialPitchFigure({ analysis }: { analysis?: PlayerAnalysis }) {
   const spatial = analysis?.spatial;
   const integrity = spatialIntegrity(spatial);
   const state = states(spatial, integrity);
@@ -75,9 +75,9 @@ export function LegacySpatialPitch({ analysis }: { analysis?: PlayerAnalysis }) 
   const counts = { goal: 0, on_target: 0, off_target: 0, blocked: 0 };
   if (integrity.shots) spatial!.shotmapPoints.forEach((shot) => { counts[shot.outcome] += 1; });
   const showCountLine = integrity.shots;
-  const description = `Legacy spatial pitch. ${state.heat}. ${state.shots}.`;
-  return <section className={panel} aria-labelledby="spatial-pitch-heading"><h2 id="spatial-pitch-heading" className="text-sm font-black">Spatial pitch</h2>
-    <figure className="mt-3" aria-describedby="spatial-pitch-caption">
+  const description = `Two-dimensional legacy spatial pitch. ${state.heat}. ${state.shots}.`;
+  return <>
+    <figure aria-describedby="spatial-pitch-caption">
       <div className="relative isolate w-full overflow-hidden rounded bg-[#063525]" style={{ aspectRatio: "108 / 70.9" }}>
         <svg viewBox="-4 0 108 100" preserveAspectRatio="none" role="img" aria-label={description} className="absolute inset-0 h-full w-full" data-layer="legacy-pitch"><image href="/assets/positional-grid-pitch.webp" x="-10.52" y="-5" width="121.17" height="110" preserveAspectRatio="none" /></svg>
         <HeatmapCanvas points={integrity.heat ? spatial!.heatmapPoints : []} enabled={integrity.heat && spatial!.heatmapPoints.length > 0}/>
@@ -89,5 +89,9 @@ export function LegacySpatialPitch({ analysis }: { analysis?: PlayerAnalysis }) 
       <figcaption id="spatial-pitch-caption" className="mt-2 text-xs text-zinc-400">{state.heat}. {state.shots}. Goal ◇ · on target ● · off target × · blocked ■.</figcaption>
     </figure>
     {showCountLine && <ul className="mt-2 flex flex-wrap gap-x-3 text-xs text-zinc-400"><li>Goals {counts.goal}</li><li>On target {counts.on_target}</li><li>Off target {counts.off_target}</li><li>Blocked {counts.blocked}</li></ul>}
-  </section>;
+  </>;
+}
+
+export function LegacySpatialPitch({ analysis }: { analysis?: PlayerAnalysis }) {
+  return <section className={panel} aria-labelledby="spatial-pitch-heading"><h2 id="spatial-pitch-heading" className="text-sm font-black">Spatial pitch</h2><div className="mt-3"><LegacySpatialPitchFigure analysis={analysis}/></div></section>;
 }

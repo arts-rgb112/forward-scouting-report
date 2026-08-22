@@ -11,8 +11,8 @@ import { getScoreBand, resolveTierPresentation } from "../dashboard/scoutingConf
 import { TierBadge } from "../dashboard/components/TierBadge";
 import type { DatasetRouteState, Player, PlayerAnalysis, TacticalQuadrant } from "../dashboard/types";
 import { axisDetail, detailMetrics, metricProfile, seasonScoreRows, selectedScore, tacticalCopy, wholeScore } from "./playerDetailViewModel";
+import { SpatialPitch } from "./SpatialPitch";
 import { BenchmarkPanel, VolumeBenchmarkRadar as ServerVolumeBenchmarkRadar } from "./VolumeBenchmarkRadar";
-import { LegacySpatialPitch } from "./LegacySpatialPitch";
 import { useRatioBenchmark } from "./useRatioBenchmark";
 import { tacticalSummaryEnabled, useTacticalSummary } from "./useTacticalSummary";
 import { useVolumeBenchmark } from "./useVolumeBenchmark";
@@ -108,8 +108,7 @@ export function TacticalSummary({ player, analysis, quadrant, quality, config, d
   </section>;
 }
 
-/** Compatibility export for existing route consumers and tests. */
-export const SpatialPitch = LegacySpatialPitch;
+export { SpatialPitch } from "./SpatialPitch";
 
 export function PercentileProfile({ player, analysis, quality }: { player: Player; analysis?: PlayerAnalysis; quality: QualityDisplay }) {
   return <section className={`${panel} six-sector-board`} aria-label="Percentile profile"><div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-sm font-black">Six-sector board</h2><p className="text-[10px] uppercase tracking-[0.16em] text-zinc-400">Server score + volume / ratio readouts</p></div><div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-3">{metricProfile(player, analysis, quality).map((metric) => {
