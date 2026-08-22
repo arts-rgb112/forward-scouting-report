@@ -1,4 +1,5 @@
-import type { FinalThirdShot, FinalThirdShotMapData } from "../api/finalThirdShotMapContracts";
+import type { FinalThirdShot } from "../api/finalThirdShotMapContracts";
+import type { FinalThirdRenderableData } from "../api/finalThirdShotMapV2Contracts";
 
 const statusStyle = { goal: { color: "#a3e635", text: "G" }, on_target: { color: "#38bdf8", text: "T" }, off_target: { color: "#fbbf24", text: "X" }, blocked: { color: "#f472b6", text: "B" } } as const;
 function Shape({ shot, size, color }: { shot: FinalThirdShot; size: number; color: string }) {
@@ -7,13 +8,13 @@ function Shape({ shot, size, color }: { shot: FinalThirdShot; size: number; colo
   if (shot.status === "off_target") return <path data-marker-shape="cross" d={`M ${-size} ${-size} L ${size} ${size} M ${size} ${-size} L ${-size} ${size}`} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round"/>;
   return <rect data-marker-shape="square" x={-size} y={-size} width={size * 2} height={size * 2} fill={color} stroke="#111827" strokeWidth="2"/>;
 }
-function Marker({ shot, data }: { shot: FinalThirdShot; data: FinalThirdShotMapData }) {
+function Marker({ shot, data }: { shot: FinalThirdShot; data: FinalThirdRenderableData }) {
   if (!shot.endpointAvailable || shot.goalMouthY === null || shot.goalMouthZ === null) return null;
   const style = statusStyle[shot.status], xg = shot.xg, xgUnavailable = xg === null, size = xgUnavailable ? 8 : 6 + (xg - data.markerSizeScale.min) / (data.markerSizeScale.max - data.markerSizeScale.min) * 18;
   const x = 160 + shot.goalMouthY * 380, y = 360 - shot.goalMouthZ * 260;
   return <g data-goal-mouth-shot={shot.shotId} data-xg-size={xgUnavailable ? "unavailable" : "observed"} transform={`translate(${x} ${y})`} aria-label={`${style.text} ${shot.status.replace("_", " ")}; xG ${xgUnavailable ? "unavailable, size unavailable" : xg.toFixed(2)}`}><title>{`${style.text} ${shot.status.replace("_", " ")}; xG ${xgUnavailable ? "unavailable, size unavailable" : xg.toFixed(2)}`}</title><Shape shot={shot} size={size} color={xgUnavailable ? "#a1a1aa" : style.color}/>{xgUnavailable && <text data-size-unavailable y="4" textAnchor="middle" fill="#111827" fontSize="10" fontWeight="900">?</text>}<text y={size + 13} textAnchor="middle" fill="#f4f4f5" fontSize="10" fontWeight="800">{style.text}</text></g>;
 }
-export function GoalMouthView({ data }: { data: FinalThirdShotMapData }) {
+export function GoalMouthView({ data }: { data: FinalThirdRenderableData }) {
   const plotted = data.shots.filter((shot) => shot.endpointAvailable && shot.goalMouthY !== null && shot.goalMouthZ !== null), unplotted = data.shots.filter((shot) => !shot.endpointAvailable);
   return <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#081018]"><svg viewBox="0 0 700 460" className="block h-auto w-full" role="img" aria-label={`Two-dimensional goal-mouth plot with ${plotted.length} authoritative endpoints and ${unplotted.length} unplotted endpoints.`}><path d="M 160 100 H 540 V 360 H 160 Z" fill="#0b1520" stroke="#e4e4e7" strokeWidth="7"/><g stroke="#cbd5e1" strokeOpacity=".35">{Array.from({ length: 7 }, (_, index) => <path key={`v${index}`} d={`M ${160 + index * 63.33} 100 V 360`}/>)}{Array.from({ length: 5 }, (_, index) => <path key={`h${index}`} d={`M 160 ${100 + index * 65} H 540`}/>)}</g><text x="350" y="410" textAnchor="middle" fill="#cbd5e1" fontSize="15">shooter left → right · ground → crossbar</text>{plotted.map((shot) => <Marker key={shot.shotId} shot={shot} data={data}/>)}</svg><div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>Shape + text: G diamond goal · T circle on target · X cross off target · B square blocked. Gray ? means xG size unavailable.</p>{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div></div>;
 }

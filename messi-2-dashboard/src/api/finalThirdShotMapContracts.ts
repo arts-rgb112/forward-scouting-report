@@ -40,3 +40,7 @@ export type FinalThirdShotMapEnvelope = z.infer<typeof finalThirdShotMapEnvelope
 export type FinalThirdShotMapData = FinalThirdShotMapEnvelope["data"];
 export type FinalThirdZone = FinalThirdShotMapData["zones"][number];
 export type FinalThirdShot = FinalThirdShotMapData["shots"][number];
+export const finalThirdFieldStateSchema = fieldState;
+export const finalThirdShotSchema = shot;
+export const finalThirdContextSchema = context;
+export const finalThirdCoverageSchema = coverage;
