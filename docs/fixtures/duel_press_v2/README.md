@@ -18,6 +18,8 @@ the focused coverage is in `tests/test_duel_press_detail_readouts.py`:
 - ground and aerial win-rate medians plus success-margin-per-90 readouts;
 - net progression per 90 in both its on-ball category score and its separate
   contextual explanation (one server formula, never a browser calculation);
+- outside-box and in-box `xGOT − xG` as server-derived total and `/90` pairs,
+  each included in its own shooting-category percentile calculation;
 - `league_per90_fallback` press provenance;
 - context indicators with raw tooltip inputs;
 - 50-row board pagination/filter/sort metadata and snapshot parity;
