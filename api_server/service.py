@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from collections import OrderedDict
 from functools import lru_cache
 import math
 from pathlib import Path
+from threading import RLock
 import time
 from pydantic import ValidationError
 
@@ -41,6 +43,7 @@ from .schemas import (
     VolumeBenchmarkSourceContext,
 )
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
+from .search import canonical_search_key
 
 
 TIER_BANDS = (
@@ -331,6 +334,55 @@ MINUTES_BAND_BOUNDS: dict[MinutesBand, tuple[int | None, int | None] | None] = {
 }
 
 
+# A player response is immutable for the lifetime of its static-cohort cache.
+# Keep one normalized joined name/club/league haystack per cohort identity so a
+# type-ahead request normalizes its short query, rather than every row in the
+# population.  Checking object identity also invalidates this small cache when
+# a cohort cache is explicitly refreshed in a long-running process.
+_SEARCH_HAYSTACK_CACHE_LIMIT = 64
+_search_haystack_cache: OrderedDict[
+    tuple[str, str, str, int, str],
+    tuple[object, dict[int, str]],
+] = OrderedDict()
+_search_haystack_cache_lock = RLock()
+_search_haystack_cache_builds = 0
+
+
+def _cached_search_haystacks(
+    *, kind: str, season: str, mode: str, scope: int, competition: str,
+    rows: tuple[PlayerResponse, ...] | tuple[DuelPressPlayerResponse, ...],
+) -> dict[int, str]:
+    """Return prebuilt search keys for one cached static cohort context."""
+    global _search_haystack_cache_builds
+    cache_key = (kind, season, mode, scope, competition)
+    with _search_haystack_cache_lock:
+        cached = _search_haystack_cache.get(cache_key)
+        if cached is not None and cached[0] is rows:
+            _search_haystack_cache.move_to_end(cache_key)
+            return cached[1]
+
+        haystacks = {
+            player.id: canonical_search_key(
+                f"{player.name}\u001f{player.club.name}\u001f{player.league.name}"
+            )
+            for player in rows
+        }
+        _search_haystack_cache[cache_key] = (rows, haystacks)
+        _search_haystack_cache.move_to_end(cache_key)
+        while len(_search_haystack_cache) > _SEARCH_HAYSTACK_CACHE_LIMIT:
+            _search_haystack_cache.popitem(last=False)
+        _search_haystack_cache_builds += 1
+        return haystacks
+
+
+def _clear_search_haystack_cache() -> None:
+    """Test/support hook for an explicitly refreshed static cohort."""
+    global _search_haystack_cache_builds
+    with _search_haystack_cache_lock:
+        _search_haystack_cache.clear()
+        _search_haystack_cache_builds = 0
+
+
 def _in_band(value: int | None, bounds: tuple[int | None, int | None] | None) -> bool:
     if bounds is None:
         return True
@@ -366,6 +418,7 @@ def canonical_leaderboard_filters(
 
 def _apply_leaderboard_filters(
     rows: tuple[PlayerResponse, ...], applied: LeaderboardAppliedFilters,
+    *, search_haystacks: dict[int, str] | None = None,
 ) -> tuple[PlayerResponse, ...]:
     if applied.role:
         rows = tuple(player for player in rows if player.archetype == applied.role)
@@ -374,12 +427,13 @@ def _apply_leaderboard_filters(
     rows = tuple(player for player in rows if matches_age_band(player.age, applied.ageBand))
     rows = tuple(player for player in rows if matches_minutes_band(player.minutes, applied.minutesBand))
     if applied.q:
-        needle = applied.q.casefold()
+        needle = canonical_search_key(applied.q)
         rows = tuple(
             player for player in rows
-            if needle in player.name.casefold()
-            or needle in player.club.name.casefold()
-            or needle in player.league.name.casefold()
+            if needle in (search_haystacks[player.id] if search_haystacks is not None
+                          else canonical_search_key(
+                              f"{player.name}\u001f{player.club.name}\u001f{player.league.name}"
+                          ))
         )
 
     # Establish the invariant tie order first. Python's stable sort preserves
@@ -405,8 +459,16 @@ def filtered_v2_players(
         role=role, position=position, age_band=age_band,
         minutes_band=minutes_band, query=query, sort=sort, order=order,
     )
+    cohort = build_v2_players(season, mode, scope, competition)
     return _apply_leaderboard_filters(
-        build_v2_players(season, mode, scope, competition), applied,
+        cohort, applied,
+        search_haystacks=(
+            _cached_search_haystacks(
+                kind="v2", season=season, mode=mode, scope=scope,
+                competition=competition,
+                rows=cohort,
+            ) if applied.q else None
+        ),
     )
 
 
@@ -420,8 +482,15 @@ def leaderboard_v21_envelope(
         role=role, position=position, age_band=age_band,
         minutes_band=minutes_band, query=query, sort=sort, order=order,
     )
+    cohort = build_v2_players(season, mode, scope, competition)
     rows = _apply_leaderboard_filters(
-        build_v2_players(season, mode, scope, competition), applied,
+        cohort, applied,
+        search_haystacks=(
+            _cached_search_haystacks(
+                kind="v2", season=season, mode=mode, scope=scope,
+                competition=competition, rows=cohort,
+            ) if applied.q else None
+        ),
     )
     population = len(rows)
     total_pages = (population + page_size - 1) // page_size
@@ -457,7 +526,8 @@ def duel_press_leaderboard_envelope(
         q=(query.strip() or None) if query is not None else None,
         ageBand=age_band, minutesBand=minutes_band, sort=sort, order=order,
     )
-    rows = build_duel_press_players(season, mode, scope, competition)
+    cohort = build_duel_press_players(season, mode, scope, competition)
+    rows = cohort
     if applied.role:
         rows = tuple(player for player in rows if player.archetype == applied.role)
     if applied.position:
@@ -465,12 +535,14 @@ def duel_press_leaderboard_envelope(
     rows = tuple(player for player in rows if matches_age_band(player.age, applied.ageBand))
     rows = tuple(player for player in rows if matches_minutes_band(player.minutes, applied.minutesBand))
     if applied.q:
-        needle = applied.q.casefold()
+        needle = canonical_search_key(applied.q)
+        search_haystacks = _cached_search_haystacks(
+            kind="duel-press", season=season, mode=mode, scope=scope,
+            competition=competition, rows=cohort,
+        )
         rows = tuple(
             player for player in rows
-            if needle in player.name.casefold()
-            or needle in player.club.name.casefold()
-            or needle in player.league.name.casefold()
+            if needle in search_haystacks[player.id]
         )
     rows = tuple(sorted(rows, key=lambda player: (player.rank, player.id)))
     key = DUEL_PRESS_SORTABLE_FIELDS[applied.sort]
