@@ -2,7 +2,7 @@
   "comparisonVersion": "contextual-compare-v1",
   "left": {
     "player": {"idNamespace": "fotmob", "playerId": 194165},
-    "taxonomy": "legacy-v1",
+    "taxonomy": "duel-press-v1",
     "context": {"season": "2022/2023", "mode": "league", "scope": 3, "competition": "all"}
   },
   "right": {
