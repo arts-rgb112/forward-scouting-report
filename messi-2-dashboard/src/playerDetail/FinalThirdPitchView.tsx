@@ -1,5 +1,6 @@
 import type { FinalThirdZone } from "../api/finalThirdShotMapContracts";
 import type { FinalThirdRenderableData, FinalThirdShotMapV2Data } from "../api/finalThirdShotMapV2Contracts";
+import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contracts";
 import { finalThirdPlanCrop, PlanPitchGeometry, PLAN_VERTICAL_TRANSFORM_Y, projectPlan } from "./SpatialPitch";
 
 const OUTER_RADIUS = 52;
@@ -12,7 +13,7 @@ const conversionTiers = [
   { min: 0, id: "bronze", color: "#fdba74" },
 ] as const;
 const conversionTier = (rate: number | null) => rate !== null && Number.isFinite(rate) && rate >= 0 && rate <= 100 ? conversionTiers.find((tier) => rate >= tier.min) ?? null : null;
-const zoneColor = (zone: FinalThirdZone, _data: FinalThirdRenderableData) => conversionTier(zone.conversionRatePct)?.color ?? "#3f3f46";
+const zoneColor = (zone: FinalThirdZone, _data: FinalThirdRenderableData | FinalThirdShotMapV3Data) => conversionTier(zone.conversionRatePct)?.color ?? "#3f3f46";
 const hexPath = (cx: number, cy: number, radius: number) => Array.from({ length: 6 }, (_, index) => { const angle = Math.PI / 3 * index; return `${index ? "L" : "M"} ${cx + Math.cos(angle) * radius} ${cy + Math.sin(angle) * radius}`; }).join(" ") + " Z";
 /** Matches matrix(0 -1 1 0 0 1000): plan x becomes vertical, plan y becomes horizontal. */
 const vertical = (point: { x: number; y: number }) => { const plan = projectPlan(point); return { x: plan.y, y: 1000 - plan.x }; };
@@ -26,7 +27,7 @@ const displayAttemptCount = (zone: FinalThirdZone, data: FinalThirdRenderableDat
   return effective === null ? "Unavailable" : `${effective}/${zone.shotsTotal}`;
 };
 
-export function FinalThirdPitchView({ data }: { data: FinalThirdRenderableData }) {
+export function FinalThirdPitchView({ data }: { data: FinalThirdRenderableData | FinalThirdShotMapV3Data }) {
   const crop = finalThirdPlanCrop(), viewBox = `${crop.x} ${crop.y} ${crop.width} ${crop.height}`;
   return <figure className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#07130f]"><svg data-final-third-pitch data-front2-crop="depth5-depth6" viewBox={viewBox} className="block h-auto w-full" role="img" aria-label="Shared Spatial Pitch plan, rotated vertically and cropped to Depths 5 and 6. Attack moves upward and Lane 1 is screen-right.">
     <g data-final-third-vertical-transform transform={`matrix(0 -1 1 0 0 ${PLAN_VERTICAL_TRANSFORM_Y})`}><PlanPitchGeometry geometryId="final-third-shared-plan"/></g>

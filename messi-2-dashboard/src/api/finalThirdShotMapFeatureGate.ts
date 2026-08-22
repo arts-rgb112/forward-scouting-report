@@ -2,3 +2,5 @@
 export const finalThirdShotMapEnabled = (env: Record<string, string | boolean | undefined> = import.meta.env) => env.VITE_FINAL_THIRD_SHOT_MAP_ENABLED === "true";
 /** Exact opt-in for server-owned effective-shot conversion. v1 remains the default. */
 export const finalThirdShotMapV2Enabled = (env: Record<string, string | boolean | undefined> = import.meta.env) => env.VITE_FINAL_THIRD_SHOT_MAP_V2_ENABLED === "true";
+/** Exact opt-in for the server-owned Goal-Mouth v3 summary and renderer. */
+export const finalThirdShotMapV3Enabled = (env: Record<string, string | boolean | undefined> = import.meta.env) => env.VITE_FINAL_THIRD_SHOT_MAP_V3_ENABLED === "true";
