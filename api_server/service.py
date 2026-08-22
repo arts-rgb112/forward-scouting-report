@@ -22,6 +22,8 @@ from .schemas import (
     DuelPressPlayerStats, DuelPressRawMetrics, DuelPressRequestContext,
     DetailReadoutComparison, DuelPressDetailCategory, DuelPressDetailPlayerIdentity,
     DuelPressDetailReadout, DuelPressDetailReadoutEnvelope,
+    ContextualCompareCanonicalContext, ContextualCompareEnvelope,
+    ContextualCompareComponentAvailability, ContextualCompareRequestSide, ContextualCompareSide,
     DuelPressMetricRanks, MetricRankContext, MetricRankRequestEntry,
     MetricRankResult, MetricRankValue,
     LeaderboardPageEnvelope, MessiDataQuality, MessiScoreAnalysis, PlayerAnalysis,
@@ -1602,6 +1604,103 @@ def compare_players(player_ids: tuple[int, ...], season: str, mode: str, scope: 
             generatedAt=dataset_generated_at(),
         ),
     )
+
+
+def _contextual_compare_context(
+    side: ContextualCompareRequestSide,
+) -> ContextualCompareCanonicalContext:
+    context = side.context
+    return ContextualCompareCanonicalContext(
+        season=context.season,
+        mode=context.mode,
+        scope=context.scope if context.mode == "league" else None,
+        competition=context.competition if context.mode == "europe" else None,
+    )
+
+
+def _resolve_contextual_compare_side(
+    player_id: int, taxonomy: str, season: str, mode: str, scope: int, competition: str,
+) -> tuple[str, PlayerResponse | None, ContextualCompareComponentAvailability, PlayerDetailResponse | None, MessiDataQuality | None, TacticalQuadrantAnalysis | None, DuelPressPlayerResponse | None, DuelPressDetailReadoutEnvelope | None]:
+    """Resolve one side from its own static cohort only.
+
+    Europe summary and duel cohorts are static and context-correct, but the
+    legacy detail, quality, and tactical builders read domestic profile and
+    tactical files keyed by the player's home league. Do not label those
+    domestic calculations as a European comparison. Europe therefore returns
+    only its exact-context summary and, for duel-press, its exact-context duel
+    companions; analysis companions declare their unavailable provenance.
+
+    There is deliberately no additional contextual cache here. The builders
+    have their own bounded caches, whose invalidation properties are explicit;
+    an outer cache keyed by an incomplete file-version tuple would only hide
+    changes to player profiles or nested static inputs.
+    """
+    unavailable = ContextualCompareComponentAvailability(
+        detail="unavailable", dataQuality="unavailable", tacticalQuadrant="unavailable",
+    )
+    if season not in supported_seasons() or not build_v2_players(season, mode, scope, competition):
+        return "invalid_context", None, unavailable, None, None, None, None, None
+    summary = find_v2_player(player_id, season, mode, scope, competition)
+    if summary is None:
+        return "unavailable", None, unavailable, None, None, None, None, None
+    if mode == "europe":
+        europe_unavailable = ContextualCompareComponentAvailability(
+            detail="exact_context_analysis_unavailable",
+            dataQuality="exact_context_analysis_unavailable",
+            tacticalQuadrant="exact_context_analysis_unavailable",
+        )
+        if taxonomy == "legacy-v1":
+            return "resolved", summary, europe_unavailable, None, None, None, None, None
+        duel = find_duel_press_player(player_id, season, mode, scope, competition)
+        readout = find_duel_press_detail_readouts(player_id, season, mode, scope, competition)
+        if duel is None or readout is None:
+            return "unavailable", None, unavailable, None, None, None, None, None
+        return "resolved", summary, europe_unavailable, None, None, None, duel.data, readout
+    detail = build_player_detail(player_id, season, mode, scope, competition)
+    quality = build_player_data_quality(player_id, season, mode, scope, competition)
+    if detail is None or quality is None:
+        return "unavailable", None, unavailable, None, None, None, None, None
+    quadrant = build_tactical_quadrant_analysis(player_id, season, mode, scope, competition)
+    resolved_quadrant = quadrant if quadrant is not None and quadrant.available else None
+    league_availability = ContextualCompareComponentAvailability(
+        detail="available", dataQuality="available",
+        tacticalQuadrant="available" if resolved_quadrant is not None else "unavailable",
+    )
+    if taxonomy == "legacy-v1":
+        return "resolved", summary, league_availability, detail, quality.dataQuality, resolved_quadrant, None, None
+    duel = find_duel_press_player(player_id, season, mode, scope, competition)
+    readout = find_duel_press_detail_readouts(player_id, season, mode, scope, competition)
+    if duel is None or readout is None:
+        return "unavailable", None, unavailable, None, None, None, None, None
+    return "resolved", summary, league_availability, detail, quality.dataQuality, resolved_quadrant, duel.data, readout
+
+
+def resolve_contextual_compare_sides(
+    left: ContextualCompareRequestSide, right: ContextualCompareRequestSide,
+) -> ContextualCompareEnvelope:
+    """Return two independently resolved sides in request order without fan-out."""
+    def resolve(side: ContextualCompareRequestSide) -> ContextualCompareSide:
+        request_context = side.context
+        scope = request_context.scope or 8
+        status, summary, component_availability, detail, quality, quadrant, duel, readout = _resolve_contextual_compare_side(
+            side.player.playerId, side.taxonomy, request_context.season,
+            request_context.mode, scope, request_context.competition,
+        )
+        return ContextualCompareSide(
+            player=side.player,
+            taxonomy=side.taxonomy,
+            context=_contextual_compare_context(side),
+            status=status,
+            summary=summary,
+            componentAvailability=component_availability,
+            detail=detail,
+            dataQuality=quality,
+            tacticalQuadrant=quadrant,
+            duelPressPlayer=duel,
+            duelPressDetailReadout=readout,
+        )
+
+    return ContextualCompareEnvelope(left=resolve(left), right=resolve(right))
 
 
 def leaderboard_options() -> dict[str, object]:

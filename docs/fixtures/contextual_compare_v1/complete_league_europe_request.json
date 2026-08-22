@@ -1,0 +1,13 @@
+{
+  "comparisonVersion": "contextual-compare-v1",
+  "left": {
+    "player": {"idNamespace": "fotmob", "playerId": 194165},
+    "taxonomy": "duel-press-v1",
+    "context": {"season": "2025/2026", "mode": "league", "scope": 8, "competition": "all"}
+  },
+  "right": {
+    "player": {"idNamespace": "fotmob", "playerId": 194165},
+    "taxonomy": "legacy-v1",
+    "context": {"season": "2025/2026", "mode": "europe", "scope": null, "competition": "ucl"}
+  }
+}

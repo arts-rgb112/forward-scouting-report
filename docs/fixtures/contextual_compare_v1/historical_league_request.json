@@ -1,0 +1,13 @@
+{
+  "comparisonVersion": "contextual-compare-v1",
+  "left": {
+    "player": {"idNamespace": "fotmob", "playerId": 194165},
+    "taxonomy": "legacy-v1",
+    "context": {"season": "2022/2023", "mode": "league", "scope": 3, "competition": "all"}
+  },
+  "right": {
+    "player": {"idNamespace": "fotmob", "playerId": 194165},
+    "taxonomy": "legacy-v1",
+    "context": {"season": "2024/2025", "mode": "league", "scope": 8, "competition": "all"}
+  }
+}

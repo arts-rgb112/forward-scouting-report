@@ -19,6 +19,7 @@ from .schemas import (
     AgeBand, ApiErrorEnvelope, DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
     DuelPressLeaderboardEnvelope, DuelPressLeaderboardSort, DuelPressPlayerEnvelope,
     DuelPressDetailReadoutEnvelope,
+    ContextualCompareEnvelope, ContextualCompareRequest,
     MetricRanksEnvelope, MetricRanksRequest,
     RatioBenchmarkEnvelope, TacticalSummaryEnvelope, VolumeBenchmarkEnvelope,
     LeaderboardSort, MinutesBand, SortOrder,
@@ -32,6 +33,7 @@ from .service import (
     duel_press_leaderboard_envelope, find_duel_press_player,
     find_duel_press_detail_readouts,
     build_player_detail, build_tactical_quadrant_analysis, compare_players, find_v2_player_summary_timed, leaderboard_options,
+    resolve_contextual_compare_sides,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
     resolve_metric_rank_entries,
@@ -55,6 +57,7 @@ PROTECTED_WATCHLIST_POST_PATHS = {
     "/api/v2/watchlist/data-quality",
 }
 METRIC_RANKS_POST_PATH = "/api/v2/metric-ranks"
+CONTEXTUAL_COMPARE_POST_PATH = "/api/v2/compare/contextual"
 PLAYER_SUMMARY_DEADLINE_SECONDS = 8.0
 _PLAYER_SUMMARY_INFLIGHT: dict[tuple[int, str, str, int, str], asyncio.Task[object]] = {}
 PLAYER_SUMMARY_LOG = logging.getLogger("messi.player_summary")
@@ -96,6 +99,31 @@ METRIC_RANKS_ERROR_RESPONSES = {
             "Request validation error: malformed or extra fields, an unsupported taxonomy, "
             "duplicate keys, or more than 50 entries."
         ),
+    },
+}
+
+CONTEXTUAL_COMPARE_ERROR_RESPONSES = {
+    400: {
+        "model": ApiErrorEnvelope,
+        "description": "The companion middleware rejected an invalid Content-Length header.",
+    },
+    403: {
+        "model": ApiErrorEnvelope,
+        "description": "The request origin is not the production dashboard or an immutable preview.",
+    },
+    413: {
+        "model": ApiErrorEnvelope,
+        "description": "Request body exceeds the 64 KiB companion API limit.",
+    },
+    422: {
+        "description": (
+            "Request validation error: malformed or extra fields, non-FotMob identity, "
+            "invalid taxonomy/version, duplicate sides, or a mode/dimension mismatch."
+        ),
+    },
+    500: {
+        "model": ShotmapServiceErrorEnvelope,
+        "description": "A stored player shotmap snapshot violates the strict shotmap contract.",
     },
 }
 
@@ -184,7 +212,7 @@ async def shotmap_contract_error(_: Request, exc: ShotmapContractViolation) -> J
 async def guard_watchlist_resolution(request: Request, call_next):
     """Bound client-owned batch posts and reject hostile browser origins."""
     path = request.url.path
-    if request.method != "POST" or path not in (*PROTECTED_WATCHLIST_POST_PATHS, METRIC_RANKS_POST_PATH):
+    if request.method != "POST" or path not in (*PROTECTED_WATCHLIST_POST_PATHS, METRIC_RANKS_POST_PATH, CONTEXTUAL_COMPARE_POST_PATH):
         return await call_next(request)
     origin = request.headers.get("origin")
     origin_allowed = (
@@ -636,6 +664,21 @@ def compare_player_details(
     if comparison is None:
         raise HTTPException(status_code=404, detail="One or more players are not in the selected leaderboard")
     return comparison
+
+
+@app.post(
+    "/api/v2/compare/contextual",
+    response_model=ContextualCompareEnvelope,
+    tags=["players"],
+    responses=CONTEXTUAL_COMPARE_ERROR_RESPONSES,
+)
+def contextual_compare(request: ContextualCompareRequest) -> ContextualCompareEnvelope:
+    """Resolve exactly two independent player contexts without cross-cohort reuse.
+
+    Unsupported but well-formed static contexts and missing players are
+    isolated per side as ``invalid_context`` and ``unavailable`` respectively.
+    """
+    return resolve_contextual_compare_sides(request.left, request.right)
 
 
 @app.post(

@@ -1,0 +1,974 @@
+{
+  "comparisonVersion": "contextual-compare-v1",
+  "left": {
+    "player": {
+      "idNamespace": "fotmob",
+      "playerId": 1
+    },
+    "taxonomy": "duel-press-v1",
+    "context": {
+      "season": "2025/2026",
+      "mode": "league",
+      "scope": 8,
+      "competition": null
+    },
+    "status": "resolved",
+    "detail": {
+      "id": 1,
+      "rank": 1,
+      "name": "Fixture player",
+      "position": "Striker",
+      "archetype": "Type A",
+      "age": 25,
+      "minutes": 900,
+      "tier": {
+        "code": "diamond",
+        "level": 1,
+        "label": "Diamond"
+      },
+      "score": 50,
+      "face": "https://example.com/face.png",
+      "league": {
+        "id": 1,
+        "name": "League",
+        "icon": "https://example.com/league.png"
+      },
+      "club": {
+        "id": 2,
+        "name": "Club",
+        "icon": "https://example.com/club.png"
+      },
+      "stats": {
+        "outsideShot": 50,
+        "boxThreat": 50,
+        "dangerZone": 50,
+        "aerial": 50,
+        "groundDuel": 50,
+        "spaceControl": 50
+      },
+      "analysis": {
+        "score": {
+          "value": 50,
+          "rank": 1,
+          "topPercent": 100,
+          "population": 1,
+          "archetype": "Type A"
+        },
+        "volumeRadar": {
+          "kind": "volume",
+          "axes": [
+            {
+              "id": "outsideShot",
+              "label": "outsideShot",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            },
+            {
+              "id": "boxThreat",
+              "label": "boxThreat",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            },
+            {
+              "id": "dangerZone",
+              "label": "dangerZone",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            },
+            {
+              "id": "aerial",
+              "label": "aerial",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            },
+            {
+              "id": "groundDuel",
+              "label": "groundDuel",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            },
+            {
+              "id": "spaceControl",
+              "label": "spaceControl",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            }
+          ]
+        },
+        "ratioRadar": {
+          "kind": "ratio",
+          "axes": [
+            {
+              "id": "outsideShot",
+              "label": "outsideShot",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            },
+            {
+              "id": "boxThreat",
+              "label": "boxThreat",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            },
+            {
+              "id": "dangerZone",
+              "label": "dangerZone",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            },
+            {
+              "id": "aerial",
+              "label": "aerial",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            },
+            {
+              "id": "groundDuel",
+              "label": "groundDuel",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            },
+            {
+              "id": "spaceControl",
+              "label": "spaceControl",
+              "score": 50,
+              "population": 1,
+              "tier": "B",
+              "imputed": false
+            }
+          ]
+        },
+        "rawMetrics": {},
+        "spatial": {
+          "available": false,
+          "heatmapPointCount": 0,
+          "heatmapPoints": [],
+          "shotmapPointCount": 0,
+          "shotmapPoints": [],
+          "shotmapSnapshotAvailable": false,
+          "trueCore": {
+            "available": false,
+            "achievedDensityPct": 0,
+            "zoneIds": [],
+            "zoneCount": 0,
+            "coreAreaPct": 0,
+            "zones": []
+          },
+          "continuousCore": {
+            "available": false,
+            "achievedDensityPct": 0,
+            "coreAreaPct": 0,
+            "densityThreshold": 0,
+            "thresholdOfPeak": 0
+          }
+        }
+      }
+    },
+    "dataQuality": {
+      "spatialAvailable": false,
+      "messiScoreComplete": false,
+      "reason": "spatial_session_missing",
+      "imputedMetrics": [
+        "spaceControl"
+      ],
+      "imputedComponents": [
+        "spatial"
+      ],
+      "observedWeightPct": 80
+    },
+    "duelPressPlayer": {
+      "id": 1,
+      "rank": 1,
+      "name": "Fixture player",
+      "position": "Striker",
+      "archetype": "Type A",
+      "age": 25,
+      "minutes": 900,
+      "tier": {
+        "code": "diamond",
+        "level": 1,
+        "label": "Diamond"
+      },
+      "score": 50,
+      "face": "https://example.com/face.png",
+      "league": {
+        "id": 1,
+        "name": "League",
+        "icon": "https://example.com/league.png"
+      },
+      "club": {
+        "id": 2,
+        "name": "Club",
+        "icon": "https://example.com/club.png"
+      },
+      "stats": {
+        "outsideShot": 50,
+        "boxThreat": 50,
+        "dangerZone": 50,
+        "combinedDuel": 50,
+        "spaceControl": 50,
+        "forwardPress": 50
+      },
+      "components": {
+        "combinedDuelVolume": 50,
+        "combinedDuelEfficiency": 50,
+        "recoveries": 50,
+        "finalThirdPossessionsWon": 50
+      },
+      "pressingRawMetrics": {}
+    },
+    "duelPressDetailReadout": {
+      "context": {
+        "playerId": 1,
+        "idNamespace": "fotmob",
+        "season": "2025/2026",
+        "mode": "league",
+        "scope": 8,
+        "competition": null
+      },
+      "player": {
+        "id": 1,
+        "name": "Fixture player",
+        "position": "Striker",
+        "club": {
+          "id": 2,
+          "name": "Club",
+          "icon": "https://example.com/club.png"
+        },
+        "league": {
+          "id": 1,
+          "name": "League",
+          "icon": "https://example.com/league.png"
+        }
+      },
+      "categories": [
+        {
+          "id": "outsideShot",
+          "label": "outsideShot",
+          "score": 50,
+          "scoreState": "observed",
+          "comparison": {
+            "state": "available",
+            "median": 0,
+            "rank": 1,
+            "percentile": 100,
+            "population": 1
+          },
+          "readouts": [
+            {
+              "id": "outsideBoxShots",
+              "label": "outsideBoxShots",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "outsideBoxXg",
+              "label": "outsideBoxXg",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "outsideBoxXgot",
+              "label": "outsideBoxXgot",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "outsideBoxShotQualityGoals",
+              "label": "outsideBoxShotQualityGoals",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            }
+          ]
+        },
+        {
+          "id": "boxThreat",
+          "label": "boxThreat",
+          "score": 50,
+          "scoreState": "observed",
+          "comparison": {
+            "state": "available",
+            "median": 0,
+            "rank": 1,
+            "percentile": 100,
+            "population": 1
+          },
+          "readouts": [
+            {
+              "id": "inBoxShots",
+              "label": "inBoxShots",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "inBoxXg",
+              "label": "inBoxXg",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "inBoxXgot",
+              "label": "inBoxXgot",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "inBoxFinishingGoals",
+              "label": "inBoxFinishingGoals",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "inBoxFinishingPer90",
+              "label": "inBoxFinishingPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "deepBoxZoneScore",
+              "label": "deepBoxZoneScore",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            }
+          ]
+        },
+        {
+          "id": "dangerZone",
+          "label": "dangerZone",
+          "score": 50,
+          "scoreState": "observed",
+          "comparison": {
+            "state": "available",
+            "median": 0,
+            "rank": 1,
+            "percentile": 100,
+            "population": 1
+          },
+          "readouts": [
+            {
+              "id": "successfulDribblesPer90",
+              "label": "successfulDribblesPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "failedDribblesPer90",
+              "label": "failedDribblesPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "lower_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "dribbleMarginPer90",
+              "label": "dribbleMarginPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "dribbleAttempts",
+              "label": "dribbleAttempts",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "dribbleSuccessRate",
+              "label": "dribbleSuccessRate",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "dangerZoneDensity",
+              "label": "dangerZoneDensity",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            }
+          ]
+        },
+        {
+          "id": "combinedDuel",
+          "label": "combinedDuel",
+          "score": 50,
+          "scoreState": "observed",
+          "comparison": {
+            "state": "available",
+            "median": 0,
+            "rank": 1,
+            "percentile": 100,
+            "population": 1
+          },
+          "readouts": [
+            {
+              "id": "groundDuelAttempts",
+              "label": "groundDuelAttempts",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "groundWonPer90",
+              "label": "groundWonPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "groundLostPer90",
+              "label": "groundLostPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "lower_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "duelMarginPer90",
+              "label": "duelMarginPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "groundDuelWinRate",
+              "label": "groundDuelWinRate",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "aerialDuelAttempts",
+              "label": "aerialDuelAttempts",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "aerialWonPer90",
+              "label": "aerialWonPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "aerialLostPer90",
+              "label": "aerialLostPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "lower_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "aerialMarginPer90",
+              "label": "aerialMarginPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "aerialDuelWinRate",
+              "label": "aerialDuelWinRate",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            }
+          ]
+        },
+        {
+          "id": "spaceControl",
+          "label": "spaceControl",
+          "score": 50,
+          "scoreState": "observed",
+          "comparison": {
+            "state": "available",
+            "median": 0,
+            "rank": 1,
+            "percentile": 100,
+            "population": 1
+          },
+          "readouts": [
+            {
+              "id": "ccaAreaPct",
+              "label": "ccaAreaPct",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "dangerZoneDensity",
+              "label": "dangerZoneDensity",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            }
+          ]
+        },
+        {
+          "id": "forwardPress",
+          "label": "forwardPress",
+          "score": 50,
+          "scoreState": "observed",
+          "comparison": {
+            "state": "available",
+            "median": 0,
+            "rank": 1,
+            "percentile": 100,
+            "population": 1
+          },
+          "readouts": [
+            {
+              "id": "recoveries",
+              "label": "recoveries",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "recoveriesPer90",
+              "label": "recoveriesPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "finalThirdPossessionsWon",
+              "label": "finalThirdPossessionsWon",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            },
+            {
+              "id": "finalThirdPossessionsWonPer90",
+              "label": "finalThirdPossessionsWonPer90",
+              "value": 0,
+              "unit": "count",
+              "direction": "higher_is_better",
+              "source": "player_season_total",
+              "state": "observed",
+              "comparison": {
+                "state": "available",
+                "median": 0,
+                "rank": 1,
+                "percentile": 100,
+                "population": 1
+              }
+            }
+          ]
+        }
+      ],
+      "contextIndicators": [
+        {
+          "id": "netProgressionPer90",
+          "label": "net",
+          "value": 0,
+          "unit": "per90",
+          "direction": "neutral",
+          "source": "server_derived",
+          "state": "server_derived",
+          "comparison": {
+            "state": "available",
+            "median": 0,
+            "rank": 1,
+            "percentile": 100,
+            "population": 1
+          },
+          "formulaId": "net-progression-v1",
+          "formulaVersion": "v1"
+        },
+        {
+          "id": "shootingLuckOrGoalkeeperImpact",
+          "label": "luck",
+          "value": 0,
+          "unit": "goals",
+          "direction": "neutral",
+          "source": "server_derived",
+          "state": "server_derived",
+          "comparison": {
+            "state": "available",
+            "median": 0,
+            "rank": 1,
+            "percentile": 100,
+            "population": 1
+          },
+          "formulaId": "goals-minus-xgot-v1",
+          "formulaVersion": "v1"
+        }
+      ]
+    },
+    "summary": {
+      "id": 1,
+      "rank": 1,
+      "name": "Fixture player",
+      "position": "Striker",
+      "archetype": "Type A",
+      "age": 25,
+      "minutes": 900,
+      "tier": {
+        "code": "diamond",
+        "level": 1,
+        "label": "Diamond"
+      },
+      "score": 50,
+      "face": "https://example.com/face.png",
+      "league": {
+        "id": 1,
+        "name": "League",
+        "icon": "https://example.com/league.png"
+      },
+      "club": {
+        "id": 2,
+        "name": "Club",
+        "icon": "https://example.com/club.png"
+      },
+      "stats": {
+        "outsideShot": 50,
+        "boxThreat": 50,
+        "dangerZone": 50,
+        "aerial": 50,
+        "groundDuel": 50,
+        "spaceControl": 50
+      }
+    },
+    "componentAvailability": {
+      "detail": "available",
+      "dataQuality": "available",
+      "tacticalQuadrant": "unavailable"
+    }
+  },
+  "right": {
+    "player": {
+      "idNamespace": "fotmob",
+      "playerId": 2
+    },
+    "taxonomy": "legacy-v1",
+    "context": {
+      "season": "2025/2026",
+      "mode": "europe",
+      "scope": null,
+      "competition": "ucl"
+    },
+    "status": "unavailable",
+    "detail": null,
+    "dataQuality": null,
+    "tacticalQuadrant": null,
+    "duelPressPlayer": null,
+    "duelPressDetailReadout": null,
+    "summary": null,
+    "componentAvailability": {
+      "detail": "unavailable",
+      "dataQuality": "unavailable",
+      "tacticalQuadrant": "unavailable"
+    }
+  }
+}
