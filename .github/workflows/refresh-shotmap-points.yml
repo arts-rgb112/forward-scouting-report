@@ -12,6 +12,18 @@ on:
         required: true
         type: boolean
         default: false
+      workers:
+        description: Safe bounded player-season workers
+        required: true
+        type: choice
+        options:
+          - "1"
+          - "3"
+        default: "3"
+
+concurrency:
+  group: shotmap-refresh
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -33,7 +45,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          args=(--season-name "${{ inputs.season_name }}")
+          args=(--season-name "${{ inputs.season_name }}" --workers "${{ inputs.workers }}")
           if [[ "${{ inputs.refresh_existing }}" == "true" ]]; then
             args+=(--refresh-existing)
           fi

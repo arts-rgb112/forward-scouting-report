@@ -8,11 +8,13 @@ read the committed JSON snapshot.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import csv
+from dataclasses import dataclass
 import json
 import math
+import os
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +22,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from fotmob_client import FotMobError, fetch_player_multi_season_data
+from fotmob_client import (
+    FotMobError,
+    configure_request_start_interval,
+    fetch_player_multi_season_data,
+)
 from tactical_ratio import _same_competition
 
 
@@ -29,6 +35,21 @@ TACTICAL_PATH = DATA_DIR / "tactical_3zone_ratio.csv"
 OUTPUT_PATH = DATA_DIR / "tactical_shotmap_points.json"
 FOTMOB_PITCH_LENGTH = 105.0
 FOTMOB_PITCH_WIDTH = 68.0
+MIN_REQUEST_INTERVAL_SECONDS = 0.65
+CHECKPOINT_TARGET_INTERVAL = 50
+
+
+class ShotmapBackfillError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class TargetResult:
+    index: int
+    updates: tuple[tuple[str, list[dict[str, object]]], ...] = ()
+    anomalies: tuple[str, ...] = ()
+    fetch_error: str | None = None
+    fatal_error: str | None = None
 
 
 def _number(value: object) -> float | None:
@@ -149,12 +170,89 @@ def _output_path(season: str | None) -> Path:
     return DATA_DIR / f"tactical_shotmap_points_{season.replace('/', '_')}.json"
 
 
+def _write_snapshot_atomic(
+    output_path: Path,
+    snapshot: dict[str, list[dict[str, object]]],
+) -> None:
+    temporary_path = output_path.with_name(
+        f".{output_path.name}.{os.getpid()}.tmp"
+    )
+    try:
+        with temporary_path.open("w", encoding="utf-8") as target:
+            json.dump(snapshot, target, ensure_ascii=False, separators=(",", ":"))
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary_path, output_path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+
+def _fetch_target(
+    task: tuple[int, tuple[tuple[str, str], list[dict[str, str]]]],
+) -> TargetResult:
+    index, ((player_id, season_name), rows) = task
+    try:
+        payload = fetch_player_multi_season_data(
+            player_id, target_season=season_name,
+        )
+    except FotMobError as exc:
+        return TargetResult(index=index, fetch_error=str(exc))
+    except Exception as exc:  # preserve other workers, then fail after checkpoint
+        return TargetResult(
+            index=index,
+            fatal_error=f"{type(exc).__name__}: {exc}",
+        )
+
+    updates: list[tuple[str, list[dict[str, object]]]] = []
+    anomalies: list[str] = []
+    records = payload.get("season_records", []) if isinstance(payload, dict) else []
+    for record in records if isinstance(records, list) else []:
+        if not isinstance(record, dict):
+            continue
+        match = next((
+            row for row in rows
+            if _same_competition(
+                str(row.get("competition_name")),
+                str(record.get("league_name")),
+            )
+        ), None)
+        if match is None:
+            continue
+        stats = record.get("stats")
+        shotmap = stats.get("shotmap") if isinstance(stats, dict) else None
+        if not isinstance(shotmap, list):
+            anomalies.append(
+                "Shotmap source unavailable: preserved session "
+                f"{match['heatmap_key']} (expected list, got "
+                f"{type(shotmap).__name__})"
+            )
+            continue
+        updates.append((
+            str(match["heatmap_key"]),
+            normalize_shotmap(shotmap),
+        ))
+    return TargetResult(
+        index=index,
+        updates=tuple(updates),
+        anomalies=tuple(anomalies),
+    )
+
+
 def build(
     season: str | None = None,
     limit: int | None = None,
     player_id: str | None = None,
     refresh_existing: bool = False,
+    workers: int = 1,
+    request_interval_seconds: float = MIN_REQUEST_INTERVAL_SECONDS,
 ) -> tuple[int, int]:
+    if workers not in {1, 3}:
+        raise ValueError("workers must be 1 or 3")
+    if request_interval_seconds < MIN_REQUEST_INTERVAL_SECONDS:
+        raise ValueError(
+            f"request_interval_seconds must be >= {MIN_REQUEST_INTERVAL_SECONDS}"
+        )
     output_path = _output_path(season)
     existing: dict[str, list[dict[str, object]]] = {}
     if output_path.exists():
@@ -166,58 +264,79 @@ def build(
             pass
     completed = 0
     preserved_invalid_sources = 0
+    fetch_errors = 0
+    fatal_errors: list[str] = []
+    initial_keys = frozenset(existing)
     targets = list(_targets(season, player_id).items())
     if limit is not None:
         targets = targets[:limit]
-    for index, ((player_id, season_name), rows) in enumerate(targets):
-        if (
-            not refresh_existing
-            and rows
-            and all(str(row["heatmap_key"]) in existing for row in rows)
-        ):
-            continue
-        if index:
-            time.sleep(1.2)
-        try:
-            payload = fetch_player_multi_season_data(player_id, target_season=season_name)
-        except FotMobError:
-            continue
-        for record in payload.get("season_records", []):
-            if not isinstance(record, dict):
-                continue
-            match = next((
-                row for row in rows
-                if _same_competition(str(row.get("competition_name")), str(record.get("league_name")))
-            ), None)
-            if match is None:
-                continue
-            stats = record.get("stats")
-            shotmap = stats.get("shotmap") if isinstance(stats, dict) else None
-            if not isinstance(shotmap, list):
-                # Missing/malformed source data is not evidence of a zero-shot
-                # season. Preserve any committed snapshot and surface the
-                # anomaly in workflow logs. Only an explicit [] is verified zero.
-                preserved_invalid_sources += 1
-                print(
-                    "Shotmap source unavailable: preserved session "
-                    f"{match['heatmap_key']} (expected list, got "
-                    f"{type(shotmap).__name__})",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                continue
-            existing[str(match["heatmap_key"])] = normalize_shotmap(shotmap)
-            completed += 1
-        if index % 20 == 0 or completed % 25 == 0:
-            output_path.write_text(json.dumps(existing, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-            print(f"Shotmap progress: {index + 1}/{len(targets)} player-season targets; {completed} sessions updated", flush=True)
-    output_path.write_text(json.dumps(existing, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    pending = [
+        (index, target)
+        for index, target in enumerate(targets)
+        if refresh_existing or not (
+            target[1]
+            and all(str(row["heatmap_key"]) in existing for row in target[1])
+        )
+    ]
+    previous_interval = configure_request_start_interval(
+        request_interval_seconds,
+    )
+    processed = 0
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            # executor.map yields input order even when workers finish out of
+            # order, so insertion/overwrite order stays deterministic.
+            for result in executor.map(_fetch_target, pending):
+                processed += 1
+                for message in result.anomalies:
+                    preserved_invalid_sources += 1
+                    print(message, file=sys.stderr, flush=True)
+                if result.fetch_error:
+                    fetch_errors += 1
+                    print(
+                        f"Shotmap fetch unavailable at target {result.index + 1}: "
+                        f"{result.fetch_error}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                if result.fatal_error:
+                    fatal_errors.append(
+                        f"target {result.index + 1}: {result.fatal_error}"
+                    )
+                for key, points in result.updates:
+                    existing[key] = points
+                    completed += 1
+                if not initial_keys.issubset(existing):
+                    raise ShotmapBackfillError(
+                        "shotmap refresh removed an existing session key"
+                    )
+                if processed % CHECKPOINT_TARGET_INTERVAL == 0:
+                    _write_snapshot_atomic(output_path, existing)
+                    print(
+                        f"Shotmap progress: {processed}/{len(pending)} pending "
+                        f"targets; {completed} sessions updated",
+                        flush=True,
+                    )
+        _write_snapshot_atomic(output_path, existing)
+    finally:
+        configure_request_start_interval(previous_interval)
     if preserved_invalid_sources:
         print(
             "Shotmap source anomalies: "
             f"{preserved_invalid_sources} session(s) preserved without overwrite",
             file=sys.stderr,
             flush=True,
+        )
+    if fetch_errors:
+        print(
+            f"Shotmap fetch errors: {fetch_errors} target(s) preserved",
+            file=sys.stderr,
+            flush=True,
+        )
+    if fatal_errors:
+        raise ShotmapBackfillError(
+            "Unexpected worker failures after preserving checkpoints: "
+            + "; ".join(fatal_errors)
         )
     return len(targets), completed
 
@@ -227,6 +346,12 @@ def main() -> None:
     parser.add_argument("--season-name")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--player-id")
+    parser.add_argument("--workers", type=int, choices=(1, 3), default=3)
+    parser.add_argument(
+        "--request-interval-seconds",
+        type=float,
+        default=MIN_REQUEST_INTERVAL_SECONDS,
+    )
     parser.add_argument(
         "--refresh-existing",
         action="store_true",
@@ -237,7 +362,12 @@ def main() -> None:
     )
     args = parser.parse_args()
     targets, completed = build(
-        args.season_name, args.limit, args.player_id, args.refresh_existing,
+        args.season_name,
+        args.limit,
+        args.player_id,
+        args.refresh_existing,
+        args.workers,
+        args.request_interval_seconds,
     )
     print(f"Shotmap snapshot: {completed}/{targets} player-season targets updated")
 

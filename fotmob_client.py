@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import functools
 import json
+import random
 import re
+import threading
 import time
 from typing import Any
 from urllib.parse import quote
@@ -11,6 +15,80 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 _NEXT_DATA_RE = re.compile(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.DOTALL)
+_RETRY_JITTER_MAX_SECONDS = 0.25
+
+
+class RequestStartLimiter:
+    """Process-wide, thread-safe request-start spacing and shared cooldown."""
+
+    def __init__(
+        self,
+        min_interval_seconds: float = 0.0,
+        *,
+        clock: Any = None,
+        sleeper: Any = None,
+    ) -> None:
+        self._clock = clock or time.monotonic
+        self._sleeper = sleeper or time.sleep
+        self._lock = threading.Lock()
+        self._min_interval = max(0.0, float(min_interval_seconds))
+        self._next_start = 0.0
+        self._cooldown_until = 0.0
+
+    def set_min_interval(self, seconds: float) -> float:
+        with self._lock:
+            previous = self._min_interval
+            self._min_interval = max(0.0, float(seconds))
+            return previous
+
+    def defer(self, seconds: float) -> None:
+        with self._lock:
+            self._cooldown_until = max(
+                self._cooldown_until,
+                self._clock() + max(0.0, float(seconds)),
+            )
+
+    def wait(self) -> None:
+        # Do not reserve future slots before sleeping: a 429 received by
+        # another worker must be able to extend every waiting worker's delay.
+        while True:
+            with self._lock:
+                now = self._clock()
+                ready_at = max(self._next_start, self._cooldown_until)
+                if now >= ready_at:
+                    self._next_start = now + self._min_interval
+                    return
+                delay = ready_at - now
+            self._sleeper(delay)
+
+
+_REQUEST_START_LIMITER = RequestStartLimiter()
+
+
+def configure_request_start_interval(seconds: float) -> float:
+    """Set the process limiter and return its previous interval."""
+
+    return _REQUEST_START_LIMITER.set_min_interval(seconds)
+
+
+def _retry_after_seconds(exc: HTTPError) -> float | None:
+    raw = exc.headers.get("Retry-After") if exc.headers is not None else None
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        try:
+            retry_at = parsedate_to_datetime(str(raw))
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max(
+            0.0,
+            (retry_at - datetime.now(timezone.utc)).total_seconds(),
+        )
+    return max(0.0, value)
 
 
 class FotMobError(Exception):
@@ -32,6 +110,7 @@ def _get(url: str) -> str:
     request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     last_error: Exception | None = None
     for attempt in range(3):
+        _REQUEST_START_LIMITER.wait()
         try:
             with urlopen(request, timeout=15) as response:
                 return response.read().decode("utf-8")
@@ -39,6 +118,14 @@ def _get(url: str) -> str:
             last_error = exc
             if exc.code not in {408, 429, 500, 502, 503, 504}:
                 raise FotMobError(f"FotMob request failed (HTTP {exc.code}).") from exc
+            if exc.code == 429:
+                retry_after = _retry_after_seconds(exc)
+                backoff = 1.5 * (attempt + 1)
+                cooldown = max(backoff, retry_after or 0.0)
+                cooldown += random.uniform(0.0, _RETRY_JITTER_MAX_SECONDS)
+                _REQUEST_START_LIMITER.defer(cooldown)
+                if attempt < 2:
+                    continue
         except (URLError, TimeoutError) as exc:
             last_error = exc
         if attempt < 2:
