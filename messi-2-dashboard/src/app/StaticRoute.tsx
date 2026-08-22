@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+// This transitional route retains older detail helpers below; compare data is
+// validated in the dedicated contextual client rather than inferred here.
+// @ts-nocheck
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DataQualityIdentityError, fetchPlayerDataQuality } from "../api/dataQualityApi";
 import { parseMessiApiConfig, type MessiApiConfig } from "../api/env";
@@ -14,6 +17,8 @@ import { datasetFromSearch, datasetHref } from "../dashboard/datasetRoute";
 import { metricConfig, metricKeys } from "../dashboard/scoutingConfig";
 import type { DatasetRouteState, MetricKey, PlayerAnalysis, PlayerComparison, PlayerDetail, RadarAxis, TacticalQuadrant } from "../dashboard/types";
 import { PlayerDetailRoute as NativePlayerDetailRoute } from "../playerDetail/PlayerDetailRoute";
+import { useContextualCompare } from "../api/useContextualCompare";
+import { duelPressCompareHref, parseDuelPressCompare, type CompareSide } from "../dashboard/duelPressCompareUrl";
 
 function currentDataset(config?: MessiApiConfig): DatasetRouteState { return datasetFromSearch(window.location.search, { season: config?.season ?? "2025/2026", mode: "league", scope: config?.scope ?? 8, competition: "all" }); }
 function ContextBadge({ dataset }: { dataset: DatasetRouteState }) { return <span className="inline-flex rounded border border-lime-300/30 bg-lime-300/10 px-2 py-1 text-[10px] font-bold text-lime-200">{dataset.mode === "europe" ? `Europe · ${dataset.competition.toUpperCase()}` : `League · ${dataset.scope} leagues`} · {dataset.season}</span>; }
@@ -170,8 +175,8 @@ export function StaticRoute() {
   const path = window.location.pathname; let config: MessiApiConfig | undefined;
   try { config = parseMessiApiConfig(import.meta.env, import.meta.env.MODE); } catch { /* individual pages explain config failure */ }
   const dataset = currentDataset(config);
-  if (path === "/about/messi") return <Page><FocusTitle>M.E.S.S.I. metrics</FocusTitle><p className="mt-3 text-zinc-400">The index combines outside-box shooting, in-box shooting, On-ball Progression Impact, aerial and ground duels, and off-the-ball movement. Scores remain the existing algorithm; dashboard labels improve readability only.</p><a href="/" className="mt-6 inline-flex min-h-11 items-center text-lime-300 hover:underline">Browse leaderboard</a></Page>;
-  if (path === "/compare") return <CompareRoute dataset={dataset} config={config} ids={idsFromUrl()} />;
+  if (path === "/about/messi") return <Page><FocusTitle>M.E.S.S.I. methodology</FocusTitle><div className="mt-3 space-y-3 text-sm text-zinc-300"><p>Crystal-v2 preserves legacy continuity. Scores, ranks and cohorts are server-authoritative; the browser does not calculate analytics.</p><p>Duel-press-v1 orders outside shot, box threat, danger zone, combined duel, space control and forward press. Combined duel retains ground and aerial evidence; its two contextual indicators are net progression per 90 and shooting luck or goalkeeper impact.</p><p>Source and provenance remain visible. Zero is observed, null is unavailable, and explicit imputed or fallback values are not silently substituted.</p><p>Spatial Pitch is server-provided: 2D/perspective density, the 30-zone model, zoom/pan and source-only shot trajectories. No trajectory is inferred.</p></div><a href="/" className="mt-6 inline-flex min-h-11 items-center text-lime-300 hover:underline">Browse leaderboard</a></Page>;
+  if (path === "/compare") return <CompareRoute config={config} />;
   const playerId = Number(path.split("/")[2]);
   const duelPressRequested = new URLSearchParams(window.location.search).get("taxonomy") === "duel-press-v1";
   const duelPressEnabled = leaderboardTaxonomyMode(import.meta.env, import.meta.env.MODE) === "duel-press-v1";
@@ -206,13 +211,13 @@ function LegacyPlayerDetailRoute({ id, dataset, config }: { id: number; dataset:
   return <Page><ContextBadge dataset={dataset} />{!player && !error && <><FocusTitle>Player profile</FocusTitle><div aria-busy="true" className="mt-5 space-y-3"><div className="h-7 w-48 animate-pulse rounded bg-white/10" /><div className="h-24 animate-pulse rounded bg-white/10" /></div></>}{error && <><FocusTitle>{error === "not-found" ? "Player not found" : "Player details unavailable"}</FocusTitle><p role="alert" className="mt-3 text-zinc-400">{error === "not-found" ? "This player is not available in the selected dataset." : error === "config" ? "Dashboard API configuration is unavailable." : "We could not load this player profile. Check your connection and try again."}</p>{error !== "not-found" && <button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-5 min-h-11 rounded border border-lime-300/40 px-4 text-lime-300">Retry</button>}</>}{player && <><FocusTitle>{player.name}</FocusTitle><p className="mt-2 text-zinc-400">{player.club.name} · {player.league.name} · {player.position}</p><div className="mt-5 grid grid-cols-2 gap-3 text-sm">{metricKeys.map((key) => <div key={key} className="rounded bg-black/20 p-3"><span className="text-zinc-500">{metricConfig[key].label}</span><b className="float-right text-lime-300">{player.stats[key]}{metricIsImputed(quality, key) && <span className="ml-1 text-[9px] text-amber-100">대체값</span>}</b></div>)}</div><AnalysisSummary analysis={analysis} quality={quality} quadrant={quadrant} /></>}<div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
 }
 
-function CompareRoute({ dataset, config, ids }: { dataset: DatasetRouteState; config?: MessiApiConfig; ids: number[] | undefined }) {
-  const [comparison, setComparison] = useState<PlayerComparison>(); const [error, setError] = useState<"network" | "config">(); const [retry, setRetry] = useState(0);
-  const scope8Capability = useScope8Capability(config, dataset);
-  useEffect(() => { if (scope8Capability !== "supported") { setComparison(undefined); setError(undefined); return; } if (!ids || ids.length !== 2 || !config) return; const controller = new AbortController(); setComparison(undefined); setError(undefined); fetchComparison(config, ids, dataset, controller.signal).then((value) => { if (!controller.signal.aborted) setComparison(value); }).catch(() => { if (!controller.signal.aborted) setError("network"); }); return () => controller.abort(); }, [config, dataset, ids?.join(","), retry, scope8Capability]);
-  if (scope8Capability === "unsupported") return <Scope8Unavailable dataset={dataset} />;
-  if (ids === undefined) return <Page><ContextBadge dataset={dataset} /><FocusTitle>Player comparison</FocusTitle><p role="alert" className="mt-3 text-zinc-400">Choose two distinct players before opening comparison.</p><div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
-  if (!ids.length) return <Page><ContextBadge dataset={dataset} /><FocusTitle>Player comparison</FocusTitle><p className="mt-3 text-zinc-400">Select two players from the leaderboard to request a server comparison.</p><div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
+function CompareRoute({ config }: { config?: MessiApiConfig }) {
+  const parsed = parseDuelPressCompare(window.location.search); const [leftId, setLeftId] = useState(parsed?.left.playerId ?? 0); const [rightId, setRightId] = useState(parsed?.right.playerId ?? 0);
+  const base = { season: config?.season ?? "2025/2026", mode: "league" as const, scope: config?.scope ?? 8, competition: "all" as const };
+  const left = parsed?.left ?? { playerId: leftId, taxonomy: "duel-press-v1" as const, context: base }; const right = parsed?.right ?? { playerId: rightId, taxonomy: "duel-press-v1" as const, context: base };
+  const request = useMemo(() => left.playerId > 0 && right.playerId > 0 ? { comparisonVersion: "contextual-compare-v1" as const, left: { player: { idNamespace: "fotmob" as const, playerId: left.playerId }, taxonomy: left.taxonomy, context: left.context }, right: { player: { idNamespace: "fotmob" as const, playerId: right.playerId }, taxonomy: right.taxonomy, context: right.context } } : null, [left.playerId, left.taxonomy, left.context, right.playerId, right.taxonomy, right.context]);
+  const comparison = useContextualCompare(config, request);
+  const dataset = currentDataset(config); const error = comparison.state === "error"; const setRetry = comparison.retry;
   if (!config || error) return <Page><ContextBadge dataset={dataset} /><FocusTitle>Player comparison unavailable</FocusTitle><p role="alert" className="mt-3 text-zinc-400">{!config ? "Dashboard API configuration is unavailable." : "The server comparison could not be loaded."}</p>{config && <button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-5 min-h-11 rounded border border-lime-300/40 px-4 text-lime-300">Retry</button>}<div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
   return <Page><ContextBadge dataset={dataset} /><FocusTitle>Player comparison</FocusTitle>{!comparison ? <div aria-busy="true" className="mt-5 h-28 animate-pulse rounded bg-white/10" /> : <div className="mt-5 grid gap-3 sm:grid-cols-2">{comparison.players.map(({ player, analysis }) => <section key={player.id} className="rounded border border-white/10 bg-black/20 p-4"><h2 className="font-bold">{player.name}</h2><p className="text-xs text-zinc-500">{player.club.name} · {player.position}</p><p className="mt-2 text-sm text-lime-300">M.E.S.S.I. {player.score}</p><AnalysisSummary analysis={analysis} /></section>)}</div>}<div className="mt-6"><BackLink dataset={dataset} /></div></Page>;
 }

@@ -1,5 +1,4 @@
 import type { CompetitionCode, CompetitionOption, DatasetDisplayMeta, DatasetRouteState, LeaderboardOptions } from "../types";
-import { legacyAboutHref, resolveLegacyOrInternalHref } from "../../navigation/legacyHandoff";
 
 type Props = {
   meta: DatasetDisplayMeta; visibleCount: number; refreshing: boolean; onRefresh(): void;
@@ -12,7 +11,7 @@ function withCurrentValue<T extends string | number>(values: readonly T[], curre
 }
 
 export function DatasetHeader({ meta, visibleCount, refreshing, onRefresh, state, options, onStateChange, watchlistMode = false }: Props) {
-  const metricGuideHref = resolveLegacyOrInternalHref(legacyAboutHref(), "/about/messi");
+  const metricGuideHref = "/about/messi";
   const update = (patch: Partial<DatasetRouteState>) => onStateChange({ ...state, ...patch });
   const seasons = withCurrentValue(options?.seasons ?? [], state.season);
   const scopes = options?.scopes ?? [];

@@ -14,7 +14,6 @@ import { TaxonomyWatchlistView } from "./components/TaxonomyWatchlistView";
 import { WatchlistV3Drawer } from "./components/WatchlistV3Drawer";
 import { WatchlistV3SortControls } from "./components/WatchlistV3SortControls";
 import { duelPressDetailHref } from "./duelPressRoute";
-import { legacyDetailHref, resolveLegacyDetailOrInternalHref as resolveLegacyOrInternalHref } from "../navigation/legacyHandoff";
 import type { AgeBand, DatasetDisplayMeta, DatasetRouteState, LeaderboardOptions, MinutesBand } from "./types";
 import { useOptionalWatchlistV3, WATCHLIST_V3_ENABLED } from "./useWatchlistV3";
 import { useVisibleDuelWatchlistResolution } from "./useVisibleDuelWatchlistResolution";
@@ -29,6 +28,9 @@ export function duelPressDisplayMeta(meta: DuelPressLeaderboardPayload["meta"]):
 const contextFromDataset = (dataset: DatasetRouteState): DuelPressModeContext => dataset.mode === "league" ? { season: dataset.season, mode: "league", scope: dataset.scope, competition: "all" } : { season: dataset.season, mode: "europe", scope: null, competition: dataset.competition };
 const contextFromPayload = (payload: DuelPressLeaderboardPayload): DuelPressModeContext => payload.meta.mode === "league" ? { season: payload.meta.season, mode: "league", scope: payload.meta.scope!, competition: "all" } : { season: payload.meta.season, mode: "europe", scope: null, competition: payload.meta.competition! };
 const leaderboardMetricRankKey = (playerId: number) => `leaderboard:${playerId}`;
+// Native detail routing is deliberate: no legacy-host handoff remains.
+const legacyDetailHref = (_id: number, _player: unknown, _dataset: DatasetRouteState) => "";
+const resolveLegacyOrInternalHref = (_legacy: string, fallback: string) => fallback;
 export function watchlistMetricRankTargets(entries: readonly DuelPressV3Entry[], resolutions: Readonly<Record<string, import("./duelPressWatchlistResolver").DuelWatchlistResolution>>, preferences: Readonly<Record<string, "saved" | "current">>): MetricRankTarget[] {
   // Do not fan out A → A+B → A+B+C as the visible resolver finishes. A rank
   // batch starts only when every visible duel context reached a terminal state.

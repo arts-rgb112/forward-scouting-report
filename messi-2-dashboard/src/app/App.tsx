@@ -3,14 +3,14 @@ import { useEffect, useState } from "react";
 import { PlayersResourceContainer } from "../dashboard/PlayersResourceContainer";
 import { DashboardErrorBoundary } from "../dashboard/components/DashboardErrorBoundary";
 import { StaticRoute } from "./StaticRoute";
-import { legacyAboutHref, legacyCompareHref, resolveLegacyOrInternalHref } from "../navigation/legacyHandoff";
 import { WatchlistV3Provider } from "../dashboard/WatchlistV3Provider";
+import { legacyRootAdapter } from "./legacyRootAdapter";
 
 export function GlobalNavigation({ pathname }: { pathname: string }) {
   const active = pathname === "/compare" ? "compare" : pathname === "/about/messi" ? "about" : "leaderboard";
   const item = "min-h-11 whitespace-nowrap rounded-md px-2 py-2 text-xs font-bold text-zinc-400 hover:text-lime-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 sm:px-3";
-  const compareHref = resolveLegacyOrInternalHref(legacyCompareHref(), "/compare");
-  const aboutHref = resolveLegacyOrInternalHref(legacyAboutHref(), "/about/messi");
+  const compareHref = "/compare";
+  const aboutHref = "/about/messi";
   return <header className="border-b border-white/10 bg-[#080b0c]/95">
     <a href="#main-content" className="sr-only z-[100] rounded bg-lime-300 px-3 py-2 font-bold text-black focus:not-sr-only focus:absolute focus:left-3 focus:top-3">본문으로 건너뛰기</a>
     <div className="mx-auto flex max-w-[1580px] flex-wrap items-center justify-between gap-x-3 px-3 sm:px-6 lg:px-8">
@@ -32,6 +32,7 @@ export default function App() {
     window.addEventListener("popstate", updatePath);
     return () => window.removeEventListener("popstate", updatePath);
   }, []);
+  useEffect(() => { if (window.location.pathname !== "/") return; const target = legacyRootAdapter(window.location.search); if (target) window.location.replace(target); }, []);
   const routed = pathname !== "/";
   return <WatchlistV3Provider><GlobalNavigation pathname={pathname} /><DashboardErrorBoundary resetKey={resetKey} onReset={() => setResetKey((key) => key + 1)}>{routed ? <StaticRoute /> : <PlayersResourceContainer key={resetKey} />}</DashboardErrorBoundary></WatchlistV3Provider>;
 }
