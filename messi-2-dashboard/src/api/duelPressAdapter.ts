@@ -13,7 +13,7 @@ export function adaptDuelPressV2PlayerCore(dto: DuelPressV2Player["data"]): Duel
   return {
     id: dto.id, idNamespace: dto.idNamespace, rank: dto.rank, name: dto.name,
     position: dto.position, archetype: dto.archetype === "Type B" ? "Type B" : "Type A",
-    age: dto.age, minutes: dto.minutes, tier: { ...dto.tier, code: dto.tier.code as "diamond" | "emerald" | "platinum" | "gold" | "silver" | "bronze" }, score: dto.overallRating.percentileScore,
+    age: dto.age, minutes: dto.minutes, tier: { ...dto.tier, code: dto.tier.code as "diamond" | "emerald" | "platinum" | "gold" | "silver" | "bronze" }, score: dto.overallRating.rawValue, scorePercentile: dto.overallRating.percentileScore,
     face: dto.face, nation: dto.nation ? { ...dto.nation } : null, league: { ...dto.league }, club: { ...dto.club },
     stats: {
       outsideShot: dto.stats.outsideShot.percentileScore,
