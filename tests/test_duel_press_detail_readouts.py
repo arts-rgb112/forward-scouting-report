@@ -177,6 +177,31 @@ def test_contract_rejects_wrong_readout_ownership_order_direction_and_context_fo
     _assert_invalid(payload)
 
 
+def test_generic_readout_rejects_invalid_source_state_provenance(monkeypatch) -> None:
+    payload = _payload(monkeypatch)
+    outside_shots = payload["categories"][0]["readouts"][0]
+    outside_shots["source"] = "server_derived"
+    outside_shots["state"] = "observed"
+    outside_shots["formulaId"] = None
+    outside_shots["formulaVersion"] = None
+    _assert_invalid(payload)
+
+    payload = _payload(monkeypatch)
+    outside_shots = payload["categories"][0]["readouts"][0]
+    outside_shots["source"] = "player_season_total"
+    outside_shots["state"] = "server_derived"
+    outside_shots["formulaId"] = "invented-direct-formula-v1"
+    outside_shots["formulaVersion"] = "legacy-bars-v1"
+    _assert_invalid(payload)
+
+    payload = _payload(monkeypatch)
+    outside_shots = payload["categories"][0]["readouts"][0]
+    outside_shots["source"] = "unavailable"
+    outside_shots["state"] = "imputed"
+    outside_shots["missingComponents"] = None
+    _assert_invalid(payload)
+
+
 @pytest.mark.parametrize(
     "mutation",
     [

@@ -408,22 +408,57 @@ class DuelPressDetailReadout(BaseModel):
 
     @model_validator(mode="after")
     def validate_value_state(self) -> "DuelPressDetailReadout":
+        if (self.formulaId is None) != (self.formulaVersion is None):
+            raise ValueError("formulaId and formulaVersion must be supplied together")
+        has_formula = self.formulaId is not None
+        has_missing = bool(self.missingComponents)
+
+        if self.state == "imputed":
+            if self.value is None or self.source != "unavailable" or not has_missing:
+                raise ValueError(
+                    "imputed readouts require a numeric value, unavailable source, and missingComponents"
+                )
+            if has_formula:
+                raise ValueError("imputed readouts cannot carry formula metadata")
+            if self.comparison.state == "available":
+                raise ValueError("imputed readouts cannot have an available player comparison")
+            return self
+
         if self.value is None:
             if self.state not in {"unavailable", "legacy_partial"} or self.source != "unavailable":
                 raise ValueError("null readouts must be unavailable/legacy_partial with unavailable source")
             if self.comparison.state == "available":
                 raise ValueError("null readouts cannot have an available player comparison")
+            if self.state == "legacy_partial" and not has_missing:
+                raise ValueError("legacy_partial readouts require missingComponents")
         elif self.state in {"unavailable", "legacy_partial"} or self.source == "unavailable":
-            raise ValueError("numeric readouts cannot be unavailable")
-        if self.state == "server_derived" and not (self.formulaId and self.formulaVersion):
-            raise ValueError("server-derived readouts require formulaId and formulaVersion")
-        if (self.formulaId is None) != (self.formulaVersion is None):
-            raise ValueError("formulaId and formulaVersion must be supplied together")
-        if (
-            self.state not in {"server_derived", "unavailable"}
-            and self.formulaId is not None
-        ):
-            raise ValueError("only derived or unavailable derived readouts may carry formula metadata")
+            raise ValueError("numeric non-imputed readouts cannot use unavailable semantics")
+
+        if self.source == "server_derived":
+            if self.state != "server_derived" or not has_formula:
+                raise ValueError(
+                    "server_derived source requires server_derived state and formula metadata"
+                )
+        elif self.source in {"player_season_total", "tactical_ratio_static"}:
+            if self.state != "observed" or has_formula:
+                raise ValueError("direct observed sources require observed state and no formula")
+        elif self.source == "league_per90_fallback":
+            if self.state == "observed" and has_formula:
+                raise ValueError("observed league_per90_fallback cannot carry formula metadata")
+            if self.state == "server_derived" and not has_formula:
+                raise ValueError("derived league_per90_fallback requires formula metadata")
+            if self.state not in {"observed", "server_derived"}:
+                raise ValueError("league_per90_fallback has invalid state")
+        elif self.source == "unavailable":
+            if self.state not in {"unavailable", "legacy_partial"}:
+                raise ValueError("unavailable source has invalid state")
+
+        if self.state == "server_derived" and not has_formula:
+            raise ValueError("server-derived readouts require formula metadata")
+        if self.state not in {"server_derived", "unavailable"} and has_formula:
+            raise ValueError("formula metadata is invalid for this readout state")
+        if has_missing and self.state not in {"legacy_partial"}:
+            raise ValueError("missingComponents is only valid for imputed or legacy_partial readouts")
         return self
 
 
