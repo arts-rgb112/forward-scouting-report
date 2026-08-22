@@ -20,6 +20,7 @@ import { useRatioBenchmark } from "./useRatioBenchmark";
 import { tacticalSummaryEnabled, useTacticalSummary } from "./useTacticalSummary";
 import { useVolumeBenchmark } from "./useVolumeBenchmark";
 import { DuelPressDetailReadoutBoard, DuelPressDetailReadoutUnavailable } from "./DuelPressDetailReadoutBoard";
+import { FinalThirdShootingMap } from "./FinalThirdShootingMap";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
 const contextLabel = (context: DatasetRouteState) => context.mode === "league" ? `League · ${context.scope} leagues` : `Europe · ${context.competition.toUpperCase()}`;
@@ -134,6 +135,7 @@ export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality,
   const spatialContextIdentity = `${player.id}|${dataset.season}|${dataset.mode}|${dataset.scope}|${dataset.competition}`;
   const readoutSlot = detailReadoutBoard ?? <PercentileProfile player={player} analysis={analysis} quality={quality} layout="rail"/>;
   return <>
+    <div data-layout="dossier-season-analysis">
     <div data-layout="detail-dossier-layout" className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(528px,596px)_minmax(0,1fr)] xl:items-start">
       <div data-layout="detail-left-rail" className="min-w-0">
         <div data-layout="dossier-season" className="grid min-w-0 items-start gap-4 md:grid-cols-[minmax(0,300px)_minmax(240px,280px)]">
@@ -147,8 +149,10 @@ export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality,
         <div className="mt-2 min-w-0"><SpatialPitch analysis={analysis} contextIdentity={spatialContextIdentity}/></div>
       </section>
     </div>
+    </div>
+    <FinalThirdShootingMap config={config} playerId={player.id} dataset={dataset}/>
     {!analysis && <p className="mt-4 rounded border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">Server analysis is unavailable; no client-side analysis has been invented.</p>}
-    <div data-layout="radar-benchmarks" className="mt-4 min-w-0"><Benchmark player={player} config={config} dataset={dataset}/></div>
+    <div data-layout="sectors-radar"><div data-layout="radar-benchmarks" className="mt-4 min-w-0"><Benchmark player={player} config={config} dataset={dataset}/></div></div>
     {afterPanels}
   </>;
 }
