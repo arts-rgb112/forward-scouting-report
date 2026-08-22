@@ -33,16 +33,22 @@ def _blocked(*, xgot: float | None = None) -> dict[str, object]:
     return {"x": 70, "y": 10, "outcome": "blocked", "xg": 0, "xgot": xgot}
 
 
-def _build(rows: list[dict[str, object]]):
-    player = SimpleNamespace(league=SimpleNamespace(name="Premier League"))
+def _build(
+    rows: list[dict[str, object]], *, mode: str = "league",
+    competition: str = "all", league_name: str = "Premier League",
+    heatmap_key: str = "194165:17:1",
+):
+    player = SimpleNamespace(league=SimpleNamespace(name=league_name))
     service._build_final_third_shot_map_cached.cache_clear()
     try:
         with (
             patch("api_server.service.find_v2_player", return_value=player),
-            patch("api_server.service.get_tactical_ratio_for_session", return_value={"heatmap_key": "194165:17:1"}),
+            patch("api_server.service.get_tactical_session_row", return_value={"heatmap_key": heatmap_key}),
             patch("api_server.service.get_shotmap_snapshot", return_value=(True, rows)),
         ):
-            return service._build_final_third_shot_map_cached(194165, "2025/2026", "league", 8, "all", (1, 1))
+            return service._build_final_third_shot_map_cached(
+                194165, "2025/2026", mode, 8, competition, (1, 1),
+            )
     finally:
         service._build_final_third_shot_map_cached.cache_clear()
 
@@ -183,11 +189,90 @@ def test_endpoint_context_front2_only_and_cors_boundaries() -> None:
     assert allowed.headers["access-control-allow-origin"] == preview
 
 
-def test_europe_context_is_explicitly_unavailable_without_domestic_fallback() -> None:
-    player = SimpleNamespace(league=SimpleNamespace(name="Premier League"))
+def test_europe_context_uses_exact_competition_snapshot_not_domestic_fallback() -> None:
+    payload = _build(
+        [_goal()], mode="europe", competition="ucl",
+        league_name="Champions League", heatmap_key="194165:7:76953",
+    )
+    assert payload is not None
+    assert payload.context.scope is None and payload.context.competition == "ucl"
+    assert payload.data.available is True
+    assert payload.data.shots[0].zoneId == "depth6_lane3"
+
+
+def test_europe_all_unions_exact_uefa_snapshots_and_marks_missing_source_partial() -> None:
+    player = SimpleNamespace(league=SimpleNamespace(name="Champions League"))
+    sessions = {
+        "Champions League": {"heatmap_key": "194165:7:76953"},
+        "Europa League": {"heatmap_key": "194165:679:76984"},
+        "Europa Conference League": None,
+    }
+    rows = {
+        "194165:7:76953": [_goal(x=90, y=50)],
+        "194165:679:76984": [{**_goal(x=80, y=50), "outcome": "on_target"}],
+    }
+
+    def source_snapshot(key: str | None, _season: str):
+        return (key in rows, rows.get(key or "", []))
+
     service._build_final_third_shot_map_cached.cache_clear()
     try:
-        with patch("api_server.service.find_v2_player", return_value=player):
+        with (
+            patch("api_server.service.find_v2_player", return_value=player),
+            patch("api_server.service.get_tactical_session_row", side_effect=lambda _id, name, _season: sessions[name]),
+            patch("api_server.service.get_shotmap_snapshot", side_effect=source_snapshot),
+        ):
+            payload = service._build_final_third_shot_map_cached(
+                194165, "2025/2026", "europe", 8, "all", (1, 1),
+            )
+    finally:
+        service._build_final_third_shot_map_cached.cache_clear()
+    assert payload is not None
+    assert payload.context.scope is None and payload.context.competition == "all"
+    assert payload.data.available is True and payload.data.completeness == "complete"
+    assert len(payload.data.shots) == 2
+    assert {shot.pitchX for shot in payload.data.shots} == {80, 90}
+
+    # A selected tournament with a missing snapshot makes an all-cups union
+    # partial rather than falling back to its first available competition.
+    sessions["Europa Conference League"] = {"heatmap_key": "194165:17015:76960"}
+    service._build_final_third_shot_map_cached.cache_clear()
+    try:
+        with (
+            patch("api_server.service.find_v2_player", return_value=player),
+            patch("api_server.service.get_tactical_session_row", side_effect=lambda _id, name, _season: sessions[name]),
+            patch("api_server.service.get_shotmap_snapshot", side_effect=source_snapshot),
+        ):
+            partial = service._build_final_third_shot_map_cached(
+                194165, "2025/2026", "europe", 8, "all", (1, 1),
+            )
+    finally:
+        service._build_final_third_shot_map_cached.cache_clear()
+    assert partial is not None and partial.data.available is True
+    assert partial.data.completeness == "partial"
+    assert len(partial.data.partialCoverage) == 30
+    assert {issue.field for issue in partial.data.partialCoverage} == {
+        "volume", "conversionRatePct", "qualityScore",
+    }
+    assert all(
+        zone.state == "partial"
+        and zone.fieldStates.volume.state == "partial"
+        and zone.fieldStates.conversionRatePct.state == "partial"
+        and zone.fieldStates.qualityScore.state == "partial"
+        and zone.reason and zone.reason.startswith("competition_snapshot_unavailable:")
+        for zone in partial.data.zones
+    )
+
+
+def test_europe_context_without_its_own_snapshot_stays_unavailable() -> None:
+    player = SimpleNamespace(league=SimpleNamespace(name="Champions League"))
+    service._build_final_third_shot_map_cached.cache_clear()
+    try:
+        with (
+            patch("api_server.service.find_v2_player", return_value=player),
+            patch("api_server.service.get_tactical_session_row", return_value={"heatmap_key": "194165:7:76953"}),
+            patch("api_server.service.get_shotmap_snapshot", return_value=(False, [])),
+        ):
             payload = service._build_final_third_shot_map_cached(194165, "2025/2026", "europe", 8, "ucl", (1, 1))
     finally:
         service._build_final_third_shot_map_cached.cache_clear()
@@ -195,6 +280,7 @@ def test_europe_context_is_explicitly_unavailable_without_domestic_fallback() ->
     assert payload.context.scope is None and payload.context.competition == "ucl"
     assert payload.data.available is False
     assert payload.data.completeness == "unavailable"
+    assert payload.data.reason == service.FINAL_THIRD_COMPETITION_UNAVAILABLE_REASON
     assert all(zone.shotsTotal is None for zone in payload.data.zones)
 
 

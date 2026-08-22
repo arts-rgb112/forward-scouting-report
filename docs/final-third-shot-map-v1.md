@@ -40,9 +40,20 @@ average(xGOT) - average(xG)
 Missing xGOT/xG is never coerced to zero. The affected zone's quality field is
 `partial` or `unavailable`, and `partialCoverage` names the zone and cause.
 No selected-context snapshot returns an unavailable envelope and ten
-unavailable tiles, never a fabricated zero-volume result. Current committed
-shot snapshots are domestic league-season sessions; Europe responses are thus
-explicitly unavailable until competition-scoped event snapshots are loaded.
+unavailable tiles, never a fabricated zero-volume result. Snapshot keys are
+competition-scoped: an exact Europe request may only read its matching
+UEFA-session key, never a domestic league-season key. `competition=all` is a
+union of the player's exact UCL, UEL, and UECL session shards for that season;
+it never chooses an arbitrary first tournament. A missing member makes a
+non-empty union `partial` and is named in `partialCoverage`; a union with no
+committed member returns the explicit unavailable envelope.
+Because a partial union's counts and rates describe only a known subset, every
+tile's `volume` and `conversionRatePct` field state (and the tile state) is
+`partial` with the same missing-competition reason. `qualityScore` is likewise
+`partial` when the available member supplies an eligible xG/xGOT subset; it
+remains explicitly `unavailable` when that subset has no eligible quality
+events. Numeric values remain the authoritative observed subset rather than
+fabricated whole-context estimates.
 
 ## Goal-mouth coordinates and identifiers
 
@@ -75,3 +86,16 @@ mtime/size revision. A static refresh invalidates the aggregate without
 provider fan-out. The endpoint uses the existing exact production/immutable
 preview CORS allowlist with `allow_credentials=false`; hostile origins receive
 no `Access-Control-Allow-Origin` header.
+
+## Snapshot coverage audit
+
+`scripts/audit_final_third_shotmap_coverage.py` reads only committed tactical
+rows and shotmap shards. It writes
+`data/final_third_shotmap_coverage.csv` (coverage by exact API context family)
+and `data/final_third_shotmap_unavailable_contexts.csv` (player/context keys
+that still have no source snapshot). Domestic scope entries are repeated only
+where that league is eligible for the requested comparison scope. European
+entries retain their exact `ucl`, `uel`, or `uecl` code and also include the
+real `all` union context. The report distinguishes full availability,
+partially sourced unions, and unavailable contexts, and reads each season
+shard with the same lookup used by the API.

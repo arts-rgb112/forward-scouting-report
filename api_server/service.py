@@ -17,7 +17,9 @@ from rankings import (
     get_spear_leaderboard, get_tactical_matrix,
 )
 from spear_cohort import load_spear_cohort
-from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
+from tactical_ratio import (
+    get_heatmap_points, get_tactical_ratio_for_session, get_tactical_session_row,
+)
 from shotmap_store_v2 import (
     ShotmapSnapshotError, get_shotmap_snapshot, shotmap_snapshot_revision,
 )
@@ -2286,9 +2288,15 @@ FINAL_THIRD_ZONE_ORDER = tuple(
 )
 FINAL_THIRD_SOURCE = "player_season_shot_events"
 FINAL_THIRD_UNAVAILABLE_REASON = "shotmap_snapshot_unavailable_for_selected_context"
+FINAL_THIRD_COMPETITION_UNAVAILABLE_REASON = "competition_scoped_shot_event_snapshot_unavailable"
 FINAL_THIRD_QUALITY_FORMULA = "avg-xgot-minus-avg-xg-v1"
 GOAL_MOUTH_WIDTH_PITCH_PCT = 7.32 / 68.0 * 100.0
 GOAL_MOUTH_CROSSBAR_METERS = 2.44
+FINAL_THIRD_EUROPE_COMPETITIONS = (
+    ("ucl", "Champions League"),
+    ("uel", "Europa League"),
+    ("uecl", "Europa Conference League"),
+)
 
 
 def _final_third_segment(value: float, boundaries: tuple[float, ...]) -> int:
@@ -2389,6 +2397,52 @@ def _shotmap_point_without_internal_identity(raw: object) -> tuple[object, str |
     return {key: value for key, value in raw.items() if key != "sourceEventId"}, event_id
 
 
+def _final_third_source_snapshots(
+    player_id: int, player: PlayerResponse, season: str, mode: str, competition: str,
+) -> tuple[list[tuple[str, list[object]]], list[str], str]:
+    """Load only exact selected-context snapshot shards, never a fallback.
+
+    ``europe=all`` is a true union of the UEFA tournaments in which this
+    player has an exact tactical session. It may be partial when one of those
+    committed competition snapshots is unavailable, but it must never choose
+    a single competition based on the arbitrary display league of an all-cup
+    aggregate row.
+    """
+
+    if mode == "league":
+        competition_names = (player.league.name,)
+        unavailable_reason = FINAL_THIRD_UNAVAILABLE_REASON
+    elif competition == "all":
+        competition_names = tuple(label for _, label in FINAL_THIRD_EUROPE_COMPETITIONS)
+        unavailable_reason = FINAL_THIRD_COMPETITION_UNAVAILABLE_REASON
+    else:
+        competition_names = tuple(
+            label for code, label in FINAL_THIRD_EUROPE_COMPETITIONS if code == competition
+        )
+        unavailable_reason = FINAL_THIRD_COMPETITION_UNAVAILABLE_REASON
+
+    snapshots: list[tuple[str, list[object]]] = []
+    missing_keys: list[str] = []
+    seen_keys: set[str] = set()
+    for competition_name in competition_names:
+        tactical = get_tactical_session_row(player_id, competition_name, season)
+        heatmap_key = str(tactical.get("heatmap_key") or "") if tactical else ""
+        if not heatmap_key or heatmap_key in seen_keys:
+            continue
+        seen_keys.add(heatmap_key)
+        try:
+            snapshot_available, source_rows = get_shotmap_snapshot(heatmap_key, season)
+        except ShotmapSnapshotError as exc:
+            raise ShotmapContractViolation(
+                "Final-third shotmap snapshot could not be loaded or validated."
+            ) from exc
+        if snapshot_available:
+            snapshots.append((heatmap_key, list(source_rows)))
+        else:
+            missing_keys.append(heatmap_key)
+    return snapshots, missing_keys, unavailable_reason
+
+
 @lru_cache(maxsize=128)
 def _build_final_third_shot_map_cached(
     player_id: int, season: str, mode: str, scope: int, competition: str,
@@ -2404,86 +2458,81 @@ def _build_final_third_shot_map_cached(
         scope=scope if mode == "league" else None,
         competition=competition if mode == "europe" else None,
     )
-    # The committed shot event snapshots are player *league-season* sessions.
-    # Europe contexts cannot safely reuse domestic events, so they are honest
-    # unavailable responses until competition-scoped source snapshots exist.
-    if mode != "league":
-        reason = "competition_scoped_shot_event_snapshot_unavailable"
+    snapshots, missing_source_keys, unavailable_reason = _final_third_source_snapshots(
+        player_id, player, season, mode, competition,
+    )
+    if not snapshots:
         return FinalThirdShotEnvelope(
             context=context,
             data=FinalThirdShotData(
-                available=False, completeness="unavailable", reason=reason,
+                available=False, completeness="unavailable", reason=unavailable_reason,
                 qualityScale=FinalThirdQualityScale(),
                 markerSizeScale=FinalThirdMarkerSizeScale(),
                 goalMouthCoordinates=FinalThirdGoalMouthCoordinates(),
-                zones=_final_third_unavailable_zones(reason), shots=[],
-                endpointUnavailableCount=0, endpointUnavailableShotIds=[], partialCoverage=[],
-            ),
-        )
-
-    tactical = get_tactical_ratio_for_session(player_id, player.league.name, season)
-    heatmap_key = str(tactical.get("heatmap_key")) if tactical and tactical.get("heatmap_key") else None
-    try:
-        snapshot_available, source_rows = get_shotmap_snapshot(heatmap_key, season)
-    except ShotmapSnapshotError as exc:
-        raise ShotmapContractViolation("Final-third shotmap snapshot could not be loaded or validated.") from exc
-    if not snapshot_available:
-        return FinalThirdShotEnvelope(
-            context=context,
-            data=FinalThirdShotData(
-                available=False, completeness="unavailable", reason=FINAL_THIRD_UNAVAILABLE_REASON,
-                qualityScale=FinalThirdQualityScale(),
-                markerSizeScale=FinalThirdMarkerSizeScale(),
-                goalMouthCoordinates=FinalThirdGoalMouthCoordinates(),
-                zones=_final_third_unavailable_zones(FINAL_THIRD_UNAVAILABLE_REASON), shots=[],
+                zones=_final_third_unavailable_zones(unavailable_reason), shots=[],
                 endpointUnavailableCount=0, endpointUnavailableShotIds=[], partialCoverage=[],
             ),
         )
 
     zone_points: dict[str, list[ShotmapPoint]] = {zone_id: [] for zone_id in FINAL_THIRD_ZONE_ORDER}
     shots: list[FinalThirdShot] = []
-    coverage: list[FinalThirdCoverageIssue] = []
-    snapshot_identity_occurrences: dict[str, int] = {}
-    provider_event_ids: set[str] = set()
-    for source_index, raw in enumerate(source_rows):
-        raw_point, provider_event_id = _shotmap_point_without_internal_identity(raw)
-        try:
-            point = ShotmapPoint.model_validate(raw_point)
-        except (TypeError, ValueError, ValidationError) as exc:
-            raise ShotmapContractViolation(
-                f"Final-third shotmap snapshot contains an invalid record at index {source_index}."
-            ) from exc
-        zone_id = _final_third_zone_id(point.x, point.y)
-        # Allocate identity before filtering: the value is stable if a future
-        # taxonomy adds depth bands without altering this source record list.
-        if provider_event_id is not None:
-            if provider_event_id in provider_event_ids:
-                raise ShotmapContractViolation(
-                    f"Final-third shotmap snapshot repeats provider event id {provider_event_id!r}."
-                )
-            provider_event_ids.add(provider_event_id)
-            shot_id, shot_id_source = provider_event_id, "provider_event"
-        else:
-            canonical = json.dumps(raw_point, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-            occurrence = snapshot_identity_occurrences.get(canonical, 0)
-            snapshot_identity_occurrences[canonical] = occurrence + 1
-            shot_id = _final_third_snapshot_identity(heatmap_key, raw_point, occurrence)
-            shot_id_source = "snapshot_record"
-        if zone_id not in zone_points:
-            continue
-        endpoint_available, mouth_y, mouth_z, endpoint_reason, unexpected_missing = _final_third_endpoint(point)
-        shot = FinalThirdShot(
-            shotId=shot_id, zoneId=zone_id, pitchX=point.x, pitchY=point.y,
-            shotIdSource=shot_id_source, xg=point.xg, xgot=point.xgot, status=point.outcome,
-            endpointAvailable=endpoint_available, goalMouthY=mouth_y,
-            goalMouthZ=mouth_z, endpointReason=endpoint_reason,
+    source_partial_reason = (
+        "competition_snapshot_unavailable:" + ",".join(missing_source_keys)
+        if missing_source_keys else None
+    )
+    coverage: list[FinalThirdCoverageIssue] = [
+        FinalThirdCoverageIssue(
+            zoneId=zone_id, field=field, reason=source_partial_reason,
         )
-        shots.append(shot)
-        zone_points[zone_id].append(point)
-        if unexpected_missing:
-            coverage.append(FinalThirdCoverageIssue(
-                shotId=shot_id, field="goalMouthEndpoint", reason=endpoint_reason or "source_endpoint_unavailable",
-            ))
+        for zone_id in FINAL_THIRD_ZONE_ORDER
+        for field in ("volume", "conversionRatePct", "qualityScore")
+        if source_partial_reason is not None
+    ]
+    snapshot_identity_occurrences: dict[str, int] = {}
+    provider_event_occurrences: dict[str, int] = {}
+    for heatmap_key, source_rows in snapshots:
+        for source_index, raw in enumerate(source_rows):
+            raw_point, provider_event_id = _shotmap_point_without_internal_identity(raw)
+            try:
+                point = ShotmapPoint.model_validate(raw_point)
+            except (TypeError, ValueError, ValidationError) as exc:
+                raise ShotmapContractViolation(
+                    "Final-third shotmap snapshot contains an invalid record "
+                    f"at {heatmap_key} index {source_index}."
+                ) from exc
+            zone_id = _final_third_zone_id(point.x, point.y)
+            # Allocate identity before filtering: the value is stable if a future
+            # taxonomy adds depth bands without altering this source record list.
+            if provider_event_id is not None:
+                occurrence = provider_event_occurrences.get(provider_event_id, 0)
+                provider_event_occurrences[provider_event_id] = occurrence + 1
+                shot_id = (
+                    provider_event_id if occurrence == 0
+                    else f"provider_event:{heatmap_key}:{provider_event_id}:{occurrence}"
+                )
+                shot_id_source = "provider_event"
+            else:
+                canonical = json.dumps(raw_point, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+                occurrence_key = f"{heatmap_key}\x00{canonical}"
+                occurrence = snapshot_identity_occurrences.get(occurrence_key, 0)
+                snapshot_identity_occurrences[occurrence_key] = occurrence + 1
+                shot_id = _final_third_snapshot_identity(heatmap_key, raw_point, occurrence)
+                shot_id_source = "snapshot_record"
+            if zone_id not in zone_points:
+                continue
+            endpoint_available, mouth_y, mouth_z, endpoint_reason, unexpected_missing = _final_third_endpoint(point)
+            shot = FinalThirdShot(
+                shotId=shot_id, zoneId=zone_id, pitchX=point.x, pitchY=point.y,
+                shotIdSource=shot_id_source, xg=point.xg, xgot=point.xgot, status=point.outcome,
+                endpointAvailable=endpoint_available, goalMouthY=mouth_y,
+                goalMouthZ=mouth_z, endpointReason=endpoint_reason,
+            )
+            shots.append(shot)
+            zone_points[zone_id].append(point)
+            if unexpected_missing:
+                coverage.append(FinalThirdCoverageIssue(
+                    shotId=shot_id, field="goalMouthEndpoint", reason=endpoint_reason or "source_endpoint_unavailable",
+                ))
 
     zones: list[FinalThirdShotZone] = []
     for zone_id in FINAL_THIRD_ZONE_ORDER:
@@ -2491,15 +2540,23 @@ def _build_final_third_shot_map_cached(
         depth, lane = int(zone_id[5]), int(zone_id[-1])
         shots_total = len(points)
         if shots_total == 0:
-            reason = "no_attempts_in_zone"
+            reason = source_partial_reason or "no_attempts_in_zone"
             zones.append(FinalThirdShotZone(
                 zoneId=zone_id, depth=depth, lane=lane, shotsTotal=0, goals=0,
                 conversionRatePct=None, qualityScore=None, qualityEligibleShots=0,
-                state="observed", source=FINAL_THIRD_SOURCE,
+                state="partial" if source_partial_reason else "observed",
+                reason=source_partial_reason, source=FINAL_THIRD_SOURCE,
                 fieldStates=FinalThirdZoneFieldStates(
-                    volume=_final_third_field("observed"),
-                    conversionRatePct=_final_third_field("unavailable", reason),
-                    qualityScore=_final_third_field("unavailable", reason, FINAL_THIRD_QUALITY_FORMULA),
+                    volume=_final_third_field(
+                        "partial" if source_partial_reason else "observed", source_partial_reason,
+                    ),
+                    conversionRatePct=_final_third_field(
+                        "partial" if source_partial_reason else "unavailable", reason,
+                    ),
+                    qualityScore=_final_third_field(
+                        "partial" if source_partial_reason else "unavailable",
+                        reason, FINAL_THIRD_QUALITY_FORMULA,
+                    ),
                 ),
             ))
             continue
@@ -2513,7 +2570,7 @@ def _build_final_third_shot_map_cached(
                 - sum(xg for xg, _ in eligible) / len(eligible),
                 4,
             )
-            quality_state = "partial" if missing_quality else "observed"
+            quality_state = "partial" if (missing_quality or source_partial_reason) else "observed"
             quality_reason = (
                 f"xgot_or_xg_unavailable_for_{missing_quality}_shots" if missing_quality else None
             )
@@ -2525,16 +2582,25 @@ def _build_final_third_shot_map_cached(
             coverage.append(FinalThirdCoverageIssue(
                 zoneId=zone_id, field="qualityScore", reason=quality_reason or "quality_source_unavailable",
             ))
+        if source_partial_reason and quality_reason:
+            quality_reason = f"{source_partial_reason};{quality_reason}"
+        elif source_partial_reason:
+            quality_reason = source_partial_reason
         zones.append(FinalThirdShotZone(
             zoneId=zone_id, depth=depth, lane=lane, shotsTotal=shots_total, goals=goals,
             conversionRatePct=conversion, qualityScore=quality,
             qualityEligibleShots=len(eligible),
-            state="partial" if missing_quality else "observed",
+            state="partial" if (missing_quality or source_partial_reason) else "observed",
             reason=quality_reason,
             source=FINAL_THIRD_SOURCE,
             fieldStates=FinalThirdZoneFieldStates(
-                volume=_final_third_field("observed"),
-                conversionRatePct=_final_third_field("observed", formula_version="goals-divided-by-shots-v1"),
+                volume=_final_third_field(
+                    "partial" if source_partial_reason else "observed", source_partial_reason,
+                ),
+                conversionRatePct=_final_third_field(
+                    "partial" if source_partial_reason else "observed",
+                    source_partial_reason, formula_version="goals-divided-by-shots-v1",
+                ),
                 qualityScore=_final_third_field(quality_state, quality_reason, FINAL_THIRD_QUALITY_FORMULA),
             ),
         ))

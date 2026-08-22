@@ -1,0 +1,136 @@
+season_name,mode,scope,competition,competition_name,api_contexts,source_sessions,available_contexts,partial_contexts,unavailable_contexts,snapshot_available,snapshot_missing,verified_zero_shot_sessions,shots_total
+2021/2022,europe,,all,All European competitions,541,572,514,0,27,545,27,8,5392
+2021/2022,europe,,ucl,UEFA Champions League,183,183,181,0,2,181,2,3,1874
+2021/2022,europe,,uecl,UEFA Europa Conference League,189,189,167,0,22,167,22,2,1609
+2021/2022,europe,,uel,UEFA Europa League,200,200,197,0,3,197,3,3,1909
+2021/2022,league,3,all,LaLiga,170,170,170,0,0,170,0,0,5917
+2021/2022,league,3,all,Premier League,200,200,199,0,1,199,1,0,7529
+2021/2022,league,3,all,Serie A,192,192,192,0,0,192,0,0,7393
+2021/2022,league,5,all,Bundesliga,181,181,181,0,0,181,0,0,6009
+2021/2022,league,5,all,LaLiga,170,170,170,0,0,170,0,0,5917
+2021/2022,league,5,all,Ligue 1,188,188,188,0,0,188,0,0,6770
+2021/2022,league,5,all,Premier League,200,200,199,0,1,199,1,0,7529
+2021/2022,league,5,all,Serie A,192,192,192,0,0,192,0,0,7393
+2021/2022,league,7,all,Bundesliga,181,181,181,0,0,181,0,0,6009
+2021/2022,league,7,all,Eredivisie,159,159,158,0,1,158,1,0,5601
+2021/2022,league,7,all,LaLiga,170,170,170,0,0,170,0,0,5917
+2021/2022,league,7,all,Ligue 1,188,188,188,0,0,188,0,0,6770
+2021/2022,league,7,all,Premier League,200,200,199,0,1,199,1,0,7529
+2021/2022,league,7,all,Primeira Liga,133,133,129,0,4,129,4,0,4418
+2021/2022,league,7,all,Serie A,192,192,192,0,0,192,0,0,7393
+2021/2022,league,8,all,Belgian Pro League,163,163,160,0,3,160,3,0,6152
+2021/2022,league,8,all,Bundesliga,181,181,181,0,0,181,0,0,6009
+2021/2022,league,8,all,Eredivisie,159,159,158,0,1,158,1,0,5601
+2021/2022,league,8,all,LaLiga,170,170,170,0,0,170,0,0,5917
+2021/2022,league,8,all,Ligue 1,188,188,188,0,0,188,0,0,6770
+2021/2022,league,8,all,Premier League,200,200,199,0,1,199,1,0,7529
+2021/2022,league,8,all,Primeira Liga,133,133,129,0,4,129,4,0,4418
+2021/2022,league,8,all,Serie A,192,192,192,0,0,192,0,0,7393
+2022/2023,europe,,all,All European competitions,528,552,501,1,27,523,29,8,5444
+2022/2023,europe,,ucl,UEFA Champions League,198,198,195,0,3,195,3,4,2078
+2022/2023,europe,,uecl,UEFA Europa Conference League,175,175,156,0,19,156,19,2,1626
+2022/2023,europe,,uel,UEFA Europa League,179,179,172,0,7,172,7,2,1740
+2022/2023,league,3,all,LaLiga,172,172,171,0,1,171,1,0,6555
+2022/2023,league,3,all,Premier League,178,178,177,0,1,177,1,0,7107
+2022/2023,league,3,all,Serie A,204,204,204,0,0,204,0,0,7381
+2022/2023,league,5,all,Bundesliga,171,171,171,0,0,171,0,0,5749
+2022/2023,league,5,all,LaLiga,172,172,171,0,1,171,1,0,6555
+2022/2023,league,5,all,Ligue 1,193,193,193,0,0,193,0,0,7008
+2022/2023,league,5,all,Premier League,178,178,177,0,1,177,1,0,7107
+2022/2023,league,5,all,Serie A,204,204,204,0,0,204,0,0,7381
+2022/2023,league,7,all,Bundesliga,171,171,171,0,0,171,0,0,5749
+2022/2023,league,7,all,Eredivisie,173,173,172,0,1,172,1,0,6483
+2022/2023,league,7,all,LaLiga,172,172,171,0,1,171,1,0,6555
+2022/2023,league,7,all,Ligue 1,193,193,193,0,0,193,0,0,7008
+2022/2023,league,7,all,Premier League,178,178,177,0,1,177,1,0,7107
+2022/2023,league,7,all,Primeira Liga,144,144,142,0,2,142,2,0,4875
+2022/2023,league,7,all,Serie A,204,204,204,0,0,204,0,0,7381
+2022/2023,league,8,all,Belgian Pro League,151,151,149,0,2,149,2,0,5250
+2022/2023,league,8,all,Bundesliga,171,171,171,0,0,171,0,0,5749
+2022/2023,league,8,all,Eredivisie,173,173,172,0,1,172,1,0,6483
+2022/2023,league,8,all,LaLiga,172,172,171,0,1,171,1,0,6555
+2022/2023,league,8,all,Ligue 1,193,193,193,0,0,193,0,0,7008
+2022/2023,league,8,all,Premier League,178,178,177,0,1,177,1,0,7107
+2022/2023,league,8,all,Primeira Liga,144,144,142,0,2,142,2,0,4875
+2022/2023,league,8,all,Serie A,204,204,204,0,0,204,0,0,7381
+2023/2024,europe,,all,All European competitions,561,579,531,0,30,548,31,13,5832
+2023/2024,europe,,ucl,UEFA Champions League,211,211,211,0,0,211,0,3,2299
+2023/2024,europe,,uecl,UEFA Europa Conference League,183,183,160,0,23,160,23,8,1623
+2023/2024,europe,,uel,UEFA Europa League,185,185,177,0,8,177,8,2,1910
+2023/2024,league,3,all,LaLiga,173,173,173,0,0,173,0,0,6407
+2023/2024,league,3,all,Premier League,186,186,185,0,1,185,1,0,8003
+2023/2024,league,3,all,Serie A,196,196,196,0,0,196,0,0,7296
+2023/2024,league,5,all,Bundesliga,189,189,189,0,0,189,0,0,6532
+2023/2024,league,5,all,LaLiga,173,173,173,0,0,173,0,0,6407
+2023/2024,league,5,all,Ligue 1,167,167,167,0,0,167,0,0,5528
+2023/2024,league,5,all,Premier League,186,186,185,0,1,185,1,0,8003
+2023/2024,league,5,all,Serie A,196,196,196,0,0,196,0,0,7296
+2023/2024,league,7,all,Bundesliga,189,189,189,0,0,189,0,0,6532
+2023/2024,league,7,all,Eredivisie,182,182,182,0,0,182,0,1,6484
+2023/2024,league,7,all,LaLiga,173,173,173,0,0,173,0,0,6407
+2023/2024,league,7,all,Ligue 1,167,167,167,0,0,167,0,0,5528
+2023/2024,league,7,all,Premier League,186,186,185,0,1,185,1,0,8003
+2023/2024,league,7,all,Primeira Liga,141,141,139,0,2,139,2,0,5129
+2023/2024,league,7,all,Serie A,196,196,196,0,0,196,0,0,7296
+2023/2024,league,8,all,Belgian Pro League,134,134,134,0,0,134,0,1,5363
+2023/2024,league,8,all,Bundesliga,189,189,189,0,0,189,0,0,6532
+2023/2024,league,8,all,Eredivisie,182,182,182,0,0,182,0,1,6484
+2023/2024,league,8,all,LaLiga,173,173,173,0,0,173,0,0,6407
+2023/2024,league,8,all,Ligue 1,167,167,167,0,0,167,0,0,5528
+2023/2024,league,8,all,Premier League,186,186,185,0,1,185,1,0,8003
+2023/2024,league,8,all,Primeira Liga,141,141,139,0,2,139,2,0,5129
+2023/2024,league,8,all,Serie A,196,196,196,0,0,196,0,0,7296
+2024/2025,europe,,all,All European competitions,633,635,583,1,50,584,51,4,7719
+2024/2025,europe,,ucl,UEFA Champions League,241,241,240,0,1,240,1,2,3350
+2024/2025,europe,,uecl,UEFA Europa Conference League,157,157,131,0,26,131,26,1,1608
+2024/2025,europe,,uel,UEFA Europa League,237,237,213,0,24,213,24,1,2761
+2024/2025,league,3,all,LaLiga,183,183,183,0,0,183,0,0,6308
+2024/2025,league,3,all,Premier League,187,187,187,0,0,187,0,0,7567
+2024/2025,league,3,all,Serie A,203,203,202,0,1,202,1,0,6758
+2024/2025,league,5,all,Bundesliga,181,181,181,0,0,181,0,0,5953
+2024/2025,league,5,all,LaLiga,183,183,183,0,0,183,0,0,6308
+2024/2025,league,5,all,Ligue 1,175,175,175,0,0,175,0,0,5674
+2024/2025,league,5,all,Premier League,187,187,187,0,0,187,0,0,7567
+2024/2025,league,5,all,Serie A,203,203,202,0,1,202,1,0,6758
+2024/2025,league,7,all,Bundesliga,181,181,181,0,0,181,0,0,5953
+2024/2025,league,7,all,Eredivisie,193,193,193,0,0,193,0,0,6141
+2024/2025,league,7,all,LaLiga,183,183,183,0,0,183,0,0,6308
+2024/2025,league,7,all,Ligue 1,175,175,175,0,0,175,0,0,5674
+2024/2025,league,7,all,Premier League,187,187,187,0,0,187,0,0,7567
+2024/2025,league,7,all,Primeira Liga,148,148,142,0,6,142,6,0,4663
+2024/2025,league,7,all,Serie A,203,203,202,0,1,202,1,0,6758
+2024/2025,league,8,all,Belgian Pro League,145,145,145,0,0,145,0,0,5687
+2024/2025,league,8,all,Bundesliga,181,181,181,0,0,181,0,0,5953
+2024/2025,league,8,all,Eredivisie,193,193,193,0,0,193,0,0,6141
+2024/2025,league,8,all,LaLiga,183,183,183,0,0,183,0,0,6308
+2024/2025,league,8,all,Ligue 1,175,175,175,0,0,175,0,0,5674
+2024/2025,league,8,all,Premier League,187,187,187,0,0,187,0,0,7567
+2024/2025,league,8,all,Primeira Liga,148,148,142,0,6,142,6,0,4663
+2024/2025,league,8,all,Serie A,203,203,202,0,1,202,1,0,6758
+2025/2026,europe,,all,All European competitions,751,754,692,1,59,694,60,20,7964
+2025/2026,europe,,ucl,UEFA Champions League,274,274,255,0,19,255,19,7,3408
+2025/2026,europe,,uecl,UEFA Europa Conference League,210,210,186,0,24,186,24,7,1839
+2025/2026,europe,,uel,UEFA Europa League,270,270,253,0,17,253,17,6,2717
+2025/2026,league,3,all,LaLiga,231,231,230,0,1,230,1,0,6991
+2025/2026,league,3,all,Premier League,242,242,241,0,1,241,1,4,7518
+2025/2026,league,3,all,Serie A,258,258,256,0,2,256,2,2,7223
+2025/2026,league,5,all,Bundesliga,225,225,222,0,3,222,3,1,6458
+2025/2026,league,5,all,LaLiga,231,231,230,0,1,230,1,0,6991
+2025/2026,league,5,all,Ligue 1,196,196,194,0,2,194,2,1,5345
+2025/2026,league,5,all,Premier League,242,242,241,0,1,241,1,4,7518
+2025/2026,league,5,all,Serie A,258,258,256,0,2,256,2,2,7223
+2025/2026,league,7,all,Bundesliga,225,225,222,0,3,222,3,1,6458
+2025/2026,league,7,all,Eredivisie,223,223,223,0,0,223,0,1,6872
+2025/2026,league,7,all,LaLiga,231,231,230,0,1,230,1,0,6991
+2025/2026,league,7,all,Ligue 1,196,196,194,0,2,194,2,1,5345
+2025/2026,league,7,all,Premier League,242,242,241,0,1,241,1,4,7518
+2025/2026,league,7,all,Primeira Liga,178,178,171,0,7,171,7,3,4778
+2025/2026,league,7,all,Serie A,258,258,256,0,2,256,2,2,7223
+2025/2026,league,8,all,Belgian Pro League,177,177,177,0,0,177,0,2,5831
+2025/2026,league,8,all,Bundesliga,225,225,222,0,3,222,3,1,6458
+2025/2026,league,8,all,Eredivisie,223,223,223,0,0,223,0,1,6872
+2025/2026,league,8,all,LaLiga,231,231,230,0,1,230,1,0,6991
+2025/2026,league,8,all,Ligue 1,196,196,194,0,2,194,2,1,5345
+2025/2026,league,8,all,Premier League,242,242,241,0,1,241,1,4,7518
+2025/2026,league,8,all,Primeira Liga,178,178,171,0,7,171,7,3,4778
+2025/2026,league,8,all,Serie A,258,258,256,0,2,256,2,2,7223
