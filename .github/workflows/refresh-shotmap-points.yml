@@ -39,7 +39,9 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        # The snapshot builder uses the dashboard stack, while the trajectory
+        # audit validates records through the strict Pydantic API schema.
+        run: pip install -r requirements.txt -r requirements-api.txt
       - name: Snapshot exact FotMob shot coordinates
         id: snapshot
         continue-on-error: true
