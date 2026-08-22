@@ -36,7 +36,7 @@ describe("LegacySpatialPitch", () => {
   it("renders exact legacy marker styles and unfiltered total counts", () => {
     render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
     const section = screen.getByRole("region", { name: "Spatial pitch" });
-    expect(within(section).getByText("2 activity points. 4 shots. Goal ★ · on target ● · off target × · blocked ◇.", { selector: "figcaption" })).toBeInTheDocument();
+    expect(within(section).getByText("2 activity points. 4 shots. Goal ◇ · on target ● · off target × · blocked ■.", { selector: "figcaption" })).toBeInTheDocument();
     expect(section.querySelectorAll("[data-shot-index]")).toHaveLength(4);
     expect(section.querySelector('[data-shot-outcome="goal"]')).toHaveAttribute("data-marker-symbol", "star");
     expect(section.querySelector('[data-shot-outcome="goal"]')).toHaveAttribute("data-marker-size", "12");
@@ -86,11 +86,52 @@ describe("LegacySpatialPitch", () => {
     expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(1); expect(container.querySelectorAll('[data-shot-outcome="goal"]')).toHaveLength(1); expect(goals).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("commits a rapid different-outcome click before scheduling the next one", () => {
+    vi.useFakeTimers(); const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
+    fireEvent.click(screen.getByRole("button", { name: /Goals, 1 shots/ }), { detail: 1 });
+    fireEvent.click(screen.getByRole("button", { name: /On target, 1 shots/ }), { detail: 1 });
+    expect(container.querySelectorAll('[data-shot-outcome="goal"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-shot-outcome="on_target"]')).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(350));
+    expect(container.querySelectorAll('[data-shot-outcome="on_target"]')).toHaveLength(0);
+    expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(2);
+  });
+
+  it("drops a pending click when the context identity changes", () => {
+    vi.useFakeTimers(); const { container, rerender } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} contextIdentity="player-1|2025" />);
+    fireEvent.click(screen.getByRole("button", { name: /Goals, 1 shots/ }), { detail: 1 });
+    rerender(<LegacySpatialPitch analysis={analysis(baseSpatial)} contextIdentity="player-1|2026" />);
+    act(() => vi.advanceTimersByTime(350));
+    expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(4);
+    expect(screen.getByRole("button", { name: /Goals, 1 shots/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("treats native keyboard button activation as an immediate toggle", () => {
+    vi.useFakeTimers(); const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />); const goals = screen.getByRole("button", { name: /Goals, 1 shots/ });
+    fireEvent.keyDown(goals, { key: "Enter" }); fireEvent.click(goals, { detail: 0 });
+    expect(container.querySelectorAll('[data-shot-outcome="goal"]')).toHaveLength(0);
+    fireEvent.keyDown(goals, { key: " " }); fireEvent.click(goals, { detail: 0 });
+    expect(container.querySelectorAll('[data-shot-outcome="goal"]')).toHaveLength(1); expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("resets a changed context and exposes xG/xGOT through one roving marker tab stop", () => {
     const richSpatial = { ...baseSpatial, shotmapPoints: [{ x: 10, y: 20, outcome: "goal" as const, xg: .36, xgot: null }, ...baseSpatial.shotmapPoints.slice(1)] };
     const { container, rerender } = render(<LegacySpatialPitch analysis={analysis(richSpatial)} contextIdentity="player-1|2025" />); const goals = screen.getByRole("button", { name: /Goals, 1 shots/ });
     fireEvent.click(goals); expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(3);
     rerender(<LegacySpatialPitch analysis={analysis(richSpatial)} contextIdentity="player-1|2026" />); expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(4);
     fireEvent.focus(container.querySelector('[data-shot-outcome="goal"]')!); expect(screen.getByRole("tooltip")).toHaveTextContent("xG 0.36"); expect(screen.getByRole("tooltip")).toHaveTextContent("xGOT —"); expect(container.querySelectorAll('[data-shot-index][tabindex="0"]')).toHaveLength(1);
+  });
+
+  it("keeps one roving tab stop for 119 shots and uses em dashes for null tooltip metrics", () => {
+    const manyShots = Array.from({ length: 119 }, (_, index) => ({ x: index % 100, y: (index * 3) % 100, outcome: "goal" as const, xg: null, xgot: null }));
+    const { container } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, shotmapPointCount: 119, shotmapPoints: manyShots })} />);
+    expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(119); expect(container.querySelectorAll('[data-shot-index][tabindex="0"]')).toHaveLength(1);
+    fireEvent.focus(container.querySelector('[data-shot-index][tabindex="0"]')!); expect(screen.getByRole("tooltip")).toHaveTextContent("xG —"); expect(screen.getByRole("tooltip")).toHaveTextContent("xGOT —");
+  });
+
+  it("uses a two-column, 44px native-button control grid at 320px", () => {
+    const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />); const controls = screen.getByRole("group", { name: "Shot outcome visibility" });
+    expect(controls).toHaveClass("grid", "grid-cols-2"); expect(container.querySelectorAll('button[aria-pressed]')).toHaveLength(4);
+    container.querySelectorAll('button[aria-pressed]').forEach((button) => expect(button).toHaveClass("min-h-11", "min-w-11"));
   });
 });

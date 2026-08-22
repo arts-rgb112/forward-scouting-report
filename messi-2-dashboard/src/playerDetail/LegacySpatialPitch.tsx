@@ -136,7 +136,9 @@ export function LegacySpatialPitch({ analysis, contextIdentity = "" }: { analysi
   const descriptionId = `${baseId}-shot-description`;
   const tooltipId = `${baseId}-shot-tooltip`;
   const identity = snapshotIdentity(contextIdentity, spatial);
-  const pendingSingleClick = useRef<number | undefined>(undefined);
+  const pendingSingleClick = useRef<{ outcome: ShotOutcome; timer: number } | null>(null);
+  const identityRef = useRef(identity);
+  identityRef.current = identity;
   const markerRefs = useRef(new Map<string, SVGGElement>());
   const markerScale = useMarkerScale();
   const normalized = useMemo(() => integrity.heat ? normalizeDensity(legacyDensityGrid(spatial!.heatmapPoints)) : undefined, [integrity.heat, spatial?.heatmapPoints]);
@@ -151,20 +153,36 @@ export function LegacySpatialPitch({ analysis, contextIdentity = "" }: { analysi
   const visibleShots = integrity.shots ? spatial!.shotmapPoints.filter((shot) => visibleOutcomes.has(shot.outcome)) : [];
   const activeVisibleId = visibleShots.some((_shot, index) => `${baseId}-shot-${index}` === activeMarkerId) ? activeMarkerId : visibleShots.length ? `${baseId}-shot-0` : null;
   const tooltipShot = visibleShots.find((_shot, index) => `${baseId}-shot-${index}` === tooltipMarkerId) ?? null;
-  const clearPendingClick = () => { if (pendingSingleClick.current !== undefined) { window.clearTimeout(pendingSingleClick.current); pendingSingleClick.current = undefined; } };
-  useEffect(() => {
-    clearPendingClick(); setVisibility({ identity, visible: new Set(presentOutcomes) }); setActiveMarkerId(null); setTooltipMarkerId(null);
-    return clearPendingClick;
-  // The serialised source snapshot resets interaction state even when its context is unchanged.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identity]);
   const updateVisibility = (transform: (current: ReadonlySet<ShotOutcome>) => ReadonlySet<ShotOutcome>) => setVisibility((current) => current.identity === identity ? { identity, visible: transform(current.visible) } : current);
   const toggleOutcome = (outcome: ShotOutcome) => updateVisibility((current) => { const next = new Set(current); next.has(outcome) ? next.delete(outcome) : next.add(outcome); return next; });
   const isolateOutcome = (outcome: ShotOutcome) => updateVisibility(() => new Set([outcome]));
+  const cancelPendingClick = () => {
+    const pending = pendingSingleClick.current;
+    if (pending) { window.clearTimeout(pending.timer); pendingSingleClick.current = null; }
+  };
+  const commitPendingClick = () => {
+    const pending = pendingSingleClick.current;
+    cancelPendingClick();
+    if (pending) toggleOutcome(pending.outcome);
+  };
+  useEffect(() => {
+    cancelPendingClick(); setVisibility({ identity, visible: new Set(presentOutcomes) }); setActiveMarkerId(null); setTooltipMarkerId(null);
+    return cancelPendingClick;
+  // The serialised source snapshot resets interaction state even when its context is unchanged.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity]);
   const handleControlClick = (outcome: ShotOutcome, detail: number) => {
-    if (detail === 0) { clearPendingClick(); toggleOutcome(outcome); return; }
-    if (pendingSingleClick.current !== undefined) { clearPendingClick(); return; }
-    pendingSingleClick.current = window.setTimeout(() => { pendingSingleClick.current = undefined; toggleOutcome(outcome); }, singleClickDelayMs);
+    const pending = pendingSingleClick.current;
+    if (detail === 0) { commitPendingClick(); toggleOutcome(outcome); return; }
+    if (pending?.outcome === outcome) { cancelPendingClick(); return; }
+    if (pending) commitPendingClick();
+    const pendingIdentity = identity;
+    const timer = window.setTimeout(() => {
+      if (pendingSingleClick.current?.timer !== timer) return;
+      pendingSingleClick.current = null;
+      if (identityRef.current === pendingIdentity) toggleOutcome(outcome);
+    }, singleClickDelayMs);
+    pendingSingleClick.current = { outcome, timer };
   };
   const navigateMarker = (currentIndex: number, direction: 1 | -1) => {
     if (!visibleShots.length) return;
@@ -175,7 +193,7 @@ export function LegacySpatialPitch({ analysis, contextIdentity = "" }: { analysi
   const visibleOutcomeList = presentOutcomes.filter((outcome) => visibleOutcomes.has(outcome));
   const description = `Legacy spatial pitch. ${state.heat}. ${state.shots}. Visible shot outcomes: ${outcomeSummary(visibleOutcomeList)}. Outcome controls change markers only; density and CCA use all activity points.`;
   return <section className={panel} aria-labelledby="spatial-pitch-heading"><h2 id="spatial-pitch-heading" className="text-sm font-black">Spatial pitch</h2>
-    {integrity.shots && presentOutcomes.length > 0 && <OutcomeControls outcomes={presentOutcomes} counts={counts} visible={visibleOutcomes} markerLayerId={markerLayerId} onClick={handleControlClick} onDoubleClick={(outcome) => { clearPendingClick(); isolateOutcome(outcome); }} />}
+    {integrity.shots && presentOutcomes.length > 0 && <OutcomeControls outcomes={presentOutcomes} counts={counts} visible={visibleOutcomes} markerLayerId={markerLayerId} onClick={handleControlClick} onDoubleClick={(outcome) => { const pending = pendingSingleClick.current; if (pending?.outcome === outcome) cancelPendingClick(); else if (pending) commitPendingClick(); isolateOutcome(outcome); }} />}
     <p role="status" aria-live="polite" className="sr-only">Visible shot outcomes: {outcomeSummary(presentOutcomes.filter((outcome) => visibleOutcomes.has(outcome)))}.</p>
     <figure className="mt-3" aria-describedby={`${descriptionId} spatial-pitch-caption`}>
       <p id={descriptionId} className="sr-only">{description}</p>
@@ -188,7 +206,7 @@ export function LegacySpatialPitch({ analysis, contextIdentity = "" }: { analysi
         </svg>
         {tooltipShot && <div id={tooltipId} role="tooltip" className="pointer-events-none absolute z-10 max-w-36 rounded border border-white/20 bg-[#0b0e0f]/95 px-2 py-1 text-[11px] text-zinc-100 shadow-lg" style={{ left: `${Math.max(4, Math.min(96, ((tooltipShot.x + 4) / 108) * 100))}%`, top: `${Math.max(4, Math.min(96, 100 - tooltipShot.y))}%`, transform: "translate(-50%, -110%)" }}><b className="block">{outcomePresentation[tooltipShot.outcome].label}</b><span className="block">xG {formatMetric(tooltipShot.xg)}</span><span className="block">xGOT {formatMetric(tooltipShot.xgot)}</span></div>}
       </div>
-      <figcaption id="spatial-pitch-caption" className="mt-2 text-xs text-zinc-400">{state.heat}. {state.shots}. Goal ★ · on target ● · off target × · blocked ◇.</figcaption>
+      <figcaption id="spatial-pitch-caption" className="mt-2 text-xs text-zinc-400">{state.heat}. {state.shots}. Goal ◇ · on target ● · off target × · blocked ■.</figcaption>
     </figure>
     {integrity.shots && <ul className="mt-2 flex flex-wrap gap-x-3 text-xs text-zinc-400"><li>Goals {counts.goal}</li><li>On target {counts.on_target}</li><li>Off target {counts.off_target}</li><li>Blocked {counts.blocked}</li></ul>}
   </section>;
