@@ -46,6 +46,15 @@ describe("root routing", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  it("keeps the exact root recovery sentinel on the nonblank dashboard without navigating", () => {
+    const navigate = vi.fn();
+    window.history.replaceState(null, "", "/?recovery=invalid-legacy-link");
+    render(<App navigate={navigate}/>);
+    expect(screen.getByTestId("dashboard-container")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/");
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["?page=detail&player=194165&season=25%2F26&mode=league&scope=8", "/players/194165?season=2025%2F2026&mode=league&scope=8"],
     ["?page=about", "/about/messi"],
@@ -75,9 +84,31 @@ describe("root routing", () => {
     expect(navigate).toHaveBeenCalledTimes(1);
   });
 
+  it("does not hard-navigate again after mounting the root recovery target", async () => {
+    const firstNavigate = vi.fn();
+    window.history.replaceState(null, "", "/?page=detail&playerId=194165&season=25%2F26&mode=league&scope=8");
+    const first = render(<App navigate={firstNavigate}/>);
+    await waitFor(() => expect(firstNavigate).toHaveBeenCalledWith("/?recovery=invalid-legacy-link"));
+    first.unmount();
+
+    const recoveryNavigate = vi.fn();
+    window.history.replaceState(null, "", "/?recovery=invalid-legacy-link");
+    render(<App navigate={recoveryNavigate}/>);
+    expect(screen.getByTestId("dashboard-container")).toBeInTheDocument();
+    expect(recoveryNavigate).not.toHaveBeenCalled();
+  });
+
   it("does not adapt a direct non-root route", () => {
     const navigate = vi.fn();
     window.history.replaceState(null, "", "/about/messi");
+    render(<App navigate={navigate}/>);
+    expect(screen.getByTestId("static-route")).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("leaves the direct compare recovery route to StaticRoute", () => {
+    const navigate = vi.fn();
+    window.history.replaceState(null, "", "/compare?recovery=invalid-legacy-link");
     render(<App navigate={navigate}/>);
     expect(screen.getByTestId("static-route")).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalled();

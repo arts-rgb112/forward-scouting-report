@@ -7,6 +7,11 @@ describe("legacy root adapter", () => {
     expect(legacyRootAdapter("?")).toBeNull();
     expect(legacyRootAdapter("?season=2025%2F2026&mode=league&scope=8&page=1&pageSize=50&sort=score&direction=desc")).toBeNull();
   });
+  it("leaves only the exact semantic terminal recovery sentinel alone", () => {
+    expect(legacyRootAdapter("?recovery=invalid-legacy-link")).toBeNull();
+    expect(legacyRootAdapter("?recovery=invalid%2Dlegacy%2Dlink")).toBeNull();
+    for (const search of ["?recovery=other", "?recovery=invalid-legacy-link&recovery=invalid-legacy-link", "?recovery=invalid-legacy-link&playerId=7", "?Recovery=invalid-legacy-link"]) expect(legacyRootAdapter(search)).toBe("/?recovery=invalid-legacy-link");
+  });
   it("converts only an unambiguous native detail route", () => {
     expect(legacyRootAdapter("?page=detail&player=7&season=24%2F25&mode=league&scope=8&competition=all")).toBe("/players/7?season=2024%2F2025&mode=league&scope=8");
     expect(legacyRootAdapter("?page=about")).toBe("/about/messi");
