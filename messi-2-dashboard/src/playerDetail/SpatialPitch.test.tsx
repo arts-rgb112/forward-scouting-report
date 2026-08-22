@@ -18,7 +18,11 @@ const analysisWith = (spatial: Partial<PlayerAnalysis["spatial"]>): PlayerAnalys
   },
 });
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+
+const svgBounds = (width: number, height: number) => ({
+  x: 0, y: 0, width, height, top: 0, right: width, bottom: height, left: 0, toJSON: () => ({}),
+}) as DOMRect;
 
 describe("perspective spatial pitch", () => {
   it("preserves attacking x and places right Lane 1 on the near lower edge", () => {
@@ -122,5 +126,60 @@ describe("perspective spatial pitch", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 119, shotmapPoints: shots })}/>);
     expect(container.querySelectorAll('[data-shot-marker][tabindex="0"]')).toHaveLength(1); fireEvent.focus(container.querySelector('[data-shot-marker][tabindex="0"]')!);
     expect(screen.getByRole("tooltip")).toHaveTextContent("xG —"); expect(screen.getByRole("tooltip")).toHaveTextContent("xGOT —");
+  });
+
+  it("keeps perspective shot visuals, hit targets, and tooltips pixel-sized across responsive widths", () => {
+    const rendered = { width: 1000, height: 650 };
+    vi.spyOn(SVGSVGElement.prototype, "getBoundingClientRect").mockImplementation(() => svgBounds(rendered.width, rendered.height));
+    const resizeCallbacks: Array<() => void> = [];
+    const disconnect = vi.fn();
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) { resizeCallbacks.push(() => callback([], this as unknown as ResizeObserver)); }
+      observe() {}
+      unobserve() {}
+      disconnect() { disconnect(); }
+    });
+
+    const shots = [
+      { x: 82, y: 20, outcome: "goal" as const, xg: .6, xgot: .74 },
+      { x: 78, y: 40, outcome: "on_target" as const },
+      { x: 74, y: 60, outcome: "off_target" as const },
+      { x: 70, y: 80, outcome: "blocked" as const },
+    ];
+    const view = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 4, shotmapPoints: shots })}/>);
+    const cssLength = (element: Element, sourceLength: number) => {
+      return sourceLength * Number(element.getAttribute("data-pixel-scale")) * rendered.width / 1000;
+    };
+    const marker = view.container.querySelector("[data-shot-marker]")!;
+    fireEvent.focus(marker);
+    const initialAnchor = view.container.querySelector("[data-shot-anchor]")!;
+    const initialShadow = view.container.querySelector("[data-shot-shadow]")!;
+    const anchorPosition = [initialAnchor.getAttribute("x1"), initialAnchor.getAttribute("y1")];
+    const shadowPosition = [initialShadow.getAttribute("cx"), initialShadow.getAttribute("cy")];
+
+    const assertPixelSizes = () => {
+      const markers = [...view.container.querySelectorAll("[data-shot-marker]")];
+      const visuals = [...view.container.querySelectorAll("[data-marker-visual]")];
+      const hits = [...view.container.querySelectorAll("[data-marker-hit]")];
+      expect(visuals.map((visual, index) => cssLength(visual, Number(markers[index].getAttribute("data-marker-size"))))).toEqual([12, 9, 9, 8]);
+      expect(hits.map((hit, index) => cssLength(visuals[index], Number(hit.getAttribute("r")) * 2))).toEqual([24, 24, 24, 24]);
+      const tooltip = screen.getByRole("tooltip");
+      expect(cssLength(tooltip, Number(tooltip.getAttribute("data-tooltip-width")))).toBe(150);
+    };
+    assertPixelSizes();
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Goal");
+
+    rendered.width = 320;
+    rendered.height = 208;
+    act(() => resizeCallbacks[0]());
+
+    const resizedVisual = view.container.querySelector("[data-marker-visual]")!;
+    expect(Number(resizedVisual.getAttribute("data-pixel-scale"))).toBeCloseTo(3.125);
+    assertPixelSizes();
+    expect([initialAnchor.getAttribute("x1"), initialAnchor.getAttribute("y1")]).toEqual(anchorPosition);
+    expect([initialShadow.getAttribute("cx"), initialShadow.getAttribute("cy")]).toEqual(shadowPosition);
+
+    view.unmount();
+    expect(disconnect).toHaveBeenCalledTimes(1);
   });
 });
