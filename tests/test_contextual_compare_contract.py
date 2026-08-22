@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 import fotmob_client
 from api_server import service
@@ -63,6 +65,15 @@ def test_complete_league_and_europe_sides_preserve_order_and_canonical_context()
     }
     assert payload["left"]["duelPressPlayer"]["idNamespace"] == "fotmob"
     assert payload["left"]["duelPressDetailReadout"]["readoutVersion"] == "detail-readout-v1"
+    assert payload["left"]["duelPressDetailReadout"]["context"] == {
+        "playerId": payload["left"]["player"]["playerId"],
+        "idNamespace": payload["left"]["player"]["idNamespace"],
+        **payload["left"]["context"],
+    }
+    assert (
+        payload["left"]["duelPressDetailReadout"]["player"]["id"]
+        == payload["left"]["player"]["playerId"]
+    )
     assert payload["left"]["tacticalQuadrant"] is not None
     assert payload["left"]["tacticalQuadrant"]["available"] is True
     assert all(payload["right"][field] is None for field in (
@@ -91,6 +102,52 @@ def test_historical_contexts_are_resolved_from_their_own_cohorts() -> None:
     assert [payload[side_name]["status"] for side_name in ("left", "right")] == ["resolved", "resolved"]
     assert payload["left"]["detail"]["league"]["name"] == "Premier League"
     assert payload["right"]["detail"]["league"]["name"] == "Bundesliga"
+    # This immutable fixture is an actual service response for its matching
+    # request, not a compact response with manually relabelled provenance.
+    assert payload == fixture("historical_league_response.json")
+
+
+def test_contextual_schema_rejects_stale_duel_readout_context_or_identity() -> None:
+    malformed = deepcopy(fixture("complete_league_europe_response.json"))
+    readout = malformed["left"]["duelPressDetailReadout"]
+    assert isinstance(readout, dict)
+    context = readout["context"]
+    assert isinstance(context, dict)
+    context["season"] = "2024/2025"
+
+    with pytest.raises(ValidationError, match="duel-press readout context must match"):
+        ContextualCompareEnvelope.model_validate(malformed)
+
+    identity_mismatch = deepcopy(fixture("complete_league_europe_response.json"))
+    identity_readout = identity_mismatch["left"]["duelPressDetailReadout"]
+    assert isinstance(identity_readout, dict)
+    identity_player = identity_readout["player"]
+    assert isinstance(identity_player, dict)
+    identity_player["id"] = 194166
+
+    with pytest.raises(ValidationError, match="duel-press readout player identity must match"):
+        ContextualCompareEnvelope.model_validate(identity_mismatch)
+
+
+def test_contextual_service_rejects_a_stale_duel_readout_from_a_builder(monkeypatch) -> None:
+    original_builder = service.find_duel_press_detail_readouts
+
+    def stale_builder(*args: object):
+        readout = original_builder(*args)
+        assert readout is not None
+        return readout.model_copy(update={
+            "context": readout.context.model_copy(update={"season": "2024/2025"}),
+        })
+
+    monkeypatch.setattr(service, "find_duel_press_detail_readouts", stale_builder)
+    request = ContextualCompareRequest.model_validate({
+        "comparisonVersion": "contextual-compare-v1",
+        "left": side(taxonomy="duel-press-v1"),
+        "right": side(season="2024/2025"),
+    })
+
+    with pytest.raises(ValidationError, match="duel-press readout context must match"):
+        service.resolve_contextual_compare_sides(request.left, request.right)
 
 
 def test_unavailable_side_keeps_resolved_sibling_and_nulls_only_its_payload() -> None:
@@ -211,6 +268,7 @@ def test_committed_strict_response_fixtures_cover_frontend_parser_states() -> No
     assert complete.right.context.mode == "europe"
     assert historical.left.context.season == "2022/2023"
     assert historical.right.context.season == "2024/2025"
+    assert historical.left.duelPressDetailReadout is None
     assert unavailable.left.status == "resolved"
     assert unavailable.right.status == "unavailable"
     assert unavailable.right.detail is None

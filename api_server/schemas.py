@@ -1182,6 +1182,40 @@ class ContextualCompareSide(BaseModel):
                 raise ValueError("resolved duel-press side requires player and detail readout")
             if self.taxonomy == "legacy-v1" and any(value is not None for value in duel):
                 raise ValueError("legacy side cannot carry duel-press data")
+            if self.taxonomy == "duel-press-v1":
+                # A readout is analytical output from the selected cohort, not
+                # merely additional player decoration.  Do not let a cached or
+                # stale readout from a different season/context be embedded in
+                # an otherwise resolved side.
+                assert self.duelPressDetailReadout is not None
+                readout = self.duelPressDetailReadout
+                expected_context = (
+                    self.player.playerId,
+                    self.player.idNamespace,
+                    self.context.season,
+                    self.context.mode,
+                    self.context.scope,
+                    self.context.competition,
+                )
+                readout_context = (
+                    readout.context.playerId,
+                    readout.context.idNamespace,
+                    readout.context.season,
+                    readout.context.mode,
+                    readout.context.scope,
+                    readout.context.competition,
+                )
+                if readout_context != expected_context:
+                    raise ValueError(
+                        "duel-press readout context must match the enclosing contextual side"
+                    )
+                if (
+                    readout.player.id != self.player.playerId
+                    or readout.player.idNamespace != self.player.idNamespace
+                ):
+                    raise ValueError(
+                        "duel-press readout player identity must match the enclosing contextual side"
+                    )
         elif any(value is not None for value in (self.summary, self.detail, self.dataQuality, self.tacticalQuadrant, *duel)):
             raise ValueError("non-resolved contextual side cannot carry player data")
         elif any(reason != "unavailable" for _, reason, _ in companions):
