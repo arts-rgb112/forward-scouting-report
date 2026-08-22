@@ -10,12 +10,13 @@ const sideRequest = (side: any) => ({ player: side.player, taxonomy: side.taxono
 describe("contextual-compare-v1 strict sides", () => {
   it("accepts the canonical league/europe fixture", () => expect(parseContextualCompareResponse(response(), request())).toBeTruthy());
   it("accepts supplied response fixtures that have exact echoed request contexts", () => {
-    for (const name of ["complete_league_europe_response.json", "unavailable_sibling_response.json", "observed_zero_imputed_fallback_response.json"]) {
+    for (const name of ["complete_league_europe_response.json", "historical_league_response.json", "unavailable_sibling_response.json", "observed_zero_imputed_fallback_response.json"]) {
       const value = fixture(name); expect(parseContextualCompareResponse(value, requestForResponse(value))).toBeTruthy();
     }
   });
-  it("rejects the supplied historical fixture until its duel readout echoes the historical context", () => {
-    const value = fixture("historical_league_response.json"); expect(() => parseContextualCompareResponse(value, requestForResponse(value))).toThrow(/duel readout identity/);
+  it("rejects a stale historical duel readout context", () => {
+    const value = fixture("historical_league_response.json"); value.left.duelPressDetailReadout.context = { ...value.left.duelPressDetailReadout.context, season: "2025/2026", scope: 8 };
+    expect(() => parseContextualCompareResponse(value, requestForResponse(value))).toThrow(/duel readout identity/);
   });
   it("rejects duplicate player/context requests before transport", () => { const value = request(); value.right = structuredClone(value.left); expect(() => contextualCompareRequestSchema.parse(value)).toThrow(); });
   it("isolates invalid_context while retaining a valid sibling", () => {
