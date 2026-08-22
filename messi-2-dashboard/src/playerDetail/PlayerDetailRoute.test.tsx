@@ -3,6 +3,8 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { duelPressDetailReadoutEnvelopeSchema } from "../api/duelPressDetailReadoutContracts";
+import { detailReadoutFixture } from "../test/fixtures/duelPressDetailReadouts";
 import { samplePlayers } from "../test/fixtures/players";
 import { PercentileProfile, PlayerDetailDossierLayout, PlayerTierCard, SpatialPitch, TacticalSummary, VolumeBenchmarkRadar } from "./PlayerDetailRoute";
 
@@ -17,6 +19,15 @@ describe("native player detail panels", () => {
     expect(screen.getByText("81")).toBeInTheDocument();
     expect(["OTS", "BOX", "OBP", "AER", "GND", "OTB"].map((name) => screen.getByText(name))).toHaveLength(6);
     expect(container.querySelector('svg[aria-hidden="true"]')).toHaveClass("right-0", "sm:-right-8");
+  });
+  it("suppresses the legacy dossier category-score strip throughout an authoritative detail-readout request", () => {
+    const readouts = duelPressDetailReadoutEnvelopeSchema.parse(detailReadoutFixture);
+    const view = render(<PlayerTierCard player={player} analysis={analysis} quality={{ kind: "idle" }} detailReadouts={readouts} renewedDetailRequested/>);
+    expect(view.container.querySelector('[aria-label="outsideShot"]')).toBeNull();
+    expect(screen.queryByText(String(readouts.categories[1].score))).not.toBeInTheDocument();
+    view.rerender(<PlayerTierCard player={player} analysis={analysis} quality={{ kind: "idle" }} renewedDetailRequested/>);
+    expect(view.container.querySelector('[aria-label="박스 밖 슈팅"]')).toBeNull();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
   it("keeps tactical summary at exactly three lines even without spatial data", () => {
     render(<TacticalSummary player={player} analysis={analysis} quality={{ kind: "idle" }} />);

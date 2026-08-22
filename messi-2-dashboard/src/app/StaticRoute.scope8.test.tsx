@@ -142,8 +142,8 @@ describe("scope-8 direct-route capability gate", () => {
 
   it("drops a late detail-readout board response after the selected context changes", async () => {
     vi.stubEnv("VITE_DUEL_PRESS_LEADERBOARD_ENABLED", "true");
-    const stale = structuredClone(detailReadoutFixture); stale.categories[0].score = 99.99;
-    const current = structuredClone(detailReadoutFixture); current.categories[0].score = 12.34; current.context.season = "2024/2025";
+    const stale = structuredClone(detailReadoutFixture); stale.categories[0].comparison = { ...stale.categories[0].comparison, percentile: 99.99 };
+    const current = structuredClone(detailReadoutFixture); current.categories[0].comparison = { ...current.categories[0].comparison, percentile: 12.34 }; current.context.season = "2024/2025";
     let resolveStale!: (value: typeof detailReadoutFixture) => void;
     transport.detailReadouts.mockImplementationOnce(() => new Promise<typeof detailReadoutFixture>((resolve) => { resolveStale = resolve; })).mockResolvedValueOnce(current);
     window.history.replaceState(null, "", "/players/1?season=2025%2F2026&scope=7&taxonomy=duel-press-v1");
@@ -152,8 +152,8 @@ describe("scope-8 direct-route capability gate", () => {
     window.history.replaceState(null, "", "/players/1?season=2024%2F2025&scope=5&taxonomy=duel-press-v1");
     view.rerender(<StaticRoute />);
     await waitFor(() => expect(transport.detailReadouts).toHaveBeenCalledTimes(2));
-    expect((await screen.findByRole("progressbar", { name: "박스 밖 슈팅 서버 점수" })).getAttribute("aria-valuenow")).toBe("12.34");
+    expect((await screen.findByRole("progressbar", { name: "박스 밖 슈팅 비교 백분위" })).getAttribute("aria-valuenow")).toBe("12");
     await act(async () => { resolveStale(stale); await Promise.resolve(); });
-    expect(screen.getByRole("progressbar", { name: "박스 밖 슈팅 서버 점수" })).toHaveAttribute("aria-valuenow", "12.34");
+    expect(screen.getByRole("progressbar", { name: "박스 밖 슈팅 비교 백분위" })).toHaveAttribute("aria-valuenow", "12");
   });
 });
