@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { legacyRootAdapter } from "./legacyRootAdapter";
 
 describe("legacy root adapter", () => {
+  it("leaves empty and canonical native dashboard queries alone", () => {
+    expect(legacyRootAdapter("")).toBeNull();
+    expect(legacyRootAdapter("?")).toBeNull();
+    expect(legacyRootAdapter("?season=2025%2F2026&mode=league&scope=8&page=1&pageSize=50&sort=score&direction=desc")).toBeNull();
+  });
   it("converts only an unambiguous native detail route", () => {
     expect(legacyRootAdapter("?page=detail&player=7&season=24%2F25&mode=league&scope=8&competition=all")).toBe("/players/7?season=2024%2F2025&mode=league&scope=8");
     expect(legacyRootAdapter("?page=about")).toBe("/about/messi");

@@ -3,9 +3,14 @@ import { datasetHref } from "../dashboard/datasetRoute";
 
 const rootRecovery = "/?recovery=invalid-legacy-link";
 const compareRecovery = "/compare?recovery=invalid-legacy-link";
+const dashboardQueryKeys = new Set(["season", "mode", "scope", "competition", "page", "pageSize", "q", "role", "position", "ageBand", "minutesBand", "sort", "direction"]);
 const season = (value: string | null) => value && /^\d{2}\/\d{2}$/.test(value) ? `20${value.slice(0, 2)}/20${value.slice(3)}` : value && /^20\d{2}\/20\d{2}$/.test(value) ? value : null;
 const value = (query: URLSearchParams, names: string[], required = false): string | null | undefined => { const values = names.flatMap((name) => query.getAll(name)); return values.length > 1 || required && values.length !== 1 ? undefined : values[0] ?? null; };
 const only = (query: URLSearchParams, keys: string[]) => [...query.keys()].every((key) => keys.includes(key));
+const nativeDashboardQuery = (query: URLSearchParams) => {
+  const pages = query.getAll("page");
+  return pages.length === 1 && /^[1-9]\d*$/.test(pages[0]) && [...query.keys()].every((key) => dashboardQueryKeys.has(key));
+};
 
 function side(query: URLSearchParams, prefix: "left" | "right"): CompareSide | null {
   const playerRaw = value(query, [`${prefix}_player`], true); const seasonRaw = value(query, [`${prefix}_season`], true); const mode = value(query, [`${prefix}_mode`], true);
@@ -18,7 +23,9 @@ function side(query: URLSearchParams, prefix: "left" | "right"): CompareSide | n
 
 /** Converts only unambiguous recognised Streamlit root deep links to native paths. */
 export function legacyRootAdapter(search: string): string | null {
+  if (search === "" || search === "?") return null;
   const query = new URLSearchParams(search); const pageValues = query.getAll("page");
+  if (nativeDashboardQuery(query)) return null;
   if (pageValues.length !== 1) return pageValues.length === 0 && [...query.keys()].length === 0 ? null : pageValues.includes("compare") ? compareRecovery : rootRecovery;
   const page = pageValues[0];
   if (page === "about") return only(query, ["page"]) ? "/about/messi" : rootRecovery;
