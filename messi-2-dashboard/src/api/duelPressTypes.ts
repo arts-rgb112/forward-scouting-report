@@ -11,7 +11,7 @@ export type PressingRawMetrics = {
 /** Confirmed fields only. Display/meta fields remain fixture-gated. */
 export type DuelPressPlayerCore = {
   id: number; idNamespace: "fotmob"; rank: number; name: string; position: string; archetype: "Type A" | "Type B"; age: number | null; minutes: number;
-  tier: { code: "diamond" | "emerald" | "platinum" | "gold" | "silver" | "bronze"; level: number; label: string; taxonomyVersion: "crystal-v2" }; score: number; face: string;
+  tier: { code: "diamond" | "emerald" | "platinum" | "gold" | "silver" | "bronze"; level: number; label: string; taxonomyVersion: "crystal-v2" }; score: number; scorePercentile?: number; face: string;
   nation: { id: number; name: string; icon: string } | null; league: { id: number; name: string; icon: string }; club: { id: number; name: string; icon: string };
   stats: Record<DuelPressMetricKey, number>; components?: DuelPressComponents; pressingRawMetrics?: PressingRawMetrics;
 };
