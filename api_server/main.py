@@ -26,6 +26,7 @@ from .schemas import (
     PlayerComparisonEnvelope, PlayerDataQualityEnvelope, PlayerDetailEnvelope,
     PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
     ShotmapServiceErrorDetail, ShotmapServiceErrorEnvelope,
+    FinalThirdShotEnvelope,
     WatchlistResolveEnvelope, WatchlistResolveRequest, TacticalQuadrantEnvelope,
 )
 from .service import (
@@ -38,6 +39,7 @@ from .service import (
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
     resolve_metric_rank_entries,
     build_ratio_benchmark, build_tactical_summary, build_volume_benchmark,
+    build_final_third_shot_map,
     ShotmapContractViolation,
 )
 
@@ -445,6 +447,61 @@ async def get_player(
     if player is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     return PlayerDetailEnvelope(data=player)
+
+
+@app.get(
+    "/api/v2/players/{player_id}/final-third-shot-map",
+    response_model=FinalThirdShotEnvelope,
+    tags=["players"],
+    responses={
+        404: {
+            "model": ApiErrorEnvelope,
+            "description": "The selected player or season is not available in the exact static context.",
+        },
+        422: {
+            "description": (
+                "depthBand must be front2; league mode requires competition=all. "
+                "front3 is deliberately unsupported."
+            ),
+        },
+        500: {
+            "model": ShotmapServiceErrorEnvelope,
+            "description": "The committed final-third shot snapshot violates its strict contract.",
+        },
+    },
+)
+def get_final_third_shot_map(
+    request: Request,
+    response: Response,
+    player_id: int,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+    depthBand: Literal["front2"] = Query(
+        default="front2",
+        description="Only exact positional-grid depths 5 and 6 are currently supported.",
+    ),
+) -> FinalThirdShotEnvelope:
+    """Return a cached, source-event-backed final-third companion contract.
+
+    This endpoint never calls FotMob: it reads the committed season shard and
+    keeps domestic and European source contexts isolated.
+    """
+    del depthBand  # Literal validation is the public front2-only product gate.
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    if mode == "europe" and "scope" in request.query_params:
+        raise HTTPException(
+            status_code=422,
+            detail="scope must be omitted for europe context",
+        )
+    validate_duel_press_context(mode, competition)
+    envelope = build_final_third_shot_map(player_id, season, mode, int(scope), competition)
+    if envelope is None:
+        raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
+    return envelope
 
 
 @app.get(

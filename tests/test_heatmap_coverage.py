@@ -522,14 +522,14 @@ class TacticalCoverageAuditTests(unittest.TestCase):
         )
         get_ratio.assert_not_called()
 
-    @patch("tactical_ratio.load_tactical_ratios")
-    def test_session_lookup_never_falls_back_to_another_season(self, load_ratios) -> None:
-        load_ratios.return_value = {"792303:8:old": {
+    @patch("tactical_ratio._tactical_rows_for_player")
+    def test_session_lookup_never_falls_back_to_another_season(self, rows_for_player) -> None:
+        rows_for_player.return_value = ({
             "fotmob_player_id": "792303",
             "competition_name": "LaLiga",
             "season_name": "2021/2022",
             "final_third_ratio": 60,
-        }}
+        },)
 
         self.assertIsNone(
             get_tactical_ratio_for_session(

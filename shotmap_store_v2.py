@@ -31,6 +31,20 @@ def _snapshot_signature() -> tuple[tuple[str, int, int], ...]:
     return tuple(signature)
 
 
+def shotmap_snapshot_revision(season: str) -> tuple[int, int] | None:
+    """Return the immutable-on-disk revision for one season shard.
+
+    Companion views include this revision in their cache key, so a refreshed
+    committed snapshot cannot be served through an old in-process aggregate.
+    """
+    shard = DATA_DIR / f"tactical_shotmap_points_{season.replace('/', '_')}.json"
+    try:
+        stat = shard.stat()
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
+
+
 @functools.lru_cache(maxsize=2)
 def _load_shotmap_points(
     signature: tuple[tuple[str, int, int], ...],
@@ -82,11 +96,10 @@ def get_shotmap_snapshot(
         return False, []
     if season:
         shard = DATA_DIR / f"tactical_shotmap_points_{season.replace('/', '_')}.json"
-        try:
-            stat = shard.stat()
-        except OSError:
+        revision = shotmap_snapshot_revision(season)
+        if revision is None:
             return False, []
-        snapshots = _load_shotmap_shard(str(shard), (stat.st_mtime_ns, stat.st_size))
+        snapshots = _load_shotmap_shard(str(shard), revision)
         key = str(heatmap_key)
         return (True, list(snapshots[key])) if key in snapshots else (False, [])
     snapshots = load_shotmap_points()

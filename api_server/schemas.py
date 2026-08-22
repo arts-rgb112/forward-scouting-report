@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import math
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
@@ -825,6 +826,11 @@ class ShotTrajectory(BaseModel):
 
     @model_validator(mode="after")
     def validate_endpoint_semantics(self) -> "ShotTrajectory":
+        if any(
+            value is not None and not math.isfinite(value)
+            for value in (self.endX, self.endY, self.endZMeters)
+        ):
+            raise ValueError("trajectory numeric values must be finite")
         if self.endpointKind == "blocked" and self.endZMeters is not None:
             raise ValueError("blocked endpoints cannot contain endZMeters")
         if self.endpointKind == "goal_mouth" and self.endX != 100.0:
@@ -851,6 +857,11 @@ class ShotmapPoint(BaseModel):
 
     @model_validator(mode="after")
     def validate_trajectory_matches_outcome(self) -> "ShotmapPoint":
+        if any(
+            value is not None and not math.isfinite(value)
+            for value in (self.x, self.y, self.xg, self.xgot)
+        ):
+            raise ValueError("shotmap numeric values must be finite")
         if self.trajectory is None:
             return self
         expected_kind = "blocked" if self.outcome == "blocked" else "goal_mouth"
@@ -859,6 +870,221 @@ class ShotmapPoint(BaseModel):
                 f"{self.outcome} shots require a {expected_kind} trajectory endpoint"
             )
         return self
+
+
+FinalThirdFieldStateCode = Literal["observed", "partial", "unavailable"]
+FinalThirdZoneStateCode = Literal["observed", "partial", "unavailable"]
+
+
+class FinalThirdFieldState(BaseModel):
+    """Provenance for one server-owned final-third metric field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    state: FinalThirdFieldStateCode
+    reason: str | None = None
+    source: Literal["player_season_shot_events"] | None = None
+    formulaVersion: str | None = None
+
+    @model_validator(mode="after")
+    def validate_unavailable_pair(self) -> "FinalThirdFieldState":
+        if self.state in {"partial", "unavailable"} and not self.reason:
+            raise ValueError("partial/unavailable final-third fields require a reason")
+        if self.state == "observed" and self.reason is not None:
+            raise ValueError("observed final-third fields cannot contain a reason")
+        return self
+
+
+class FinalThirdZoneFieldStates(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    volume: FinalThirdFieldState
+    conversionRatePct: FinalThirdFieldState
+    qualityScore: FinalThirdFieldState
+
+
+class FinalThirdShotZone(BaseModel):
+    """One taxonomy tile; its counts are never browser-derived."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    zoneId: str = Field(pattern=r"^depth[56]_lane[1-5]$")
+    depth: Literal[5, 6]
+    lane: Literal[1, 2, 3, 4, 5]
+    shotsTotal: int | None = Field(default=None, ge=0)
+    goals: int | None = Field(default=None, ge=0)
+    conversionRatePct: float | None = Field(default=None, ge=0, le=100)
+    qualityScore: float | None = None
+    qualityEligibleShots: int | None = Field(default=None, ge=0)
+    state: FinalThirdZoneStateCode
+    reason: str | None = None
+    source: Literal["player_season_shot_events"] | None = None
+    qualityFormulaVersion: Literal["avg-xgot-minus-avg-xg-v1"] = "avg-xgot-minus-avg-xg-v1"
+    fieldStates: FinalThirdZoneFieldStates
+
+    @model_validator(mode="after")
+    def validate_final_third_zone(self) -> "FinalThirdShotZone":
+        if self.zoneId != f"depth{self.depth}_lane{self.lane}":
+            raise ValueError("zoneId must match depth and lane")
+        if self.shotsTotal is None:
+            if any(value is not None for value in (
+                self.goals, self.conversionRatePct, self.qualityScore,
+                self.qualityEligibleShots,
+            )):
+                raise ValueError("unavailable zone volume cannot contain derived metrics")
+        else:
+            if self.goals is None or self.goals > self.shotsTotal:
+                raise ValueError("zone goals must be present and no greater than shotsTotal")
+            if self.shotsTotal == 0 and (
+                self.conversionRatePct is not None or self.qualityScore is not None
+                or self.qualityEligibleShots != 0
+            ):
+                raise ValueError("zero-attempt zones have null conversion/quality and zero eligible shots")
+        return self
+
+
+class FinalThirdCoverageIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    zoneId: str | None = Field(default=None, pattern=r"^depth[56]_lane[1-5]$")
+    shotId: str | None = Field(default=None, min_length=1)
+    field: Literal["volume", "conversionRatePct", "qualityScore", "goalMouthEndpoint"]
+    reason: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_target(self) -> "FinalThirdCoverageIssue":
+        if self.zoneId is None and self.shotId is None:
+            raise ValueError("coverage issue requires a zoneId or shotId")
+        return self
+
+
+class FinalThirdGoalMouthCoordinates(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal["goal-mouth-v1"] = "goal-mouth-v1"
+    unit: Literal["normalized"] = "normalized"
+    horizontalMin: Literal[0] = 0
+    horizontalMax: Literal[1] = 1
+    verticalMin: Literal[0] = 0
+    verticalMax: Literal[1] = 1
+    origin: Literal["bottom_left_shooter_view"] = "bottom_left_shooter_view"
+    horizontalDirection: Literal["shooter_left_to_right"] = "shooter_left_to_right"
+    verticalDirection: Literal["ground_to_crossbar"] = "ground_to_crossbar"
+
+
+class FinalThirdQualityScale(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min: Literal[-0.5] = -0.5
+    neutral: Literal[0] = 0
+    max: Literal[0.5] = 0.5
+    version: Literal["final-third-quality-v1"] = "final-third-quality-v1"
+
+
+class FinalThirdMarkerSizeScale(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min: Literal[0] = 0
+    max: Literal[1] = 1
+    version: Literal["xg-natural-0-to-1-v1"] = "xg-natural-0-to-1-v1"
+
+
+class FinalThirdShot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shotId: str = Field(min_length=1)
+    shotIdSource: Literal["provider_event", "snapshot_record"] = "snapshot_record"
+    zoneId: str = Field(pattern=r"^depth[56]_lane[1-5]$")
+    pitchX: float = Field(ge=0, le=100)
+    pitchY: float = Field(ge=0, le=100)
+    xg: float | None = Field(default=None, ge=0)
+    xgot: float | None = Field(default=None, ge=0)
+    status: Literal["goal", "on_target", "off_target", "blocked"]
+    endpointAvailable: bool
+    goalMouthY: float | None = None
+    goalMouthZ: float | None = None
+    endpointReason: str | None = None
+    source: Literal["player_season_shot_events"] = "player_season_shot_events"
+
+    @model_validator(mode="after")
+    def validate_goal_mouth_endpoint(self) -> "FinalThirdShot":
+        if any(
+            value is not None and not math.isfinite(value)
+            for value in (self.pitchX, self.pitchY, self.xg, self.xgot, self.goalMouthY, self.goalMouthZ)
+        ):
+            raise ValueError("final-third shot numeric values must be finite")
+        coordinates = (self.goalMouthY, self.goalMouthZ)
+        if self.endpointAvailable:
+            if any(value is None for value in coordinates) or self.endpointReason is not None:
+                raise ValueError("available endpoints require both coordinates and no reason")
+        elif any(value is not None for value in coordinates) or not self.endpointReason:
+            raise ValueError("unavailable endpoints require null coordinates and an explicit reason")
+        return self
+
+
+class FinalThirdShotContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    idNamespace: Literal["fotmob"] = "fotmob"
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    mode: Literal["league", "europe"]
+    scope: Literal[3, 5, 7, 8] | None = None
+    competition: CompetitionCode | None = None
+    depthBand: Literal["front2"] = "front2"
+
+    @model_validator(mode="after")
+    def validate_dimension(self) -> "FinalThirdShotContext":
+        if self.mode == "league" and (self.scope is None or self.competition is not None):
+            raise ValueError("league context requires scope and null competition")
+        if self.mode == "europe" and (self.scope is not None or self.competition is None):
+            raise ValueError("europe context requires null scope and competition")
+        return self
+
+
+class FinalThirdShotData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    available: bool
+    completeness: Literal["complete", "partial", "unavailable"]
+    reason: str | None = None
+    gridVersion: Literal["positional-6x5-v1"] = "positional-6x5-v1"
+    attackDirection: Literal["left_to_right"] = "left_to_right"
+    includedDepths: list[Literal[5, 6]] = Field(default_factory=lambda: [5, 6], min_length=2, max_length=2)
+    qualityScale: FinalThirdQualityScale
+    markerSizeScale: FinalThirdMarkerSizeScale
+    goalMouthCoordinates: FinalThirdGoalMouthCoordinates
+    zones: list[FinalThirdShotZone] = Field(min_length=10, max_length=10)
+    shots: list[FinalThirdShot]
+    endpointUnavailableCount: int = Field(ge=0)
+    endpointUnavailableShotIds: list[str]
+    partialCoverage: list[FinalThirdCoverageIssue]
+
+    @model_validator(mode="after")
+    def validate_final_third_data(self) -> "FinalThirdShotData":
+        if self.includedDepths != [5, 6]:
+            raise ValueError("front2 must include depths [5, 6] in canonical order")
+        expected = [
+            *(f"depth6_lane{lane}" for lane in range(1, 6)),
+            *(f"depth5_lane{lane}" for lane in range(1, 6)),
+        ]
+        if [zone.zoneId for zone in self.zones] != expected:
+            raise ValueError("front2 zones must use the canonical fixed order")
+        unavailable_ids = [shot.shotId for shot in self.shots if not shot.endpointAvailable]
+        if self.endpointUnavailableCount != len(unavailable_ids) or self.endpointUnavailableShotIds != unavailable_ids:
+            raise ValueError("endpoint-unavailable count/list must match shots")
+        if not self.available and self.completeness != "unavailable":
+            raise ValueError("unavailable final-third data must declare unavailable completeness")
+        return self
+
+
+class FinalThirdShotEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    chartTaxonomyVersion: Literal["final-third-shot-map-v1"] = "final-third-shot-map-v1"
+    context: FinalThirdShotContext
+    data: FinalThirdShotData
 
 
 class PositionalGridCell(BaseModel):
