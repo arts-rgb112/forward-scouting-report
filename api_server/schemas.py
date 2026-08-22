@@ -13,6 +13,16 @@ TierCode = Literal["diamond", "emerald", "platinum", "gold", "silver", "bronze"]
 TierTaxonomyVersion = Literal["crystal-v2"]
 MetricTaxonomyVersion = Literal["duel-press-v1"]
 RawMetricSource = Literal["player_season_total", "league_per90_fallback"]
+DetailReadoutVersion = Literal["detail-readout-v1"]
+DetailReadoutState = Literal[
+    "observed", "server_derived", "imputed", "unavailable", "legacy_partial",
+]
+DetailReadoutSource = Literal[
+    "player_season_total", "league_per90_fallback", "tactical_ratio_static",
+    "server_derived", "unavailable",
+]
+DetailComparisonDirection = Literal["higher_is_better", "lower_is_better", "neutral"]
+DetailComparisonState = Literal["available", "unavailable", "not_applicable"]
 
 
 class AssetRef(BaseModel):
@@ -342,6 +352,277 @@ class DuelPressPlayerEnvelope(BaseModel):
     metricTaxonomyVersion: MetricTaxonomyVersion = "duel-press-v1"
     context: DuelPressRequestContext
     data: DuelPressPlayerResponse
+
+
+class DetailReadoutComparison(BaseModel):
+    """A server-authored comparison in the exact requested cohort.
+
+    ``neutral`` readouts (the context indicators) still expose distribution
+    position, but clients must not interpret a high percentile as better.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    state: DetailComparisonState
+    median: float | None = None
+    rank: int | None = Field(default=None, ge=1)
+    percentile: float | None = Field(default=None, ge=0, le=100)
+    population: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_availability(self) -> "DetailReadoutComparison":
+        populated = (self.median, self.rank, self.percentile)
+        if self.state == "available":
+            if any(value is None for value in populated) or self.population < 1:
+                raise ValueError("available comparison requires median, rank, percentile, and population")
+            if self.rank is not None and self.rank > self.population:
+                raise ValueError("comparison rank must not exceed population")
+        elif self.state == "unavailable":
+            if self.rank is not None or self.percentile is not None:
+                raise ValueError("unavailable comparison cannot have rank or percentile")
+            if self.population == 0 and self.median is not None:
+                raise ValueError("empty unavailable comparison cannot have a median")
+            if self.population > 0 and self.median is None:
+                raise ValueError("non-empty unavailable comparison requires a cohort median")
+        elif any(value is not None for value in populated) or self.population != 0:
+            raise ValueError("not_applicable comparison must be null with zero population")
+        return self
+
+
+class DuelPressDetailReadout(BaseModel):
+    """One raw, server-owned readout. Numeric zero is an observed value."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^[a-z][A-Za-z0-9]*$")
+    label: str = Field(min_length=1)
+    value: float | None = None
+    unit: Literal["count", "per90", "goals", "percent", "score"]
+    direction: DetailComparisonDirection
+    source: DetailReadoutSource
+    state: DetailReadoutState
+    comparison: DetailReadoutComparison
+    formulaId: str | None = None
+    formulaVersion: str | None = None
+    missingComponents: list[str] | None = None
+
+    @model_validator(mode="after")
+    def validate_value_state(self) -> "DuelPressDetailReadout":
+        if (self.formulaId is None) != (self.formulaVersion is None):
+            raise ValueError("formulaId and formulaVersion must be supplied together")
+        has_formula = self.formulaId is not None
+        has_missing = bool(self.missingComponents)
+
+        if self.state == "imputed":
+            if self.value is None or self.source != "unavailable" or not has_missing:
+                raise ValueError(
+                    "imputed readouts require a numeric value, unavailable source, and missingComponents"
+                )
+            if has_formula:
+                raise ValueError("imputed readouts cannot carry formula metadata")
+            if self.comparison.state == "available":
+                raise ValueError("imputed readouts cannot have an available player comparison")
+            return self
+
+        if self.value is None:
+            if self.state not in {"unavailable", "legacy_partial"} or self.source != "unavailable":
+                raise ValueError("null readouts must be unavailable/legacy_partial with unavailable source")
+            if self.comparison.state == "available":
+                raise ValueError("null readouts cannot have an available player comparison")
+            if self.state == "legacy_partial" and not has_missing:
+                raise ValueError("legacy_partial readouts require missingComponents")
+        elif self.state in {"unavailable", "legacy_partial"} or self.source == "unavailable":
+            raise ValueError("numeric non-imputed readouts cannot use unavailable semantics")
+
+        if self.source == "server_derived":
+            if self.state != "server_derived" or not has_formula:
+                raise ValueError(
+                    "server_derived source requires server_derived state and formula metadata"
+                )
+        elif self.source in {"player_season_total", "tactical_ratio_static"}:
+            if self.state != "observed" or has_formula:
+                raise ValueError("direct observed sources require observed state and no formula")
+        elif self.source == "league_per90_fallback":
+            if self.state == "observed" and has_formula:
+                raise ValueError("observed league_per90_fallback cannot carry formula metadata")
+            if self.state == "server_derived" and not has_formula:
+                raise ValueError("derived league_per90_fallback requires formula metadata")
+            if self.state not in {"observed", "server_derived"}:
+                raise ValueError("league_per90_fallback has invalid state")
+        elif self.source == "unavailable":
+            if self.state not in {"unavailable", "legacy_partial"}:
+                raise ValueError("unavailable source has invalid state")
+
+        if self.state == "server_derived" and not has_formula:
+            raise ValueError("server-derived readouts require formula metadata")
+        if self.state not in {"server_derived", "unavailable"} and has_formula:
+            raise ValueError("formula metadata is invalid for this readout state")
+        if has_missing and self.state not in {"legacy_partial"}:
+            raise ValueError("missingComponents is only valid for imputed or legacy_partial readouts")
+        return self
+
+
+DUEL_PRESS_DETAIL_CATEGORY_READOUT_IDS = {
+    "outsideShot": (
+        "outsideBoxShots", "outsideBoxXg", "outsideBoxXgot",
+        "outsideBoxShotQualityGoals",
+    ),
+    "boxThreat": (
+        "inBoxShots", "inBoxXg", "inBoxXgot", "inBoxFinishingGoals",
+        "inBoxFinishingPer90", "deepBoxZoneScore",
+    ),
+    "dangerZone": (
+        "successfulDribblesPer90", "failedDribblesPer90",
+        "dribbleMarginPer90", "dribbleAttempts", "dribbleSuccessRate",
+        "dangerZoneDensity",
+    ),
+    "combinedDuel": (
+        "groundDuelAttempts", "groundWonPer90", "groundLostPer90",
+        "duelMarginPer90", "groundDuelWinRate", "aerialDuelAttempts",
+        "aerialWonPer90", "aerialLostPer90", "aerialMarginPer90",
+        "aerialDuelWinRate",
+    ),
+    "spaceControl": ("ccaAreaPct", "dangerZoneDensity"),
+    "forwardPress": (
+        "recoveries", "recoveriesPer90", "finalThirdPossessionsWon",
+        "finalThirdPossessionsWonPer90",
+    ),
+}
+DUEL_PRESS_DETAIL_LOWER_BETTER_IDS = {
+    "failedDribblesPer90", "groundLostPer90", "aerialLostPer90",
+}
+
+
+class DuelPressDetailCategory(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: Literal["outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress"]
+    label: str = Field(min_length=1)
+    score: float | None = Field(default=None, ge=0, le=100)
+    scoreState: Literal["observed", "imputed", "unavailable"]
+    imputedComponents: list[str] = Field(default_factory=list)
+    comparison: DetailReadoutComparison
+    readouts: list[DuelPressDetailReadout] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_score_state(self) -> "DuelPressDetailCategory":
+        if self.score is None and self.scoreState != "unavailable":
+            raise ValueError("null category scores require unavailable scoreState")
+        if self.score is not None and self.scoreState == "unavailable":
+            raise ValueError("numeric category scores cannot be unavailable")
+        if self.scoreState == "imputed" and not self.imputedComponents:
+            raise ValueError("imputed category scores require imputedComponents")
+        if self.scoreState != "imputed" and self.imputedComponents:
+            raise ValueError("only imputed category scores may list imputedComponents")
+        expected_ids = DUEL_PRESS_DETAIL_CATEGORY_READOUT_IDS[self.id]
+        if tuple(readout.id for readout in self.readouts) != expected_ids:
+            raise ValueError(f"{self.id} readouts must use the exact required ownership and order")
+        for readout in self.readouts:
+            expected_direction = (
+                "lower_is_better"
+                if readout.id in DUEL_PRESS_DETAIL_LOWER_BETTER_IDS
+                else "higher_is_better"
+            )
+            if readout.direction != expected_direction:
+                raise ValueError(f"{readout.id} must use direction={expected_direction}")
+        if self.id == "forwardPress":
+            readouts = {readout.id: readout for readout in self.readouts}
+            self._validate_press_pair(
+                "recoveries", readouts["recoveries"], readouts["recoveriesPer90"],
+            )
+            self._validate_press_pair(
+                "finalThirdPossessionsWon",
+                readouts["finalThirdPossessionsWon"],
+                readouts["finalThirdPossessionsWonPer90"],
+            )
+        return self
+
+    @staticmethod
+    def _validate_press_pair(
+        label: str, total: DuelPressDetailReadout, per90: DuelPressDetailReadout,
+    ) -> None:
+        total_available = total.value is not None
+        per90_available = per90.value is not None
+        if total_available != per90_available:
+            raise ValueError(f"{label} total and per90 must both be numeric or both unavailable")
+        if not total_available:
+            if any(
+                item.source != "unavailable" or item.state != "unavailable"
+                for item in (total, per90)
+            ):
+                raise ValueError(f"unavailable {label} pair must use unavailable source/state")
+            return
+        if total.source != per90.source:
+            raise ValueError(f"{label} total/per90 sources must match")
+        if total.source == "player_season_total":
+            if total.state != "observed" or per90.state != "observed":
+                raise ValueError(f"player_season_total {label} pair must be observed")
+            return
+        if total.source == "league_per90_fallback":
+            if (
+                total.state != "server_derived"
+                or total.formulaId != "league-per90-total-v1"
+                or per90.state != "observed"
+            ):
+                raise ValueError(
+                    f"league_per90_fallback {label} requires derived total and observed per90"
+                )
+            return
+        raise ValueError(f"numeric {label} pair has invalid source")
+
+
+class DuelPressDetailPlayerIdentity(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int = Field(gt=0)
+    idNamespace: Literal["fotmob"] = "fotmob"
+    name: str = Field(min_length=1)
+    position: str = Field(min_length=1)
+    club: AssetRef
+    league: AssetRef
+
+
+class DuelPressDetailReadoutEnvelope(BaseModel):
+    """Strict additive detail contract; legacy player and companion DTOs stay intact."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    metricTaxonomyVersion: MetricTaxonomyVersion = "duel-press-v1"
+    readoutVersion: DetailReadoutVersion = "detail-readout-v1"
+    context: DuelPressRequestContext
+    player: DuelPressDetailPlayerIdentity
+    categories: list[DuelPressDetailCategory] = Field(min_length=6, max_length=6)
+    contextIndicators: list[DuelPressDetailReadout] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_order_and_identity(self) -> "DuelPressDetailReadoutEnvelope":
+        category_ids = [category.id for category in self.categories]
+        if category_ids != [
+            "outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress",
+        ]:
+            raise ValueError("categories must use the exact duel-press-v1 order")
+        if [indicator.id for indicator in self.contextIndicators] != [
+            "netProgressionPer90", "shootingLuckOrGoalkeeperImpact",
+        ]:
+            raise ValueError("contextIndicators must use the exact required order")
+        expected_indicator_formulas = (
+            "net-progression-v1", "goals-minus-xgot-v1",
+        )
+        for indicator, formula_id in zip(self.contextIndicators, expected_indicator_formulas):
+            if (
+                indicator.direction != "neutral"
+                or indicator.formulaId != formula_id
+            ):
+                raise ValueError(
+                    f"{indicator.id} must be neutral with formulaId={formula_id}"
+                )
+            if indicator.value is not None and (
+                indicator.source != "server_derived" or indicator.state != "server_derived"
+            ):
+                raise ValueError(f"numeric {indicator.id} must be server-derived")
+        if self.player.id != self.context.playerId:
+            raise ValueError("player identity must match context playerId")
+        return self
 
 
 class MetricRankPlayerRef(BaseModel):

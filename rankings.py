@@ -629,9 +629,29 @@ def get_spear_leaderboard(
             # approximating an average from the rendered 0-100 sector score.
             "out_box_shots_raw": metric.out_box_shots,
             "in_box_shots_raw": metric.in_box_shots,
+            # Detail-readout-v1 consumes static source measures and named
+            # server derivations below.  They remain internal frame columns;
+            # no legacy leaderboard/player DTO is widened by these values.
+            "goals_raw": metric.goals,
+            "xgot_raw": metric.xgot,
+            "out_box_xg_raw": metric.out_box_xg,
+            "out_box_xgot_raw": metric.out_box_xgot,
+            "out_box_shot_quality_goals_raw": metric.out_box_shot_quality,
+            "in_box_xg_raw": metric.in_box_xg,
+            "in_box_xgot_raw": metric.in_box_xgot,
+            "in_box_finishing_goals_raw": metric.in_box_finishing,
             "dribble_attempts_raw": metric.dribble_attempts,
+            "dribble_success_rate_raw": metric.dribbles_success_rate,
+            "dribbles_succeeded_per90_raw": metric.dribbles_succeeded_per90,
+            "dribbles_failed_per90_raw": metric.dribbles_failed_per90,
             "aerial_duel_attempts_raw": metric.aerial_duel_attempts,
             "ground_duel_attempts_raw": metric.ground_duel_attempts,
+            "ground_won_per90_raw": metric.duels_won_per90,
+            "ground_lost_per90_raw": metric.duels_lost_per90,
+            "ground_duel_win_rate_raw": metric.duels_won_percentage,
+            "aerial_won_per90_raw": metric.aerial_duels_won_per90,
+            "aerial_lost_per90_raw": metric.aerial_duels_lost_per90,
+            "aerial_duel_win_rate_raw": metric.aerial_duels_won_percentage,
             "cca_area_pct": row.get("cca_area_pct") if row is not None else None,
             # Ratio-companion raw values use the exact same fully eligible
             # domestic eight-league rows as the cached M.E.S.S.I. table.
@@ -644,6 +664,8 @@ def get_spear_leaderboard(
             "danger_zone_density": row.get("danger_zone_density") if row is not None else None,
             "aerial_margin_per90_raw": metric.aerial_margin_per90,
             "duel_margin_per90_raw": metric.duel_margin_per90,
+            "net_progression_per90_raw": metric.net_progression_per90,
+            "shooting_luck_or_goalkeeper_impact_raw": metric.luck_or_gk_impact,
             "recoveries": metric.recoveries,
             "recoveries_per90": metric.recoveries_per90,
             "recoveries_source": metric.recoveries_source,

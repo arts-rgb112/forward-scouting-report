@@ -18,6 +18,7 @@ from starlette.responses import PlainTextResponse
 from .schemas import (
     AgeBand, ApiErrorEnvelope, DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
     DuelPressLeaderboardEnvelope, DuelPressLeaderboardSort, DuelPressPlayerEnvelope,
+    DuelPressDetailReadoutEnvelope,
     MetricRanksEnvelope, MetricRanksRequest,
     RatioBenchmarkEnvelope, TacticalSummaryEnvelope, VolumeBenchmarkEnvelope,
     LeaderboardSort, MinutesBand, SortOrder,
@@ -29,6 +30,7 @@ from .schemas import (
 from .service import (
     build_duel_spatial_analysis, build_player_data_quality, build_players,
     duel_press_leaderboard_envelope, find_duel_press_player,
+    find_duel_press_detail_readouts,
     build_player_detail, build_tactical_quadrant_analysis, compare_players, find_v2_player_summary_timed, leaderboard_options,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
@@ -437,6 +439,31 @@ def get_duel_press_player(
     if player is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     return player
+
+
+@app.get(
+    "/api/v2/players/{playerId}/duel-press/detail-metrics",
+    response_model=DuelPressDetailReadoutEnvelope,
+    tags=["players"],
+    responses=DUEL_PRESS_ERROR_RESPONSES,
+)
+def get_duel_press_detail_metrics(
+    response: Response,
+    playerId: int,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+) -> DuelPressDetailReadoutEnvelope:
+    """Strict, additive six-category raw detail readout from the static cohort."""
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    validate_duel_press_context(mode, competition)
+    detail = find_duel_press_detail_readouts(playerId, season, mode, int(scope), competition)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
+    return detail
 
 
 @app.post(
