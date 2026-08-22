@@ -1,0 +1,36 @@
+{
+  "schema": "final-third-goal-mouth-source-fixture-v3",
+  "conversionVersion": "goal-mouth-v3",
+  "schemaVersion": "3.0.0",
+  "chartTaxonomyVersion": "final-third-shot-map-goal-mouth-v3",
+  "shootingQuality": {
+    "formulaVersion": "sum-xgot-minus-sum-xg-v1",
+    "eligibility": "front2 source shots with both finite xg and xgot",
+    "observed": {
+      "totalShotCount": 4,
+      "eligibleShotCount": 4,
+      "xgTotal": 0.35,
+      "xgotTotal": 0.78,
+      "xgotMinusXg": 0.43,
+      "state": "observed"
+    },
+    "partial": {
+      "totalShotCount": 3,
+      "eligibleShotCount": 1,
+      "xgTotal": 0.2,
+      "xgotTotal": 0.5,
+      "xgotMinusXg": 0.3,
+      "state": "partial",
+      "reason": "xgot_or_xg_unavailable_for_2_front_two_shots"
+    },
+    "unavailable": {
+      "totalShotCount": null,
+      "eligibleShotCount": null,
+      "xgTotal": null,
+      "xgotTotal": null,
+      "xgotMinusXg": null,
+      "state": "unavailable",
+      "reason": "competition_scoped_shot_event_snapshot_unavailable"
+    }
+  }
+}

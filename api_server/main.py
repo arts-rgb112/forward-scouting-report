@@ -28,7 +28,7 @@ from .schemas import (
     PlayerComparisonEnvelope, PlayerDataQualityEnvelope, PlayerDetailEnvelope,
     PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
     ShotmapServiceErrorDetail, ShotmapServiceErrorEnvelope,
-    FinalThirdEffectiveShotEnvelope, FinalThirdShotEnvelope,
+    FinalThirdEffectiveShotEnvelope, FinalThirdGoalMouthEnvelope, FinalThirdShotEnvelope,
     WatchlistResolveEnvelope, WatchlistResolveRequest, TacticalQuadrantEnvelope,
 )
 from .service import (
@@ -492,7 +492,7 @@ async def get_player(
 
 @app.get(
     "/api/v2/players/{player_id}/final-third-shot-map",
-    response_model=FinalThirdShotEnvelope | FinalThirdEffectiveShotEnvelope,
+    response_model=FinalThirdShotEnvelope | FinalThirdEffectiveShotEnvelope | FinalThirdGoalMouthEnvelope,
     tags=["players"],
     responses={
         404: {
@@ -523,14 +523,15 @@ def get_final_third_shot_map(
         default="front2",
         description="Only exact positional-grid depths 5 and 6 are currently supported.",
     ),
-    conversionVersion: Literal["goals-v1", "effective-shot-v2"] = Query(
+    conversionVersion: Literal["goals-v1", "effective-shot-v2", "goal-mouth-v3"] = Query(
         default="goals-v1",
         description=(
             "goals-v1 preserves the released goal conversion contract; "
-            "effective-shot-v2 returns on-target-or-goal share plus effectiveShotCount."
+            "effective-shot-v2 returns on-target-or-goal share plus effectiveShotCount; "
+            "goal-mouth-v3 additionally returns the server-owned front-two xGOT-minus-xG caption."
         ),
     ),
-) -> FinalThirdShotEnvelope | FinalThirdEffectiveShotEnvelope:
+) -> FinalThirdShotEnvelope | FinalThirdEffectiveShotEnvelope | FinalThirdGoalMouthEnvelope:
     """Return a cached, source-event-backed final-third companion contract.
 
     This endpoint never calls FotMob: it reads the committed season shard and

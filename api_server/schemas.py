@@ -1449,6 +1449,64 @@ class FinalThirdEffectiveShotEnvelope(BaseModel):
     data: FinalThirdEffectiveShotData
 
 
+class FinalThirdShootingQualitySummary(BaseModel):
+    """Server-owned front-two shot-quality total for the goal-mouth caption."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    totalShotCount: int | None = Field(default=None, ge=0)
+    eligibleShotCount: int | None = Field(default=None, ge=0)
+    xgTotal: float | None = Field(default=None, ge=0)
+    xgotTotal: float | None = Field(default=None, ge=0)
+    xgotMinusXg: float | None = None
+    state: FinalThirdFieldStateCode
+    reason: str | None = None
+    source: Literal["player_season_shot_events"] | None = None
+    formulaVersion: Literal["sum-xgot-minus-sum-xg-v1"] = "sum-xgot-minus-sum-xg-v1"
+
+    @model_validator(mode="after")
+    def validate_shooting_quality_summary(self) -> "FinalThirdShootingQualitySummary":
+        values = (self.xgTotal, self.xgotTotal, self.xgotMinusXg)
+        if self.totalShotCount is None:
+            if self.eligibleShotCount is not None or any(value is not None for value in values):
+                raise ValueError("unavailable shooting-quality source cannot contain values")
+            if self.state != "unavailable" or not self.reason or self.source is not None:
+                raise ValueError("unavailable shooting-quality source requires explicit unavailable provenance")
+            return self
+        if self.eligibleShotCount is None or self.eligibleShotCount > self.totalShotCount:
+            raise ValueError("eligible shooting-quality count must be within total volume")
+        if self.eligibleShotCount == 0 and self.totalShotCount > 0:
+            if any(value is not None for value in values) or self.state != "unavailable" or not self.reason:
+                raise ValueError("no eligible quality shots must remain explicitly unavailable")
+            return self
+        if any(value is None for value in values):
+            raise ValueError("available shooting-quality totals must be complete")
+        if self.state == "unavailable" or (self.state == "observed" and self.reason is not None):
+            raise ValueError("shooting-quality state/reason is inconsistent")
+        if self.state == "partial" and not self.reason:
+            raise ValueError("partial shooting-quality totals require a reason")
+        return self
+
+
+class FinalThirdGoalMouthData(FinalThirdEffectiveShotData):
+    """v3 adds a strict server-computed goal-mouth caption summary."""
+
+    shootingQuality: FinalThirdShootingQualitySummary
+
+
+class FinalThirdGoalMouthEnvelope(BaseModel):
+    """Opt-in v3 contract; v1 and v2 responses remain byte-compatible."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["3.0.0"] = "3.0.0"
+    chartTaxonomyVersion: Literal["final-third-shot-map-goal-mouth-v3"] = (
+        "final-third-shot-map-goal-mouth-v3"
+    )
+    context: FinalThirdShotContext
+    data: FinalThirdGoalMouthData
+
+
 class PositionalGridCell(BaseModel):
     """One 6-depth × 5-lane tactical-grid occupancy value."""
 
