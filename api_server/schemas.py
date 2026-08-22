@@ -1212,6 +1212,14 @@ class FinalThirdZoneFieldStates(BaseModel):
     qualityScore: FinalThirdFieldState
 
 
+class FinalThirdEffectiveShotZoneFieldStates(FinalThirdZoneFieldStates):
+    """v2 provenance for the server-counted effective-shot numerator."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    effectiveShotCount: FinalThirdFieldState
+
+
 class FinalThirdShotZone(BaseModel):
     """One taxonomy tile; its counts are never browser-derived."""
 
@@ -1394,6 +1402,51 @@ class FinalThirdShotEnvelope(BaseModel):
     chartTaxonomyVersion: Literal["final-third-shot-map-v1"] = "final-third-shot-map-v1"
     context: FinalThirdShotContext
     data: FinalThirdShotData
+
+
+class FinalThirdEffectiveShotZone(FinalThirdShotZone):
+    """v2 tile where conversion is effective on-target attempts, not goals."""
+
+    effectiveShotCount: int | None = Field(default=None, ge=0)
+    fieldStates: FinalThirdEffectiveShotZoneFieldStates
+
+    @model_validator(mode="after")
+    def validate_effective_shot_count(self) -> "FinalThirdEffectiveShotZone":
+        if self.shotsTotal is None:
+            if self.effectiveShotCount is not None:
+                raise ValueError("unavailable zone cannot contain an effective shot count")
+            if self.fieldStates.effectiveShotCount.state != "unavailable":
+                raise ValueError("unavailable effective shot count requires unavailable field state")
+            return self
+        if self.effectiveShotCount is None or self.effectiveShotCount > self.shotsTotal:
+            raise ValueError("effective shot count must be present and no greater than shotsTotal")
+        if self.fieldStates.effectiveShotCount.state == "unavailable":
+            raise ValueError("available effective shot count cannot use unavailable field state")
+        if self.shotsTotal == 0 and self.effectiveShotCount != 0:
+            raise ValueError("zero-attempt zones have zero effective shots")
+        return self
+
+
+class FinalThirdEffectiveShotData(FinalThirdShotData):
+    """Versioned v2 data: effective attempts are goals plus on-target shots."""
+
+    zones: list[FinalThirdEffectiveShotZone] = Field(min_length=10, max_length=10)
+    conversionDefinition: Literal[
+        "effective-on-target-plus-goal-divided-by-shots-v2"
+    ] = "effective-on-target-plus-goal-divided-by-shots-v2"
+
+
+class FinalThirdEffectiveShotEnvelope(BaseModel):
+    """Opt-in companion version; v1 remains unchanged for existing clients."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["2.0.0"] = "2.0.0"
+    chartTaxonomyVersion: Literal["final-third-shot-map-effective-v2"] = (
+        "final-third-shot-map-effective-v2"
+    )
+    context: FinalThirdShotContext
+    data: FinalThirdEffectiveShotData
 
 
 class PositionalGridCell(BaseModel):

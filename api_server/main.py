@@ -28,7 +28,7 @@ from .schemas import (
     PlayerComparisonEnvelope, PlayerDataQualityEnvelope, PlayerDetailEnvelope,
     PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
     ShotmapServiceErrorDetail, ShotmapServiceErrorEnvelope,
-    FinalThirdShotEnvelope,
+    FinalThirdEffectiveShotEnvelope, FinalThirdShotEnvelope,
     WatchlistResolveEnvelope, WatchlistResolveRequest, TacticalQuadrantEnvelope,
 )
 from .service import (
@@ -492,7 +492,7 @@ async def get_player(
 
 @app.get(
     "/api/v2/players/{player_id}/final-third-shot-map",
-    response_model=FinalThirdShotEnvelope,
+    response_model=FinalThirdShotEnvelope | FinalThirdEffectiveShotEnvelope,
     tags=["players"],
     responses={
         404: {
@@ -523,7 +523,14 @@ def get_final_third_shot_map(
         default="front2",
         description="Only exact positional-grid depths 5 and 6 are currently supported.",
     ),
-) -> FinalThirdShotEnvelope:
+    conversionVersion: Literal["goals-v1", "effective-shot-v2"] = Query(
+        default="goals-v1",
+        description=(
+            "goals-v1 preserves the released goal conversion contract; "
+            "effective-shot-v2 returns on-target-or-goal share plus effectiveShotCount."
+        ),
+    ),
+) -> FinalThirdShotEnvelope | FinalThirdEffectiveShotEnvelope:
     """Return a cached, source-event-backed final-third companion contract.
 
     This endpoint never calls FotMob: it reads the committed season shard and
@@ -538,7 +545,9 @@ def get_final_third_shot_map(
             detail="scope must be omitted for europe context",
         )
     validate_duel_press_context(mode, competition)
-    envelope = build_final_third_shot_map(player_id, season, mode, int(scope), competition)
+    envelope = build_final_third_shot_map(
+        player_id, season, mode, int(scope), competition, conversionVersion,
+    )
     if envelope is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"

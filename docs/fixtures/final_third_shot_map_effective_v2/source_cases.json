@@ -1,0 +1,54 @@
+{
+  "schema": "final-third-shot-map-effective-source-fixture-v2",
+  "conversionVersion": "effective-shot-v2",
+  "schemaVersion": "2.0.0",
+  "chartTaxonomyVersion": "final-third-shot-map-effective-v2",
+  "conversionDefinition": "effective-on-target-plus-goal-divided-by-shots-v2",
+  "statusCardinality": "canonical statuses are mutually exclusive",
+  "rows": [
+    {
+      "sourceEventId": "goal-1",
+      "x": 90,
+      "y": 50,
+      "outcome": "goal",
+      "xg": 0.2,
+      "xgot": 0.5,
+      "trajectory": {"schemaVersion": "shotmap-trajectory-v1", "endpointKind": "goal_mouth", "endX": 100, "endY": 50, "endZMeters": 1.22, "source": "fotmob"}
+    },
+    {
+      "sourceEventId": "on-target-1",
+      "x": 90,
+      "y": 50,
+      "outcome": "on_target",
+      "xg": 0.1,
+      "xgot": 0.2,
+      "trajectory": {"schemaVersion": "shotmap-trajectory-v1", "endpointKind": "goal_mouth", "endX": 100, "endY": 48, "endZMeters": 0.6, "source": "fotmob"}
+    },
+    {
+      "sourceEventId": "off-target-1",
+      "x": 90,
+      "y": 50,
+      "outcome": "off_target",
+      "xg": 0,
+      "xgot": 0,
+      "trajectory": {"schemaVersion": "shotmap-trajectory-v1", "endpointKind": "goal_mouth", "endX": 100, "endY": 57, "endZMeters": 3.1, "source": "fotmob"}
+    },
+    {
+      "sourceEventId": "blocked-1",
+      "x": 90,
+      "y": 50,
+      "outcome": "blocked",
+      "xg": 0.05,
+      "xgot": 0.08,
+      "trajectory": {"schemaVersion": "shotmap-trajectory-v1", "endpointKind": "blocked", "endX": 85, "endY": 50, "endZMeters": null, "source": "fotmob"}
+    }
+  ],
+  "expect": {
+    "zoneId": "depth6_lane3",
+    "shotsTotal": 4,
+    "goals": 1,
+    "effectiveShotCount": 2,
+    "conversionRatePct": 50.0,
+    "zeroZone": {"zoneId": "depth6_lane1", "shotsTotal": 0, "effectiveShotCount": 0, "conversionRatePct": null}
+  }
+}
