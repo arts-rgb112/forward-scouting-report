@@ -1,5 +1,8 @@
 import type { Player, SortKey, SortState } from "./types";
-export const normalizeText = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().trim();
+import { textComparisonKey } from "./textComparisonKey";
+
+/** @deprecated Prefer textComparisonKey for explicit local-only comparisons. */
+export const normalizeText = textComparisonKey;
 export function derivePositions(players: readonly Player[]): string[] { return ["ALL", ...Array.from(new Set(players.map((player) => player.position))).sort()]; }
 type FilterOptions = { query: string; role: string; sort: SortState | SortKey; watchOnly: boolean; watchlistIds: readonly number[] };
 export function filterAndSortPlayers(players: readonly Player[], options: FilterOptions): Player[] {

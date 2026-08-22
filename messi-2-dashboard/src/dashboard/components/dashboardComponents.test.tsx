@@ -120,6 +120,20 @@ describe("dashboard contract UI", () => {
     expect(commit).toHaveBeenLastCalledWith("");
   });
 
+  it("suggests an accented display name for raw accented and unaccented drafts", () => {
+    const commit = vi.fn();
+    const diaz = { ...samplePlayers[0], name: "Luis Díaz", club: { ...samplePlayers[0].club, name: "Real Betis" }, league: { ...samplePlayers[0].league, name: "La Liga" } };
+    render(<DashboardToolbar query="" role="ALL" watchOnly={false} watchCount={0} hasFilters={false} players={[diaz]} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={commit} onRoleChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={vi.fn()} />);
+    const input = screen.getByLabelText("Search players");
+    for (const value of ["Diaz", "Luis Diaz", "Díaz"]) {
+      fireEvent.change(input, { target: { value } });
+      expect(screen.getByRole("link", { name: /Luis Díaz/i })).toBeInTheDocument();
+      expect(input).toHaveValue(value);
+    }
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(commit).toHaveBeenLastCalledWith("Díaz");
+  });
+
   it("cancels a pending leaderboard draft when the query namespace changes", () => {
     vi.useFakeTimers();
     const commit = vi.fn();

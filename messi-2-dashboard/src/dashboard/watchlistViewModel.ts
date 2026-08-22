@@ -1,6 +1,7 @@
 import type { ResolvedWatchlistEntry } from "../api/watchlistResolveApi";
 import type { AgeBand, DatasetRouteState, MetricKey, MinutesBand, SortState, Player, Tier } from "./types";
 import type { WatchlistEntry, WatchlistSnapshot } from "./watchlistStorage";
+import { textComparisonKey } from "./textComparisonKey";
 
 export const WATCHLIST_PAGE_SIZE = 50;
 export type WatchlistProfile = {
@@ -59,7 +60,6 @@ export function watchlistRows(entries: readonly WatchlistEntry[], resolved: Read
   });
 }
 
-const text = (value: string | undefined) => value?.toLocaleLowerCase() ?? "";
 const compareNullable = (left: number | null | undefined, right: number | null | undefined, direction: "asc" | "desc") => {
   if (left == null && right == null) return 0;
   if (left == null) return 1;
@@ -89,12 +89,12 @@ function matchesMinutesBand(minutes: number | undefined, band: MinutesBand) {
 export function filterAndSortWatchlistRows(rows: readonly WatchlistRow[], filters: WatchlistFilters): WatchlistRow[] {
   const ageBand = filters.ageBand ?? "all";
   const minutesBand = filters.minutesBand ?? "all";
-  const needle = filters.query.trim().toLocaleLowerCase();
+  const needle = textComparisonKey(filters.query);
   const filtered = rows.filter((row) => {
     // Resolve overlays are display-only. Filtering/sorting/pagination must remain stable
     // against immutable saved values so a refreshed profile cannot move another context.
     const profile = profileFromSnapshot(row.entry.snapshot);
-    const searchable = [profile.name, profile.clubName, profile.leagueName, profile.position].map(text).join(" ");
+    const searchable = textComparisonKey([profile.name, profile.clubName, profile.leagueName, profile.position].filter((value): value is string => Boolean(value)).join(" "));
     if (needle && !searchable.includes(needle)) return false;
     if (filters.role !== "ALL" && profile.archetype !== filters.role) return false;
     if (filters.position !== "ALL" && profile.position !== filters.position) return false;

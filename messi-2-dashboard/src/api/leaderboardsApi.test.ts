@@ -26,6 +26,14 @@ describe("leaderboard API pagination", () => {
     expect(result.serverPage?.pageSize).toBe(50);
   });
 
+  it("sends the user's raw accent-bearing q and retains authoritative page totals", async () => {
+    const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(payload), { headers: { "Content-Type": "application/json" } }));
+    const result = await fetchLeaderboard(config, { season: "2025/2026", mode: "league", scope: 7, competition: "all" }, { page: 1, pageSize: 50, q: "Díaz", role: "all", position: "ALL", ageBand: "all", minutesBand: "all", sort: "score", direction: "desc" }, new AbortController().signal);
+    expect(new URL(String(request.mock.calls[0][0])).searchParams.get("q")).toBe("Díaz");
+    expect(result.meta.totalItems).toBe(910);
+    expect(result.serverPage?.totalPages).toBe(19);
+  });
+
   it("rejects a non-null competition in league response metadata", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ ...payload, meta: { ...payload.meta, competition: "ucl" } }), { headers: { "Content-Type": "application/json" } }));
     await expect(fetchLeaderboard(config, { season: "2025/2026", mode: "league", scope: 7, competition: "all" }, { page: 1, pageSize: 50, q: "", role: "all", position: "ALL", ageBand: "all", minutesBand: "all", sort: "score", direction: "desc" }, new AbortController().signal)).rejects.toMatchObject({ kind: "schema" });

@@ -1,5 +1,6 @@
 import type { AgeBand, MinutesBand } from "./types";
 import type { WatchlistV3Entry } from "./watchlistV3Contracts";
+import { textComparisonKey } from "./textComparisonKey";
 
 export const WATCHLIST_V3_PAGE_SIZE = 50;
 export type WatchlistV3MetricSort = "outsideShot" | "boxThreat" | "dangerZone" | "aerial" | "groundDuel" | "combinedDuel" | "spaceControl" | "forwardPress";
@@ -17,9 +18,9 @@ function minutesMatches(minutes: number | undefined, band: MinutesBand) { if (ba
 function nullableNumber(left: number | null | undefined, right: number | null | undefined, direction: "asc" | "desc") { if (left == null && right == null) return 0; if (left == null) return 1; if (right == null) return -1; return direction === "asc" ? left - right : right - left; }
 
 export function filterAndSortWatchlistV3(entries: readonly WatchlistV3Entry[], filters: WatchlistV3Filters): WatchlistV3Entry[] {
-  const needle = filters.query.trim().toLocaleLowerCase();
+  const needle = textComparisonKey(filters.query);
   const filtered = entries.filter((entry) => {
-    const profile = watchlistV3Profile(entry); const searchable = `${profile.name} ${profile.clubName} ${profile.leagueName ?? ""} ${profile.position} ${entry.context.season} ${entry.context.mode} ${entry.context.scope ?? ""} ${entry.context.competition}`.toLocaleLowerCase();
+    const profile = watchlistV3Profile(entry); const searchable = textComparisonKey(`${profile.name} ${profile.clubName} ${profile.leagueName ?? ""} ${profile.position} ${entry.context.season} ${entry.context.mode} ${entry.context.scope ?? ""} ${entry.context.competition}`);
     return (!needle || searchable.includes(needle)) && (filters.role === "ALL" || profile.archetype === filters.role) && (filters.position === "ALL" || profile.position === filters.position) && ageMatches(profile.age, filters.ageBand) && minutesMatches(profile.minutes, filters.minutesBand);
   });
   return filtered.slice().sort((left, right) => {
