@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, useId, useState, type ReactNode } from "react";
 import { getScoreBand } from "../dashboard/scoutingConfig";
 import type { DuelPressDetailReadout, DuelPressDetailReadoutEnvelope } from "../api/duelPressDetailReadoutContracts";
 
@@ -25,8 +25,11 @@ export function formatAuthoritativePercentile(percentile: number | null): number
   return Math.min(99, Math.max(0, Math.floor(percentile)));
 }
 
+const scoreBadgeGeometry = "inline-flex min-w-10 items-center justify-center rounded-md border px-2 font-mono text-[13px] font-bold h-8";
+const unavailableBadge = "border-zinc-400/30 bg-zinc-400/10 text-zinc-300";
+
 function scoreTextToken(score: number) {
-  return getScoreBand(score).className.split(" ").find((token) => token.startsWith("text-")) ?? getScoreBand(0).className.split(" ").find((token) => token.startsWith("text-"))!;
+  return `${scoreBadgeGeometry} ${getScoreBand(score).className}`;
 }
 
 function comparisonDetails(comparison: DuelPressDetailReadout["comparison"]) {
@@ -42,6 +45,10 @@ function comparisonDetails(comparison: DuelPressDetailReadout["comparison"]) {
 function DetailsTooltip({ label, displayValue, children, trigger }: { label: string; displayValue: string; children: ReactNode; trigger: ReactNode }) {
   const [open, setOpen] = useState(false);
   const tooltipId = `detail-tooltip-${useId().replace(/:/g, "")}`;
+  const triggerClassName = isValidElement<{ className?: string }>(trigger) ? trigger.props.className ?? "" : "";
+  const renderedTrigger = triggerClassName.includes("text-zinc-") && isValidElement<{ className?: string }>(trigger)
+    ? cloneElement(trigger, { className: `${scoreBadgeGeometry} ${unavailableBadge}` })
+    : trigger;
   return <span className="relative inline-flex min-w-0" onPointerEnter={() => setOpen(true)} onPointerLeave={() => setOpen(false)}>
     <button
       type="button"
@@ -50,8 +57,9 @@ function DetailsTooltip({ label, displayValue, children, trigger }: { label: str
       className="min-w-0 rounded text-inherit outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
       onFocus={() => setOpen(true)}
       onBlur={() => setOpen(false)}
+      onClick={() => setOpen(true)}
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.currentTarget.blur(); setOpen(false); } }}
-    >{trigger}</button>
+    >{renderedTrigger}</button>
     {open && <span id={tooltipId} role="tooltip" className="absolute right-0 top-full z-20 mt-2 w-64 rounded border border-white/20 bg-[#101415] p-3 text-left text-[11px] leading-4 text-zinc-200 shadow-lg">{children}</span>}
   </span>;
 }
@@ -132,12 +140,20 @@ function ContextCard({ readout, label }: { readout: DuelPressDetailReadout; labe
   </article>;
 }
 
-export function DuelPressDetailReadoutBoard({ data }: { data: DuelPressDetailReadoutEnvelope }) {
+export type DetailReadoutBoardLayout = "page" | "rail";
+
+export function DuelPressDetailReadoutBoard({ data, layout = "page" }: { data: DuelPressDetailReadoutEnvelope; layout?: DetailReadoutBoardLayout }) {
+  const categoryGridClass = layout === "rail"
+    ? "mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2"
+    : "mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3";
+  const contextGridClass = layout === "rail"
+    ? "grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2"
+    : "grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2";
   return <section aria-label="Duel press detailed stats board" className="min-w-0">
     <h2 className="text-lg font-black">상세 스탯 보드</h2>
-    <div data-layout="detail-readout-grid" className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{data.categories.map((category) => <CategoryCard key={category.id} category={category}/>)}</div>
+    <div data-layout="detail-readout-grid" className={categoryGridClass}>{data.categories.map((category) => <CategoryCard key={category.id} category={category}/>)}</div>
     <section aria-label="컨텍스트 지표" className="mt-3 min-w-0">
-      <div data-layout="auxiliary-measurements" className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+      <div data-layout="auxiliary-measurements" className={contextGridClass}>
         <ContextCard readout={data.contextIndicators[0]} label="순수 전진 기여도"/>
         <ContextCard readout={data.contextIndicators[1]} label="득점 운·상대 선방"/>
       </div>
