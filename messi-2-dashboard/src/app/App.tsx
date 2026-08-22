@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PlayersResourceContainer } from "../dashboard/PlayersResourceContainer";
 import { DashboardErrorBoundary } from "../dashboard/components/DashboardErrorBoundary";
@@ -24,15 +24,27 @@ export function GlobalNavigation({ pathname }: { pathname: string }) {
   </header>;
 }
 
-export default function App() {
+type AppProps = { navigate?: (target: string) => void };
+const browserNavigate = (target: string) => window.location.replace(target);
+
+export default function App({ navigate = browserNavigate }: AppProps) {
+  const initialLocation = useRef({ pathname: window.location.pathname, search: window.location.search });
+  const initialNavigate = useRef(navigate);
+  const legacyRouteHandled = useRef(false);
   const [resetKey, setResetKey] = useState(0);
-  const [pathname, setPathname] = useState(window.location.pathname);
+  const [pathname, setPathname] = useState(initialLocation.current.pathname);
   useEffect(() => {
     const updatePath = () => setPathname(window.location.pathname);
     window.addEventListener("popstate", updatePath);
     return () => window.removeEventListener("popstate", updatePath);
   }, []);
-  useEffect(() => { if (window.location.pathname !== "/") return; const target = legacyRootAdapter(window.location.search); if (target) window.location.replace(target); }, []);
+  useEffect(() => {
+    if (legacyRouteHandled.current) return;
+    legacyRouteHandled.current = true;
+    if (initialLocation.current.pathname !== "/") return;
+    const target = legacyRootAdapter(initialLocation.current.search);
+    if (target) initialNavigate.current(target);
+  }, []);
   const routed = pathname !== "/";
   return <WatchlistV3Provider><GlobalNavigation pathname={pathname} /><DashboardErrorBoundary resetKey={resetKey} onReset={() => setResetKey((key) => key + 1)}>{routed ? <StaticRoute /> : <PlayersResourceContainer key={resetKey} />}</DashboardErrorBoundary></WatchlistV3Provider>;
 }
