@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 import pytest
 
+from api_server import main as api_main
 from api_server import service
 from api_server.main import app
 from api_server.schemas import DuelPressDetailReadoutEnvelope, DuelPressPlayerEnvelope
@@ -37,6 +38,17 @@ def _detail(monkeypatch, *, mode: str = "league"):
     return service.find_duel_press_detail_readouts(
         player.id, "2025/2026", mode, 8, "ucl" if mode == "europe" else "all",
     )
+
+
+def _payload(monkeypatch) -> dict[str, object]:
+    detail = _detail(monkeypatch)
+    assert detail is not None
+    return detail.model_dump(mode="json")
+
+
+def _assert_invalid(payload: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        DuelPressDetailReadoutEnvelope.model_validate(payload)
 
 
 def test_complete_detail_readout_has_six_ordered_categories_and_all_legacy_bars(monkeypatch) -> None:
@@ -113,26 +125,158 @@ def test_europe_context_nulls_scope_and_keeps_competition(monkeypatch) -> None:
 
 
 def test_detail_envelope_rejects_wrong_version_extra_and_bad_null_state(monkeypatch) -> None:
-    detail = _detail(monkeypatch)
-    assert detail is not None
-    payload = detail.model_dump(mode="json")
+    payload = _payload(monkeypatch)
     payload["readoutVersion"] = "detail-readout-v0"
-    with pytest.raises(ValidationError):
-        DuelPressDetailReadoutEnvelope.model_validate(payload)
+    _assert_invalid(payload)
 
-    payload = detail.model_dump(mode="json")
+    payload = _payload(monkeypatch)
+    payload["metricTaxonomyVersion"] = "duel-press-v0"
+    _assert_invalid(payload)
+
+    payload = _payload(monkeypatch)
     payload["extra"] = True
-    with pytest.raises(ValidationError):
-        DuelPressDetailReadoutEnvelope.model_validate(payload)
+    _assert_invalid(payload)
 
-    payload = detail.model_dump(mode="json")
+    payload = _payload(monkeypatch)
     payload["categories"][0]["readouts"][0]["value"] = None
     payload["categories"][0]["readouts"][0]["state"] = "observed"
-    with pytest.raises(ValidationError):
-        DuelPressDetailReadoutEnvelope.model_validate(payload)
+    _assert_invalid(payload)
 
 
-def test_openapi_and_cors_expose_only_the_additive_get_contract() -> None:
+def test_contract_rejects_wrong_readout_ownership_order_direction_and_context_formula(monkeypatch) -> None:
+    payload = _payload(monkeypatch)
+    payload["categories"][0]["readouts"][0], payload["categories"][0]["readouts"][1] = (
+        payload["categories"][0]["readouts"][1], payload["categories"][0]["readouts"][0],
+    )
+    _assert_invalid(payload)
+
+    payload = _payload(monkeypatch)
+    payload["categories"][0]["readouts"][0] = payload["contextIndicators"][0]
+    _assert_invalid(payload)
+
+    payload = _payload(monkeypatch)
+    combined = payload["categories"][3]["readouts"]
+    combined[5], combined[6] = combined[6], combined[5]
+    _assert_invalid(payload)
+
+    payload = _payload(monkeypatch)
+    failed = payload["categories"][2]["readouts"][1]
+    failed["direction"] = "higher_is_better"
+    _assert_invalid(payload)
+
+    payload = _payload(monkeypatch)
+    payload["contextIndicators"].reverse()
+    _assert_invalid(payload)
+
+    payload = _payload(monkeypatch)
+    payload["contextIndicators"][0]["direction"] = "higher_is_better"
+    _assert_invalid(payload)
+
+    payload = _payload(monkeypatch)
+    payload["contextIndicators"][1]["formulaId"] = "goals-minus-xg-v1"
+    _assert_invalid(payload)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "half_unavailable",
+        "source_mismatch",
+        "player_total_derived",
+        "fallback_total_observed",
+        "fallback_per90_derived",
+    ],
+)
+def test_forward_press_pair_rejects_invalid_source_state_combinations(monkeypatch, mutation: str) -> None:
+    payload = _payload(monkeypatch)
+    press = payload["categories"][5]["readouts"]
+    recoveries, recoveries_per90 = press[0], press[1]
+    final_total, final_per90 = press[2], press[3]
+    if mutation == "half_unavailable":
+        recoveries_per90.update({
+            "value": None, "source": "unavailable", "state": "unavailable",
+            "comparison": {
+                "state": "unavailable", "median": None, "rank": None,
+                "percentile": None, "population": 0,
+            },
+        })
+    elif mutation == "source_mismatch":
+        recoveries_per90["source"] = "league_per90_fallback"
+    elif mutation == "player_total_derived":
+        recoveries.update({
+            "state": "server_derived", "formulaId": "league-per90-total-v1",
+            "formulaVersion": "legacy-bars-v1",
+        })
+    elif mutation == "fallback_total_observed":
+        final_total.update({
+            "state": "observed", "formulaId": None, "formulaVersion": None,
+        })
+    else:
+        final_per90.update({
+            "state": "server_derived", "formulaId": "league-per90-total-v1",
+            "formulaVersion": "legacy-bars-v1",
+        })
+    _assert_invalid(payload)
+
+
+def test_forward_press_observed_zero_pair_is_valid(monkeypatch) -> None:
+    payload = _payload(monkeypatch)
+    press = payload["categories"][5]["readouts"]
+    press[0]["value"] = 0
+    press[1]["value"] = 0
+    validated = DuelPressDetailReadoutEnvelope.model_validate(payload)
+    assert validated.categories[5].readouts[0].value == 0
+    assert validated.categories[5].readouts[1].value == 0
+
+
+def test_lower_better_rank_is_server_authored_in_correct_direction() -> None:
+    best = service._detail_comparison(1.0, [1.0, 2.0, 3.0], "lower_is_better")
+    worst = service._detail_comparison(3.0, [1.0, 2.0, 3.0], "lower_is_better")
+    assert (best.rank, best.percentile, best.median, best.population) == (1, 100.0, 2.0, 3)
+    assert (worst.rank, worst.percentile) == (3, 0.0)
+
+
+@pytest.mark.parametrize(
+    ("params", "expected_scope", "expected_competition"),
+    [
+        ({"mode": "league", "scope": 8, "competition": "all"}, 8, None),
+        ({"mode": "europe", "competition": "ucl"}, None, "ucl"),
+    ],
+)
+def test_real_http_route_echoes_canonical_league_and_europe_contexts(
+    monkeypatch, params: dict[str, object], expected_scope: int | None,
+    expected_competition: str | None,
+) -> None:
+    detail = _detail(monkeypatch)
+    assert detail is not None
+
+    def resolve(player_id: int, season: str, mode: str, scope: int, competition: str):
+        return detail.model_copy(update={
+            "context": detail.context.model_copy(update={
+                "playerId": player_id, "season": season, "mode": mode,
+                "scope": scope if mode == "league" else None,
+                "competition": competition if mode == "europe" else None,
+            }),
+        })
+
+    monkeypatch.setattr(api_main, "find_duel_press_detail_readouts", resolve)
+    response = TestClient(app).get(
+        "/api/v2/players/194165/duel-press/detail-metrics",
+        params={"season": "2025/2026", **params},
+    )
+    assert response.status_code == 200
+    assert response.json()["context"] == {
+        "playerId": 194165, "idNamespace": "fotmob", "season": "2025/2026",
+        "mode": params["mode"], "scope": expected_scope,
+        "competition": expected_competition,
+    }
+
+
+@pytest.mark.parametrize("origin", [
+    "https://forward-scouting-report-6dn7-tau.vercel.app",
+    "https://forward-scouting-report-6dn7-feature-42-messiflick.vercel.app",
+])
+def test_openapi_and_cors_expose_only_the_additive_get_contract(origin: str) -> None:
     client = TestClient(app)
     schema = client.get("/openapi.json").json()
     path = "/api/v2/players/{playerId}/duel-press/detail-metrics"
@@ -144,9 +288,9 @@ def test_openapi_and_cors_expose_only_the_additive_get_contract() -> None:
     response = client.options(
         path,
         headers={
-            "Origin": "https://forward-scouting-report-6dn7-tau.vercel.app",
+            "Origin": origin,
             "Access-Control-Request-Method": "GET",
         },
     )
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "https://forward-scouting-report-6dn7-tau.vercel.app"
+    assert response.headers["access-control-allow-origin"] == origin

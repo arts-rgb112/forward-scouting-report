@@ -570,6 +570,8 @@ def _detail_readout(
             id=identifier, label=label, value=None, unit=unit, direction=direction,
             source="unavailable", state="unavailable",
             comparison=_detail_comparison(None, comparison_values, direction),
+            formulaId=formula_id,
+            formulaVersion=DETAIL_READOUT_FORMULA_VERSION if formula_id else None,
             missingComponents=missing_components,
         )
     return DuelPressDetailReadout(

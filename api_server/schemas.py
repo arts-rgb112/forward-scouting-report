@@ -411,13 +411,51 @@ class DuelPressDetailReadout(BaseModel):
         if self.value is None:
             if self.state not in {"unavailable", "legacy_partial"} or self.source != "unavailable":
                 raise ValueError("null readouts must be unavailable/legacy_partial with unavailable source")
+            if self.comparison.state == "available":
+                raise ValueError("null readouts cannot have an available player comparison")
         elif self.state in {"unavailable", "legacy_partial"} or self.source == "unavailable":
             raise ValueError("numeric readouts cannot be unavailable")
         if self.state == "server_derived" and not (self.formulaId and self.formulaVersion):
             raise ValueError("server-derived readouts require formulaId and formulaVersion")
-        if self.state != "server_derived" and (self.formulaId is not None or self.formulaVersion is not None):
-            raise ValueError("only server-derived readouts may carry formula metadata")
+        if (self.formulaId is None) != (self.formulaVersion is None):
+            raise ValueError("formulaId and formulaVersion must be supplied together")
+        if (
+            self.state not in {"server_derived", "unavailable"}
+            and self.formulaId is not None
+        ):
+            raise ValueError("only derived or unavailable derived readouts may carry formula metadata")
         return self
+
+
+DUEL_PRESS_DETAIL_CATEGORY_READOUT_IDS = {
+    "outsideShot": (
+        "outsideBoxShots", "outsideBoxXg", "outsideBoxXgot",
+        "outsideBoxShotQualityGoals",
+    ),
+    "boxThreat": (
+        "inBoxShots", "inBoxXg", "inBoxXgot", "inBoxFinishingGoals",
+        "inBoxFinishingPer90", "deepBoxZoneScore",
+    ),
+    "dangerZone": (
+        "successfulDribblesPer90", "failedDribblesPer90",
+        "dribbleMarginPer90", "dribbleAttempts", "dribbleSuccessRate",
+        "dangerZoneDensity",
+    ),
+    "combinedDuel": (
+        "groundDuelAttempts", "groundWonPer90", "groundLostPer90",
+        "duelMarginPer90", "groundDuelWinRate", "aerialDuelAttempts",
+        "aerialWonPer90", "aerialLostPer90", "aerialMarginPer90",
+        "aerialDuelWinRate",
+    ),
+    "spaceControl": ("ccaAreaPct", "dangerZoneDensity"),
+    "forwardPress": (
+        "recoveries", "recoveriesPer90", "finalThirdPossessionsWon",
+        "finalThirdPossessionsWonPer90",
+    ),
+}
+DUEL_PRESS_DETAIL_LOWER_BETTER_IDS = {
+    "failedDribblesPer90", "groundLostPer90", "aerialLostPer90",
+}
 
 
 class DuelPressDetailCategory(BaseModel):
@@ -441,7 +479,61 @@ class DuelPressDetailCategory(BaseModel):
             raise ValueError("imputed category scores require imputedComponents")
         if self.scoreState != "imputed" and self.imputedComponents:
             raise ValueError("only imputed category scores may list imputedComponents")
+        expected_ids = DUEL_PRESS_DETAIL_CATEGORY_READOUT_IDS[self.id]
+        if tuple(readout.id for readout in self.readouts) != expected_ids:
+            raise ValueError(f"{self.id} readouts must use the exact required ownership and order")
+        for readout in self.readouts:
+            expected_direction = (
+                "lower_is_better"
+                if readout.id in DUEL_PRESS_DETAIL_LOWER_BETTER_IDS
+                else "higher_is_better"
+            )
+            if readout.direction != expected_direction:
+                raise ValueError(f"{readout.id} must use direction={expected_direction}")
+        if self.id == "forwardPress":
+            readouts = {readout.id: readout for readout in self.readouts}
+            self._validate_press_pair(
+                "recoveries", readouts["recoveries"], readouts["recoveriesPer90"],
+            )
+            self._validate_press_pair(
+                "finalThirdPossessionsWon",
+                readouts["finalThirdPossessionsWon"],
+                readouts["finalThirdPossessionsWonPer90"],
+            )
         return self
+
+    @staticmethod
+    def _validate_press_pair(
+        label: str, total: DuelPressDetailReadout, per90: DuelPressDetailReadout,
+    ) -> None:
+        total_available = total.value is not None
+        per90_available = per90.value is not None
+        if total_available != per90_available:
+            raise ValueError(f"{label} total and per90 must both be numeric or both unavailable")
+        if not total_available:
+            if any(
+                item.source != "unavailable" or item.state != "unavailable"
+                for item in (total, per90)
+            ):
+                raise ValueError(f"unavailable {label} pair must use unavailable source/state")
+            return
+        if total.source != per90.source:
+            raise ValueError(f"{label} total/per90 sources must match")
+        if total.source == "player_season_total":
+            if total.state != "observed" or per90.state != "observed":
+                raise ValueError(f"player_season_total {label} pair must be observed")
+            return
+        if total.source == "league_per90_fallback":
+            if (
+                total.state != "server_derived"
+                or total.formulaId != "league-per90-total-v1"
+                or per90.state != "observed"
+            ):
+                raise ValueError(
+                    f"league_per90_fallback {label} requires derived total and observed per90"
+                )
+            return
+        raise ValueError(f"numeric {label} pair has invalid source")
 
 
 class DuelPressDetailPlayerIdentity(BaseModel):
@@ -478,6 +570,21 @@ class DuelPressDetailReadoutEnvelope(BaseModel):
             "netProgressionPer90", "shootingLuckOrGoalkeeperImpact",
         ]:
             raise ValueError("contextIndicators must use the exact required order")
+        expected_indicator_formulas = (
+            "net-progression-v1", "goals-minus-xgot-v1",
+        )
+        for indicator, formula_id in zip(self.contextIndicators, expected_indicator_formulas):
+            if (
+                indicator.direction != "neutral"
+                or indicator.formulaId != formula_id
+            ):
+                raise ValueError(
+                    f"{indicator.id} must be neutral with formulaId={formula_id}"
+                )
+            if indicator.value is not None and (
+                indicator.source != "server_derived" or indicator.state != "server_derived"
+            ):
+                raise ValueError(f"numeric {indicator.id} must be server-derived")
         if self.player.id != self.context.playerId:
             raise ValueError("player identity must match context playerId")
         return self
