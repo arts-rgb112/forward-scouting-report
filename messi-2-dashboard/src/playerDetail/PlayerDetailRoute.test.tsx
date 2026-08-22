@@ -24,7 +24,7 @@ describe("native player detail panels", () => {
   });
   it("uses one responsive perspective pitch with an exact positional grid and no synthetic shots", () => {
     render(<SpatialPitch analysis={analysis} />); const section = screen.getByRole("region", { name: "Spatial pitch" });
-    expect(within(section).getByRole("img")).toHaveAttribute("viewBox", "0 0 1000 650"); expect(section.querySelectorAll("svg")).toHaveLength(1); expect(section.querySelectorAll("[data-zone-label]")).toHaveLength(30); expect(section.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
+    expect(within(section).getByRole("img")).toHaveAttribute("viewBox", "0 0 1000 650"); expect(section.querySelectorAll("svg")).toHaveLength(1); expect(section.querySelectorAll("[data-grid-segment]")).toHaveLength(15); expect(section.querySelectorAll("[data-zone-label]")).toHaveLength(0); expect(section.querySelectorAll("[data-goal]")).toHaveLength(2); expect(section.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
   });
   it("renders a six-sector, server-readout board with accessible non-fabricated score bars", () => {
     render(<PercentileProfile player={player} analysis={analysis} quality={{ kind: "idle" }} />); const section = screen.getByRole("region", { name: "Percentile profile" });

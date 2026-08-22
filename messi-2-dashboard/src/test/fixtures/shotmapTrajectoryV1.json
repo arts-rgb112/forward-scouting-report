@@ -1,0 +1,7 @@
+[
+  { "x": 99, "y": 50, "outcome": "goal", "xg": 0.4, "xgot": 0.8, "trajectory": { "schemaVersion": "shotmap-trajectory-v1", "endpointKind": "goal_mouth", "endX": 100, "endY": 56.795, "endZMeters": 1.17, "source": "fotmob" } },
+  { "x": 85, "y": 45, "outcome": "on_target", "xg": 0.2, "xgot": 0.3, "trajectory": { "schemaVersion": "shotmap-trajectory-v1", "endpointKind": "goal_mouth", "endX": 100, "endY": 50, "endZMeters": 0.8, "source": "fotmob" } },
+  { "x": 80, "y": 40, "outcome": "off_target", "xg": 0.08, "xgot": null, "trajectory": { "schemaVersion": "shotmap-trajectory-v1", "endpointKind": "goal_mouth", "endX": 100, "endY": 63, "endZMeters": 3.2, "source": "fotmob" } },
+  { "x": 70, "y": 44.118, "outcome": "blocked", "xg": 0.1, "xgot": null, "trajectory": { "schemaVersion": "shotmap-trajectory-v1", "endpointKind": "blocked", "endX": 78.571, "endY": 40, "endZMeters": null, "source": "fotmob" } },
+  { "x": 75, "y": 55, "outcome": "off_target", "xg": null, "xgot": null, "trajectory": null }
+]
