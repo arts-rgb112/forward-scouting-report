@@ -11,7 +11,9 @@ from pydantic import ValidationError
 
 from api_server.main import app
 from api_server import service
-from api_server.schemas import FinalThirdShot, FinalThirdShotEnvelope
+from api_server.schemas import (
+    FinalThirdEffectiveShotEnvelope, FinalThirdShot, FinalThirdShotEnvelope,
+)
 from scripts.audit_shotmap_coverage import audit_trajectories
 from scripts.build_shotmap_points import normalize_shotmap
 
@@ -37,6 +39,7 @@ def _build(
     rows: list[dict[str, object]], *, mode: str = "league",
     competition: str = "all", league_name: str = "Premier League",
     heatmap_key: str = "194165:17:1",
+    conversion_version: str = "goals-v1",
 ):
     player = SimpleNamespace(league=SimpleNamespace(name=league_name))
     service._build_final_third_shot_map_cached.cache_clear()
@@ -47,7 +50,7 @@ def _build(
             patch("api_server.service.get_shotmap_snapshot", return_value=(True, rows)),
         ):
             return service._build_final_third_shot_map_cached(
-                194165, "2025/2026", mode, 8, competition, (1, 1),
+                194165, "2025/2026", mode, 8, competition, (1, 1), conversion_version,
             )
     finally:
         service._build_final_third_shot_map_cached.cache_clear()
@@ -68,8 +71,39 @@ def test_final_third_aggregates_fixed_zones_zero_null_quality_and_missing_xgot()
     zero = next(zone for zone in data.zones if zone.zoneId == "depth6_lane1")
     assert (zero.shotsTotal, zero.goals, zero.conversionRatePct, zero.qualityScore, zero.qualityEligibleShots) == (0, 0, None, None, 0)
     assert zero.fieldStates.conversionRatePct.reason == "no_attempts_in_zone"
+    assert zero.fieldStates.conversionRatePct.formulaVersion is None
     assert data.completeness == "partial"
     assert any(issue.zoneId == "depth6_lane3" and issue.field == "qualityScore" for issue in data.partialCoverage)
+
+
+def test_effective_conversion_v2_counts_mutually_exclusive_goal_and_on_target_statuses() -> None:
+    fixture = json.loads((
+        Path(__file__).resolve().parents[1]
+        / "docs" / "fixtures" / "final_third_shot_map_effective_v2" / "source_cases.json"
+    ).read_text(encoding="utf-8"))
+    payload = _build(fixture["rows"], conversion_version=fixture["conversionVersion"])
+    assert isinstance(payload, FinalThirdEffectiveShotEnvelope)
+    assert payload.schemaVersion == "2.0.0"
+    assert payload.chartTaxonomyVersion == "final-third-shot-map-effective-v2"
+    assert payload.data.conversionDefinition == fixture["conversionDefinition"]
+    central = next(zone for zone in payload.data.zones if zone.zoneId == "depth6_lane3")
+    # Four source events in the zone: one goal and one distinct on-target
+    # outcome. They are exclusive canonical statuses, so the numerator is 2.
+    expected = fixture["expect"]
+    assert (central.shotsTotal, central.goals, central.effectiveShotCount, central.conversionRatePct) == (
+        expected["shotsTotal"], expected["goals"], expected["effectiveShotCount"], expected["conversionRatePct"],
+    )
+    zero = next(zone for zone in payload.data.zones if zone.zoneId == "depth6_lane1")
+    assert (zero.shotsTotal, zero.effectiveShotCount, zero.conversionRatePct) == (
+        expected["zeroZone"]["shotsTotal"], expected["zeroZone"]["effectiveShotCount"], expected["zeroZone"]["conversionRatePct"],
+    )
+    assert zero.fieldStates.conversionRatePct.formulaVersion == (
+        "effective-on-target-plus-goal-divided-by-shots-v2"
+    )
+    assert central.fieldStates.conversionRatePct.formulaVersion == (
+        "effective-on-target-plus-goal-divided-by-shots-v2"
+    )
+    assert central.fieldStates.effectiveShotCount.formulaVersion == "status-goal-or-on-target-v2"
 
 
 def test_canonical_source_fixture_exercises_math_and_endpoint_contract() -> None:
@@ -179,6 +213,20 @@ def test_endpoint_context_front2_only_and_cors_boundaries() -> None:
     assert response.status_code == 200
     payload = FinalThirdShotEnvelope.model_validate(response.json())
     assert payload.context.competition is None and payload.context.scope == 8
+    assert "effectiveShotCount" not in response.json()["data"]["zones"][0]
+    effective = CLIENT.get(base, params={
+        "season": "2025/2026", "mode": "league", "scope": 8,
+        "competition": "all", "conversionVersion": "effective-shot-v2",
+    })
+    assert effective.status_code == 200
+    effective_payload = FinalThirdEffectiveShotEnvelope.model_validate(effective.json())
+    assert effective_payload.data.conversionDefinition == "effective-on-target-plus-goal-divided-by-shots-v2"
+    assert all(zone.effectiveShotCount is not None for zone in effective_payload.data.zones)
+    invalid_conversion = CLIENT.get(base, params={
+        "season": "2025/2026", "mode": "league", "scope": 8,
+        "competition": "all", "conversionVersion": "client-derived-v0",
+    })
+    assert invalid_conversion.status_code == 422
     assert response.headers["cache-control"].startswith("public")
     hostile = CLIENT.get(base, params={"season": "2025/2026", "mode": "league", "scope": 8, "competition": "all"}, headers={"Origin": "https://hostile.example"})
     assert hostile.status_code == 200
@@ -284,12 +332,43 @@ def test_europe_context_without_its_own_snapshot_stays_unavailable() -> None:
     assert all(zone.shotsTotal is None for zone in payload.data.zones)
 
 
+def test_effective_conversion_v2_preserves_unavailable_source_not_zero() -> None:
+    player = SimpleNamespace(league=SimpleNamespace(name="Champions League"))
+    service._build_final_third_shot_map_cached.cache_clear()
+    try:
+        with (
+            patch("api_server.service.find_v2_player", return_value=player),
+            patch("api_server.service.get_tactical_session_row", return_value={"heatmap_key": "194165:7:76953"}),
+            patch("api_server.service.get_shotmap_snapshot", return_value=(False, [])),
+        ):
+            payload = service._build_final_third_shot_map_cached(
+                194165, "2025/2026", "europe", 8, "ucl", (1, 1), "effective-shot-v2",
+            )
+    finally:
+        service._build_final_third_shot_map_cached.cache_clear()
+    assert isinstance(payload, FinalThirdEffectiveShotEnvelope)
+    assert payload.data.available is False
+    assert all(
+        zone.shotsTotal is None
+        and zone.effectiveShotCount is None
+        and zone.fieldStates.effectiveShotCount.state == "unavailable"
+        for zone in payload.data.zones
+    )
+
+
 def test_openapi_exposes_strict_final_third_contract() -> None:
     schema = CLIENT.get("/openapi.json").json()
     contract = schema["components"]["schemas"]["FinalThirdShotEnvelope"]
+    effective_contract = schema["components"]["schemas"]["FinalThirdEffectiveShotEnvelope"]
     assert contract["additionalProperties"] is False
+    assert effective_contract["additionalProperties"] is False
     assert "/api/v2/players/{player_id}/final-third-shot-map" in schema["paths"]
     assert schema["components"]["schemas"]["FinalThirdShot"]["additionalProperties"] is False
+    assert schema["components"]["schemas"]["FinalThirdEffectiveShotZone"]["additionalProperties"] is False
+    assert schema["components"]["schemas"]["FinalThirdEffectiveShotZoneFieldStates"]["additionalProperties"] is False
+    parameters = schema["paths"]["/api/v2/players/{player_id}/final-third-shot-map"]["get"]["parameters"]
+    conversion = next(parameter for parameter in parameters if parameter["name"] == "conversionVersion")
+    assert conversion["schema"]["enum"] == ["goals-v1", "effective-shot-v2"]
 
 
 def test_trajectory_audit_accepts_additive_source_event_identity() -> None:
