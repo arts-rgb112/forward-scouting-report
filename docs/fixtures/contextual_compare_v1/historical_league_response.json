@@ -905,6 +905,45 @@
           "formulaVersion": "v1"
         }
       ]
+    },
+    "summary": {
+      "id": 1,
+      "rank": 1,
+      "name": "Fixture player",
+      "position": "Striker",
+      "archetype": "Type A",
+      "age": 25,
+      "minutes": 900,
+      "tier": {
+        "code": "diamond",
+        "level": 1,
+        "label": "Diamond"
+      },
+      "score": 50,
+      "face": "https://example.com/face.png",
+      "league": {
+        "id": 1,
+        "name": "League",
+        "icon": "https://example.com/league.png"
+      },
+      "club": {
+        "id": 2,
+        "name": "Club",
+        "icon": "https://example.com/club.png"
+      },
+      "stats": {
+        "outsideShot": 50,
+        "boxThreat": 50,
+        "dangerZone": 50,
+        "aerial": 50,
+        "groundDuel": 50,
+        "spaceControl": 50
+      }
+    },
+    "componentAvailability": {
+      "detail": "available",
+      "dataQuality": "available",
+      "tacticalQuadrant": "unavailable"
     }
   },
   "right": {
@@ -1104,6 +1143,45 @@
         "spatial"
       ],
       "observedWeightPct": 80
+    },
+    "summary": {
+      "id": 2,
+      "rank": 1,
+      "name": "Fixture player",
+      "position": "Striker",
+      "archetype": "Type A",
+      "age": 25,
+      "minutes": 900,
+      "tier": {
+        "code": "diamond",
+        "level": 1,
+        "label": "Diamond"
+      },
+      "score": 50,
+      "face": "https://example.com/face.png",
+      "league": {
+        "id": 1,
+        "name": "League",
+        "icon": "https://example.com/league.png"
+      },
+      "club": {
+        "id": 2,
+        "name": "Club",
+        "icon": "https://example.com/club.png"
+      },
+      "stats": {
+        "outsideShot": 50,
+        "boxThreat": 50,
+        "dangerZone": 50,
+        "aerial": 50,
+        "groundDuel": 50,
+        "spaceControl": 50
+      }
+    },
+    "componentAvailability": {
+      "detail": "available",
+      "dataQuality": "available",
+      "tacticalQuadrant": "unavailable"
     }
   }
 }

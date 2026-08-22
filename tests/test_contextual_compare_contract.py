@@ -51,13 +51,23 @@ def test_complete_league_and_europe_sides_preserve_order_and_canonical_context()
     assert payload["right"]["context"] == {
         "season": "2025/2026", "mode": "europe", "scope": None, "competition": "ucl",
     }
-    assert payload["left"]["status"] == payload["right"]["status"] == "resolved"
+    assert payload["left"]["status"] == "resolved"
+    # Europe detail/quality/quadrant builders currently use domestic static
+    # inputs. Contextual compare must not relabel that data as UCL data.
+    assert payload["right"]["status"] == "resolved"
+    assert payload["right"]["summary"]["id"] == 194165
+    assert payload["right"]["componentAvailability"] == {
+        "detail": "exact_context_analysis_unavailable",
+        "dataQuality": "exact_context_analysis_unavailable",
+        "tacticalQuadrant": "exact_context_analysis_unavailable",
+    }
     assert payload["left"]["duelPressPlayer"]["idNamespace"] == "fotmob"
     assert payload["left"]["duelPressDetailReadout"]["readoutVersion"] == "detail-readout-v1"
     assert payload["left"]["tacticalQuadrant"] is not None
     assert payload["left"]["tacticalQuadrant"]["available"] is True
-    assert payload["right"]["duelPressPlayer"] is None
-    assert payload["right"]["duelPressDetailReadout"] is None
+    assert all(payload["right"][field] is None for field in (
+        "detail", "dataQuality", "tacticalQuadrant", "duelPressPlayer", "duelPressDetailReadout",
+    ))
     # The endpoint transports the authoritative builders verbatim: zero,
     # unavailable, fallback, and imputed states are never re-normalised here.
     assert payload["left"]["detail"] == service.build_player_detail(
@@ -89,11 +99,13 @@ def test_unavailable_side_keeps_resolved_sibling_and_nulls_only_its_payload() ->
     assert response.status_code == 200
     data = response.json()
     assert data["left"]["status"] == "resolved"
+    assert data["left"]["summary"] is not None
     assert data["left"]["detail"] is not None
     assert data["right"]["status"] == "unavailable"
     assert all(data["right"][field] is None for field in (
-        "detail", "dataQuality", "tacticalQuadrant", "duelPressPlayer", "duelPressDetailReadout",
+        "summary", "detail", "dataQuality", "tacticalQuadrant", "duelPressPlayer", "duelPressDetailReadout",
     ))
+    assert set(data["right"]["componentAvailability"].values()) == {"unavailable"}
 
 
 @pytest.mark.parametrize("mutate", [
@@ -111,8 +123,7 @@ def test_strict_request_rejects_invalid_versions_dimensions_extras_and_duplicate
     assert post(payload).status_code == 422
 
 
-def test_no_provider_calls_and_cached_static_context_resolution(monkeypatch) -> None:
-    service._resolve_contextual_compare_side.cache_clear()
+def test_no_provider_calls_for_contextual_resolution(monkeypatch) -> None:
     service.build_v2_players.cache_clear()
     monkeypatch.setattr(fotmob_client, "_get", lambda *_: pytest.fail("contextual compare must not call FotMob"))
     payload = {
@@ -121,9 +132,34 @@ def test_no_provider_calls_and_cached_static_context_resolution(monkeypatch) -> 
         "right": side(player_id=194165, season="2024/2025"),
     }
     assert post(payload).status_code == 200
-    misses_after_first = service._resolve_contextual_compare_side.cache_info().misses
     assert post(payload).status_code == 200
-    assert service._resolve_contextual_compare_side.cache_info().misses == misses_after_first == 2
+
+
+def test_europe_side_never_invokes_domestic_detail_quality_or_quadrant_builders(monkeypatch) -> None:
+    def unexpected_domestic_builder(*_: object) -> None:
+        pytest.fail("Europe contextual side must not reuse domestic companion data")
+
+    monkeypatch.setattr(service, "build_player_detail", unexpected_domestic_builder)
+    monkeypatch.setattr(service, "build_player_data_quality", unexpected_domestic_builder)
+    monkeypatch.setattr(service, "build_tactical_quadrant_analysis", unexpected_domestic_builder)
+    payload = {
+        "comparisonVersion": "contextual-compare-v1",
+        "left": side(taxonomy="duel-press-v1", mode="europe", scope=None, competition="ucl"),
+        "right": side(player_id=194166, mode="europe", scope=None, competition="ucl"),
+    }
+    response = post(payload)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["left"]["status"] == "resolved"
+    assert payload["left"]["summary"] is not None
+    assert set(payload["left"]["componentAvailability"].values()) == {
+        "exact_context_analysis_unavailable",
+    }
+    assert payload["left"]["duelPressPlayer"]["id"] == 194165
+    assert payload["left"]["duelPressDetailReadout"]["context"]["mode"] == "europe"
+    for resolved_side in payload.values():
+        if isinstance(resolved_side, dict) and "status" in resolved_side:
+            assert all(resolved_side[field] is None for field in ("detail", "dataQuality", "tacticalQuadrant"))
 
 
 def test_body_limit_cors_preflight_and_hostile_origin_contract() -> None:
@@ -150,7 +186,7 @@ def test_body_limit_cors_preflight_and_hostile_origin_contract() -> None:
 def test_openapi_exposes_strict_contextual_contract_and_errors() -> None:
     schema = TestClient(app).get("/openapi.json").json()
     operation = schema["paths"]["/api/v2/compare/contextual"]["post"]
-    assert {"200", "413", "422", "500"}.issubset(operation["responses"])
+    assert {"200", "400", "403", "413", "422", "500"}.issubset(operation["responses"])
     request = schema["components"]["schemas"]["ContextualCompareRequest"]
     response = schema["components"]["schemas"]["ContextualCompareEnvelope"]
     assert request["additionalProperties"] is False
@@ -158,6 +194,7 @@ def test_openapi_exposes_strict_contextual_contract_and_errors() -> None:
     assert request["properties"]["comparisonVersion"]["const"] == "contextual-compare-v1"
     side = schema["components"]["schemas"]["ContextualCompareSide"]
     assert "tacticalQuadrant" in side["properties"]
+    assert {"summary", "componentAvailability"}.issubset(side["properties"])
     ContextualCompareRequest.model_validate(fixture("complete_league_europe_request.json"))
 
 

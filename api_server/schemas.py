@@ -1054,6 +1054,9 @@ class PlayerDetailEnvelope(BaseModel):
 ContextualCompareVersion = Literal["contextual-compare-v1"]
 ContextualCompareTaxonomy = Literal["legacy-v1", "duel-press-v1"]
 ContextualCompareStatus = Literal["resolved", "unavailable", "invalid_context"]
+ContextualCompareComponentReason = Literal[
+    "available", "exact_context_analysis_unavailable", "unavailable",
+]
 
 
 class ContextualComparePlayerRef(BaseModel):
@@ -1132,6 +1135,16 @@ class ContextualCompareRequest(BaseModel):
         return self
 
 
+class ContextualCompareComponentAvailability(BaseModel):
+    """Per-component provenance for a resolved side's optional companions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    detail: ContextualCompareComponentReason
+    dataQuality: ContextualCompareComponentReason
+    tacticalQuadrant: ContextualCompareComponentReason
+
+
 class ContextualCompareSide(BaseModel):
     """One server-resolved side. Failure never mutates or drops its sibling."""
 
@@ -1141,6 +1154,8 @@ class ContextualCompareSide(BaseModel):
     taxonomy: ContextualCompareTaxonomy
     context: ContextualCompareCanonicalContext
     status: ContextualCompareStatus
+    summary: PlayerResponse | None = None
+    componentAvailability: ContextualCompareComponentAvailability
     detail: PlayerDetailResponse | None = None
     dataQuality: MessiDataQuality | None = None
     tacticalQuadrant: TacticalQuadrantAnalysis | None = None
@@ -1149,19 +1164,28 @@ class ContextualCompareSide(BaseModel):
 
     @model_validator(mode="after")
     def validate_status_payload(self) -> "ContextualCompareSide":
-        common = (self.detail, self.dataQuality)
+        companions = (
+            ("detail", self.componentAvailability.detail, self.detail),
+            ("dataQuality", self.componentAvailability.dataQuality, self.dataQuality),
+            ("tacticalQuadrant", self.componentAvailability.tacticalQuadrant, self.tacticalQuadrant),
+        )
         duel = (self.duelPressPlayer, self.duelPressDetailReadout)
         if self.status == "resolved":
-            if any(value is None for value in common):
-                raise ValueError("resolved contextual side requires detail and dataQuality")
+            if self.summary is None:
+                raise ValueError("resolved contextual side requires an exact-context summary")
+            for label, reason, value in companions:
+                if (reason == "available") != (value is not None):
+                    raise ValueError(f"{label} availability must match its payload")
             if self.tacticalQuadrant is not None and not self.tacticalQuadrant.available:
                 raise ValueError("contextual tactical quadrant must be available when present")
             if self.taxonomy == "duel-press-v1" and any(value is None for value in duel):
                 raise ValueError("resolved duel-press side requires player and detail readout")
             if self.taxonomy == "legacy-v1" and any(value is not None for value in duel):
                 raise ValueError("legacy side cannot carry duel-press data")
-        elif any(value is not None for value in (*common, self.tacticalQuadrant, *duel)):
+        elif any(value is not None for value in (self.summary, self.detail, self.dataQuality, self.tacticalQuadrant, *duel)):
             raise ValueError("non-resolved contextual side cannot carry player data")
+        elif any(reason != "unavailable" for _, reason, _ in companions):
+            raise ValueError("non-resolved contextual side requires unavailable component reasons")
         return self
 
 

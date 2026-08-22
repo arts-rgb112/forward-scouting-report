@@ -905,6 +905,45 @@
           "formulaVersion": "v1"
         }
       ]
+    },
+    "summary": {
+      "id": 1,
+      "rank": 1,
+      "name": "Fixture player",
+      "position": "Striker",
+      "archetype": "Type A",
+      "age": 25,
+      "minutes": 900,
+      "tier": {
+        "code": "diamond",
+        "level": 1,
+        "label": "Diamond"
+      },
+      "score": 50,
+      "face": "https://example.com/face.png",
+      "league": {
+        "id": 1,
+        "name": "League",
+        "icon": "https://example.com/league.png"
+      },
+      "club": {
+        "id": 2,
+        "name": "Club",
+        "icon": "https://example.com/club.png"
+      },
+      "stats": {
+        "outsideShot": 50,
+        "boxThreat": 50,
+        "dangerZone": 50,
+        "aerial": 50,
+        "groundDuel": 50,
+        "spaceControl": 50
+      }
+    },
+    "componentAvailability": {
+      "detail": "available",
+      "dataQuality": "available",
+      "tacticalQuadrant": "unavailable"
     }
   },
   "right": {
@@ -920,7 +959,12 @@
       "competition": "ucl"
     },
     "status": "resolved",
-    "detail": {
+    "detail": null,
+    "dataQuality": null,
+    "tacticalQuadrant": null,
+    "duelPressPlayer": null,
+    "duelPressDetailReadout": null,
+    "summary": {
       "id": 2,
       "rank": 1,
       "name": "Fixture player",
@@ -952,158 +996,12 @@
         "aerial": 50,
         "groundDuel": 50,
         "spaceControl": 50
-      },
-      "analysis": {
-        "score": {
-          "value": 50,
-          "rank": 1,
-          "topPercent": 100,
-          "population": 1,
-          "archetype": "Type A"
-        },
-        "volumeRadar": {
-          "kind": "volume",
-          "axes": [
-            {
-              "id": "outsideShot",
-              "label": "outsideShot",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            },
-            {
-              "id": "boxThreat",
-              "label": "boxThreat",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            },
-            {
-              "id": "dangerZone",
-              "label": "dangerZone",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            },
-            {
-              "id": "aerial",
-              "label": "aerial",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            },
-            {
-              "id": "groundDuel",
-              "label": "groundDuel",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            },
-            {
-              "id": "spaceControl",
-              "label": "spaceControl",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            }
-          ]
-        },
-        "ratioRadar": {
-          "kind": "ratio",
-          "axes": [
-            {
-              "id": "outsideShot",
-              "label": "outsideShot",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            },
-            {
-              "id": "boxThreat",
-              "label": "boxThreat",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            },
-            {
-              "id": "dangerZone",
-              "label": "dangerZone",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            },
-            {
-              "id": "aerial",
-              "label": "aerial",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            },
-            {
-              "id": "groundDuel",
-              "label": "groundDuel",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            },
-            {
-              "id": "spaceControl",
-              "label": "spaceControl",
-              "score": 50,
-              "population": 1,
-              "tier": "B",
-              "imputed": false
-            }
-          ]
-        },
-        "rawMetrics": {},
-        "spatial": {
-          "available": false,
-          "heatmapPointCount": 0,
-          "heatmapPoints": [],
-          "shotmapPointCount": 0,
-          "shotmapPoints": [],
-          "shotmapSnapshotAvailable": false,
-          "trueCore": {
-            "available": false,
-            "achievedDensityPct": 0,
-            "zoneIds": [],
-            "zoneCount": 0,
-            "coreAreaPct": 0,
-            "zones": []
-          },
-          "continuousCore": {
-            "available": false,
-            "achievedDensityPct": 0,
-            "coreAreaPct": 0,
-            "densityThreshold": 0,
-            "thresholdOfPeak": 0
-          }
-        }
       }
     },
-    "dataQuality": {
-      "spatialAvailable": false,
-      "messiScoreComplete": false,
-      "reason": "spatial_session_missing",
-      "imputedMetrics": [
-        "spaceControl"
-      ],
-      "imputedComponents": [
-        "spatial"
-      ],
-      "observedWeightPct": 80
+    "componentAvailability": {
+      "detail": "exact_context_analysis_unavailable",
+      "dataQuality": "exact_context_analysis_unavailable",
+      "tacticalQuadrant": "exact_context_analysis_unavailable"
     }
   }
 }

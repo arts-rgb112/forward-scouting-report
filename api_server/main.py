@@ -103,6 +103,14 @@ METRIC_RANKS_ERROR_RESPONSES = {
 }
 
 CONTEXTUAL_COMPARE_ERROR_RESPONSES = {
+    400: {
+        "model": ApiErrorEnvelope,
+        "description": "The companion middleware rejected an invalid Content-Length header.",
+    },
+    403: {
+        "model": ApiErrorEnvelope,
+        "description": "The request origin is not the production dashboard or an immutable preview.",
+    },
     413: {
         "model": ApiErrorEnvelope,
         "description": "Request body exceeds the 64 KiB companion API limit.",
