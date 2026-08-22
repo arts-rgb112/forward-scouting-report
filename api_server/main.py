@@ -19,6 +19,8 @@ from .schemas import (
     AgeBand, ApiErrorEnvelope, DuelSpatialEnvelope, HealthResponse, LeaderboardEnvelope, LeaderboardOptions, LeaderboardPageEnvelope,
     DuelPressLeaderboardEnvelope, DuelPressLeaderboardSort, DuelPressPlayerEnvelope,
     DuelPressDetailReadoutEnvelope,
+    DuelPressV2LeaderboardPageEnvelope, DuelPressV2PlayerEnvelope,
+    DuelPressDetailReadoutV2Envelope,
     ContextualCompareEnvelope, ContextualCompareRequest,
     MetricRanksEnvelope, MetricRanksRequest,
     RatioBenchmarkEnvelope, TacticalSummaryEnvelope, VolumeBenchmarkEnvelope,
@@ -33,6 +35,8 @@ from .service import (
     build_duel_spatial_analysis, build_player_data_quality, build_players,
     duel_press_leaderboard_envelope, find_duel_press_player,
     find_duel_press_detail_readouts,
+    duel_press_v2_leaderboard_envelope, find_duel_press_v2_player,
+    find_duel_press_detail_readouts_v2,
     build_player_detail, build_tactical_quadrant_analysis, compare_players, find_v2_player_summary_timed, leaderboard_options,
     resolve_contextual_compare_sides,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
@@ -317,6 +321,43 @@ def list_duel_press_leaderboards(
 
 
 @app.get(
+    "/api/v2/leaderboards/duel-press-v2",
+    response_model=DuelPressV2LeaderboardPageEnvelope,
+    tags=["leaderboards"],
+    responses=DUEL_PRESS_ERROR_RESPONSES,
+)
+def list_duel_press_v2_leaderboards(
+    response: Response,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+    page: int = Query(default=1, ge=1),
+    pageSize: int = Query(default=50, ge=50, le=50),
+    sort: DuelPressLeaderboardSort = Query(default="rank"),
+    order: SortOrder = Query(default="asc"),
+    role: Literal["Type A", "Type B"] | None = Query(default=None),
+    position: str | None = Query(default=None, min_length=1, max_length=100),
+    ageBand: AgeBand = Query(default="all"),
+    minutesBand: MinutesBand = Query(default="all"),
+    q: str | None = Query(default=None, min_length=1, max_length=100),
+) -> DuelPressV2LeaderboardPageEnvelope:
+    """Versioned stat-pairs-v2 board; the v1 companion remains untouched."""
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    validate_duel_press_context(mode, competition)
+    envelope = duel_press_v2_leaderboard_envelope(
+        season, mode, int(scope), competition, page=page, page_size=pageSize,
+        role=role, position=position, age_band=ageBand, minutes_band=minutesBand,
+        query=q, sort=sort, order=order,
+    )
+    if mode == "europe" and not envelope.meta.population:
+        raise HTTPException(status_code=404, detail="This competition is unavailable for the selected season")
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
+    return envelope
+
+
+@app.get(
     "/api/v2/leaderboards", response_model=LeaderboardEnvelope | LeaderboardPageEnvelope,
     tags=["leaderboards"],
 )
@@ -545,6 +586,54 @@ def get_duel_press_detail_metrics(
         raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
     validate_duel_press_context(mode, competition)
     detail = find_duel_press_detail_readouts(playerId, season, mode, int(scope), competition)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
+    return detail
+
+
+@app.get(
+    "/api/v2/players/{playerId}/duel-press-v2",
+    response_model=DuelPressV2PlayerEnvelope,
+    tags=["players"],
+    responses=DUEL_PRESS_ERROR_RESPONSES,
+)
+def get_duel_press_v2_player(
+    response: Response,
+    playerId: int,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+) -> DuelPressV2PlayerEnvelope:
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    validate_duel_press_context(mode, competition)
+    player = find_duel_press_v2_player(playerId, season, mode, int(scope), competition)
+    if player is None:
+        raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
+    return player
+
+
+@app.get(
+    "/api/v2/players/{playerId}/duel-press-v2/detail-metrics",
+    response_model=DuelPressDetailReadoutV2Envelope,
+    tags=["players"],
+    responses=DUEL_PRESS_ERROR_RESPONSES,
+)
+def get_duel_press_v2_detail_metrics(
+    response: Response,
+    playerId: int,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+) -> DuelPressDetailReadoutV2Envelope:
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    validate_duel_press_context(mode, competition)
+    detail = find_duel_press_detail_readouts_v2(playerId, season, mode, int(scope), competition)
     if detail is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"

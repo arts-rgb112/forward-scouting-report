@@ -1,0 +1,3615 @@
+{
+  "mutation": {
+    "minutes_played": 0
+  },
+  "payload": {
+    "pairReason": "minutes_unavailable_or_nonpositive",
+    "pairState": "partial",
+    "per90": null,
+    "per90State": "unavailable",
+    "total": 4,
+    "totalState": "observed"
+  },
+  "responses": {
+    "detail": {
+      "categories": [
+        {
+          "comparison": {
+            "median": 20.0,
+            "percentileScore": 99,
+            "population": 1,
+            "rank": 1,
+            "state": "available"
+          },
+          "direction": "higher_is_better",
+          "formulaId": "stat-pairs-category-v2",
+          "formulaVersion": "stat-pairs-v2",
+          "groups": [
+            {
+              "id": "outsideBoxShooting",
+              "kind": "count_rate_pair",
+              "label": "Outside-box shooting",
+              "metrics": [
+                {
+                  "id": "outsideBoxShotAttempts",
+                  "label": "Outside-box shot attempts",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 4.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "count",
+                    "value": 4.0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "outsideBoxXg",
+                  "label": "Outside-box xG",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 0.4,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "goals",
+                    "value": 0.4
+                  },
+                  "value": null
+                },
+                {
+                  "id": "outsideBoxXgot",
+                  "label": "Outside-box xGOT",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 0.6,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "goals",
+                    "value": 0.6
+                  },
+                  "value": null
+                }
+              ]
+            }
+          ],
+          "id": "outsideShot",
+          "imputedComponents": [
+            "out_box_shots_raw",
+            "out_box_xg_raw",
+            "out_box_xgot_raw"
+          ],
+          "label": "outsideShot",
+          "percentileScore": 20,
+          "scoreState": "imputed"
+        },
+        {
+          "comparison": {
+            "median": 20.0,
+            "percentileScore": 99,
+            "population": 1,
+            "rank": 1,
+            "state": "available"
+          },
+          "direction": "higher_is_better",
+          "formulaId": "stat-pairs-category-v2",
+          "formulaVersion": "stat-pairs-v2",
+          "groups": [
+            {
+              "id": "inBoxShooting",
+              "kind": "count_rate_pair",
+              "label": "In-box shooting",
+              "metrics": [
+                {
+                  "id": "inBoxShotAttempts",
+                  "label": "In-box shot attempts",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 8.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "count",
+                    "value": 8.0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "inBoxXg",
+                  "label": "In-box xG",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 1.2,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "goals",
+                    "value": 1.2
+                  },
+                  "value": null
+                },
+                {
+                  "id": "inBoxXgot",
+                  "label": "In-box xGOT",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 1.5,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "goals",
+                    "value": 1.5
+                  },
+                  "value": null
+                }
+              ]
+            }
+          ],
+          "id": "boxThreat",
+          "imputedComponents": [
+            "in_box_shots_raw",
+            "in_box_xg_raw",
+            "in_box_xgot_raw"
+          ],
+          "label": "boxThreat",
+          "percentileScore": 20,
+          "scoreState": "imputed"
+        },
+        {
+          "comparison": {
+            "median": 20.0,
+            "percentileScore": 99,
+            "population": 1,
+            "rank": 1,
+            "state": "available"
+          },
+          "direction": "higher_is_better",
+          "formulaId": "stat-pairs-category-v2",
+          "formulaVersion": "stat-pairs-v2",
+          "groups": [
+            {
+              "id": "onBallDribbles",
+              "kind": "count_rate_pair",
+              "label": "On-ball dribbles",
+              "metrics": [
+                {
+                  "id": "dribbleAttempts",
+                  "label": "Dribble attempts",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 40.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "attempts-from-success-rate-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "count",
+                    "value": 40.0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "successfulDribbles",
+                  "label": "Successful dribbles",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 28.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "count",
+                    "value": 28.0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "failedDribbles",
+                  "label": "Failed dribbles",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "lower_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 12.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "lower_is_better",
+                    "formulaId": "losses-from-success-rate-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "count",
+                    "value": 12.0
+                  },
+                  "value": null
+                }
+              ]
+            }
+          ],
+          "id": "dangerZone",
+          "imputedComponents": [
+            "dribble_attempts_raw",
+            "dribbles_succeeded_raw",
+            "dribbles_failed_raw"
+          ],
+          "label": "dangerZone",
+          "percentileScore": 20,
+          "scoreState": "imputed"
+        },
+        {
+          "comparison": {
+            "median": 20.0,
+            "percentileScore": 99,
+            "population": 1,
+            "rank": 1,
+            "state": "available"
+          },
+          "direction": "higher_is_better",
+          "formulaId": "stat-pairs-category-v2",
+          "formulaVersion": "stat-pairs-v2",
+          "groups": [
+            {
+              "id": "combinedDuelVolume",
+              "kind": "count_rate_pair",
+              "label": "Combined duel volume",
+              "metrics": [
+                {
+                  "id": "combinedDuelAttempts",
+                  "label": "Combined duel attempts",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 106.6667,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "combined-duel-attempts-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "count",
+                    "value": 106.6667
+                  },
+                  "value": null
+                }
+              ]
+            },
+            {
+              "id": "groundDuels",
+              "kind": "duel_split",
+              "label": "Ground duels",
+              "metrics": [
+                {
+                  "id": "groundDuelAttempts",
+                  "label": "Ground duel attempts",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 66.6667,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "attempts-from-success-rate-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "count",
+                    "value": 66.6667
+                  },
+                  "value": null
+                },
+                {
+                  "id": "groundDuelWins",
+                  "label": "Ground duel wins",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 44.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "count",
+                    "value": 44.0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "groundDuelLosses",
+                  "label": "Ground duel losses",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "lower_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 22.6667,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "lower_is_better",
+                    "formulaId": "losses-from-wins-attempts-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "count",
+                    "value": 22.6667
+                  },
+                  "value": null
+                },
+                {
+                  "id": "groundDuelWinRate",
+                  "label": "Ground duel success rate",
+                  "pairReason": null,
+                  "pairState": "scalar",
+                  "per90": null,
+                  "total": null,
+                  "value": {
+                    "comparison": {
+                      "median": 66.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "percent",
+                    "value": 66.0
+                  }
+                }
+              ]
+            },
+            {
+              "id": "aerialDuels",
+              "kind": "duel_split",
+              "label": "Aerial duels",
+              "metrics": [
+                {
+                  "id": "aerialDuelAttempts",
+                  "label": "Aerial duel attempts",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 40.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "attempts-from-success-rate-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "count",
+                    "value": 40.0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "aerialDuelWins",
+                  "label": "Aerial duel wins",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 26.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "count",
+                    "value": 26.0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "aerialDuelLosses",
+                  "label": "Aerial duel losses",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "lower_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 14.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "lower_is_better",
+                    "formulaId": "losses-from-wins-attempts-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "count",
+                    "value": 14.0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "aerialDuelWinRate",
+                  "label": "Aerial duel success rate",
+                  "pairReason": null,
+                  "pairState": "scalar",
+                  "per90": null,
+                  "total": null,
+                  "value": {
+                    "comparison": {
+                      "median": 65.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "percent",
+                    "value": 65.0
+                  }
+                }
+              ]
+            }
+          ],
+          "id": "combinedDuel",
+          "imputedComponents": [
+            "combined_duel_attempts_raw",
+            "duels_won_raw",
+            "ground_duel_losses_raw",
+            "aerial_duels_won_raw",
+            "aerial_duel_losses_raw"
+          ],
+          "label": "combinedDuel",
+          "percentileScore": 20,
+          "scoreState": "imputed"
+        },
+        {
+          "comparison": {
+            "median": 99.0,
+            "percentileScore": 99,
+            "population": 1,
+            "rank": 1,
+            "state": "available"
+          },
+          "direction": "higher_is_better",
+          "formulaId": "stat-pairs-category-v2",
+          "formulaVersion": "stat-pairs-v2",
+          "groups": [
+            {
+              "id": "spaceControl",
+              "kind": "spatial",
+              "label": "Space control",
+              "metrics": [
+                {
+                  "id": "ccaAreaPct",
+                  "label": "CCA area",
+                  "pairReason": null,
+                  "pairState": "scalar",
+                  "per90": null,
+                  "total": null,
+                  "value": {
+                    "comparison": {
+                      "median": 14.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "tactical_ratio_static",
+                    "state": "observed",
+                    "unit": "percent",
+                    "value": 14.0
+                  }
+                },
+                {
+                  "id": "dangerZoneDensity",
+                  "label": "Danger-zone density",
+                  "pairReason": null,
+                  "pairState": "scalar",
+                  "per90": null,
+                  "total": null,
+                  "value": {
+                    "comparison": {
+                      "median": 12.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "tactical_ratio_static",
+                    "state": "observed",
+                    "unit": "percent",
+                    "value": 12.0
+                  }
+                }
+              ]
+            }
+          ],
+          "id": "spaceControl",
+          "imputedComponents": [],
+          "label": "spaceControl",
+          "percentileScore": 99,
+          "scoreState": "observed"
+        },
+        {
+          "comparison": {
+            "median": 99.0,
+            "percentileScore": 99,
+            "population": 1,
+            "rank": 1,
+            "state": "available"
+          },
+          "direction": "higher_is_better",
+          "formulaId": "stat-pairs-category-v2",
+          "formulaVersion": "stat-pairs-v2",
+          "groups": [
+            {
+              "id": "forwardPressing",
+              "kind": "pressing",
+              "label": "Forward pressing",
+              "metrics": [
+                {
+                  "id": "recoveries",
+                  "label": "Recoveries",
+                  "pairReason": null,
+                  "pairState": "complete",
+                  "per90": {
+                    "comparison": {
+                      "median": 1.9,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "per90",
+                    "value": 1.9
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 40.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "player_season_total",
+                    "state": "observed",
+                    "unit": "count",
+                    "value": 40.0
+                  },
+                  "value": null
+                },
+                {
+                  "id": "finalThirdPossessionsWon",
+                  "label": "Final-third possessions won",
+                  "pairReason": null,
+                  "pairState": "complete",
+                  "per90": {
+                    "comparison": {
+                      "median": 0.4,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": 99,
+                    "source": "league_per90_fallback",
+                    "state": "observed",
+                    "unit": "per90",
+                    "value": 0.4
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 8.0,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "league-per90-total-v2",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "count",
+                    "value": 8.0
+                  },
+                  "value": null
+                }
+              ]
+            }
+          ],
+          "id": "forwardPress",
+          "imputedComponents": [],
+          "label": "forwardPress",
+          "percentileScore": 99,
+          "scoreState": "observed"
+        }
+      ],
+      "cohortPopulation": 1,
+      "context": {
+        "competition": null,
+        "idNamespace": "fotmob",
+        "mode": "league",
+        "playerId": 194165,
+        "scope": 8,
+        "season": "2025/2026"
+      },
+      "contextIndicators": [
+        {
+          "aggregate": false,
+          "id": "netProgressionPer90",
+          "label": "Net progression /90",
+          "metric": {
+            "id": "netProgressionPer90",
+            "label": "Net progression /90",
+            "pairReason": null,
+            "pairState": "scalar",
+            "per90": null,
+            "total": null,
+            "value": {
+              "comparison": {
+                "median": null,
+                "percentileScore": null,
+                "population": 0,
+                "rank": null,
+                "state": "unavailable"
+              },
+              "direction": "higher_is_better",
+              "formulaId": null,
+              "formulaVersion": null,
+              "percentileScore": null,
+              "source": "unavailable",
+              "state": "unavailable",
+              "unit": "per90",
+              "value": null
+            }
+          },
+          "tooltipFacts": [
+            {
+              "id": "successfulDribblesPer90",
+              "label": "Successful dribbles /90",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": null,
+                  "percentileScore": null,
+                  "population": 0,
+                  "rank": null,
+                  "state": "unavailable"
+                },
+                "direction": "higher_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": null,
+                "source": "unavailable",
+                "state": "unavailable",
+                "unit": "per90",
+                "value": null
+              }
+            },
+            {
+              "id": "foulsWonPer90",
+              "label": "Fouls won /90",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": null,
+                  "percentileScore": null,
+                  "population": 0,
+                  "rank": null,
+                  "state": "unavailable"
+                },
+                "direction": "higher_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": null,
+                "source": "unavailable",
+                "state": "unavailable",
+                "unit": "per90",
+                "value": null
+              }
+            },
+            {
+              "id": "penaltiesAwardedPer90",
+              "label": "Penalties awarded /90",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": null,
+                  "percentileScore": null,
+                  "population": 0,
+                  "rank": null,
+                  "state": "unavailable"
+                },
+                "direction": "higher_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": null,
+                "source": "unavailable",
+                "state": "unavailable",
+                "unit": "per90",
+                "value": null
+              }
+            },
+            {
+              "id": "groundDuelWinsPer90",
+              "label": "Ground duel wins /90",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": null,
+                  "percentileScore": null,
+                  "population": 0,
+                  "rank": null,
+                  "state": "unavailable"
+                },
+                "direction": "higher_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": null,
+                "source": "unavailable",
+                "state": "unavailable",
+                "unit": "per90",
+                "value": null
+              }
+            },
+            {
+              "id": "groundDuelLossesPer90",
+              "label": "Ground duel losses /90",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": null,
+                  "percentileScore": null,
+                  "population": 0,
+                  "rank": null,
+                  "state": "unavailable"
+                },
+                "direction": "lower_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": null,
+                "source": "unavailable",
+                "state": "unavailable",
+                "unit": "per90",
+                "value": null
+              }
+            },
+            {
+              "id": "aerialDuelWinsPer90",
+              "label": "Aerial duel wins /90",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": null,
+                  "percentileScore": null,
+                  "population": 0,
+                  "rank": null,
+                  "state": "unavailable"
+                },
+                "direction": "higher_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": null,
+                "source": "unavailable",
+                "state": "unavailable",
+                "unit": "per90",
+                "value": null
+              }
+            },
+            {
+              "id": "aerialDuelLossesPer90",
+              "label": "Aerial duel losses /90",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": null,
+                  "percentileScore": null,
+                  "population": 0,
+                  "rank": null,
+                  "state": "unavailable"
+                },
+                "direction": "lower_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": null,
+                "source": "unavailable",
+                "state": "unavailable",
+                "unit": "per90",
+                "value": null
+              }
+            },
+            {
+              "id": "failedDribblesPer90",
+              "label": "Failed dribbles /90",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": null,
+                  "percentileScore": null,
+                  "population": 0,
+                  "rank": null,
+                  "state": "unavailable"
+                },
+                "direction": "lower_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": null,
+                "source": "unavailable",
+                "state": "unavailable",
+                "unit": "per90",
+                "value": null
+              }
+            },
+            {
+              "id": "dispossessedPer90",
+              "label": "Dispossessed /90",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": null,
+                  "percentileScore": null,
+                  "population": 0,
+                  "rank": null,
+                  "state": "unavailable"
+                },
+                "direction": "lower_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": null,
+                "source": "unavailable",
+                "state": "unavailable",
+                "unit": "per90",
+                "value": null
+              }
+            }
+          ]
+        },
+        {
+          "aggregate": false,
+          "id": "goalsMinusXgot",
+          "label": "Goals minus xGOT",
+          "metric": {
+            "id": "goalsMinusXgot",
+            "label": "Goals minus xGOT",
+            "pairReason": null,
+            "pairState": "scalar",
+            "per90": null,
+            "total": null,
+            "value": {
+              "comparison": {
+                "median": 0.6,
+                "percentileScore": 99,
+                "population": 1,
+                "rank": 1,
+                "state": "available"
+              },
+              "direction": "higher_is_better",
+              "formulaId": "goals-minus-xgot-v1",
+              "formulaVersion": "stat-pairs-v2",
+              "percentileScore": 99,
+              "source": "server_derived",
+              "state": "server_derived",
+              "unit": "goals",
+              "value": 0.6
+            }
+          },
+          "tooltipFacts": [
+            {
+              "id": "goals",
+              "label": "Goals",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": 10.0,
+                  "percentileScore": 99,
+                  "population": 1,
+                  "rank": 1,
+                  "state": "available"
+                },
+                "direction": "higher_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": 99,
+                "source": "player_season_total",
+                "state": "observed",
+                "unit": "goals",
+                "value": 10.0
+              }
+            },
+            {
+              "id": "xgot",
+              "label": "xGOT",
+              "pairReason": null,
+              "pairState": "scalar",
+              "per90": null,
+              "total": null,
+              "value": {
+                "comparison": {
+                  "median": 9.4,
+                  "percentileScore": 99,
+                  "population": 1,
+                  "rank": 1,
+                  "state": "available"
+                },
+                "direction": "higher_is_better",
+                "formulaId": null,
+                "formulaVersion": null,
+                "percentileScore": 99,
+                "source": "player_season_total",
+                "state": "observed",
+                "unit": "goals",
+                "value": 9.4
+              }
+            }
+          ]
+        }
+      ],
+      "metricTaxonomyVersion": "duel-press-v2",
+      "player": {
+        "club": {
+          "icon": "https://images.fotmob.com/image_resources/logo/teamlogo/9823.png",
+          "id": 9823,
+          "name": "Bayern München"
+        },
+        "id": 194165,
+        "idNamespace": "fotmob",
+        "league": {
+          "icon": "https://images.fotmob.com/image_resources/logo/leaguelogo/54.png",
+          "id": 54,
+          "name": "Bundesliga"
+        },
+        "name": "Harry Kane",
+        "position": "Striker"
+      },
+      "ratingSnapshotId": "stat-pairs-v2:3882082fdda247ef",
+      "ratingVersion": "stat-pairs-v2",
+      "readoutVersion": "detail-readout-v2",
+      "schemaVersion": "2.0.0"
+    },
+    "leaderboard": {
+      "cohortPopulation": 1,
+      "context": {
+        "competition": null,
+        "mode": "league",
+        "scope": 8,
+        "season": "2025/2026"
+      },
+      "data": [
+        {
+          "age": 33,
+          "archetype": "Type A",
+          "club": {
+            "icon": "https://images.fotmob.com/image_resources/logo/teamlogo/9823.png",
+            "id": 9823,
+            "name": "Bayern München"
+          },
+          "face": "https://images.fotmob.com/image_resources/playerimages/194165.png",
+          "id": 194165,
+          "idNamespace": "fotmob",
+          "league": {
+            "icon": "https://images.fotmob.com/image_resources/logo/leaguelogo/54.png",
+            "id": 54,
+            "name": "Bundesliga"
+          },
+          "minutes": 2382,
+          "name": "Harry Kane",
+          "nation": null,
+          "overallRating": {
+            "comparison": {
+              "median": 40.0,
+              "percentileScore": 99,
+              "population": 1,
+              "rank": 1,
+              "state": "available"
+            },
+            "direction": "higher_is_better",
+            "formulaId": "stat-pairs-overall-v2",
+            "formulaVersion": "stat-pairs-v2",
+            "percentileScore": 99,
+            "rawValue": 40.0,
+            "state": "imputed"
+          },
+          "position": "Striker",
+          "rank": 1,
+          "stats": {
+            "boxThreat": {
+              "comparison": {
+                "median": 20.0,
+                "percentileScore": 99,
+                "population": 1,
+                "rank": 1,
+                "state": "available"
+              },
+              "direction": "higher_is_better",
+              "formulaId": "stat-pairs-category-v2",
+              "formulaVersion": "stat-pairs-v2",
+              "groups": [
+                {
+                  "id": "inBoxShooting",
+                  "kind": "count_rate_pair",
+                  "label": "In-box shooting",
+                  "metrics": [
+                    {
+                      "id": "inBoxShotAttempts",
+                      "label": "In-box shot attempts",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 8.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "count",
+                        "value": 8.0
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "inBoxXg",
+                      "label": "In-box xG",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 1.2,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "goals",
+                        "value": 1.2
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "inBoxXgot",
+                      "label": "In-box xGOT",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 1.5,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "goals",
+                        "value": 1.5
+                      },
+                      "value": null
+                    }
+                  ]
+                }
+              ],
+              "id": "boxThreat",
+              "imputedComponents": [
+                "in_box_shots_raw",
+                "in_box_xg_raw",
+                "in_box_xgot_raw"
+              ],
+              "label": "boxThreat",
+              "percentileScore": 20,
+              "scoreState": "imputed"
+            },
+            "combinedDuel": {
+              "comparison": {
+                "median": 20.0,
+                "percentileScore": 99,
+                "population": 1,
+                "rank": 1,
+                "state": "available"
+              },
+              "direction": "higher_is_better",
+              "formulaId": "stat-pairs-category-v2",
+              "formulaVersion": "stat-pairs-v2",
+              "groups": [
+                {
+                  "id": "combinedDuelVolume",
+                  "kind": "count_rate_pair",
+                  "label": "Combined duel volume",
+                  "metrics": [
+                    {
+                      "id": "combinedDuelAttempts",
+                      "label": "Combined duel attempts",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 106.6667,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": "combined-duel-attempts-v2",
+                        "formulaVersion": "stat-pairs-v2",
+                        "percentileScore": 99,
+                        "source": "server_derived",
+                        "state": "server_derived",
+                        "unit": "count",
+                        "value": 106.6667
+                      },
+                      "value": null
+                    }
+                  ]
+                },
+                {
+                  "id": "groundDuels",
+                  "kind": "duel_split",
+                  "label": "Ground duels",
+                  "metrics": [
+                    {
+                      "id": "groundDuelAttempts",
+                      "label": "Ground duel attempts",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 66.6667,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": "attempts-from-success-rate-v2",
+                        "formulaVersion": "stat-pairs-v2",
+                        "percentileScore": 99,
+                        "source": "server_derived",
+                        "state": "server_derived",
+                        "unit": "count",
+                        "value": 66.6667
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "groundDuelWins",
+                      "label": "Ground duel wins",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 44.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "count",
+                        "value": 44.0
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "groundDuelLosses",
+                      "label": "Ground duel losses",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "lower_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 22.6667,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "lower_is_better",
+                        "formulaId": "losses-from-wins-attempts-v2",
+                        "formulaVersion": "stat-pairs-v2",
+                        "percentileScore": 99,
+                        "source": "server_derived",
+                        "state": "server_derived",
+                        "unit": "count",
+                        "value": 22.6667
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "groundDuelWinRate",
+                      "label": "Ground duel success rate",
+                      "pairReason": null,
+                      "pairState": "scalar",
+                      "per90": null,
+                      "total": null,
+                      "value": {
+                        "comparison": {
+                          "median": 66.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "percent",
+                        "value": 66.0
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "aerialDuels",
+                  "kind": "duel_split",
+                  "label": "Aerial duels",
+                  "metrics": [
+                    {
+                      "id": "aerialDuelAttempts",
+                      "label": "Aerial duel attempts",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 40.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": "attempts-from-success-rate-v2",
+                        "formulaVersion": "stat-pairs-v2",
+                        "percentileScore": 99,
+                        "source": "server_derived",
+                        "state": "server_derived",
+                        "unit": "count",
+                        "value": 40.0
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "aerialDuelWins",
+                      "label": "Aerial duel wins",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 26.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "count",
+                        "value": 26.0
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "aerialDuelLosses",
+                      "label": "Aerial duel losses",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "lower_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 14.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "lower_is_better",
+                        "formulaId": "losses-from-wins-attempts-v2",
+                        "formulaVersion": "stat-pairs-v2",
+                        "percentileScore": 99,
+                        "source": "server_derived",
+                        "state": "server_derived",
+                        "unit": "count",
+                        "value": 14.0
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "aerialDuelWinRate",
+                      "label": "Aerial duel success rate",
+                      "pairReason": null,
+                      "pairState": "scalar",
+                      "per90": null,
+                      "total": null,
+                      "value": {
+                        "comparison": {
+                          "median": 65.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "percent",
+                        "value": 65.0
+                      }
+                    }
+                  ]
+                }
+              ],
+              "id": "combinedDuel",
+              "imputedComponents": [
+                "combined_duel_attempts_raw",
+                "duels_won_raw",
+                "ground_duel_losses_raw",
+                "aerial_duels_won_raw",
+                "aerial_duel_losses_raw"
+              ],
+              "label": "combinedDuel",
+              "percentileScore": 20,
+              "scoreState": "imputed"
+            },
+            "dangerZone": {
+              "comparison": {
+                "median": 20.0,
+                "percentileScore": 99,
+                "population": 1,
+                "rank": 1,
+                "state": "available"
+              },
+              "direction": "higher_is_better",
+              "formulaId": "stat-pairs-category-v2",
+              "formulaVersion": "stat-pairs-v2",
+              "groups": [
+                {
+                  "id": "onBallDribbles",
+                  "kind": "count_rate_pair",
+                  "label": "On-ball dribbles",
+                  "metrics": [
+                    {
+                      "id": "dribbleAttempts",
+                      "label": "Dribble attempts",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 40.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": "attempts-from-success-rate-v2",
+                        "formulaVersion": "stat-pairs-v2",
+                        "percentileScore": 99,
+                        "source": "server_derived",
+                        "state": "server_derived",
+                        "unit": "count",
+                        "value": 40.0
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "successfulDribbles",
+                      "label": "Successful dribbles",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 28.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "count",
+                        "value": 28.0
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "failedDribbles",
+                      "label": "Failed dribbles",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "lower_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 12.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "lower_is_better",
+                        "formulaId": "losses-from-success-rate-v2",
+                        "formulaVersion": "stat-pairs-v2",
+                        "percentileScore": 99,
+                        "source": "server_derived",
+                        "state": "server_derived",
+                        "unit": "count",
+                        "value": 12.0
+                      },
+                      "value": null
+                    }
+                  ]
+                }
+              ],
+              "id": "dangerZone",
+              "imputedComponents": [
+                "dribble_attempts_raw",
+                "dribbles_succeeded_raw",
+                "dribbles_failed_raw"
+              ],
+              "label": "dangerZone",
+              "percentileScore": 20,
+              "scoreState": "imputed"
+            },
+            "forwardPress": {
+              "comparison": {
+                "median": 99.0,
+                "percentileScore": 99,
+                "population": 1,
+                "rank": 1,
+                "state": "available"
+              },
+              "direction": "higher_is_better",
+              "formulaId": "stat-pairs-category-v2",
+              "formulaVersion": "stat-pairs-v2",
+              "groups": [
+                {
+                  "id": "forwardPressing",
+                  "kind": "pressing",
+                  "label": "Forward pressing",
+                  "metrics": [
+                    {
+                      "id": "recoveries",
+                      "label": "Recoveries",
+                      "pairReason": null,
+                      "pairState": "complete",
+                      "per90": {
+                        "comparison": {
+                          "median": 1.9,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "per90",
+                        "value": 1.9
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 40.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "count",
+                        "value": 40.0
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "finalThirdPossessionsWon",
+                      "label": "Final-third possessions won",
+                      "pairReason": null,
+                      "pairState": "complete",
+                      "per90": {
+                        "comparison": {
+                          "median": 0.4,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "league_per90_fallback",
+                        "state": "observed",
+                        "unit": "per90",
+                        "value": 0.4
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 8.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": "league-per90-total-v2",
+                        "formulaVersion": "stat-pairs-v2",
+                        "percentileScore": 99,
+                        "source": "server_derived",
+                        "state": "server_derived",
+                        "unit": "count",
+                        "value": 8.0
+                      },
+                      "value": null
+                    }
+                  ]
+                }
+              ],
+              "id": "forwardPress",
+              "imputedComponents": [],
+              "label": "forwardPress",
+              "percentileScore": 99,
+              "scoreState": "observed"
+            },
+            "outsideShot": {
+              "comparison": {
+                "median": 20.0,
+                "percentileScore": 99,
+                "population": 1,
+                "rank": 1,
+                "state": "available"
+              },
+              "direction": "higher_is_better",
+              "formulaId": "stat-pairs-category-v2",
+              "formulaVersion": "stat-pairs-v2",
+              "groups": [
+                {
+                  "id": "outsideBoxShooting",
+                  "kind": "count_rate_pair",
+                  "label": "Outside-box shooting",
+                  "metrics": [
+                    {
+                      "id": "outsideBoxShotAttempts",
+                      "label": "Outside-box shot attempts",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 4.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "count",
+                        "value": 4.0
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "outsideBoxXg",
+                      "label": "Outside-box xG",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 0.4,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "goals",
+                        "value": 0.4
+                      },
+                      "value": null
+                    },
+                    {
+                      "id": "outsideBoxXgot",
+                      "label": "Outside-box xGOT",
+                      "pairReason": "minutes_unavailable_or_nonpositive",
+                      "pairState": "partial",
+                      "per90": {
+                        "comparison": {
+                          "median": null,
+                          "percentileScore": null,
+                          "population": 0,
+                          "rank": null,
+                          "state": "unavailable"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": null,
+                        "source": "unavailable",
+                        "state": "unavailable",
+                        "unit": "per90",
+                        "value": null
+                      },
+                      "total": {
+                        "comparison": {
+                          "median": 0.6,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "player_season_total",
+                        "state": "observed",
+                        "unit": "goals",
+                        "value": 0.6
+                      },
+                      "value": null
+                    }
+                  ]
+                }
+              ],
+              "id": "outsideShot",
+              "imputedComponents": [
+                "out_box_shots_raw",
+                "out_box_xg_raw",
+                "out_box_xgot_raw"
+              ],
+              "label": "outsideShot",
+              "percentileScore": 20,
+              "scoreState": "imputed"
+            },
+            "spaceControl": {
+              "comparison": {
+                "median": 99.0,
+                "percentileScore": 99,
+                "population": 1,
+                "rank": 1,
+                "state": "available"
+              },
+              "direction": "higher_is_better",
+              "formulaId": "stat-pairs-category-v2",
+              "formulaVersion": "stat-pairs-v2",
+              "groups": [
+                {
+                  "id": "spaceControl",
+                  "kind": "spatial",
+                  "label": "Space control",
+                  "metrics": [
+                    {
+                      "id": "ccaAreaPct",
+                      "label": "CCA area",
+                      "pairReason": null,
+                      "pairState": "scalar",
+                      "per90": null,
+                      "total": null,
+                      "value": {
+                        "comparison": {
+                          "median": 14.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "tactical_ratio_static",
+                        "state": "observed",
+                        "unit": "percent",
+                        "value": 14.0
+                      }
+                    },
+                    {
+                      "id": "dangerZoneDensity",
+                      "label": "Danger-zone density",
+                      "pairReason": null,
+                      "pairState": "scalar",
+                      "per90": null,
+                      "total": null,
+                      "value": {
+                        "comparison": {
+                          "median": 12.0,
+                          "percentileScore": 99,
+                          "population": 1,
+                          "rank": 1,
+                          "state": "available"
+                        },
+                        "direction": "higher_is_better",
+                        "formulaId": null,
+                        "formulaVersion": null,
+                        "percentileScore": 99,
+                        "source": "tactical_ratio_static",
+                        "state": "observed",
+                        "unit": "percent",
+                        "value": 12.0
+                      }
+                    }
+                  ]
+                }
+              ],
+              "id": "spaceControl",
+              "imputedComponents": [],
+              "label": "spaceControl",
+              "percentileScore": 99,
+              "scoreState": "observed"
+            }
+          },
+          "tier": {
+            "code": "diamond",
+            "label": "Diamond",
+            "level": 1,
+            "taxonomyVersion": "crystal-v2"
+          }
+        }
+      ],
+      "meta": {
+        "applied": {
+          "ageBand": "all",
+          "minutesBand": "all",
+          "order": "asc",
+          "position": null,
+          "q": null,
+          "role": null,
+          "sort": "rank"
+        },
+        "competition": null,
+        "generatedAt": "2026-08-22T11:59:26.489426Z",
+        "hasNextPage": false,
+        "mode": "league",
+        "page": 1,
+        "pageSize": 50,
+        "population": 1,
+        "returned": 1,
+        "schemaVersion": "2.0.0",
+        "scope": 8,
+        "season": "2025/2026",
+        "source": "messi-static-cohort",
+        "totalItems": 1,
+        "totalPages": 1
+      },
+      "metricTaxonomyVersion": "duel-press-v2",
+      "ratingSnapshotId": "stat-pairs-v2:3882082fdda247ef",
+      "ratingVersion": "stat-pairs-v2",
+      "readoutVersion": "detail-readout-v2",
+      "schemaVersion": "2.0.0"
+    },
+    "player": {
+      "cohortPopulation": 1,
+      "context": {
+        "competition": null,
+        "idNamespace": "fotmob",
+        "mode": "league",
+        "playerId": 194165,
+        "scope": 8,
+        "season": "2025/2026"
+      },
+      "data": {
+        "age": 33,
+        "archetype": "Type A",
+        "club": {
+          "icon": "https://images.fotmob.com/image_resources/logo/teamlogo/9823.png",
+          "id": 9823,
+          "name": "Bayern München"
+        },
+        "face": "https://images.fotmob.com/image_resources/playerimages/194165.png",
+        "id": 194165,
+        "idNamespace": "fotmob",
+        "league": {
+          "icon": "https://images.fotmob.com/image_resources/logo/leaguelogo/54.png",
+          "id": 54,
+          "name": "Bundesliga"
+        },
+        "minutes": 2382,
+        "name": "Harry Kane",
+        "nation": null,
+        "overallRating": {
+          "comparison": {
+            "median": 40.0,
+            "percentileScore": 99,
+            "population": 1,
+            "rank": 1,
+            "state": "available"
+          },
+          "direction": "higher_is_better",
+          "formulaId": "stat-pairs-overall-v2",
+          "formulaVersion": "stat-pairs-v2",
+          "percentileScore": 99,
+          "rawValue": 40.0,
+          "state": "imputed"
+        },
+        "position": "Striker",
+        "rank": 1,
+        "stats": {
+          "boxThreat": {
+            "comparison": {
+              "median": 20.0,
+              "percentileScore": 99,
+              "population": 1,
+              "rank": 1,
+              "state": "available"
+            },
+            "direction": "higher_is_better",
+            "formulaId": "stat-pairs-category-v2",
+            "formulaVersion": "stat-pairs-v2",
+            "groups": [
+              {
+                "id": "inBoxShooting",
+                "kind": "count_rate_pair",
+                "label": "In-box shooting",
+                "metrics": [
+                  {
+                    "id": "inBoxShotAttempts",
+                    "label": "In-box shot attempts",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 8.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "count",
+                      "value": 8.0
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "inBoxXg",
+                    "label": "In-box xG",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 1.2,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "goals",
+                      "value": 1.2
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "inBoxXgot",
+                    "label": "In-box xGOT",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 1.5,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "goals",
+                      "value": 1.5
+                    },
+                    "value": null
+                  }
+                ]
+              }
+            ],
+            "id": "boxThreat",
+            "imputedComponents": [
+              "in_box_shots_raw",
+              "in_box_xg_raw",
+              "in_box_xgot_raw"
+            ],
+            "label": "boxThreat",
+            "percentileScore": 20,
+            "scoreState": "imputed"
+          },
+          "combinedDuel": {
+            "comparison": {
+              "median": 20.0,
+              "percentileScore": 99,
+              "population": 1,
+              "rank": 1,
+              "state": "available"
+            },
+            "direction": "higher_is_better",
+            "formulaId": "stat-pairs-category-v2",
+            "formulaVersion": "stat-pairs-v2",
+            "groups": [
+              {
+                "id": "combinedDuelVolume",
+                "kind": "count_rate_pair",
+                "label": "Combined duel volume",
+                "metrics": [
+                  {
+                    "id": "combinedDuelAttempts",
+                    "label": "Combined duel attempts",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 106.6667,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": "combined-duel-attempts-v2",
+                      "formulaVersion": "stat-pairs-v2",
+                      "percentileScore": 99,
+                      "source": "server_derived",
+                      "state": "server_derived",
+                      "unit": "count",
+                      "value": 106.6667
+                    },
+                    "value": null
+                  }
+                ]
+              },
+              {
+                "id": "groundDuels",
+                "kind": "duel_split",
+                "label": "Ground duels",
+                "metrics": [
+                  {
+                    "id": "groundDuelAttempts",
+                    "label": "Ground duel attempts",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 66.6667,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": "attempts-from-success-rate-v2",
+                      "formulaVersion": "stat-pairs-v2",
+                      "percentileScore": 99,
+                      "source": "server_derived",
+                      "state": "server_derived",
+                      "unit": "count",
+                      "value": 66.6667
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "groundDuelWins",
+                    "label": "Ground duel wins",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 44.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "count",
+                      "value": 44.0
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "groundDuelLosses",
+                    "label": "Ground duel losses",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "lower_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 22.6667,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "lower_is_better",
+                      "formulaId": "losses-from-wins-attempts-v2",
+                      "formulaVersion": "stat-pairs-v2",
+                      "percentileScore": 99,
+                      "source": "server_derived",
+                      "state": "server_derived",
+                      "unit": "count",
+                      "value": 22.6667
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "groundDuelWinRate",
+                    "label": "Ground duel success rate",
+                    "pairReason": null,
+                    "pairState": "scalar",
+                    "per90": null,
+                    "total": null,
+                    "value": {
+                      "comparison": {
+                        "median": 66.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "percent",
+                      "value": 66.0
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "aerialDuels",
+                "kind": "duel_split",
+                "label": "Aerial duels",
+                "metrics": [
+                  {
+                    "id": "aerialDuelAttempts",
+                    "label": "Aerial duel attempts",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 40.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": "attempts-from-success-rate-v2",
+                      "formulaVersion": "stat-pairs-v2",
+                      "percentileScore": 99,
+                      "source": "server_derived",
+                      "state": "server_derived",
+                      "unit": "count",
+                      "value": 40.0
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "aerialDuelWins",
+                    "label": "Aerial duel wins",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 26.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "count",
+                      "value": 26.0
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "aerialDuelLosses",
+                    "label": "Aerial duel losses",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "lower_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 14.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "lower_is_better",
+                      "formulaId": "losses-from-wins-attempts-v2",
+                      "formulaVersion": "stat-pairs-v2",
+                      "percentileScore": 99,
+                      "source": "server_derived",
+                      "state": "server_derived",
+                      "unit": "count",
+                      "value": 14.0
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "aerialDuelWinRate",
+                    "label": "Aerial duel success rate",
+                    "pairReason": null,
+                    "pairState": "scalar",
+                    "per90": null,
+                    "total": null,
+                    "value": {
+                      "comparison": {
+                        "median": 65.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "percent",
+                      "value": 65.0
+                    }
+                  }
+                ]
+              }
+            ],
+            "id": "combinedDuel",
+            "imputedComponents": [
+              "combined_duel_attempts_raw",
+              "duels_won_raw",
+              "ground_duel_losses_raw",
+              "aerial_duels_won_raw",
+              "aerial_duel_losses_raw"
+            ],
+            "label": "combinedDuel",
+            "percentileScore": 20,
+            "scoreState": "imputed"
+          },
+          "dangerZone": {
+            "comparison": {
+              "median": 20.0,
+              "percentileScore": 99,
+              "population": 1,
+              "rank": 1,
+              "state": "available"
+            },
+            "direction": "higher_is_better",
+            "formulaId": "stat-pairs-category-v2",
+            "formulaVersion": "stat-pairs-v2",
+            "groups": [
+              {
+                "id": "onBallDribbles",
+                "kind": "count_rate_pair",
+                "label": "On-ball dribbles",
+                "metrics": [
+                  {
+                    "id": "dribbleAttempts",
+                    "label": "Dribble attempts",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 40.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": "attempts-from-success-rate-v2",
+                      "formulaVersion": "stat-pairs-v2",
+                      "percentileScore": 99,
+                      "source": "server_derived",
+                      "state": "server_derived",
+                      "unit": "count",
+                      "value": 40.0
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "successfulDribbles",
+                    "label": "Successful dribbles",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 28.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "count",
+                      "value": 28.0
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "failedDribbles",
+                    "label": "Failed dribbles",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "lower_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 12.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "lower_is_better",
+                      "formulaId": "losses-from-success-rate-v2",
+                      "formulaVersion": "stat-pairs-v2",
+                      "percentileScore": 99,
+                      "source": "server_derived",
+                      "state": "server_derived",
+                      "unit": "count",
+                      "value": 12.0
+                    },
+                    "value": null
+                  }
+                ]
+              }
+            ],
+            "id": "dangerZone",
+            "imputedComponents": [
+              "dribble_attempts_raw",
+              "dribbles_succeeded_raw",
+              "dribbles_failed_raw"
+            ],
+            "label": "dangerZone",
+            "percentileScore": 20,
+            "scoreState": "imputed"
+          },
+          "forwardPress": {
+            "comparison": {
+              "median": 99.0,
+              "percentileScore": 99,
+              "population": 1,
+              "rank": 1,
+              "state": "available"
+            },
+            "direction": "higher_is_better",
+            "formulaId": "stat-pairs-category-v2",
+            "formulaVersion": "stat-pairs-v2",
+            "groups": [
+              {
+                "id": "forwardPressing",
+                "kind": "pressing",
+                "label": "Forward pressing",
+                "metrics": [
+                  {
+                    "id": "recoveries",
+                    "label": "Recoveries",
+                    "pairReason": null,
+                    "pairState": "complete",
+                    "per90": {
+                      "comparison": {
+                        "median": 1.9,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "per90",
+                      "value": 1.9
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 40.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "count",
+                      "value": 40.0
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "finalThirdPossessionsWon",
+                    "label": "Final-third possessions won",
+                    "pairReason": null,
+                    "pairState": "complete",
+                    "per90": {
+                      "comparison": {
+                        "median": 0.4,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "league_per90_fallback",
+                      "state": "observed",
+                      "unit": "per90",
+                      "value": 0.4
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 8.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": "league-per90-total-v2",
+                      "formulaVersion": "stat-pairs-v2",
+                      "percentileScore": 99,
+                      "source": "server_derived",
+                      "state": "server_derived",
+                      "unit": "count",
+                      "value": 8.0
+                    },
+                    "value": null
+                  }
+                ]
+              }
+            ],
+            "id": "forwardPress",
+            "imputedComponents": [],
+            "label": "forwardPress",
+            "percentileScore": 99,
+            "scoreState": "observed"
+          },
+          "outsideShot": {
+            "comparison": {
+              "median": 20.0,
+              "percentileScore": 99,
+              "population": 1,
+              "rank": 1,
+              "state": "available"
+            },
+            "direction": "higher_is_better",
+            "formulaId": "stat-pairs-category-v2",
+            "formulaVersion": "stat-pairs-v2",
+            "groups": [
+              {
+                "id": "outsideBoxShooting",
+                "kind": "count_rate_pair",
+                "label": "Outside-box shooting",
+                "metrics": [
+                  {
+                    "id": "outsideBoxShotAttempts",
+                    "label": "Outside-box shot attempts",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 4.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "count",
+                      "value": 4.0
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "outsideBoxXg",
+                    "label": "Outside-box xG",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 0.4,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "goals",
+                      "value": 0.4
+                    },
+                    "value": null
+                  },
+                  {
+                    "id": "outsideBoxXgot",
+                    "label": "Outside-box xGOT",
+                    "pairReason": "minutes_unavailable_or_nonpositive",
+                    "pairState": "partial",
+                    "per90": {
+                      "comparison": {
+                        "median": null,
+                        "percentileScore": null,
+                        "population": 0,
+                        "rank": null,
+                        "state": "unavailable"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": null,
+                      "source": "unavailable",
+                      "state": "unavailable",
+                      "unit": "per90",
+                      "value": null
+                    },
+                    "total": {
+                      "comparison": {
+                        "median": 0.6,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "player_season_total",
+                      "state": "observed",
+                      "unit": "goals",
+                      "value": 0.6
+                    },
+                    "value": null
+                  }
+                ]
+              }
+            ],
+            "id": "outsideShot",
+            "imputedComponents": [
+              "out_box_shots_raw",
+              "out_box_xg_raw",
+              "out_box_xgot_raw"
+            ],
+            "label": "outsideShot",
+            "percentileScore": 20,
+            "scoreState": "imputed"
+          },
+          "spaceControl": {
+            "comparison": {
+              "median": 99.0,
+              "percentileScore": 99,
+              "population": 1,
+              "rank": 1,
+              "state": "available"
+            },
+            "direction": "higher_is_better",
+            "formulaId": "stat-pairs-category-v2",
+            "formulaVersion": "stat-pairs-v2",
+            "groups": [
+              {
+                "id": "spaceControl",
+                "kind": "spatial",
+                "label": "Space control",
+                "metrics": [
+                  {
+                    "id": "ccaAreaPct",
+                    "label": "CCA area",
+                    "pairReason": null,
+                    "pairState": "scalar",
+                    "per90": null,
+                    "total": null,
+                    "value": {
+                      "comparison": {
+                        "median": 14.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "tactical_ratio_static",
+                      "state": "observed",
+                      "unit": "percent",
+                      "value": 14.0
+                    }
+                  },
+                  {
+                    "id": "dangerZoneDensity",
+                    "label": "Danger-zone density",
+                    "pairReason": null,
+                    "pairState": "scalar",
+                    "per90": null,
+                    "total": null,
+                    "value": {
+                      "comparison": {
+                        "median": 12.0,
+                        "percentileScore": 99,
+                        "population": 1,
+                        "rank": 1,
+                        "state": "available"
+                      },
+                      "direction": "higher_is_better",
+                      "formulaId": null,
+                      "formulaVersion": null,
+                      "percentileScore": 99,
+                      "source": "tactical_ratio_static",
+                      "state": "observed",
+                      "unit": "percent",
+                      "value": 12.0
+                    }
+                  }
+                ]
+              }
+            ],
+            "id": "spaceControl",
+            "imputedComponents": [],
+            "label": "spaceControl",
+            "percentileScore": 99,
+            "scoreState": "observed"
+          }
+        },
+        "tier": {
+          "code": "diamond",
+          "label": "Diamond",
+          "level": 1,
+          "taxonomyVersion": "crystal-v2"
+        }
+      },
+      "metricTaxonomyVersion": "duel-press-v2",
+      "ratingSnapshotId": "stat-pairs-v2:3882082fdda247ef",
+      "ratingVersion": "stat-pairs-v2",
+      "readoutVersion": "detail-readout-v2",
+      "schemaVersion": "2.0.0"
+    }
+  }
+}

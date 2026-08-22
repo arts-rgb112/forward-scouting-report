@@ -15,11 +15,17 @@ TierTaxonomyVersion = Literal["crystal-v2"]
 MetricTaxonomyVersion = Literal["duel-press-v1"]
 RawMetricSource = Literal["player_season_total", "league_per90_fallback"]
 DetailReadoutVersion = Literal["detail-readout-v1"]
+DetailReadoutV2Version = Literal["detail-readout-v2"]
 DetailReadoutState = Literal[
     "observed", "server_derived", "imputed", "unavailable", "legacy_partial",
 ]
 DetailReadoutSource = Literal[
     "player_season_total", "league_per90_fallback", "tactical_ratio_static",
+    "server_derived", "unavailable",
+]
+DetailV2Source = Literal[
+    "player_season_total", "league_per90_fallback", "tactical_ratio_static",
+    "provider_wins_attempts_derived_rate", "zero_attempts_observed",
     "server_derived", "unavailable",
 ]
 DetailComparisonDirection = Literal["higher_is_better", "lower_is_better", "neutral"]
@@ -624,6 +630,298 @@ class DuelPressDetailReadoutEnvelope(BaseModel):
         if self.player.id != self.context.playerId:
             raise ValueError("player identity must match context playerId")
         return self
+
+
+# detail-readout-v2 deliberately has its own envelope rather than widening the
+# frozen v1 ordered-readout DTO.  A datum is the smallest renderable unit: the
+# API owns both the raw fact and its context-specific display score.
+class DetailV2Comparison(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: Literal["available", "unavailable", "zero_attempts_floor"]
+    median: float | None = None
+    rank: int | None = Field(default=None, ge=1)
+    population: int = Field(ge=0)
+    percentileScore: int | None = Field(default=None, ge=0, le=99)
+
+    @model_validator(mode="after")
+    def validate_availability(self) -> "DetailV2Comparison":
+        if self.state in {"available", "zero_attempts_floor"}:
+            if self.median is None or self.rank is None or self.population < 1 or self.percentileScore is None:
+                raise ValueError("available v2 comparison requires median, rank, population, and score")
+            if self.rank > self.population:
+                raise ValueError("v2 comparison rank must not exceed population")
+            if self.state == "zero_attempts_floor" and (
+                self.percentileScore != 0 or self.rank != self.population
+            ):
+                raise ValueError("zero-attempt floor must expose population rank and zero score")
+        elif any(value is not None for value in (self.rank, self.percentileScore)):
+            raise ValueError("unavailable v2 comparison cannot have rank or score")
+        return self
+
+
+class DetailV2Datum(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: float | None = None
+    unit: Literal["count", "per90", "goals", "percent", "score"]
+    direction: DetailComparisonDirection
+    state: Literal["observed", "server_derived", "unavailable"]
+    source: DetailV2Source
+    percentileScore: int | None = Field(default=None, ge=0, le=99)
+    formulaId: str | None = None
+    formulaVersion: str | None = None
+    comparison: DetailV2Comparison
+
+    @model_validator(mode="after")
+    def validate_provenance(self) -> "DetailV2Datum":
+        has_formula = self.formulaId is not None
+        if has_formula != (self.formulaVersion is not None):
+            raise ValueError("v2 formula id and version must occur together")
+        if self.value is None:
+            if self.state != "unavailable" or self.source != "unavailable" or has_formula:
+                raise ValueError("unavailable v2 datum must have unavailable provenance")
+            return self
+        if self.percentileScore is None or self.comparison.percentileScore != self.percentileScore:
+            raise ValueError("numeric v2 datum must expose the server percentileScore")
+        if self.state == "observed":
+            observed_sources = {
+                "player_season_total", "tactical_ratio_static", "league_per90_fallback",
+                "provider_wins_attempts_derived_rate", "zero_attempts_observed",
+            }
+            derived_source_formulas = {
+                "provider_wins_attempts_derived_rate": "provider_wins_attempts_derived_rate",
+                "zero_attempts_observed": "zero_attempts_floor",
+            }
+            required_formula = derived_source_formulas.get(self.source)
+            if self.source not in observed_sources or has_formula != (required_formula is not None):
+                raise ValueError("observed v2 datum has invalid provenance")
+            if required_formula is not None and self.formulaId != required_formula:
+                raise ValueError("observed derived datum must declare its formula")
+        elif self.state == "server_derived":
+            if self.source != "server_derived" or not has_formula:
+                raise ValueError("derived v2 datum requires server formula provenance")
+        else:
+            raise ValueError("numeric v2 datum cannot be unavailable")
+        return self
+
+
+class DetailV2Metric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^[a-z][A-Za-z0-9]*$")
+    label: str = Field(min_length=1)
+    # Count/goal measures use the total/per90 pair. Percent, spatial, and
+    # contextual measures use ``value`` instead.
+    total: DetailV2Datum | None = None
+    per90: DetailV2Datum | None = None
+    value: DetailV2Datum | None = None
+    pairState: Literal["complete", "partial", "unavailable", "scalar"]
+    pairReason: Literal["minutes_unavailable_or_nonpositive", "source_unavailable"] | None = None
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> "DetailV2Metric":
+        paired = self.total is not None or self.per90 is not None
+        if paired == (self.value is not None) or (paired and (self.total is None or self.per90 is None)):
+            raise ValueError("v2 metric must be either a total/per90 pair or one scalar datum")
+        if self.value is not None:
+            if self.pairState != "scalar" or self.pairReason is not None:
+                raise ValueError("scalar v2 metric must use pairState=scalar")
+        elif self.total is not None and self.per90 is not None:
+            availability = (self.total.value is not None, self.per90.value is not None)
+            expected = "complete" if all(availability) else "partial" if any(availability) else "unavailable"
+            if self.pairState != expected:
+                raise ValueError("v2 pairState must reflect total/per90 availability")
+            if expected == "complete" and self.pairReason is not None:
+                raise ValueError("complete v2 pair cannot have a reason")
+            if expected in {"partial", "unavailable"} and self.pairReason is None:
+                raise ValueError("non-complete v2 pair requires a reason")
+        return self
+
+
+class DetailV2Group(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^[a-z][A-Za-z0-9]*$")
+    label: str = Field(min_length=1)
+    kind: Literal["count_rate_pair", "duel_split", "spatial", "pressing"]
+    metrics: list[DetailV2Metric] = Field(min_length=1)
+
+
+class DuelPressDetailV2Category(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: Literal["outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress"]
+    label: str = Field(min_length=1)
+    percentileScore: int | None = Field(default=None, ge=0, le=99)
+    scoreState: Literal["observed", "imputed", "unavailable"]
+    imputedComponents: list[str] = Field(default_factory=list)
+    direction: Literal["higher_is_better"] = "higher_is_better"
+    comparison: DetailV2Comparison
+    formulaId: Literal["stat-pairs-category-v2"] = "stat-pairs-category-v2"
+    formulaVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
+    groups: list[DetailV2Group] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_score(self) -> "DuelPressDetailV2Category":
+        if (self.percentileScore is None) != (self.scoreState == "unavailable"):
+            raise ValueError("v2 category score state is inconsistent")
+        if (self.scoreState == "imputed") != bool(self.imputedComponents):
+            raise ValueError("v2 category imputation is inconsistent")
+        return self
+
+
+class DuelPressDetailV2ContextIndicator(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: Literal["netProgressionPer90", "goalsMinusXgot"]
+    label: str = Field(min_length=1)
+    aggregate: Literal[False] = False
+    metric: DetailV2Metric
+    tooltipFacts: list[DetailV2Metric] = Field(min_length=2)
+
+
+class DuelPressDetailReadoutV2Envelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["2.0.0"] = "2.0.0"
+    metricTaxonomyVersion: Literal["duel-press-v2"] = "duel-press-v2"
+    readoutVersion: DetailReadoutV2Version = "detail-readout-v2"
+    ratingVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
+    ratingSnapshotId: str = Field(pattern=r"^stat-pairs-v2:[a-f0-9]{16}$")
+    context: DuelPressRequestContext
+    player: DuelPressDetailPlayerIdentity
+    cohortPopulation: int = Field(ge=0)
+    categories: list[DuelPressDetailV2Category] = Field(min_length=6, max_length=6)
+    contextIndicators: list[DuelPressDetailV2ContextIndicator] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_order_and_identity(self) -> "DuelPressDetailReadoutV2Envelope":
+        if [item.id for item in self.categories] != [
+            "outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress",
+        ]:
+            raise ValueError("v2 categories must use canonical order")
+        if [item.id for item in self.contextIndicators] != ["netProgressionPer90", "goalsMinusXgot"]:
+            raise ValueError("v2 context indicators must use canonical order")
+        if self.context.playerId != self.player.id:
+            raise ValueError("v2 player identity must match context")
+        return self
+
+
+class DuelPressV2RatingStats(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outsideShot: DuelPressDetailV2Category
+    boxThreat: DuelPressDetailV2Category
+    dangerZone: DuelPressDetailV2Category
+    combinedDuel: DuelPressDetailV2Category
+    spaceControl: DuelPressDetailV2Category
+    forwardPress: DuelPressDetailV2Category
+
+
+class DuelPressV2CohortContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7, 8] | None = None
+    competition: CompetitionCode | None = None
+
+    @model_validator(mode="after")
+    def validate_active_dimension(self) -> "DuelPressV2CohortContext":
+        if self.mode == "league" and (self.scope is None or self.competition is not None):
+            raise ValueError("v2 league context requires scope and null competition")
+        if self.mode == "europe" and (self.scope is not None or self.competition is None):
+            raise ValueError("v2 Europe context requires competition and null scope")
+        return self
+
+
+class DuelPressV2OverallRating(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rawValue: float = Field(ge=0, le=99)
+    percentileScore: int = Field(ge=0, le=99)
+    direction: Literal["higher_is_better"] = "higher_is_better"
+    state: Literal["observed", "imputed"]
+    comparison: DetailV2Comparison
+    formulaId: Literal["stat-pairs-overall-v2"] = "stat-pairs-overall-v2"
+    formulaVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
+
+    @model_validator(mode="after")
+    def validate_percentile_score(self) -> "DuelPressV2OverallRating":
+        if self.comparison.percentileScore != self.percentileScore:
+            raise ValueError("overall percentileScore must be server comparison score")
+        return self
+
+
+class DuelPressV2LeaderboardPlayer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int = Field(gt=0)
+    idNamespace: Literal["fotmob"] = "fotmob"
+    rank: int = Field(ge=1)
+    overallRating: DuelPressV2OverallRating
+    name: str = Field(min_length=1)
+    position: str = Field(min_length=1)
+    archetype: Literal["Type A", "Type B"]
+    age: int | None = Field(default=None, ge=0)
+    minutes: int = Field(ge=0)
+    tier: PlayerTier
+    face: HttpUrl
+    nation: str | None = None
+    club: AssetRef
+    league: AssetRef
+    stats: DuelPressV2RatingStats
+
+
+class DuelPressV2LeaderboardEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["2.0.0"] = "2.0.0"
+    metricTaxonomyVersion: Literal["duel-press-v2"] = "duel-press-v2"
+    readoutVersion: DetailReadoutV2Version = "detail-readout-v2"
+    ratingVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
+    ratingSnapshotId: str = Field(pattern=r"^stat-pairs-v2:[a-f0-9]{16}$")
+    context: DuelPressV2CohortContext
+    cohortPopulation: int = Field(ge=0)
+    data: list[DuelPressV2LeaderboardPlayer]
+
+
+class DuelPressV2LeaderboardMeta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["2.0.0"] = "2.0.0"
+    season: str
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7, 8] | None = None
+    competition: CompetitionCode | None = None
+    population: int = Field(ge=0)
+    returned: int = Field(ge=0)
+    page: int = Field(ge=1)
+    pageSize: Literal[50] = 50
+    totalItems: int = Field(ge=0)
+    totalPages: int = Field(ge=0)
+    hasNextPage: bool
+    applied: DuelPressAppliedFilters
+    generatedAt: datetime
+    source: Literal["messi-static-cohort"] = "messi-static-cohort"
+
+
+class DuelPressV2LeaderboardPageEnvelope(DuelPressV2LeaderboardEnvelope):
+    meta: DuelPressV2LeaderboardMeta
+
+
+class DuelPressV2PlayerEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["2.0.0"] = "2.0.0"
+    metricTaxonomyVersion: Literal["duel-press-v2"] = "duel-press-v2"
+    readoutVersion: DetailReadoutV2Version = "detail-readout-v2"
+    ratingVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
+    ratingSnapshotId: str = Field(pattern=r"^stat-pairs-v2:[a-f0-9]{16}$")
+    context: DuelPressRequestContext
+    cohortPopulation: int = Field(ge=0)
+    data: DuelPressV2LeaderboardPlayer
 
 
 class MetricRankPlayerRef(BaseModel):

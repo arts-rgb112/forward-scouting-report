@@ -1,0 +1,18 @@
+{
+  "rawInputs": {
+    "ground_duel_attempts_provider_raw": 0,
+    "aerial_duel_attempts_provider_raw": 0,
+    "duels_won_raw": null,
+    "aerial_duels_won_raw": null,
+    "ground_duel_win_rate_raw": null,
+    "aerial_duel_win_rate_raw": null
+  },
+  "expected": {
+    "value": 0,
+    "state": "observed",
+    "source": "zero_attempts_observed",
+    "formulaId": "zero_attempts_floor",
+    "comparisonState": "zero_attempts_floor",
+    "lossPercentileScore": 0
+  }
+}

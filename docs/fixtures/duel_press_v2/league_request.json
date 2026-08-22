@@ -1,0 +1,10 @@
+{
+  "season": "2025/2026",
+  "mode": "league",
+  "scope": 8,
+  "competition": "all",
+  "page": 1,
+  "pageSize": 50,
+  "sort": "rank",
+  "order": "asc"
+}

@@ -1,0 +1,32 @@
+{
+  "context": {
+    "playerId": 1467236,
+    "name": "Lamine Yamal",
+    "season": "2025/2026",
+    "mode": "league",
+    "scope": 8,
+    "competition": null
+  },
+  "staticSource": {
+    "tacticalSession": "present",
+    "missingFields": [
+      "aerial_duels_won",
+      "aerial_duel_attempts_raw"
+    ],
+    "providerLookupResult": "not_attempted_no_verified_sportsapi_raw_duel_schema"
+  },
+  "v2Expectation": {
+    "category": "combinedDuel",
+    "scoreState": "imputed",
+    "imputedComponents": [
+      "combined_duel_attempts_raw",
+      "aerial_duels_won_raw",
+      "aerial_duel_losses_raw"
+    ],
+    "unavailableMetrics": [
+      "aerialDuelAttempts",
+      "aerialDuelWins",
+      "aerialDuelLosses"
+    ]
+  }
+}

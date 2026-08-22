@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -12,11 +13,20 @@ import pytest
 from api_server import main as api_main
 from api_server import service
 from api_server.main import app
-from api_server.schemas import DuelPressDetailReadoutEnvelope, DuelPressPlayerEnvelope
+from api_server.schemas import (
+    DuelPressDetailReadoutEnvelope, DuelPressDetailReadoutV2Envelope,
+    DuelPressPlayerEnvelope, DuelPressV2LeaderboardPageEnvelope,
+    DuelPressV2PlayerEnvelope,
+)
+from scripts.audit_duel_press_v2_sources import (
+    COHORT_FIELDS, TACTICAL_FIELDS, _tactical_competition_name, _v2_context,
+    build_audit_rows,
+)
 
 
 DUEL_FIXTURES = Path(__file__).parents[1] / "docs" / "fixtures" / "duel_press_v1"
 DETAIL_FIXTURES = Path(__file__).parents[1] / "docs" / "fixtures" / "duel_press_detail_readouts"
+V2_FIXTURES = Path(__file__).parents[1] / "docs" / "fixtures" / "duel_press_v2"
 
 
 def _player():
@@ -49,6 +59,29 @@ def _payload(monkeypatch) -> dict[str, object]:
 def _assert_invalid(payload: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         DuelPressDetailReadoutEnvelope.model_validate(payload)
+
+
+def _v2_fixture(name: str) -> dict[str, object]:
+    return json.loads((V2_FIXTURES / name).read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("fixture_name", [
+    "complete_league.json", "complete_europe.json", "observed_zero.json",
+    "unavailable.json", "partial_pair.json", "imputed_lower_better.json",
+])
+def test_full_v2_endpoint_fixtures_are_strictly_model_valid(fixture_name: str) -> None:
+    """Frontend fixtures carry complete, strict payloads for all v2 routes."""
+    fixture = _v2_fixture(fixture_name)
+    responses = fixture["responses"]
+    for field, model in (
+        ("leaderboard", DuelPressV2LeaderboardPageEnvelope),
+        ("player", DuelPressV2PlayerEnvelope),
+        ("detail", DuelPressDetailReadoutV2Envelope),
+    ):
+        payload = responses[field]
+        validated = model.model_validate(payload)
+        assert validated.schemaVersion == "2.0.0"
+        assert validated.model_dump(mode="json") == payload
 
 
 def test_complete_detail_readout_has_six_ordered_categories_and_all_legacy_bars(monkeypatch) -> None:
@@ -201,6 +234,15 @@ def test_generic_readout_rejects_invalid_source_state_provenance(monkeypatch) ->
     outside_shots["missingComponents"] = None
     _assert_invalid(payload)
 
+    # V2-only provenance must remain rejected by the immutable v1 DTO.
+    payload = _payload(monkeypatch)
+    payload["categories"][0]["readouts"][0]["source"] = "provider_wins_attempts_derived_rate"
+    _assert_invalid(payload)
+
+    payload = _payload(monkeypatch)
+    payload["categories"][0]["readouts"][0]["source"] = "zero_attempts_observed"
+    _assert_invalid(payload)
+
 
 @pytest.mark.parametrize(
     "mutation",
@@ -309,6 +351,21 @@ def test_openapi_and_cors_expose_only_the_additive_get_contract(origin: str) -> 
     assert {"200", "404", "422"}.issubset(schema["paths"][path]["get"]["responses"])
     envelope = schema["components"]["schemas"]["DuelPressDetailReadoutEnvelope"]
     assert envelope["additionalProperties"] is False
+    assert schema["components"]["schemas"]["DuelPressDetailReadout"]["properties"]["source"]["enum"] == [
+        "player_season_total", "league_per90_fallback", "tactical_ratio_static",
+        "server_derived", "unavailable",
+    ]
+    assert schema["components"]["schemas"]["DetailV2Datum"]["properties"]["source"]["enum"] == [
+        "player_season_total", "league_per90_fallback", "tactical_ratio_static",
+        "provider_wins_attempts_derived_rate", "zero_attempts_observed",
+        "server_derived", "unavailable",
+    ]
+    for model in (
+        "DuelPressV2LeaderboardPageEnvelope", "DuelPressV2PlayerEnvelope",
+        "DuelPressDetailReadoutV2Envelope",
+    ):
+        schema_version = schema["components"]["schemas"][model]["properties"]["schemaVersion"]
+        assert schema_version["const"] == schema_version["default"] == "2.0.0"
 
     response = client.options(
         path,
@@ -319,3 +376,390 @@ def test_openapi_and_cors_expose_only_the_additive_get_contract(origin: str) -> 
     )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == origin
+
+
+def test_v2_stat_pairs_are_server_owned_and_share_one_snapshot(monkeypatch) -> None:
+    player = _player()
+    record = _record(player.id)
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    profile = service.find_duel_press_v2_player(player.id, "2025/2026", "league", 8, "all")
+    assert detail is not None and profile is not None
+    assert detail.metricTaxonomyVersion == "duel-press-v2"
+    assert detail.schemaVersion == "2.0.0"
+    assert detail.ratingVersion == "stat-pairs-v2"
+    assert detail.ratingSnapshotId == profile.ratingSnapshotId
+    outside = detail.categories[0].groups[0].metrics
+    assert outside[0].total.value == 4
+    assert outside[0].per90.state == "server_derived"
+    assert outside[1].per90.direction == "higher_is_better"
+    danger = detail.categories[2].groups[0].metrics
+    assert danger[2].total.direction == "lower_is_better"
+    combined = detail.categories[3].groups
+    assert combined[0].metrics[0].id == "combinedDuelAttempts"
+    assert combined[1].metrics[2].id == "groundDuelLosses"
+    assert combined[2].metrics[2].id == "aerialDuelLosses"
+    assert all(category.percentileScore == 99 for category in detail.categories)
+    assert detail.contextIndicators[0].aggregate is False
+    assert detail.contextIndicators[0].metric.value.direction == "higher_is_better"
+    assert detail.contextIndicators[1].metric.value.direction == "higher_is_better"
+    assert {item.id for item in detail.contextIndicators[1].tooltipFacts} == {"goals", "xgot"}
+    fixture = _v2_fixture("complete_league.json")["payload"]
+    assert detail.metricTaxonomyVersion == fixture["metricTaxonomyVersion"]
+    assert [item.id for item in detail.categories] == fixture["categoryOrder"]
+    assert [item.id for item in detail.contextIndicators] == fixture["contextIndicatorOrder"]
+
+
+def test_v2_provider_attempt_columns_do_not_change_legacy_v1_scores_ranks_or_detail(monkeypatch) -> None:
+    """Provider-only v2 inputs must not alter any v1 calculation or DTO."""
+    player = _player()
+    frame = {"record": _record(player.id)}
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [frame["record"]])
+
+    legacy_before = service.duel_press_leaderboard_envelope(
+        "2025/2026", "league", 8, "all", page=1, page_size=50,
+        role=None, position=None, age_band="all", minutes_band="all",
+        query=None, sort="rank", order="asc",
+    )
+    detail_before = service.find_duel_press_detail_readouts(player.id, "2025/2026", "league", 8, "all")
+    assert detail_before is not None
+
+    # These exact count fields belong to the v2-only ingestion frame.  They
+    # deliberately disagree with the legacy rate-derived totals.
+    frame["record"] = {
+        **frame["record"],
+        "ground_duel_attempts_provider_raw": 70,
+        "aerial_duel_attempts_provider_raw": 50,
+    }
+    legacy_after = service.duel_press_leaderboard_envelope(
+        "2025/2026", "league", 8, "all", page=1, page_size=50,
+        role=None, position=None, age_band="all", minutes_band="all",
+        query=None, sort="rank", order="asc",
+    )
+    detail_after = service.find_duel_press_detail_readouts(player.id, "2025/2026", "league", 8, "all")
+    assert detail_after is not None
+    assert legacy_after.model_dump(mode="json") == legacy_before.model_dump(mode="json")
+    assert detail_after.model_dump(mode="json") == detail_before.model_dump(mode="json")
+
+    service._v2_frame_cached.cache_clear()
+    v2 = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    assert v2 is not None
+    combined = next(item for item in v2.categories if item.id == "combinedDuel")
+    assert combined.groups[1].metrics[0].total.value == 70
+    assert combined.groups[2].metrics[0].total.value == 50
+
+
+def test_v2_rate_zero_is_unavailable_not_zero_and_marks_rating_imputed(monkeypatch) -> None:
+    player = _player()
+    record = _record(player.id)
+    record["dribble_success_rate_raw"] = 0
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    assert detail is not None
+    danger = detail.categories[2]
+    assert danger.scoreState == "imputed"
+    imputed_fixture = _v2_fixture("imputed_lower_better.json")["imputed"]
+    assert danger.id == imputed_fixture["category"]
+    assert danger.scoreState == imputed_fixture["scoreState"]
+    failed = danger.groups[0].metrics[2]
+    assert failed.total.value is None
+    assert failed.total.state == "unavailable"
+    assert failed.total.percentileScore is None
+    assert failed.pairState == "unavailable"
+    assert failed.pairReason == "source_unavailable"
+    fixture = _v2_fixture("unavailable.json")["payload"]
+    assert failed.total.state == fixture["state"]
+    assert failed.total.value == fixture["value"]
+
+
+def test_v2_total_without_minutes_is_an_explicit_partial_pair(monkeypatch) -> None:
+    player = _player()
+    record = _record(player.id)
+    record["minutes_played"] = 0
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    assert detail is not None
+    attempts = detail.categories[0].groups[0].metrics[0]
+    assert attempts.total.value == 4
+    assert attempts.per90.value is None
+    assert attempts.pairState == "partial"
+    assert attempts.pairReason == "minutes_unavailable_or_nonpositive"
+    fixture = _v2_fixture("partial_pair.json")["payload"]
+    assert attempts.pairState == fixture["pairState"]
+    assert attempts.pairReason == fixture["pairReason"]
+
+
+def test_v2_observed_zero_and_fallback_press_provenance(monkeypatch) -> None:
+    player = _player()
+    record = _record(player.id)
+    record["out_box_shots_raw"] = 0
+    record["out_box_xg_raw"] = 0
+    record["out_box_xgot_raw"] = 0
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    assert detail is not None
+    shots = detail.categories[0].groups[0].metrics[0]
+    assert shots.total.value == 0
+    assert shots.total.state == "observed"
+    zero_fixture = _v2_fixture("observed_zero.json")["payload"]
+    assert shots.total.state == zero_fixture["state"]
+    assert shots.total.value == zero_fixture["value"]
+    press = detail.categories[5].groups[0].metrics[1]
+    assert press.total.state == "server_derived"
+    assert press.total.formulaId == "league-per90-total-v2"
+    assert press.per90.source == "league_per90_fallback"
+
+
+def test_v2_europe_context_and_schema_rejects_malformed_snapshot(monkeypatch) -> None:
+    player = _player()
+    record = _record(player.id)
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "europe", 8, "ucl")
+    assert detail is not None
+    assert detail.context.scope is None
+    assert detail.context.competition == "ucl"
+    fixture_context = _v2_fixture("complete_europe.json")["payload"]["context"]
+    assert detail.context.mode == fixture_context["mode"]
+    assert detail.context.scope == fixture_context["scope"]
+    payload = detail.model_dump(mode="json")
+    payload["ratingSnapshotId"] = "bad"
+    with pytest.raises(ValidationError):
+        DuelPressDetailReadoutV2Envelope.model_validate(payload)
+
+
+def test_v2_board_keeps_page_filter_sort_metadata_and_snapshot(monkeypatch) -> None:
+    player = _player()
+    record = _record(player.id)
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+    board = service.duel_press_v2_leaderboard_envelope(
+        "2025/2026", "league", 8, "all", page=1, page_size=50,
+        role=None, position=None, age_band="all", minutes_band="all",
+        query=None, sort="combinedDuel", order="desc",
+    )
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    assert detail is not None
+    assert board.meta.pageSize == 50
+    assert board.meta.applied.sort == "combinedDuel"
+    assert board.data[0].stats.combinedDuel.percentileScore == detail.categories[3].percentileScore
+    assert board.ratingSnapshotId == detail.ratingSnapshotId
+
+
+def test_v2_board_descending_ties_keep_rank_then_id(monkeypatch) -> None:
+    player = _player()
+    peer = player.model_copy(update={"id": player.id + 1, "name": "Peer"})
+    record = _record(player.id)
+    peer_record = dict(record)
+    peer_record["player_id"] = peer.id
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player, peer))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record, peer_record])
+    service._v2_frame_cached.cache_clear()
+    asc = service.duel_press_v2_leaderboard_envelope("2025/2026", "league", 8, "all", page=1, page_size=50, role=None, position=None, age_band="all", minutes_band="all", query=None, sort="rank", order="asc")
+    desc = service.duel_press_v2_leaderboard_envelope("2025/2026", "league", 8, "all", page=1, page_size=50, role=None, position=None, age_band="all", minutes_band="all", query=None, sort="rank", order="desc")
+    assert [item.id for item in asc.data] == [player.id, peer.id]
+    assert [item.id for item in desc.data] == [player.id, peer.id]
+
+
+def test_v2_http_trio_context_status_and_cors(monkeypatch) -> None:
+    detail = _detail(monkeypatch)
+    assert detail is not None
+    record = _record(detail.player.id)
+    player = _player()
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+    v2_detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    v2_player = service.find_duel_press_v2_player(player.id, "2025/2026", "league", 8, "all")
+    v2_board = service.duel_press_v2_leaderboard_envelope("2025/2026", "league", 8, "all", page=1, page_size=50, role=None, position=None, age_band="all", minutes_band="all", query=None, sort="rank", order="asc")
+    assert v2_detail is not None and v2_player is not None
+    monkeypatch.setattr(api_main, "find_duel_press_detail_readouts_v2", lambda *args: v2_detail)
+    monkeypatch.setattr(api_main, "find_duel_press_v2_player", lambda *args: v2_player)
+    monkeypatch.setattr(api_main, "duel_press_v2_leaderboard_envelope", lambda *args, **kwargs: v2_board)
+    client = TestClient(app)
+    params = {"season": "2025/2026", "mode": "league", "scope": 8, "competition": "all"}
+    board = client.get("/api/v2/leaderboards/duel-press-v2", params=params)
+    profile = client.get(f"/api/v2/players/{player.id}/duel-press-v2", params=params)
+    readout = client.get(f"/api/v2/players/{player.id}/duel-press-v2/detail-metrics", params=params)
+    assert [response.status_code for response in (board, profile, readout)] == [200, 200, 200]
+    assert board.json()["ratingSnapshotId"] == profile.json()["ratingSnapshotId"] == readout.json()["ratingSnapshotId"]
+    assert board.json()["context"] == {"season": "2025/2026", "mode": "league", "scope": 8, "competition": None}
+    assert client.get(f"/api/v2/players/{player.id}/duel-press-v2", params={**params, "competition": "ucl"}).status_code == 422
+    preflight = client.options("/api/v2/leaderboards/duel-press-v2", headers={"Origin": "https://forward-scouting-report-6dn7-tau.vercel.app", "Access-Control-Request-Method": "GET"})
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == "https://forward-scouting-report-6dn7-tau.vercel.app"
+
+
+def test_v2_lower_is_better_score_is_inverted_and_zero_to_99() -> None:
+    best = service._v2_display_comparison(1.0, [1.0, 2.0, 3.0], "lower_is_better")
+    worst = service._v2_display_comparison(3.0, [1.0, 2.0, 3.0], "lower_is_better")
+    fixture = _v2_fixture("imputed_lower_better.json")["lowerIsBetter"]
+    assert (best.rank, best.percentileScore) == (fixture["best"]["rank"], fixture["best"]["percentileScore"])
+    assert (worst.rank, worst.percentileScore) == (fixture["worst"]["rank"], fixture["worst"]["percentileScore"])
+
+
+def test_v2_openapi_exposes_separate_strict_endpoint_trio() -> None:
+    schema = TestClient(app).get("/openapi.json").json()
+    assert "/api/v2/leaderboards/duel-press-v2" in schema["paths"]
+    assert "/api/v2/players/{playerId}/duel-press-v2" in schema["paths"]
+    assert "/api/v2/players/{playerId}/duel-press-v2/detail-metrics" in schema["paths"]
+    assert schema["components"]["schemas"]["DuelPressDetailReadoutV2Envelope"]["additionalProperties"] is False
+
+
+def test_yamal_2025_2026_static_source_absence_is_audited_and_visible_in_v2() -> None:
+    """Representative guard: never conceal a missing source with a rerating."""
+    fixture = _v2_fixture("yamal_2025_2026_source_absence.json")
+    expected = fixture["v2Expectation"]
+    static = fixture["staticSource"]
+    context = fixture["context"]
+    rows = build_audit_rows(
+        Path(__file__).parents[1] / "data" / "spear_cohort.csv",
+        Path(__file__).parents[1] / "data" / "tactical_3zone_ratio.csv",
+        timestamp="2026-08-22T00:00:00+00:00",
+        scope=int(context["scope"]),
+    )
+    audit = next(row for row in rows if (
+        row["playerId"] == str(context["playerId"])
+        and row["season"] == context["season"]
+        and row["mode"] == context["mode"]
+        and row["scope"] == str(context["scope"])
+        and row["competition"] == ""
+    ))
+    assert audit["missingFields"].split(";") == static["missingFields"]
+    assert audit["providerLookupResult"] == static["providerLookupResult"]
+
+    service._v2_frame_cached.cache_clear()
+    detail = service.find_duel_press_detail_readouts_v2(
+        int(context["playerId"]), str(context["season"]), str(context["mode"]),
+        int(context["scope"]), "all",
+    )
+    profile = service.find_duel_press_v2_player(
+        int(context["playerId"]), str(context["season"]), str(context["mode"]),
+        int(context["scope"]), "all",
+    )
+    assert detail is not None and profile is not None
+    category = next(item for item in detail.categories if item.id == expected["category"])
+    assert category.scoreState == expected["scoreState"]
+    assert category.imputedComponents == expected["imputedComponents"]
+    aerial_metrics = category.groups[2].metrics
+    assert [item.id for item in aerial_metrics[:3]] == expected["unavailableMetrics"]
+    assert all(item.pairState == "unavailable" for item in aerial_metrics[:3])
+    assert aerial_metrics[3].id == "aerialDuelWinRate"
+    assert aerial_metrics[3].value is not None and aerial_metrics[3].value.state == "unavailable"
+    assert profile.data.stats.combinedDuel.scoreState == expected["scoreState"]
+
+
+def test_v2_derives_aerial_rate_only_from_exact_provider_wins_and_attempts(monkeypatch) -> None:
+    player = _player()
+    record = _record(player.id)
+    fixture = _v2_fixture("derivable_aerial_rate.json")
+    record.update(fixture["rawInputs"])
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    assert detail is not None
+    aerial = next(item for item in detail.categories if item.id == "combinedDuel").groups[2].metrics
+    totals = fixture["expectedAerialTotals"]
+    assert aerial[0].total is not None and aerial[0].total.value == totals["attempts"]
+    assert aerial[1].total is not None and aerial[1].total.value == totals["wins"]
+    assert aerial[2].total is not None and aerial[2].total.value == totals["losses"]
+    rate = aerial[3]
+    expected_rate = fixture["expectedRate"]
+    assert rate.id == "aerialDuelWinRate"
+    assert rate.value is not None
+    assert {
+        "value": rate.value.value,
+        "state": rate.value.state,
+        "source": rate.value.source,
+        "formulaId": rate.value.formulaId,
+        "formulaVersion": rate.value.formulaVersion,
+    } == expected_rate
+
+
+def test_v2_explicit_zero_attempt_duels_are_observed_but_losses_use_server_floor(monkeypatch) -> None:
+    player = _player()
+    record = _record(player.id)
+    fixture = _v2_fixture("observed_zero_attempt_duels.json")
+    record.update(fixture["rawInputs"])
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    assert detail is not None
+    expected = fixture["expected"]
+    combined = next(item for item in detail.categories if item.id == "combinedDuel")
+    for group in combined.groups[1:]:
+        attempts, wins, losses, rate = group.metrics
+        assert attempts.total is not None and attempts.total.value == expected["value"]
+        assert attempts.per90 is not None and attempts.per90.value == expected["value"]
+        assert wins.total is not None and wins.total.value == expected["value"]
+        assert wins.total.state == expected["state"]
+        assert wins.total.source == expected["source"]
+        assert wins.total.formulaId == expected["formulaId"]
+        assert losses.total is not None and losses.total.value == expected["value"]
+        assert losses.total.comparison.state == expected["comparisonState"]
+        assert losses.total.percentileScore == expected["lossPercentileScore"]
+        assert losses.per90 is not None and losses.per90.comparison.state == expected["comparisonState"]
+        assert losses.per90.percentileScore == expected["lossPercentileScore"]
+        assert rate.value is not None and rate.value.value == expected["value"]
+        assert rate.value.state == expected["state"]
+        assert rate.value.source == expected["source"]
+        assert rate.value.formulaId == expected["formulaId"]
+
+
+def test_v2_source_audit_distinguishes_derivable_rate_from_missing_wins_or_attempts(tmp_path) -> None:
+    cohort_path = tmp_path / "cohort.csv"
+    tactical_path = tmp_path / "tactical.csv"
+    cohort_fields = [
+        "player_id", "player_name", "season_name", "league_name", *COHORT_FIELDS,
+        "aerial_duel_attempts_raw", "aerial_duels_won_percentage",
+    ]
+    cohort_row = {field: "1" for field in cohort_fields}
+    cohort_row.update({
+        "player_id": "1467236", "player_name": "Lamine Yamal", "season_name": "2025/2026",
+        "league_name": "LaLiga", "aerial_duels_won": "12", "aerial_duel_attempts_raw": "20",
+        "aerial_duels_won_percentage": "",
+    })
+    with cohort_path.open("w", encoding="utf-8", newline="") as target:
+        writer = csv.DictWriter(target, fieldnames=cohort_fields)
+        writer.writeheader(); writer.writerow(cohort_row)
+    with tactical_path.open("w", encoding="utf-8", newline="") as target:
+        writer = csv.DictWriter(target, fieldnames=["fotmob_player_id", "competition_name", "season_name", *TACTICAL_FIELDS])
+        writer.writeheader(); writer.writerow({
+            "fotmob_player_id": "1467236", "competition_name": "LaLiga", "season_name": "2025/2026",
+            "cca_area_pct": "10", "danger_zone_density": "20",
+        })
+    rows = build_audit_rows(cohort_path, tactical_path, timestamp="2026-08-22T00:00:00+00:00")
+    assert rows == [{
+        "playerId": "1467236", "name": "Lamine Yamal", "season": "2025/2026",
+        "mode": "league", "scope": "8", "competition": "", "missingFields": "",
+        "derivableFields": "aerial_duel_win_rate_raw",
+        "requiredProviderInputs": "verified_sportsapi_player_id;exact_tournament_id;exact_season_id;aerial_duels_won; aerial_duel_attempts;count_units",
+        "providerLookupResult": "not_attempted_no_verified_sportsapi_raw_duel_schema",
+        "reason": "rate_derivable_from_wins_attempts", "timestamp": "2026-08-22T00:00:00+00:00",
+    }]
+
+
+@pytest.mark.parametrize(
+    ("alias", "competition", "code"),
+    [
+        ("Champions League", "UEFA Champions League", "ucl"),
+        ("UEFA Europa League", "UEFA Europa League", "uel"),
+        ("Conference League", "UEFA Europa Conference League", "uecl"),
+    ],
+)
+def test_v2_source_audit_maps_all_europe_aliases_to_public_context(alias: str, competition: str, code: str) -> None:
+    assert _v2_context(alias, 8) == ("europe", "", code)
+    assert _tactical_competition_name(alias) == competition

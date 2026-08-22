@@ -1,0 +1,19 @@
+{
+  "rawInputs": {
+    "aerial_duels_won_raw": 12,
+    "aerial_duel_attempts_provider_raw": 20,
+    "aerial_duel_win_rate_raw": null
+  },
+  "expectedRate": {
+    "value": 60,
+    "state": "observed",
+    "source": "provider_wins_attempts_derived_rate",
+    "formulaId": "provider_wins_attempts_derived_rate",
+    "formulaVersion": "stat-pairs-v2"
+  },
+  "expectedAerialTotals": {
+    "attempts": 20,
+    "wins": 12,
+    "losses": 8
+  }
+}
