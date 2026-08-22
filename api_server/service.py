@@ -1052,6 +1052,20 @@ def _v2_net_progression_per90(record: dict[str, object]) -> float | None:
     return sum(values[:5]) - sum(values[5:])
 
 
+def _v2_xgot_minus_xg(record: dict[str, object], *, xgot_key: str, xg_key: str) -> float | None:
+    """Return an observed finishing-quality delta without treating a gap as zero."""
+    xgot, xg = _detail_number(record.get(xgot_key)), _detail_number(record.get(xg_key))
+    return xgot - xg if xgot is not None and xg is not None else None
+
+
+def _v2_outside_box_xgot_minus_xg(record: dict[str, object]) -> float | None:
+    return _v2_xgot_minus_xg(record, xgot_key="out_box_xgot_raw", xg_key="out_box_xg_raw")
+
+
+def _v2_in_box_xgot_minus_xg(record: dict[str, object]) -> float | None:
+    return _v2_xgot_minus_xg(record, xgot_key="in_box_xgot_raw", xg_key="in_box_xg_raw")
+
+
 def _v2_display_comparison(value: float | None, values: list[float], direction: str) -> DetailV2Comparison:
     if value is None or not values:
         ordered = sorted(values)
@@ -1280,11 +1294,13 @@ def _v2_component_specs():
             ("out_box_shots_raw", "higher_is_better", lambda row: _v2_per90(direct("out_box_shots_raw")(row), row), lambda row: False),
             ("out_box_xg_raw", "higher_is_better", lambda row: _v2_per90(direct("out_box_xg_raw")(row), row), lambda row: False),
             ("out_box_xgot_raw", "higher_is_better", lambda row: _v2_per90(direct("out_box_xgot_raw")(row), row), lambda row: False),
+            ("out_box_xgot_minus_xg_per90", "higher_is_better", lambda row: _v2_per90(_v2_outside_box_xgot_minus_xg(row), row), lambda row: False),
         ),
         "boxThreat": (
             ("in_box_shots_raw", "higher_is_better", lambda row: _v2_per90(direct("in_box_shots_raw")(row), row), lambda row: False),
             ("in_box_xg_raw", "higher_is_better", lambda row: _v2_per90(direct("in_box_xg_raw")(row), row), lambda row: False),
             ("in_box_xgot_raw", "higher_is_better", lambda row: _v2_per90(direct("in_box_xgot_raw")(row), row), lambda row: False),
+            ("in_box_xgot_minus_xg_per90", "higher_is_better", lambda row: _v2_per90(_v2_in_box_xgot_minus_xg(row), row), lambda row: False),
         ),
         "dangerZone": (
             ("dribble_attempts_raw", "higher_is_better", lambda row: _v2_per90(_v2_attempts(row, "dribbles_succeeded_raw", "dribble_success_rate_raw"), row), lambda row: False),
@@ -1467,11 +1483,13 @@ def _v2_category(record: dict[str, object], records: list[dict[str, object]], ca
             _v2_pair(records, record, identifier="outsideBoxShotAttempts", label="Outside-box shot attempts", unit="count", direction="higher_is_better", total_evaluator=direct("out_box_shots_raw"), total_observed=True),
             _v2_pair(records, record, identifier="outsideBoxXg", label="Outside-box xG", unit="goals", direction="higher_is_better", total_evaluator=direct("out_box_xg_raw"), total_observed=True),
             _v2_pair(records, record, identifier="outsideBoxXgot", label="Outside-box xGOT", unit="goals", direction="higher_is_better", total_evaluator=direct("out_box_xgot_raw"), total_observed=True),
+            _v2_pair(records, record, identifier="outsideBoxXgotMinusXg", label="Outside-box xGOT minus xG", unit="goals", direction="higher_is_better", total_evaluator=_v2_outside_box_xgot_minus_xg, total_observed=False, total_formula="xgot-minus-xg-v1"),
         ])],
         "boxThreat": [DetailV2Group(id="inBoxShooting", label="In-box shooting", kind="count_rate_pair", metrics=[
             _v2_pair(records, record, identifier="inBoxShotAttempts", label="In-box shot attempts", unit="count", direction="higher_is_better", total_evaluator=direct("in_box_shots_raw"), total_observed=True),
             _v2_pair(records, record, identifier="inBoxXg", label="In-box xG", unit="goals", direction="higher_is_better", total_evaluator=direct("in_box_xg_raw"), total_observed=True),
             _v2_pair(records, record, identifier="inBoxXgot", label="In-box xGOT", unit="goals", direction="higher_is_better", total_evaluator=direct("in_box_xgot_raw"), total_observed=True),
+            _v2_pair(records, record, identifier="inBoxXgotMinusXg", label="In-box xGOT minus xG", unit="goals", direction="higher_is_better", total_evaluator=_v2_in_box_xgot_minus_xg, total_observed=False, total_formula="xgot-minus-xg-v1"),
         ])],
         "dangerZone": [DetailV2Group(id="onBallDribbles", label="On-ball dribbles", kind="count_rate_pair", metrics=[
             _v2_pair(records, record, identifier="dribbleAttempts", label="Dribble attempts", unit="count", direction="higher_is_better", total_evaluator=lambda row: _v2_attempts(row, "dribbles_succeeded_raw", "dribble_success_rate_raw"), total_observed=False, total_formula="attempts-from-success-rate-v2"),

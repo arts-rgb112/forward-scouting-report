@@ -395,6 +395,12 @@ def test_v2_stat_pairs_are_server_owned_and_share_one_snapshot(monkeypatch) -> N
     assert outside[0].total.value == 4
     assert outside[0].per90.state == "server_derived"
     assert outside[1].per90.direction == "higher_is_better"
+    assert outside[3].id == "outsideBoxXgotMinusXg"
+    assert outside[3].total.formulaId == "xgot-minus-xg-v1"
+    assert outside[3].per90.direction == "higher_is_better"
+    in_box = detail.categories[1].groups[0].metrics
+    assert in_box[3].id == "inBoxXgotMinusXg"
+    assert in_box[3].total.formulaId == "xgot-minus-xg-v1"
     danger = detail.categories[2].groups[0].metrics
     assert danger[2].total.direction == "lower_is_better"
     assert danger[3].id == "netProgressionPer90"
@@ -418,6 +424,32 @@ def test_v2_stat_pairs_are_server_owned_and_share_one_snapshot(monkeypatch) -> N
     assert detail.metricTaxonomyVersion == fixture["metricTaxonomyVersion"]
     assert [item.id for item in detail.categories] == fixture["categoryOrder"]
     assert [item.id for item in detail.contextIndicators] == fixture["contextIndicatorOrder"]
+
+
+def test_v2_box_xgot_minus_xg_pairs_are_server_derived_and_rerate_shooting(monkeypatch) -> None:
+    """Both shot sectors own the quality delta as a total plus per-90 pair."""
+    player = _player()
+    record = _record(player.id)
+    peer = {**record, "player_id": 999999, "out_box_xgot_raw": 0.2, "out_box_xg_raw": 2.2,
+            "in_box_xgot_raw": 0.5, "in_box_xg_raw": 4.5}
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record, peer])
+    service._v2_frame_cached.cache_clear()
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    assert detail is not None
+    outside = detail.categories[0].groups[0].metrics[3]
+    in_box = detail.categories[1].groups[0].metrics[3]
+    for metric, expected in ((outside, record["out_box_xgot_raw"] - record["out_box_xg_raw"]), (in_box, record["in_box_xgot_raw"] - record["in_box_xg_raw"])):
+        assert metric.total is not None and metric.per90 is not None
+        assert metric.total.value == pytest.approx(expected)
+        assert metric.per90.value == pytest.approx(expected * 90 / record["minutes_played"])
+        assert metric.total.state == "server_derived"
+        assert metric.total.formulaId == "xgot-minus-xg-v1"
+        assert metric.total.percentileScore == 99
+    specs = service._v2_component_specs()
+    assert "out_box_xgot_minus_xg_per90" in {item[0] for item in specs["outsideShot"]}
+    assert "in_box_xgot_minus_xg_per90" in {item[0] for item in specs["boxThreat"]}
+    assert all(0 <= category.percentileScore <= 99 for category in detail.categories[:2])
 
 
 def test_v2_provider_attempt_columns_do_not_change_legacy_v1_scores_ranks_or_detail(monkeypatch) -> None:

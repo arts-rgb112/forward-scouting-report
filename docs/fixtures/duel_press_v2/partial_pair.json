@@ -152,6 +152,47 @@
                     "value": 0.6
                   },
                   "value": null
+                },
+                {
+                  "id": "outsideBoxXgotMinusXg",
+                  "label": "Outside-box xGOT minus xG",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 0.2,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "xgot-minus-xg-v1",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "goals",
+                    "value": 0.2
+                  },
+                  "value": null
                 }
               ]
             }
@@ -160,7 +201,8 @@
           "imputedComponents": [
             "out_box_shots_raw",
             "out_box_xg_raw",
-            "out_box_xgot_raw"
+            "out_box_xgot_raw",
+            "out_box_xgot_minus_xg_per90"
           ],
           "label": "outsideShot",
           "percentileScore": 20,
@@ -305,6 +347,47 @@
                     "value": 1.5
                   },
                   "value": null
+                },
+                {
+                  "id": "inBoxXgotMinusXg",
+                  "label": "In-box xGOT minus xG",
+                  "pairReason": "minutes_unavailable_or_nonpositive",
+                  "pairState": "partial",
+                  "per90": {
+                    "comparison": {
+                      "median": null,
+                      "percentileScore": null,
+                      "population": 0,
+                      "rank": null,
+                      "state": "unavailable"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": null,
+                    "formulaVersion": null,
+                    "percentileScore": null,
+                    "source": "unavailable",
+                    "state": "unavailable",
+                    "unit": "per90",
+                    "value": null
+                  },
+                  "total": {
+                    "comparison": {
+                      "median": 0.3,
+                      "percentileScore": 99,
+                      "population": 1,
+                      "rank": 1,
+                      "state": "available"
+                    },
+                    "direction": "higher_is_better",
+                    "formulaId": "xgot-minus-xg-v1",
+                    "formulaVersion": "stat-pairs-v2",
+                    "percentileScore": 99,
+                    "source": "server_derived",
+                    "state": "server_derived",
+                    "unit": "goals",
+                    "value": 0.3
+                  },
+                  "value": null
                 }
               ]
             }
@@ -313,7 +396,8 @@
           "imputedComponents": [
             "in_box_shots_raw",
             "in_box_xg_raw",
-            "in_box_xgot_raw"
+            "in_box_xgot_raw",
+            "in_box_xgot_minus_xg_per90"
           ],
           "label": "boxThreat",
           "percentileScore": 20,
@@ -1612,7 +1696,7 @@
         "name": "Harry Kane",
         "position": "Striker"
       },
-      "ratingSnapshotId": "stat-pairs-v2:c4c7ee3f16aba6b1",
+      "ratingSnapshotId": "stat-pairs-v2:1a086dbbc20fa04b",
       "ratingVersion": "stat-pairs-v2",
       "readoutVersion": "detail-readout-v2",
       "schemaVersion": "2.0.0"
@@ -1668,7 +1752,8 @@
               "imputedComponents": [
                 "in_box_shots_raw",
                 "in_box_xg_raw",
-                "in_box_xgot_raw"
+                "in_box_xgot_raw",
+                "in_box_xgot_minus_xg_per90"
               ],
               "percentileScore": 20,
               "scoreState": "imputed"
@@ -1704,7 +1789,8 @@
               "imputedComponents": [
                 "out_box_shots_raw",
                 "out_box_xg_raw",
-                "out_box_xgot_raw"
+                "out_box_xgot_raw",
+                "out_box_xgot_minus_xg_per90"
               ],
               "percentileScore": 20,
               "scoreState": "imputed"
@@ -1735,7 +1821,7 @@
           "sort": "rank"
         },
         "competition": null,
-        "generatedAt": "2026-08-22T18:26:46.943992Z",
+        "generatedAt": "2026-08-22T18:59:20.356133Z",
         "hasNextPage": false,
         "mode": "league",
         "page": 1,
@@ -1750,7 +1836,7 @@
         "totalPages": 1
       },
       "metricTaxonomyVersion": "duel-press-v2",
-      "ratingSnapshotId": "stat-pairs-v2:c4c7ee3f16aba6b1",
+      "ratingSnapshotId": "stat-pairs-v2:1a086dbbc20fa04b",
       "ratingVersion": "stat-pairs-v2",
       "readoutVersion": "detail-readout-v2",
       "schemaVersion": "2.0.0"
@@ -1807,7 +1893,8 @@
             "imputedComponents": [
               "in_box_shots_raw",
               "in_box_xg_raw",
-              "in_box_xgot_raw"
+              "in_box_xgot_raw",
+              "in_box_xgot_minus_xg_per90"
             ],
             "percentileScore": 20,
             "scoreState": "imputed"
@@ -1843,7 +1930,8 @@
             "imputedComponents": [
               "out_box_shots_raw",
               "out_box_xg_raw",
-              "out_box_xgot_raw"
+              "out_box_xgot_raw",
+              "out_box_xgot_minus_xg_per90"
             ],
             "percentileScore": 20,
             "scoreState": "imputed"
@@ -1863,7 +1951,7 @@
         }
       },
       "metricTaxonomyVersion": "duel-press-v2",
-      "ratingSnapshotId": "stat-pairs-v2:c4c7ee3f16aba6b1",
+      "ratingSnapshotId": "stat-pairs-v2:1a086dbbc20fa04b",
       "ratingVersion": "stat-pairs-v2",
       "readoutVersion": "detail-readout-v2",
       "schemaVersion": "2.0.0"
