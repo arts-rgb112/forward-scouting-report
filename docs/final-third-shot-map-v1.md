@@ -48,10 +48,12 @@ it never chooses an arbitrary first tournament. A missing member makes a
 non-empty union `partial` and is named in `partialCoverage`; a union with no
 committed member returns the explicit unavailable envelope.
 Because a partial union's counts and rates describe only a known subset, every
-tile's `volume`, `conversionRatePct`, and `qualityScore` field state (and the
-tile state) is also `partial` with the same missing-competition reason. The
-numeric values remain the authoritative observed subset rather than fabricated
-whole-context estimates.
+tile's `volume` and `conversionRatePct` field state (and the tile state) is
+`partial` with the same missing-competition reason. `qualityScore` is likewise
+`partial` when the available member supplies an eligible xG/xGOT subset; it
+remains explicitly `unavailable` when that subset has no eligible quality
+events. Numeric values remain the authoritative observed subset rather than
+fabricated whole-context estimates.
 
 ## Goal-mouth coordinates and identifiers
 
