@@ -874,6 +874,18 @@ V2_CATEGORY_ORDER = (
     "outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress",
 )
 
+# Integer point weights keep the published 30/20/15/15/10/10 formula exact.
+# Do not use binary floats here: a .5 total changed with expression order and
+# made otherwise identical score calculations disagree by one point.
+V2_OVERALL_WEIGHT_POINTS = {
+    "boxThreat": 30,
+    "outsideShot": 20,
+    "dangerZone": 15,
+    "spaceControl": 15,
+    "combinedDuel": 10,
+    "forwardPress": 10,
+}
+
 
 def _v2_per90(total: float | None, record: dict[str, object]) -> float | None:
     minutes = _detail_number(record.get("minutes_played"))
@@ -1133,6 +1145,18 @@ def _v2_values(records: list[dict[str, object]], evaluator) -> list[float]:
     return [value for record in records if (value := evaluator(record)) is not None]
 
 
+def _v2_round_half_up(numerator: int, denominator: int) -> int:
+    """Deterministic non-negative half-up rounding for official ratings."""
+    if denominator <= 0:
+        raise ValueError("rating denominator must be positive")
+    return (2 * numerator + denominator) // (2 * denominator)
+
+
+def _v2_overall_rating(categories: dict[str, int]) -> int:
+    weighted = sum(V2_OVERALL_WEIGHT_POINTS[category] * categories[category] for category in V2_OVERALL_WEIGHT_POINTS)
+    return _v2_round_half_up(weighted, 100)
+
+
 def _v2_percentile_score_from_sorted(
     value: float | None, ordered_values: list[float], direction: str,
 ) -> int | None:
@@ -1365,13 +1389,9 @@ def _v2_rating_snapshot(
                     absent.append(source_field)
                 else:
                     scores.append(score)
-            categories[category] = int(round(sum(scores) / len(scores)))
+            categories[category] = _v2_round_half_up(sum(scores), len(scores))
             missing[category] = absent
-        overall = int(round(
-            0.30 * categories["boxThreat"] + 0.20 * categories["outsideShot"]
-            + 0.15 * categories["dangerZone"] + 0.15 * categories["spaceControl"]
-            + 0.10 * categories["combinedDuel"] + 0.10 * categories["forwardPress"]
-        ))
+        overall = _v2_overall_rating(categories)
         ratings[player_id] = {"categories": categories, "missing": missing, "overall": overall}
     for category in V2_CATEGORY_ORDER:
         values = sorted(float(item["categories"][category]) for item in ratings.values())
