@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PlayerAnalysis } from "../dashboard/types";
 import { ATTACKING_GOAL_FRAME_LIFT, GOAL_CROSSBAR_HEIGHT_METERS, GOAL_POST_Y, GOAL_WIDTH_METERS, LEGACY_POSITIONAL_SEGMENTS, PITCH_WIDTH_METERS, POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES, projectPerspective, SIX_YARD_BOX_Y, SpatialPitch } from "./SpatialPitch";
+import { HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, legacyDensityGrid, legacyHeatmapColor, normalizeDensity } from "./legacyHeatmap";
 
 const analysisWith = (spatial: Partial<PlayerAnalysis["spatial"]>): PlayerAnalysis => ({
   score: { value: 80, rank: 1, topPercent: 1, population: 100, archetype: "Type A" },
@@ -173,13 +174,22 @@ describe("perspective spatial pitch", () => {
     expect(container.querySelector("[data-shot-trajectory]")).not.toBeInTheDocument();
   });
 
-  it("uses one projection for populated heat and shot source coordinates", () => {
+  it("projects the exact legacy 32 by 22 density grid rather than activity circles", () => {
     const point = { x: 44, y: 21.82 };
     const analysis = analysisWith({ heatmapPointCount: 1, heatmapPoints: [point], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ ...point, outcome: "goal", xg: .72, xgot: .84 }] });
     const { container } = render(<SpatialPitch analysis={analysis}/>);
-    const heat = container.querySelector("[data-heat-point]"); const shot = container.querySelector("[data-shot-marker]");
-    expect(heat).toHaveAttribute("data-screen-x", shot?.getAttribute("data-screen-x"));
-    expect(heat).toHaveAttribute("data-screen-y", shot?.getAttribute("data-screen-y"));
+    const normalized = normalizeDensity(legacyDensityGrid([point]));
+    const row = Math.floor(point.y / 100 * HEATMAP_ROWS), column = Math.floor(point.x / 100 * HEATMAP_COLUMNS);
+    const heat = container.querySelector(`[data-density-row="${row}"][data-density-column="${column}"]`)!; const shot = container.querySelector("[data-shot-marker]");
+    const [red, green, blue, alpha] = legacyHeatmapColor(normalized[row * HEATMAP_COLUMNS + column]);
+    expect(container.querySelectorAll("[data-density-cell]")).toHaveLength(HEATMAP_ROWS * HEATMAP_COLUMNS);
+    expect(container.querySelectorAll("[data-heat-point]")).toHaveLength(0);
+    expect(heat).toHaveAttribute("data-density-normalized", String(normalized[row * HEATMAP_COLUMNS + column]));
+    expect(heat).toHaveAttribute("fill", `rgb(${red} ${green} ${blue})`);
+    expect(heat).toHaveAttribute("fill-opacity", String(alpha * HEATMAP_OPACITY));
+    expect(heat.closest("[data-layer=heat]")).toHaveAttribute("clip-path");
+    expect(shot).toHaveAttribute("data-screen-x", String(projectPerspective(point).x));
+    expect(shot).toHaveAttribute("data-screen-y", String(projectPerspective(point).y));
     expect(shot).toHaveAttribute("data-marker-symbol", "star");
     expect(shot).toHaveAttribute("tabindex", "0");
     expect(screen.getByRole("list", { name: "Authoritative shot events" })).toHaveTextContent(/Goal · xG 0.72 · xGOT 0.84/);
@@ -197,14 +207,60 @@ describe("perspective spatial pitch", () => {
     expect(screen.getByText("◇ Goals 0")).toBeInTheDocument();
   });
 
-  it("keeps a production-sized payload bounded to one heat node per point and no marker tab stops", () => {
-    const heatmapPoints = Array.from({ length: 180 }, (_, index) => ({ x: index % 100, y: (index * 7) % 100 }));
-    const shotmapPoints = Array.from({ length: 120 }, (_, index) => ({ x: 70 + index % 30, y: 25 + index % 50, outcome: "on_target" as const, xg: .1, xgot: .2 }));
+  it("keeps a production-sized payload bounded to the density mesh while panning does not rebuild it", () => {
+    const heatmapPoints = Array.from({ length: 2000 }, (_, index) => ({ x: index % 100, y: (index * 7) % 100 }));
+    const shotmapPoints = Array.from({ length: 150 }, (_, index) => ({ x: 70 + index % 30, y: 25 + index % 50, outcome: "on_target" as const, xg: .1, xgot: .2 }));
     const { container } = render(<SpatialPitch analysis={analysisWith({ heatmapPointCount: heatmapPoints.length, heatmapPoints, shotmapSnapshotAvailable: true, shotmapPointCount: shotmapPoints.length, shotmapPoints })}/>);
-    expect(container.querySelectorAll("[data-heat-point]")).toHaveLength(180);
-    expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(120);
+    const before = [...container.querySelectorAll("[data-density-cell]")];
+    expect(before).toHaveLength(HEATMAP_ROWS * HEATMAP_COLUMNS);
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    const viewport = container.querySelector("svg[role=img]")!;
+    fireEvent.keyDown(viewport, { key: "ArrowRight" });
+    expect([...container.querySelectorAll("[data-density-cell]")]).toEqual(before);
+    expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(150);
     expect(container.querySelectorAll('[data-shot-marker][tabindex="0"]')).toHaveLength(1);
-    expect(within(screen.getByRole("list", { name: "Authoritative shot events" })).getAllByRole("listitem")).toHaveLength(120);
+    expect(within(screen.getByRole("list", { name: "Authoritative shot events" })).getAllByRole("listitem")).toHaveLength(150);
+  });
+
+  it("fails closed for unavailable, mismatched, and invalid heatmap coordinates", () => {
+    const { container, rerender } = render(<SpatialPitch analysis={analysisWith({ available: false })}/>);
+    expect(container.querySelectorAll("[data-density-cell]")).toHaveLength(HEATMAP_ROWS * HEATMAP_COLUMNS);
+    expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
+    rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 2, heatmapPoints: [{ x: 50, y: 50 }] })}/>);
+    expect(screen.getAllByText(/Activity heatmap integrity mismatch/).length).toBeGreaterThan(0);
+    expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
+    rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 101, y: 50 }] })}/>);
+    expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
+  });
+
+  it("controls exact Perspective viewBoxes and resets pan on escape, context, and view transitions", () => {
+    vi.spyOn(SVGSVGElement.prototype, "getBoundingClientRect").mockImplementation(() => svgBounds(1000, 650));
+    const analysis = analysisWith({});
+    const { container, rerender } = render(<SpatialPitch analysis={analysis} contextIdentity="one"/>);
+    const viewport = () => container.querySelector("svg[role=img]")!;
+    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(viewport()).toHaveAttribute("viewBox", "250 162.5 500 325");
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(viewport()).toHaveAttribute("viewBox", "333.33333333333337 216.66666666666669 333.3333333333333 216.66666666666666");
+    expect(screen.getByRole("button", { name: "Zoom in" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+    expect(viewport()).toHaveAttribute("viewBox", "250 162.5 500 325");
+    fireEvent.pointerDown(viewport(), { pointerId: 1, clientX: 500, clientY: 325 });
+    fireEvent.pointerMove(viewport(), { pointerId: 1, clientX: 0, clientY: 0 });
+    expect(viewport()).toHaveAttribute("viewBox", "500 325 500 325");
+    fireEvent.pointerCancel(viewport(), { pointerId: 1 });
+    fireEvent.pointerMove(viewport(), { pointerId: 1, clientX: 500, clientY: 325 });
+    expect(viewport()).toHaveAttribute("viewBox", "500 325 500 325");
+    fireEvent.keyDown(viewport(), { key: "Escape" });
+    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    fireEvent.click(screen.getByRole("button", { name: "2D plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Perspective" }));
+    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    rerender(<SpatialPitch analysis={analysis} contextIdentity="two"/>);
+    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
   });
 
   it("defaults reduced-motion users to the responsive 2D fallback and remains keyboard switchable", () => {
