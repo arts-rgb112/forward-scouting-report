@@ -60,4 +60,9 @@ describe("watchlist view model", () => {
     expect(filterAndSortWatchlistRows(rows, { query: "", role: "ALL", position: "ALL", ageBand: "u23", minutesBand: "1000-1499", sort: { key: "score", direction: "desc" } }).map((row) => row.key)).toEqual([younger.key]);
     expect(filterAndSortWatchlistRows(rows, { query: "", role: "ALL", position: "ALL", ageBand: "all", minutesBand: "all", sort: { key: "score", direction: "desc" } })).toHaveLength(3);
   });
+
+  it("matches saved display values without requiring diacritics", () => {
+    const diaz = entryFromPlayer({ ...samplePlayers[0], name: "Luis Díaz", club: { ...samplePlayers[0].club, name: "Real Betis" } }, league);
+    expect(filterAndSortWatchlistRows(watchlistRows([diaz], {}), { query: "Diaz", role: "ALL", position: "ALL", sort: { key: "score", direction: "desc" } })).toHaveLength(1);
+  });
 });

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { legacyDetailHref, resolveLegacyDetailOrInternalHref } from "../../navigation/legacyHandoff";
 import { datasetHref, positionFilterValues } from "../datasetRoute";
+import { textComparisonKey } from "../textComparisonKey";
 import type { AgeBand, DatasetRouteState, MinutesBand, Player, PositionFilterCapability } from "../types";
 import { Icon } from "./Icon";
 
@@ -24,7 +25,8 @@ export function DashboardToolbar(props: Props) {
   const scheduleCommit = (value: string) => { cancelCommit(); if (!value) { commitNow(""); return; } if (value === queryRef.current) return; timer.current = window.setTimeout(() => { timer.current = undefined; if (!composingRef.current && value !== queryRef.current) onQueryChangeRef.current(value); }, 350); };
   useEffect(() => { const queryChanged = committedQueryRef.current !== props.query; committedQueryRef.current = props.query; if (queryNamespaceRef.current !== queryNamespace || (hadFiltersRef.current && !props.hasFilters)) { queryNamespaceRef.current = queryNamespace; hadFiltersRef.current = props.hasFilters; composingRef.current = false; cancelCommit(); if (needle !== props.query) setNeedle(props.query); setOpen(false); setActive(-1); return; } hadFiltersRef.current = props.hasFilters; if (!queryChanged || composingRef.current || props.query === needle) return; cancelCommit(); setNeedle(props.query); }, [props.hasFilters, props.query, queryNamespace]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => cancelCommit(), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const candidates = needle.trim() ? props.players.filter((player) => `${player.name} ${player.club.name} ${player.league.name}`.toLocaleLowerCase().includes(needle.toLocaleLowerCase())).slice(0, 8) : [];
+  const comparisonNeedle = textComparisonKey(needle);
+  const candidates = comparisonNeedle ? props.players.filter((player) => textComparisonKey(`${player.name} ${player.club.name} ${player.league.name}`).includes(comparisonNeedle)).slice(0, 8) : [];
   useEffect(() => { if (open && active >= 0) suggestionRefs.current[active]?.focus(); }, [active, open]);
   const suggestionHref = (player: ToolbarPlayer) => props.playerSuggestionHref?.(player) ?? resolveLegacyDetailOrInternalHref(legacyDetailHref(player.id, { name: player.name, clubName: player.club.name }, props.dataset), datasetHref(`/players/${player.id}`, props.dataset));
   const focusSuggestion = (index: number) => { if (!candidates.length) return; const next = Math.max(0, Math.min(index, candidates.length - 1)); setOpen(true); setActive(next); suggestionRefs.current[next]?.focus(); };
