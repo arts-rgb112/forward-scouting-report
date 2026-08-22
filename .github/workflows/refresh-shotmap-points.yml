@@ -7,6 +7,11 @@ on:
         description: Season to snapshot (for example 2025/2026)
         required: true
         default: "2025/2026"
+      refresh_existing:
+        description: Refetch existing sessions for a deterministic trajectory backfill
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -26,7 +31,13 @@ jobs:
       - name: Snapshot exact FotMob shot coordinates
         id: snapshot
         continue-on-error: true
-        run: python scripts/build_shotmap_points.py --season-name "${{ inputs.season_name }}"
+        shell: bash
+        run: |
+          args=(--season-name "${{ inputs.season_name }}")
+          if [[ "${{ inputs.refresh_existing }}" == "true" ]]; then
+            args+=(--refresh-existing)
+          fi
+          python scripts/build_shotmap_points.py "${args[@]}"
       - name: Audit all tactical sessions
         if: always()
         run: python scripts/audit_shotmap_coverage.py
