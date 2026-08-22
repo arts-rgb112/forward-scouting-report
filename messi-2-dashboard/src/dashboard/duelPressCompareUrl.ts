@@ -13,4 +13,12 @@ const readSide = (query: URLSearchParams, prefix: "left" | "right"): CompareSide
   if (mode === "europe" && scopeRaw === "null" && (competition === "all" || competition === "ucl" || competition === "uel" || competition === "uecl")) return { playerId, taxonomy, context: { season, mode, scope: null, competition } };
   return null;
 };
-export function parseDuelPressCompare(search: string): { left: CompareSide; right: CompareSide } | null { const query = new URLSearchParams(search); const left = readSide(query, "left"); const right = readSide(query, "right"); return left && right ? { left, right } : null; }
+const sideFields = ["PlayerId", "Taxonomy", "Season", "Mode", "Scope", "Competition"] as const;
+/** The canonical public compare URL. Reject duplicates and stray fields rather than guessing. */
+export function parseDuelPressCompare(search: string): { left: CompareSide; right: CompareSide } | null {
+  const query = new URLSearchParams(search);
+  const allowed = new Set(["leftPlayerId", "leftTaxonomy", "leftSeason", "leftMode", "leftScope", "leftCompetition", "rightPlayerId", "rightTaxonomy", "rightSeason", "rightMode", "rightScope", "rightCompetition"]);
+  if ([...query.keys()].some((key) => !allowed.has(key)) || (["left", "right"] as const).some((prefix) => sideFields.some((field) => query.getAll(`${prefix}${field}`).length !== 1))) return null;
+  const left = readSide(query, "left"); const right = readSide(query, "right");
+  return left && right ? { left, right } : null;
+}

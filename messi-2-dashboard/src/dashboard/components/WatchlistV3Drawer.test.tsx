@@ -25,17 +25,17 @@ describe("Watchlist V3 drawer", () => {
     expect(screen.getByText("Position 1")).toBeInTheDocument();
     expect(screen.getByText("Position 2")).toBeInTheDocument();
     const compare = screen.getByRole("link", { name: "Compare selected" });
-    expect(compare).toHaveAttribute("href", import.meta.env.VITE_LEGACY_HANDOFF_ENABLED === "true" ? expect.stringContaining("streamlit.app") : "/compare");
+    expect(compare).toHaveAttribute("href", expect.stringMatching(/^\/compare\?leftPlayerId=2&leftTaxonomy=legacy-v1/));
     fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]);
     expect(screen.queryByText("Position 2")).not.toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" }); expect(close).toHaveBeenCalled();
   });
 
-  it("keeps mixed legacy and Duel compare order in either internal or enabled direct handoff", () => {
+  it("keeps mixed legacy and Duel compare order in the native canonical URL", () => {
     const duel = { version: 3, taxonomy: "duel-press-v1", namespace: "fotmob", key: "duel-right", playerId: 303, context, snapshot: { id: 303, name: "Duel Right", club: { name: "Duel Club" } }, savedAt: "2026-08-11T00:00:00.000Z" } as unknown as WatchlistV3Entry;
     render(<WatchlistV3Drawer open entries={[entries[0], duel]} selectedKeys={[duel.key, entries[0].key]} feedback="" onClose={vi.fn()} onRemove={vi.fn()} onToggleSelection={vi.fn()} />);
     const href = screen.getByRole("link", { name: "Compare selected" }).getAttribute("href")!;
-    if (import.meta.env.VITE_LEGACY_HANDOFF_ENABLED === "true") { const params = new URL(href).searchParams; expect(params.get("left_player")).toBe("303"); expect(params.get("left_team")).toBe("Duel Club"); expect(params.get("right_player")).toBe(String(entries[0].playerId)); }
-    else expect(href).toBe("/compare");
+    const params = new URL(href, "https://native.test").searchParams;
+    expect(params.get("leftPlayerId")).toBe("303"); expect(params.get("leftTaxonomy")).toBe("duel-press-v1"); expect(params.get("rightPlayerId")).toBe(String(entries[0].playerId)); expect(href).not.toMatch(/streamlit/i);
   });
 });

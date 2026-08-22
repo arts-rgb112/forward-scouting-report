@@ -1,7 +1,6 @@
 import { datasetHref } from "../datasetRoute";
 import type { AssetRef, DatasetRouteState, Player } from "../types";
 import { AssetImage } from "./AssetImage";
-import { legacyDetailHref, resolveLegacyDetailOrInternalHref } from "../../navigation/legacyHandoff";
 import { leagueFallbackLabel } from "../leagueDisplay";
 
 export type PlayerIdentityData = Pick<Player, "id" | "name" | "position" | "archetype" | "face"> & { nation: AssetRef | null; league: AssetRef; club: AssetRef };
@@ -21,7 +20,7 @@ export function PlayerIdentity({ player, partial = false, mobile = false, datase
   const current = dataset ?? { season: query.get("season") || "2025/2026", mode: query.get("mode") === "europe" ? "europe" as const : "league" as const, scope: ([3, 5, 7, 8].includes(rawScope) ? rawScope : 8) as DatasetRouteState["scope"], competition: "all" as const };
   const clubName = isPartialIdentity(player, partial) ? player.club?.name ?? player.clubName : player.club.name;
   const leagueName = isPartialIdentity(player, partial) ? player.league?.name ?? player.leagueName : player.league.name;
-  const detailHref = suppliedDetailHref ?? resolveLegacyDetailOrInternalHref(legacyDetailHref(player.id, { name: player.name, clubName: clubName ?? "" }, current), datasetHref(`/players/${player.id}`, current));
+  const detailHref = suppliedDetailHref ?? datasetHref(`/players/${player.id}`, current);
   const resolvedDomId = domId === undefined ? (mobile ? undefined : `player-${player.id}`) : domId ?? undefined;
   return <div id={resolvedDomId} className="flex min-w-0 items-center gap-3">
     {(!partial || player.face !== undefined) ? <AssetImage src={player.face ?? null} alt={`${player.name} portrait`} kind="face" fallbackLabel={player.name} width={size} height={size} className={`${mobile ? "h-14 w-14" : "h-12 w-12"} rounded-md border border-white/10 object-cover`} /> : <span aria-label={`${player.name} portrait unavailable`} className={`${mobile ? "h-14 w-14" : "h-12 w-12"} grid shrink-0 place-items-center rounded-md border border-white/10 text-zinc-600`}>—</span>}

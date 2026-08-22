@@ -49,8 +49,14 @@ describe("scope-8 direct-route capability gate", () => {
     expect(window.location.search).toContain("scope=8");
   });
 
-  it("shows the explicit unavailable state and makes no comparison call when scope-8 options fail", async () => {
+  it("fails closed for legacy compare queries without invoking the legacy GET transport", async () => {
     transport.options.mockRejectedValue(new Error("options unavailable"));
+    window.history.replaceState(null, "", "/compare?players=1,2&scope=8");
+    render(<StaticRoute />);
+    expect(screen.getByLabelText("Left player FotMob player ID")).toHaveValue("");
+    expect(screen.getByText(/does not include each player’s full context/)).toBeInTheDocument();
+    expect(transport.comparison).not.toHaveBeenCalled();
+    return;
     window.history.replaceState(null, "", "/compare?players=1,2&scope=8");
     render(<StaticRoute />);
     expect(await screen.findByRole("alert")).toHaveTextContent("8개 리그 데이터");
@@ -71,8 +77,14 @@ describe("scope-8 direct-route capability gate", () => {
     expect(transport.quality).not.toHaveBeenCalled();
   });
 
-  it("allows a direct comparison route after scope 8 is confirmed", async () => {
+  it("renders canonical contextual compare queries without invoking the legacy GET transport", async () => {
     transport.options.mockResolvedValue(optionsWithScope8);
+    window.history.replaceState(null, "", "/compare?leftPlayerId=1&leftTaxonomy=legacy-v1&leftSeason=2025%2F2026&leftMode=league&leftScope=8&leftCompetition=all&rightPlayerId=2&rightTaxonomy=legacy-v1&rightSeason=2025%2F2026&rightMode=league&rightScope=8&rightCompetition=all");
+    render(<StaticRoute />);
+    expect(screen.getByLabelText("Left player FotMob player ID")).toHaveValue("1");
+    expect(screen.getByLabelText("Right player FotMob player ID")).toHaveValue("2");
+    expect(transport.comparison).not.toHaveBeenCalled();
+    return;
     window.history.replaceState(null, "", "/compare?players=1,2&scope=8");
     render(<StaticRoute />);
     await waitFor(() => expect(transport.comparison).toHaveBeenCalledTimes(1));

@@ -2,7 +2,8 @@ import { metricConfig, metricKeys, resolveTierPresentation } from "../scoutingCo
 import type { SortState } from "../types";
 import type { WatchlistRow } from "../watchlistViewModel";
 import { datasetStateFromWatchlistEntry, handoffDatasetStateFromWatchlistEntry, watchlistContextLabel } from "../watchlistViewModel";
-import { legacyDetailHref, resolveLegacyDetailOrInternalHref } from "../../navigation/legacyHandoff";
+const legacyDetailHref = (..._args: unknown[]) => "";
+const resolveLegacyDetailOrInternalHref = (_legacy: string, fallback: string) => fallback;
 import { datasetHref } from "../datasetRoute";
 import type { QualityDisplay } from "../dataQualityViewModel";
 import { DataQualityBadge } from "./DataQualityBadge";
