@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import type { FinalThirdRenderableData } from "../api/finalThirdShotMapV2Contracts";
+import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contracts";
 import type { MessiApiConfig } from "../api/env";
 import type { DatasetRouteState } from "../dashboard/types";
 import { FinalThirdPitchView } from "./FinalThirdPitchView";
@@ -7,7 +8,7 @@ import { GoalMouthView } from "./GoalMouthView";
 import { useFinalThirdShotMap } from "./useFinalThirdShotMap";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
-function ChartViews({ data, resourceKey, id }: { data: FinalThirdRenderableData; resourceKey: string; id: string }) {
+function ChartViews({ data, resourceKey, id }: { data: FinalThirdRenderableData | FinalThirdShotMapV3Data; resourceKey: string; id: string }) {
   const [view, setView] = useState<"pitch" | "goal-mouth">("pitch"), tabs = useRef<Array<HTMLButtonElement | null>>([]);
   const select = (next: "pitch" | "goal-mouth", focus = false) => { setView(next); if (focus) requestAnimationFrame(() => tabs.current[next === "pitch" ? 0 : 1]?.focus()); };
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => { const nextIndex = event.key === "ArrowLeft" ? (index + 1) % 2 : event.key === "ArrowRight" ? (index + 1) % 2 : event.key === "Home" ? 0 : event.key === "End" ? 1 : null; if (nextIndex === null) return; event.preventDefault(); select(nextIndex === 0 ? "pitch" : "goal-mouth", true); };
