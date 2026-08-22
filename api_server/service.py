@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from datetime import datetime, timezone
 from collections import OrderedDict
 from functools import cmp_to_key, lru_cache
@@ -31,7 +32,7 @@ from .schemas import (
     DuelPressDetailReadout, DuelPressDetailReadoutEnvelope,
     DetailV2Comparison, DetailV2Datum, DetailV2Metric, DetailV2Group,
     DuelPressDetailV2Category, DuelPressDetailV2ContextIndicator,
-    DuelPressDetailReadoutV2Envelope, DuelPressV2RatingStats,
+    DuelPressDetailReadoutV2Envelope, DuelPressV2BoardCategory, DuelPressV2RatingStats,
     DuelPressV2LeaderboardPlayer, DuelPressV2LeaderboardPageEnvelope,
     DuelPressV2PlayerEnvelope, DuelPressV2LeaderboardMeta, DuelPressV2CohortContext,
     ContextualCompareCanonicalContext, ContextualCompareEnvelope,
@@ -1050,6 +1051,25 @@ def _v2_values(records: list[dict[str, object]], evaluator) -> list[float]:
     return [value for record in records if (value := evaluator(record)) is not None]
 
 
+def _v2_percentile_score_from_sorted(
+    value: float | None, ordered_values: list[float], direction: str,
+) -> int | None:
+    """Rank one component against a pre-sorted static-cohort distribution.
+
+    The board computes every player's score from the same distribution.  Doing
+    the sort once per component prevents a cold leaderboard request from
+    repeatedly sorting the entire cohort for every player/metric pair.
+    """
+    if value is None or not ordered_values:
+        return None
+    population = len(ordered_values)
+    if direction == "lower_is_better":
+        rank = 1 + bisect_left(ordered_values, value)
+    else:
+        rank = 1 + population - bisect_right(ordered_values, value)
+    return 99 if population == 1 else int(round(99 * (population - rank) / (population - 1)))
+
+
 def _v2_pair(
     records: list[dict[str, object]], record: dict[str, object], *, identifier: str,
     label: str, unit: str, direction: str, total_evaluator, total_observed: bool,
@@ -1220,6 +1240,16 @@ def _v2_rating_snapshot(
 ) -> tuple[str, dict[int, dict[str, object]]]:
     """Calculate every visible v2 rating once from one raw static frame."""
     specs = _v2_component_specs()
+    # ``_v2_display_comparison`` deliberately builds rich comparison objects
+    # for one detail response.  The board needs the same strict rank rule for
+    # every record, so materialise each component distribution exactly once.
+    # This keeps the first static-cohort request bounded instead of performing
+    # O(players * components) full sorts.
+    distributions = {
+        (category, source_field): sorted(_v2_values(records, evaluator))
+        for category, components in specs.items()
+        for source_field, _direction, evaluator, _zero_attempt_floor in components
+    }
     ratings: dict[int, dict[str, object]] = {}
     for record in records:
         try:
@@ -1233,14 +1263,17 @@ def _v2_rating_snapshot(
             absent: list[str] = []
             for source_field, direction, evaluator, zero_attempt_floor in components:
                 value = evaluator(record)
-                comparison = _v2_display_comparison(value, _v2_values(records, evaluator), direction)
                 if zero_attempt_floor(record):
                     scores.append(0)
-                elif comparison.percentileScore is None:
+                    continue
+                score = _v2_percentile_score_from_sorted(
+                    value, distributions[(category, source_field)], direction,
+                )
+                if score is None:
                     scores.append(V2_MISSING_COMPONENT_SCORE)
                     absent.append(source_field)
                 else:
-                    scores.append(comparison.percentileScore)
+                    scores.append(score)
             categories[category] = int(round(sum(scores) / len(scores)))
             missing[category] = absent
         overall = int(round(
@@ -1250,14 +1283,28 @@ def _v2_rating_snapshot(
         ))
         ratings[player_id] = {"categories": categories, "missing": missing, "overall": overall}
     for category in V2_CATEGORY_ORDER:
-        values = [float(item["categories"][category]) for item in ratings.values()]
+        values = sorted(float(item["categories"][category]) for item in ratings.values())
         for value in ratings.values():
-            value.setdefault("categoryComparisons", {})[category] = _v2_display_comparison(
-                float(value["categories"][category]), values, "higher_is_better",
+            category_value = float(value["categories"][category])
+            rank = 1 + len(values) - bisect_right(values, category_value)
+            middle = len(values) // 2
+            median = values[middle] if len(values) % 2 else (values[middle - 1] + values[middle]) / 2.0
+            score = 99 if len(values) == 1 else int(round(99 * (len(values) - rank) / (len(values) - 1)))
+            value.setdefault("categoryComparisons", {})[category] = DetailV2Comparison(
+                state="available", median=round(float(median), 4), rank=rank,
+                population=len(values), percentileScore=score,
             )
-    overall_values = [float(item["overall"]) for item in ratings.values()]
+    overall_values = sorted(float(item["overall"]) for item in ratings.values())
     for value in ratings.values():
-        comparison = _v2_display_comparison(float(value["overall"]), overall_values, "higher_is_better")
+        overall_value = float(value["overall"])
+        rank = 1 + len(overall_values) - bisect_right(overall_values, overall_value)
+        middle = len(overall_values) // 2
+        median = overall_values[middle] if len(overall_values) % 2 else (overall_values[middle - 1] + overall_values[middle]) / 2.0
+        score = 99 if len(overall_values) == 1 else int(round(99 * (len(overall_values) - rank) / (len(overall_values) - 1)))
+        comparison = DetailV2Comparison(
+            state="available", median=round(float(median), 4), rank=rank,
+            population=len(overall_values), percentileScore=score,
+        )
         value["overallComparison"] = comparison
         value["rank"] = comparison.rank
     material = [
@@ -1302,7 +1349,18 @@ def _v2_player(
     player: DuelPressPlayerResponse, rating: dict[str, object], record: dict[str, object],
     records: list[dict[str, object]], cohort_population: int,
 ) -> DuelPressV2LeaderboardPlayer:
-    category_models = {category: _v2_category(record, records, category, rating) for category in V2_CATEGORY_ORDER}
+    # The leaderboard and profile resource expose the six authoritative card
+    # scores only.  Rebuilding every raw pair for all 50 rows belongs to the
+    # dedicated detail-metrics endpoint and made first-page navigation
+    # needlessly expensive.
+    category_models = {
+        category: DuelPressV2BoardCategory(
+            percentileScore=int(rating["categories"][category]),
+            scoreState="imputed" if rating["missing"][category] else "observed",
+            imputedComponents=list(rating["missing"][category]),
+        )
+        for category in V2_CATEGORY_ORDER
+    }
     return DuelPressV2LeaderboardPlayer(
         id=player.id, rank=int(rating["rank"]),
         overallRating={

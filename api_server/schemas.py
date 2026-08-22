@@ -808,15 +808,26 @@ class DuelPressDetailReadoutV2Envelope(BaseModel):
         return self
 
 
+class DuelPressV2BoardCategory(BaseModel):
+    """Compact board card: drill-down facts live on the detail endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    percentileScore: int = Field(ge=0, le=99)
+    scoreState: Literal["observed", "imputed"]
+    imputedComponents: list[str] = Field(default_factory=list)
+    direction: Literal["higher_is_better"] = "higher_is_better"
+
+
 class DuelPressV2RatingStats(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    outsideShot: DuelPressDetailV2Category
-    boxThreat: DuelPressDetailV2Category
-    dangerZone: DuelPressDetailV2Category
-    combinedDuel: DuelPressDetailV2Category
-    spaceControl: DuelPressDetailV2Category
-    forwardPress: DuelPressDetailV2Category
+    outsideShot: DuelPressV2BoardCategory
+    boxThreat: DuelPressV2BoardCategory
+    dangerZone: DuelPressV2BoardCategory
+    combinedDuel: DuelPressV2BoardCategory
+    spaceControl: DuelPressV2BoardCategory
+    forwardPress: DuelPressV2BoardCategory
 
 
 class DuelPressV2CohortContext(BaseModel):

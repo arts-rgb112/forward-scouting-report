@@ -554,6 +554,9 @@ def test_v2_board_keeps_page_filter_sort_metadata_and_snapshot(monkeypatch) -> N
     assert board.meta.pageSize == 50
     assert board.meta.applied.sort == "combinedDuel"
     assert board.data[0].stats.combinedDuel.percentileScore == detail.categories[3].percentileScore
+    # Board rows remain score-only; raw total/per90 drill-down is owned by the
+    # separately cached detail endpoint and must not be rebuilt fifty times.
+    assert "groups" not in board.data[0].stats.combinedDuel.model_dump()
     assert board.ratingSnapshotId == detail.ratingSnapshotId
 
 
