@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const DUEL_PRESS_V2_CATEGORIES = ["outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress"] as const;
 export const DUEL_PRESS_V2_CONTEXT_INDICATORS = ["netProgressionPer90", "goalsMinusXgot"] as const;
+/** Server-owned shooting quality pairs introduced by stat-pairs-v2. */
+export const DUEL_PRESS_V2_XGOT_MINUS_XG_METRICS = ["outsideBoxXgotMinusXg", "inBoxXgotMinusXg"] as const;
 export type DuelPressV2CategoryId = typeof DUEL_PRESS_V2_CATEGORIES[number];
 export type DuelPressV2ContextIndicatorId = typeof DUEL_PRESS_V2_CONTEXT_INDICATORS[number];
 
@@ -15,7 +17,7 @@ const comparison = z.object({ state: z.enum(["available", "unavailable", "not_ap
   if (value.state === "unavailable" && value.rank !== null && value.rank > value.population) ctx.addIssue({ code: "custom", message: "unavailable rank exceeds population" });
 });
 
-const metricValue = z.object({ value: finite.nullable(), unit: z.enum(["count", "per90", "goals", "percent", "score"]), direction, state: z.enum(["observed", "server_derived", "imputed", "unavailable"]), source: z.enum(["player_season_total", "league_per90_fallback", "tactical_ratio_static", "server_derived", "unavailable"]), percentileScore: score.nullable(), formulaId: z.string().min(1).nullable(), formulaVersion: z.string().min(1).nullable(), comparison }).strict().superRefine((value, ctx) => {
+const metricValue = z.object({ value: finite.nullable(), unit: z.enum(["count", "per90", "goals", "percent", "score"]), direction, state: z.enum(["observed", "server_derived", "imputed", "unavailable"]), source: z.enum(["player_season_total", "league_per90_fallback", "tactical_ratio_static", "server_derived", "provider_wins_attempts_derived_rate", "zero_attempts_observed", "unavailable"]), percentileScore: score.nullable(), formulaId: z.string().min(1).nullable(), formulaVersion: z.string().min(1).nullable(), comparison }).strict().superRefine((value, ctx) => {
   if (value.value === null && value.state !== "unavailable") ctx.addIssue({ code: "custom", message: "null metric value must be unavailable" });
   if (value.value !== null && value.state === "unavailable") ctx.addIssue({ code: "custom", message: "numeric metric cannot be unavailable" });
   if (value.state === "unavailable" && value.source !== "unavailable") ctx.addIssue({ code: "custom", message: "unavailable metric requires unavailable source" });

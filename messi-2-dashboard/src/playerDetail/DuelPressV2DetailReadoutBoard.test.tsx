@@ -58,6 +58,26 @@ describe("DuelPressV2DetailReadoutBoard", () => {
     unmount();
   });
 
+  it("renders xGOT minus xG total then /90 rows directly after xGOT", () => {
+    const input = structuredClone(readDetail("complete_league"));
+    const delta = structuredClone(input.categories[0].groups[0].metrics[2]);
+    delta.id = "outsideBoxXgotMinusXg";
+    delta.label = "Outside-box xGOT minus xG";
+    delta.total.value = 1.3866;
+    delta.total.percentileScore = 98;
+    delta.per90.value = 0.0524;
+    delta.per90.percentileScore = 98;
+    input.categories[0].groups[0].metrics.splice(3, 0, delta);
+    render(<DuelPressV2DetailReadoutBoard data={duelPressV2DetailMetricsSchema.parse(input)} layout="page"/>);
+    const xgot = screen.getByText("Outside-box xGOT — Total").parentElement!;
+    const total = screen.getByText("Outside-box xGOT minus xG — Total").parentElement!;
+    const per90 = screen.getByText("Outside-box xGOT minus xG — /90").parentElement!;
+    expect(xgot.compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(total.compareDocumentPosition(per90) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(total).getByText("98")).toBeTruthy();
+    expect(within(per90).getByText("98")).toBeTruthy();
+  });
+
   it("uses scalar comparison rank and median in ground/aerial rate tooltips", async () => {
     render(<DuelPressV2DetailReadoutBoard data={parseDetail("complete_league")} layout="page"/>);
     const trigger = screen.getByRole("button", { name: /Ground duel success rate 상세 정보/ });
