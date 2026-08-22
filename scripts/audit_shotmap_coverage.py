@@ -87,7 +87,17 @@ def audit_trajectories() -> tuple[int, int, int, Counter[str], Counter[str]]:
         for record in records:
             total_shots += 1
             try:
-                point = ShotmapPoint.model_validate(record)
+                # ``sourceEventId`` is additive snapshot metadata for the
+                # final-third companion.  It deliberately stays outside the
+                # legacy strict ShotmapPoint DTO, just as the legacy player
+                # detail response does; auditing trajectories must therefore
+                # validate the same DTO-compatible view.
+                legacy_record = (
+                    {field: value for field, value in record.items() if field != "sourceEventId"}
+                    if isinstance(record, dict)
+                    else record
+                )
+                point = ShotmapPoint.model_validate(legacy_record)
             except (TypeError, ValueError):
                 invalid += 1
                 continue

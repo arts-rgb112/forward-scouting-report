@@ -40,6 +40,31 @@ def post(payload: dict[str, object], origin: str = PRODUCTION_ORIGIN):
     return TestClient(app).post("/api/v2/compare/contextual", headers={"Origin": origin}, json=payload)
 
 
+def without_snapshot_trajectories(payload: dict[str, object]) -> dict[str, object]:
+    """Keep this contextual fixture stable across additive shotmap backfills.
+
+    Trajectories are optional source enrichment.  They are intentionally
+    transported verbatim by contextual compare, but are refreshed separately
+    from the context contract fixture; stripping only this optional field
+    lets this test keep asserting exact context/cohort resolution without
+    asking the service to rewrite current source data at read time.
+    """
+    normalized = deepcopy(payload)
+    for side_name in ("left", "right"):
+        side_payload = normalized.get(side_name)
+        if not isinstance(side_payload, dict):
+            continue
+        detail = side_payload.get("detail")
+        analysis = detail.get("analysis") if isinstance(detail, dict) else None
+        spatial = analysis.get("spatial") if isinstance(analysis, dict) else None
+        points = spatial.get("shotmapPoints") if isinstance(spatial, dict) else None
+        if isinstance(points, list):
+            for point in points:
+                if isinstance(point, dict):
+                    point["trajectory"] = None
+    return normalized
+
+
 def test_complete_league_and_europe_sides_preserve_order_and_canonical_context() -> None:
     response = post(fixture("complete_league_europe_request.json"))
     assert response.status_code == 200
@@ -107,9 +132,18 @@ def test_historical_contexts_are_resolved_from_their_own_cohorts() -> None:
         "idNamespace": payload["left"]["player"]["idNamespace"],
         **payload["left"]["context"],
     }
-    # This immutable fixture is an actual service response for its matching
-    # request, not a compact response with manually relabelled provenance.
-    assert payload == fixture("historical_league_response.json")
+    # The fixture is an exact historical-context response.  Shot trajectories
+    # are optional provider enrichment that can be backfilled independently;
+    # compare must pass current values through rather than re-normalising them
+    # to the fixture's older null state.
+    current_points = payload["left"]["detail"]["analysis"]["spatial"]["shotmapPoints"]
+    assert all(
+        point["trajectory"] is None or point["trajectory"]["schemaVersion"] == "shotmap-trajectory-v1"
+        for point in current_points
+    )
+    assert without_snapshot_trajectories(payload) == without_snapshot_trajectories(
+        fixture("historical_league_response.json")
+    )
 
 
 def test_contextual_schema_rejects_stale_duel_readout_context_or_identity() -> None:

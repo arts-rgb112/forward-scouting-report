@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from collections import OrderedDict
 from functools import lru_cache
+import hashlib
+import json
 import math
 from pathlib import Path
 from threading import RLock
@@ -15,7 +17,10 @@ from rankings import (
 )
 from spear_cohort import load_spear_cohort
 from tactical_ratio import get_heatmap_points, get_tactical_ratio_for_session
-from shotmap_store_v2 import ShotmapSnapshotError, get_shotmap_snapshot
+from shotmap_store_v2 import (
+    ShotmapSnapshotError, get_shotmap_snapshot, shotmap_snapshot_revision,
+)
+from positional_grid import POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES
 
 from .schemas import (
     AgeBand, AssetRef, CompareMeta, ContinuousCoreAnalysis, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, ShotmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
@@ -41,6 +46,10 @@ from .schemas import (
     TacticalSummaryData, TacticalSummaryLine,
     VolumeBenchmarkAxis, VolumeBenchmarkData,
     VolumeBenchmarkSourceContext,
+    FinalThirdCoverageIssue, FinalThirdFieldState, FinalThirdGoalMouthCoordinates,
+    FinalThirdMarkerSizeScale, FinalThirdShot, FinalThirdShotContext,
+    FinalThirdQualityScale, FinalThirdShotData, FinalThirdShotEnvelope, FinalThirdShotZone,
+    FinalThirdZoneFieldStates,
 )
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
 from .search import canonical_search_key
@@ -1395,7 +1404,8 @@ def _spatial_analysis(
     valid_shots: list[ShotmapPoint] = []
     for index, shot in enumerate(shot_rows):
         try:
-            valid_shots.append(ShotmapPoint.model_validate(shot))
+            legacy_shot, _ = _shotmap_point_without_internal_identity(shot)
+            valid_shots.append(ShotmapPoint.model_validate(legacy_shot))
         except (TypeError, ValueError, ValidationError) as exc:
             raise ShotmapContractViolation(
                 f"Stored shotmap snapshot contains an invalid record at index {index}."
@@ -1555,6 +1565,288 @@ def build_player_detail(player_id: int, season: str, mode: str, scope: int, comp
         rawMetrics=_raw_metrics(metrics), spatial=_spatial_analysis(player_id, tactical, season),
     )
     return PlayerDetailResponse(**player.model_dump(), analysis=analysis)
+
+
+FINAL_THIRD_ZONE_ORDER = tuple(
+    [f"depth6_lane{lane}" for lane in range(1, 6)]
+    + [f"depth5_lane{lane}" for lane in range(1, 6)]
+)
+FINAL_THIRD_SOURCE = "player_season_shot_events"
+FINAL_THIRD_UNAVAILABLE_REASON = "shotmap_snapshot_unavailable_for_selected_context"
+FINAL_THIRD_QUALITY_FORMULA = "avg-xgot-minus-avg-xg-v1"
+GOAL_MOUTH_WIDTH_PITCH_PCT = 7.32 / 68.0 * 100.0
+GOAL_MOUTH_CROSSBAR_METERS = 2.44
+
+
+def _final_third_segment(value: float, boundaries: tuple[float, ...]) -> int:
+    """Use the published positional-grid boundary convention (right edge inclusive)."""
+    for index, edge in enumerate(boundaries[1:], start=1):
+        if value < edge or index == len(boundaries) - 1:
+            return index
+    raise AssertionError("positional grid must cover normalized pitch coordinates")
+
+
+def _final_third_zone_id(pitch_x: float, pitch_y: float) -> str:
+    depth = _final_third_segment(pitch_x, POSITIONAL_DEPTH_BOUNDARIES)
+    lane = _final_third_segment(pitch_y, POSITIONAL_LANE_BOUNDARIES)
+    return f"depth{depth}_lane{lane}"
+
+
+def _final_third_field(
+    state: str, reason: str | None = None, formula_version: str | None = None,
+    source_available: bool = True,
+) -> FinalThirdFieldState:
+    return FinalThirdFieldState(
+        state=state,
+        reason=reason,
+        source=FINAL_THIRD_SOURCE if source_available else None,
+        formulaVersion=formula_version,
+    )
+
+
+def _final_third_unavailable_zones(reason: str) -> list[FinalThirdShotZone]:
+    return [
+        FinalThirdShotZone(
+            zoneId=zone_id,
+            depth=int(zone_id[5]), lane=int(zone_id[-1]),
+            shotsTotal=None, goals=None, conversionRatePct=None,
+            qualityScore=None, qualityEligibleShots=None,
+            state="unavailable", reason=reason, source=None,
+            fieldStates=FinalThirdZoneFieldStates(
+                volume=_final_third_field("unavailable", reason, source_available=False),
+                conversionRatePct=_final_third_field("unavailable", reason, source_available=False),
+                qualityScore=_final_third_field("unavailable", reason, FINAL_THIRD_QUALITY_FORMULA, source_available=False),
+            ),
+        )
+        for zone_id in FINAL_THIRD_ZONE_ORDER
+    ]
+
+
+def _final_third_endpoint(point: ShotmapPoint) -> tuple[bool, float | None, float | None, str | None, bool]:
+    """Translate a provider goal-line endpoint without deriving any missing coordinate.
+
+    The static v1 trajectory's blocked point is useful on the pitch but is not
+    a goal-mouth endpoint.  It therefore remains intentionally unplottable in
+    the front-on view.
+    """
+    if point.outcome == "blocked":
+        return False, None, None, "blocked_has_no_goal_mouth_endpoint", False
+    trajectory = point.trajectory
+    if trajectory is None:
+        return False, None, None, "goal_mouth_endpoint_unavailable_in_source", True
+    if trajectory.endpointKind != "goal_mouth" or trajectory.endZMeters is None:
+        return False, None, None, "goal_mouth_endpoint_incomplete_in_source", True
+    # The normalized goal frame is intentionally not clamped. A provider may
+    # report a shot outside the posts/crossbar and the client must preserve it.
+    mouth_y = 0.5 + (trajectory.endY - 50.0) / GOAL_MOUTH_WIDTH_PITCH_PCT
+    mouth_z = trajectory.endZMeters / GOAL_MOUTH_CROSSBAR_METERS
+    return True, round(mouth_y, 6), round(mouth_z, 6), None, False
+
+
+def _final_third_quality_values(point: ShotmapPoint) -> tuple[float, float] | None:
+    if point.xg is None or point.xgot is None:
+        return None
+    if not math.isfinite(point.xg) or not math.isfinite(point.xgot):
+        return None
+    return point.xg, point.xgot
+
+
+def _final_third_snapshot_identity(heatmap_key: str | None, raw: object, occurrence: int) -> str:
+    """Return a collision-resistant identity for legacy ID-less static records.
+
+    The fingerprint uses the complete persisted record rather than presentation
+    coordinates alone.  ``occurrence`` only distinguishes byte-identical
+    records; snapshot builders retain provider list order deterministically.
+    This is explicitly labelled ``snapshot_record`` in the response.
+    """
+    canonical = json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:24]
+    return f"snapshot_record:{heatmap_key}:{digest}:{occurrence}"
+
+
+def _shotmap_point_without_internal_identity(raw: object) -> tuple[object, str | None]:
+    """Read optional ETL identity without extending the legacy ShotmapPoint DTO."""
+    if not isinstance(raw, dict):
+        return raw, None
+    source_event_id = raw.get("sourceEventId")
+    event_id = None
+    if isinstance(source_event_id, (str, int)) and not isinstance(source_event_id, bool):
+        text = str(source_event_id).strip()
+        event_id = text or None
+    return {key: value for key, value in raw.items() if key != "sourceEventId"}, event_id
+
+
+@lru_cache(maxsize=128)
+def _build_final_third_shot_map_cached(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+    snapshot_revision: tuple[int, int] | None,
+) -> FinalThirdShotEnvelope | None:
+    """Aggregate one immutable shotmap snapshot without any provider request."""
+    del snapshot_revision  # cache invalidation input; the store owns file access.
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    context = FinalThirdShotContext(
+        playerId=player_id, season=season, mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+    )
+    # The committed shot event snapshots are player *league-season* sessions.
+    # Europe contexts cannot safely reuse domestic events, so they are honest
+    # unavailable responses until competition-scoped source snapshots exist.
+    if mode != "league":
+        reason = "competition_scoped_shot_event_snapshot_unavailable"
+        return FinalThirdShotEnvelope(
+            context=context,
+            data=FinalThirdShotData(
+                available=False, completeness="unavailable", reason=reason,
+                qualityScale=FinalThirdQualityScale(),
+                markerSizeScale=FinalThirdMarkerSizeScale(),
+                goalMouthCoordinates=FinalThirdGoalMouthCoordinates(),
+                zones=_final_third_unavailable_zones(reason), shots=[],
+                endpointUnavailableCount=0, endpointUnavailableShotIds=[], partialCoverage=[],
+            ),
+        )
+
+    tactical = get_tactical_ratio_for_session(player_id, player.league.name, season)
+    heatmap_key = str(tactical.get("heatmap_key")) if tactical and tactical.get("heatmap_key") else None
+    try:
+        snapshot_available, source_rows = get_shotmap_snapshot(heatmap_key, season)
+    except ShotmapSnapshotError as exc:
+        raise ShotmapContractViolation("Final-third shotmap snapshot could not be loaded or validated.") from exc
+    if not snapshot_available:
+        return FinalThirdShotEnvelope(
+            context=context,
+            data=FinalThirdShotData(
+                available=False, completeness="unavailable", reason=FINAL_THIRD_UNAVAILABLE_REASON,
+                qualityScale=FinalThirdQualityScale(),
+                markerSizeScale=FinalThirdMarkerSizeScale(),
+                goalMouthCoordinates=FinalThirdGoalMouthCoordinates(),
+                zones=_final_third_unavailable_zones(FINAL_THIRD_UNAVAILABLE_REASON), shots=[],
+                endpointUnavailableCount=0, endpointUnavailableShotIds=[], partialCoverage=[],
+            ),
+        )
+
+    zone_points: dict[str, list[ShotmapPoint]] = {zone_id: [] for zone_id in FINAL_THIRD_ZONE_ORDER}
+    shots: list[FinalThirdShot] = []
+    coverage: list[FinalThirdCoverageIssue] = []
+    snapshot_identity_occurrences: dict[str, int] = {}
+    provider_event_ids: set[str] = set()
+    for source_index, raw in enumerate(source_rows):
+        raw_point, provider_event_id = _shotmap_point_without_internal_identity(raw)
+        try:
+            point = ShotmapPoint.model_validate(raw_point)
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise ShotmapContractViolation(
+                f"Final-third shotmap snapshot contains an invalid record at index {source_index}."
+            ) from exc
+        zone_id = _final_third_zone_id(point.x, point.y)
+        # Allocate identity before filtering: the value is stable if a future
+        # taxonomy adds depth bands without altering this source record list.
+        if provider_event_id is not None:
+            if provider_event_id in provider_event_ids:
+                raise ShotmapContractViolation(
+                    f"Final-third shotmap snapshot repeats provider event id {provider_event_id!r}."
+                )
+            provider_event_ids.add(provider_event_id)
+            shot_id, shot_id_source = provider_event_id, "provider_event"
+        else:
+            canonical = json.dumps(raw_point, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+            occurrence = snapshot_identity_occurrences.get(canonical, 0)
+            snapshot_identity_occurrences[canonical] = occurrence + 1
+            shot_id = _final_third_snapshot_identity(heatmap_key, raw_point, occurrence)
+            shot_id_source = "snapshot_record"
+        if zone_id not in zone_points:
+            continue
+        endpoint_available, mouth_y, mouth_z, endpoint_reason, unexpected_missing = _final_third_endpoint(point)
+        shot = FinalThirdShot(
+            shotId=shot_id, zoneId=zone_id, pitchX=point.x, pitchY=point.y,
+            shotIdSource=shot_id_source, xg=point.xg, xgot=point.xgot, status=point.outcome,
+            endpointAvailable=endpoint_available, goalMouthY=mouth_y,
+            goalMouthZ=mouth_z, endpointReason=endpoint_reason,
+        )
+        shots.append(shot)
+        zone_points[zone_id].append(point)
+        if unexpected_missing:
+            coverage.append(FinalThirdCoverageIssue(
+                shotId=shot_id, field="goalMouthEndpoint", reason=endpoint_reason or "source_endpoint_unavailable",
+            ))
+
+    zones: list[FinalThirdShotZone] = []
+    for zone_id in FINAL_THIRD_ZONE_ORDER:
+        points = zone_points[zone_id]
+        depth, lane = int(zone_id[5]), int(zone_id[-1])
+        shots_total = len(points)
+        if shots_total == 0:
+            reason = "no_attempts_in_zone"
+            zones.append(FinalThirdShotZone(
+                zoneId=zone_id, depth=depth, lane=lane, shotsTotal=0, goals=0,
+                conversionRatePct=None, qualityScore=None, qualityEligibleShots=0,
+                state="observed", source=FINAL_THIRD_SOURCE,
+                fieldStates=FinalThirdZoneFieldStates(
+                    volume=_final_third_field("observed"),
+                    conversionRatePct=_final_third_field("unavailable", reason),
+                    qualityScore=_final_third_field("unavailable", reason, FINAL_THIRD_QUALITY_FORMULA),
+                ),
+            ))
+            continue
+        goals = sum(point.outcome == "goal" for point in points)
+        eligible = [value for point in points if (value := _final_third_quality_values(point)) is not None]
+        missing_quality = shots_total - len(eligible)
+        conversion = round(goals / shots_total * 100.0, 2)
+        if eligible:
+            quality = round(
+                sum(xgot for _, xgot in eligible) / len(eligible)
+                - sum(xg for xg, _ in eligible) / len(eligible),
+                4,
+            )
+            quality_state = "partial" if missing_quality else "observed"
+            quality_reason = (
+                f"xgot_or_xg_unavailable_for_{missing_quality}_shots" if missing_quality else None
+            )
+        else:
+            quality = None
+            quality_state = "unavailable"
+            quality_reason = "xgot_or_xg_unavailable_for_all_zone_shots"
+        if missing_quality:
+            coverage.append(FinalThirdCoverageIssue(
+                zoneId=zone_id, field="qualityScore", reason=quality_reason or "quality_source_unavailable",
+            ))
+        zones.append(FinalThirdShotZone(
+            zoneId=zone_id, depth=depth, lane=lane, shotsTotal=shots_total, goals=goals,
+            conversionRatePct=conversion, qualityScore=quality,
+            qualityEligibleShots=len(eligible),
+            state="partial" if missing_quality else "observed",
+            reason=quality_reason,
+            source=FINAL_THIRD_SOURCE,
+            fieldStates=FinalThirdZoneFieldStates(
+                volume=_final_third_field("observed"),
+                conversionRatePct=_final_third_field("observed", formula_version="goals-divided-by-shots-v1"),
+                qualityScore=_final_third_field(quality_state, quality_reason, FINAL_THIRD_QUALITY_FORMULA),
+            ),
+        ))
+    completeness = "partial" if coverage else "complete"
+    endpoint_unavailable_ids = [shot.shotId for shot in shots if not shot.endpointAvailable]
+    return FinalThirdShotEnvelope(
+        context=context,
+        data=FinalThirdShotData(
+            available=True, completeness=completeness, reason=None,
+            qualityScale=FinalThirdQualityScale(),
+            markerSizeScale=FinalThirdMarkerSizeScale(),
+            goalMouthCoordinates=FinalThirdGoalMouthCoordinates(), zones=zones, shots=shots,
+            endpointUnavailableCount=len(endpoint_unavailable_ids),
+            endpointUnavailableShotIds=endpoint_unavailable_ids, partialCoverage=coverage,
+        ),
+    )
+
+
+def build_final_third_shot_map(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> FinalThirdShotEnvelope | None:
+    """Return only snapshot-backed data and invalidate aggregates on source refresh."""
+    return _build_final_third_shot_map_cached(
+        player_id, season, mode, scope, competition, shotmap_snapshot_revision(season),
+    )
 
 
 def build_duel_spatial_analysis(

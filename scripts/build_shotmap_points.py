@@ -71,6 +71,23 @@ def shot_outcome(shot: dict[str, Any]) -> str:
     return "off_target"
 
 
+def source_event_id(shot: dict[str, Any]) -> str | None:
+    """Keep a provider event identifier only when the payload explicitly has one.
+
+    Older committed shards predate this field. They remain readable through a
+    documented snapshot-record identity rather than pretending an array index
+    is a provider event id.
+    """
+    for field in ("eventId", "event_id", "shotId", "shot_id", "id"):
+        value = shot.get(field)
+        if isinstance(value, bool) or value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
 def shot_trajectory(
     shot: dict[str, Any], outcome: str,
 ) -> dict[str, object] | None:
@@ -141,6 +158,8 @@ def normalize_shotmap(payload: object) -> list[dict[str, object]]:
             "xg": round(value, 4) if (value := _number(shot.get("expectedGoals"))) is not None else None,
             "xgot": round(value, 4) if (value := _number(shot.get("expectedGoalsOnTarget"))) is not None else None,
         }
+        if (event_id := source_event_id(shot)) is not None:
+            normalized["sourceEventId"] = event_id
         if (trajectory := shot_trajectory(shot, outcome)) is not None:
             normalized["trajectory"] = trajectory
         shots.append(normalized)

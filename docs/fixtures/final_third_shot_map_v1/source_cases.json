@@ -1,0 +1,61 @@
+{
+  "schema": "final-third-shot-map-source-fixture-v1",
+  "heatmapKey": "194165:17:1",
+  "rows": [
+    {
+      "sourceEventId": "provider-event-1",
+      "x": 90,
+      "y": 50,
+      "outcome": "goal",
+      "xg": 0.2,
+      "xgot": 0.5,
+      "trajectory": {
+        "schemaVersion": "shotmap-trajectory-v1",
+        "endpointKind": "goal_mouth",
+        "endX": 100,
+        "endY": 50,
+        "endZMeters": 1.22,
+        "source": "fotmob"
+      }
+    },
+    {
+      "x": 70,
+      "y": 10,
+      "outcome": "blocked",
+      "xg": 0,
+      "xgot": null
+    },
+    {
+      "x": 90,
+      "y": 50,
+      "outcome": "on_target",
+      "xg": 0.1,
+      "xgot": null
+    }
+  ],
+  "expect": {
+    "zoneOrder": [
+      "depth6_lane1", "depth6_lane2", "depth6_lane3", "depth6_lane4", "depth6_lane5",
+      "depth5_lane1", "depth5_lane2", "depth5_lane3", "depth5_lane4", "depth5_lane5"
+    ],
+    "depth6_lane3": {
+      "shotsTotal": 2,
+      "goals": 1,
+      "conversionRatePct": 50,
+      "qualityScore": 0.3,
+      "qualityEligibleShots": 1,
+      "qualityState": "partial"
+    },
+    "depth6_lane1": {
+      "shotsTotal": 0,
+      "goals": 0,
+      "conversionRatePct": null,
+      "qualityScore": null
+    },
+    "blocked": {
+      "endpointAvailable": false,
+      "endpointReason": "blocked_has_no_goal_mouth_endpoint",
+      "xg": 0
+    }
+  }
+}
