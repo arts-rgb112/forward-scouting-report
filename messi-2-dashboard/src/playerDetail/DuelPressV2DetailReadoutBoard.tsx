@@ -13,7 +13,9 @@ function Tooltip({ label, children, content }: { label: string; children: ReactN
 
 function MetricTooltip({ metric }: { metric: DuelPressV2Metric }) {
   const values = [metric.total, metric.per90, metric.value].filter(Boolean);
-  return <div className="space-y-1">{values.map((item, index) => <p key={`${item!.unit}-${index}`}>{index === 0 && metric.pairState !== "scalar" ? "총량" : metric.pairState === "scalar" ? "원천값" : "/90"}: {item!.value === null ? "데이터 없음" : `${item!.value} ${unitLabel(item!.unit)}`} · {item!.state} · {item!.source}</p>)}{metric.pairReason && <p>사유: {metric.pairReason}</p>}{metric.total?.comparison.rank !== null && <p>순위: {metric.total?.comparison.rank}/{metric.total?.comparison.population} · 중앙값 {metric.total?.comparison.median}</p>}</div>;
+  const comparisonMetric = metric.pairState === "scalar" ? metric.value : metric.total;
+  const comparison = comparisonMetric?.comparison;
+  return <div className="space-y-1">{values.map((item, index) => <p key={`${item!.unit}-${index}`}>{index === 0 && metric.pairState !== "scalar" ? "총량" : metric.pairState === "scalar" ? "원천값" : "/90"}: {item!.value === null ? "데이터 없음" : `${item!.value} ${unitLabel(item!.unit)}`} · {item!.state} · {item!.source}</p>)}{metric.pairReason && <p>사유: {metric.pairReason}</p>}{comparison && comparison.state !== "unavailable" && <p>순위: {comparison.rank ?? "데이터 없음"}/{comparison.population} · 중앙값 {comparison.median ?? "데이터 없음"}</p>}</div>;
 }
 
 function ScoreRow({ metric, label, score, slot }: { metric: DuelPressV2Metric; label: string; score: number | null; slot: "value" | "total" | "per90" }) {

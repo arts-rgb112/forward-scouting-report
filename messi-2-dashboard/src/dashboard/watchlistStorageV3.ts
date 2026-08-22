@@ -24,7 +24,8 @@ export function migrateWatchlistV2Source(rawV2: string | null): LegacyV3Entry[] 
 }
 
 export function duelPressEntry(player: DuelPressPlayerCore, context: DuelPressModeContext, savedAt = new Date().toISOString()): DuelPressV3Entry {
-  return { version: 3, taxonomy: "duel-press-v1", namespace: "fotmob", key: watchlistV3Key("duel-press-v1", player.id, context), playerId: player.id, context: structuredClone(context), snapshot: structuredClone(player), savedAt };
+  if (!player.components || !player.pressingRawMetrics) throw new Error("v2 leaderboard rows cannot be stored as v1 watchlist snapshots");
+  return { version: 3, taxonomy: "duel-press-v1", namespace: "fotmob", key: watchlistV3Key("duel-press-v1", player.id, context), playerId: player.id, context: structuredClone(context), snapshot: structuredClone(player) as DuelPressV3Entry["snapshot"], savedAt };
 }
 
 export function legacyV3Entry(playerId: number, snapshot: WatchlistSnapshot, context: DuelPressModeContext, savedAt = new Date().toISOString()): LegacyV3Entry {

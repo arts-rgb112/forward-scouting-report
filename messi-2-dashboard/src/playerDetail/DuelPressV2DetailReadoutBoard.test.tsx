@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import { readFileSync } from "node:fs";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { duelPressV2DetailMetricsSchema } from "../api/duelPressV2Contracts";
 import { DuelPressV2DetailReadoutBoard } from "./DuelPressV2DetailReadoutBoard";
@@ -55,5 +56,13 @@ describe("DuelPressV2DetailReadoutBoard", () => {
     expect(within(screen.getAllByText("Outside-box shot attempts — Total")[0].parentElement!).getByText("0")).toBeTruthy();
     expect(within(screen.getAllByText("Outside-box shot attempts — /90")[0].parentElement!).getByText("0")).toBeTruthy();
     unmount();
+  });
+
+  it("uses scalar comparison rank and median in ground/aerial rate tooltips", async () => {
+    render(<DuelPressV2DetailReadoutBoard data={parseDetail("complete_league")} layout="page"/>);
+    const trigger = screen.getByRole("button", { name: /Ground duel success rate 상세 정보/ });
+    fireEvent.focus(trigger);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("중앙값 66");
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/순위:/);
   });
 });

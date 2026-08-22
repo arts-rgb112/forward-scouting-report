@@ -23,7 +23,7 @@ import type { DuelPressV3Entry, LegacyV3Entry } from "./watchlistV3Contracts";
 import { defaultWatchlistV3Filters, watchlistV3Page, type WatchlistV3Filters } from "./watchlistV3ViewModel";
 import { useMetricRanks, type MetricRankTarget } from "./useMetricRanks";
 
-type Props = { payload: DuelPressLeaderboardPayload; apiConfig?: MessiApiConfig; dataset: DatasetRouteState; options?: LeaderboardOptions; search: DuelPressSearch; refreshing: boolean; onRefresh(): void; onDatasetChange(state: DatasetRouteState): void; onSearchChange(search: DuelPressSearch, replace?: boolean): void; onPageChange(page: number): void; warning?: React.ReactNode };
+type Props = { payload: DuelPressLeaderboardPayload; apiConfig?: MessiApiConfig; dataset: DatasetRouteState; options?: LeaderboardOptions; search: DuelPressSearch; refreshing: boolean; onRefresh(): void; onDatasetChange(state: DatasetRouteState): void; onSearchChange(search: DuelPressSearch, replace?: boolean): void; onPageChange(page: number): void; warning?: React.ReactNode; v2Source?: boolean };
 export function duelPressDisplayMeta(meta: DuelPressLeaderboardPayload["meta"]): DatasetDisplayMeta { return { schemaVersion: meta.schemaVersion, season: meta.season, scope: meta.scope, population: meta.population, totalItems: meta.totalItems, returned: meta.returned, generatedAt: meta.generatedAt, source: meta.source, mode: meta.mode, competition: meta.competition }; }
 const contextFromDataset = (dataset: DatasetRouteState): DuelPressModeContext => dataset.mode === "league" ? { season: dataset.season, mode: "league", scope: dataset.scope, competition: "all" } : { season: dataset.season, mode: "europe", scope: null, competition: dataset.competition };
 const contextFromPayload = (payload: DuelPressLeaderboardPayload): DuelPressModeContext => payload.meta.mode === "league" ? { season: payload.meta.season, mode: "league", scope: payload.meta.scope!, competition: "all" } : { season: payload.meta.season, mode: "europe", scope: null, competition: payload.meta.competition! };
@@ -43,7 +43,7 @@ export function watchlistMetricRankTargets(entries: readonly DuelPressV3Entry[],
   });
 }
 
-export default function DuelPressLeaderboardDashboard({ payload, apiConfig, dataset, options, search, refreshing, onRefresh, onDatasetChange, onSearchChange, onPageChange, warning }: Props) {
+export default function DuelPressLeaderboardDashboard({ payload, apiConfig, dataset, options, search, refreshing, onRefresh, onDatasetChange, onSearchChange, onPageChange, warning, v2Source = false }: Props) {
   const v3 = useOptionalWatchlistV3(); const enabled = WATCHLIST_V3_ENABLED && Boolean(v3); const context = useMemo(() => contextFromDataset(dataset), [dataset]);
   const [watchFilters, setWatchFilters] = useState<WatchlistV3Filters>(defaultWatchlistV3Filters); const [retryEpoch, setRetryEpoch] = useState(0);
   const resultsSummaryRef = useRef<HTMLParagraphElement>(null);
@@ -71,7 +71,7 @@ export default function DuelPressLeaderboardDashboard({ payload, apiConfig, data
   const metricRanks = useMetricRanks(apiConfig, isWatchlist ? watchlistRankTargets : leaderboardRankTargets, Boolean(apiConfig));
   const leaderboardMetricRanks = useMemo(() => Object.fromEntries(payload.players.map((player) => [player.id, metricRanks[leaderboardMetricRankKey(player.id)] ?? {}])), [metricRanks, payload.players]);
   const watchRange = visibleEntries.length ? `${watchView.start}–${watchView.end} of ${watchView.total} saved contexts` : `0 of ${watchView.total} saved contexts`;
-  const watch = enabled ? { available: true, isWatched: (player: DuelPressPlayerCore) => v3!.isWatched("duel-press-v1", player.id, context), onToggle: (player: DuelPressPlayerCore) => { v3!.toggleDuel(player, context); }, accessibleLabel: (player: DuelPressPlayerCore) => `${v3!.isWatched("duel-press-v1", player.id, context) ? "Remove" : "Save"} ${player.name}, ${context.season}, ${context.mode === "league" ? `${context.scope} leagues` : `Europe ${context.competition.toUpperCase()}`}, duel and press taxonomy` } : undefined;
+  const watch = enabled && !v2Source ? { available: true, isWatched: (player: DuelPressPlayerCore) => v3!.isWatched("duel-press-v1", player.id, context), onToggle: (player: DuelPressPlayerCore) => { v3!.toggleDuel(player, context); }, accessibleLabel: (player: DuelPressPlayerCore) => `${v3!.isWatched("duel-press-v1", player.id, context) ? "Remove" : "Save"} ${player.name}, ${context.season}, ${context.mode === "league" ? `${context.scope} leagues` : `Europe ${context.competition.toUpperCase()}`}, duel and press taxonomy` } : undefined;
   return <main id="main-content" aria-busy={isWatchlist ? pending : refreshing} className="min-h-screen bg-[#080b0c] text-zinc-100"><StatusFeedback message={enabled ? v3!.feedback : ""} /><div className="mx-auto max-w-[1580px] px-3 py-5 sm:px-6 lg:px-8">
     <DatasetHeader meta={meta} visibleCount={isWatchlist ? watchView.total : payload.players.length} refreshing={isWatchlist ? pending : refreshing} onRefresh={isWatchlist ? () => setRetryEpoch((value) => value + 1) : onRefresh} state={dataset} options={options} onStateChange={onDatasetChange} watchlistMode={isWatchlist} />
     {!isWatchlist && warning}
