@@ -17,14 +17,14 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 import sys
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from rankings import COMPARISON_SCOPES
-from shotmap_store_v2 import load_shotmap_points
+from shotmap_store_v2 import get_shotmap_snapshot
 
 
 DATA_DIR = ROOT / "data"
@@ -51,7 +51,8 @@ DOMESTIC_LEAGUE_IDS = {
 
 COVERAGE_FIELDS = (
     "season_name", "mode", "scope", "competition", "competition_name",
-    "sessions", "snapshot_available", "snapshot_missing",
+    "api_contexts", "source_sessions", "available_contexts", "partial_contexts",
+    "unavailable_contexts", "snapshot_available", "snapshot_missing",
     "verified_zero_shot_sessions", "shots_total",
 )
 UNAVAILABLE_FIELDS = (
@@ -99,36 +100,43 @@ def _rows(path: Path = TACTICAL_PATH) -> list[dict[str, str]]:
 
 
 def build_report(
-    rows: Iterable[dict[str, str]], snapshots: dict[str, list[Any]],
+    rows: Iterable[dict[str, str]],
+    snapshot_lookup: Callable[[str, str], tuple[bool, list[Any]]],
     source_exceptions: dict[str, str],
 ) -> tuple[list[dict[str, object]], list[dict[str, str]]]:
     """Return deterministic coverage and unavailable-context report rows."""
 
     grouped: dict[tuple[str, str, str, str, str], dict[str, int]] = defaultdict(
         lambda: {
-            "sessions": 0, "snapshot_available": 0, "snapshot_missing": 0,
+            "api_contexts": 0, "source_sessions": 0, "available_contexts": 0,
+            "partial_contexts": 0, "unavailable_contexts": 0,
+            "snapshot_available": 0, "snapshot_missing": 0,
             "verified_zero_shot_sessions": 0, "shots_total": 0,
         }
     )
     unavailable: list[dict[str, str]] = []
+    europe_all: dict[tuple[str, str], list[tuple[dict[str, str], bool, list[Any]]]] = defaultdict(list)
     for row in rows:
         heatmap_key = str(row.get("heatmap_key") or "").strip()
-        available = heatmap_key in snapshots
-        points = snapshots.get(heatmap_key, [])
+        season = str(row.get("season_name") or "")
+        available, points = snapshot_lookup(heatmap_key, season)
         for mode, scope, competition, competition_name in context_refs(row):
             key = (
-                str(row.get("season_name") or ""), mode, scope,
+                season, mode, scope,
                 competition, competition_name,
             )
             summary = grouped[key]
-            summary["sessions"] += 1
+            summary["api_contexts"] += 1
+            summary["source_sessions"] += 1
             if available:
+                summary["available_contexts"] += 1
                 summary["snapshot_available"] += 1
                 summary["shots_total"] += len(points)
                 if not points:
                     summary["verified_zero_shot_sessions"] += 1
                 continue
             summary["snapshot_missing"] += 1
+            summary["unavailable_contexts"] += 1
             unavailable.append({
                 "player_id": str(row.get("fotmob_player_id") or ""),
                 "player_name": str(row.get("player_name") or ""),
@@ -137,6 +145,39 @@ def build_report(
                 "heatmap_key": heatmap_key,
                 "reason": source_exceptions.get(heatmap_key, "snapshot_missing"),
             })
+        if str(row.get("competition_name") or "").strip() in EUROPE_COMPETITIONS:
+            europe_all[(season, str(row.get("fotmob_player_id") or ""))].append((row, available, points))
+
+    # Europe ``all`` is an API context of its own: it unions the exact UEFA
+    # sessions for one player-season. It is unavailable only when every one of
+    # those source snapshots is absent; a mixed source set is partial.
+    for (season, player_id), members in europe_all.items():
+        key = (season, "europe", "", "all", "All European competitions")
+        summary = grouped[key]
+        summary["api_contexts"] += 1
+        summary["source_sessions"] += len(members)
+        available_members = [(row, points) for row, available, points in members if available]
+        missing_members = [row for row, available, _ in members if not available]
+        summary["snapshot_available"] += len(available_members)
+        summary["snapshot_missing"] += len(missing_members)
+        summary["shots_total"] += sum(len(points) for _, points in available_members)
+        summary["verified_zero_shot_sessions"] += sum(not points for _, points in available_members)
+        if not available_members:
+            summary["unavailable_contexts"] += 1
+            for row in missing_members:
+                heatmap_key = str(row.get("heatmap_key") or "").strip()
+                unavailable.append({
+                    "player_id": player_id, "player_name": str(row.get("player_name") or ""),
+                    "season_name": season, "mode": "europe", "scope": "",
+                    "competition": "all", "competition_name": "All European competitions",
+                    "heatmap_key": heatmap_key,
+                    "reason": source_exceptions.get(heatmap_key, "snapshot_missing"),
+                })
+        elif missing_members:
+            summary["available_contexts"] += 1
+            summary["partial_contexts"] += 1
+        else:
+            summary["available_contexts"] += 1
     coverage = [
         {
             "season_name": key[0], "mode": key[1], "scope": key[2],
@@ -167,11 +208,11 @@ def write_reports(
 
 def main() -> None:
     coverage, unavailable = build_report(
-        _rows(), load_shotmap_points(), load_source_exceptions(),
+        _rows(), get_shotmap_snapshot, load_source_exceptions(),
     )
     write_reports(coverage, unavailable)
-    total = sum(int(row["sessions"]) for row in coverage)
-    available = sum(int(row["snapshot_available"]) for row in coverage)
+    total = sum(int(row["api_contexts"]) for row in coverage)
+    available = sum(int(row["available_contexts"]) for row in coverage)
     print(
         "Final Third exact-context coverage: "
         f"{available}/{total}; unavailable contexts: {len(unavailable)}"

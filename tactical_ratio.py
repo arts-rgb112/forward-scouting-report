@@ -282,8 +282,13 @@ def get_tactical_ratio_by_name(player_name: str) -> Optional[dict[str, float]]:
     return _with_current_spatial_definition(matches[0]) if len(matches) == 1 else None
 
 
-def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, season_label: str) -> Optional[dict[str, float]]:
-    """Return one player's one competition-season row; never blend sessions."""
+def get_tactical_session_row(player_id: str | int, competition_name: str, season_label: str) -> Optional[dict[str, float]]:
+    """Return one raw player competition-season row; never blend sessions.
+
+    Consumers that only need the immutable ``heatmap_key`` (for example the
+    final-third shot snapshot companion) must not trigger spatial recalculation
+    or read activity coordinates merely to locate that source session.
+    """
     candidates = [
         row for row in _tactical_rows_for_player(player_id)
         if _same_competition(row.get("competition_name") or TOURNAMENT_NAMES.get(str(row.get("tournament_id")), ""), competition_name)
@@ -296,7 +301,13 @@ def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, 
     # same persisted spatial sample, so resolve deterministically instead of
     # hiding the complete player session.
     heatmap_keys = {str(row.get("heatmap_key") or "") for row in candidates}
-    return _with_current_spatial_definition(candidates[0]) if len(heatmap_keys) == 1 else None
+    return dict(candidates[0]) if len(heatmap_keys) == 1 else None
+
+
+def get_tactical_ratio_for_session(player_id: str | int, competition_name: str, season_label: str) -> Optional[dict[str, float]]:
+    """Return one player's one competition-season spatial row."""
+    row = get_tactical_session_row(player_id, competition_name, season_label)
+    return _with_current_spatial_definition(row) if row is not None else None
 
 
 @functools.lru_cache(maxsize=1)

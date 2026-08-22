@@ -41,10 +41,12 @@ Missing xGOT/xG is never coerced to zero. The affected zone's quality field is
 `partial` or `unavailable`, and `partialCoverage` names the zone and cause.
 No selected-context snapshot returns an unavailable envelope and ten
 unavailable tiles, never a fabricated zero-volume result. Snapshot keys are
-competition-scoped: a Europe request may only read the matching UEFA-session
-key, never a domestic league-season key. If that exact source snapshot is not
-committed, the API returns the explicit unavailable envelope rather than a
-fallback dataset.
+competition-scoped: an exact Europe request may only read its matching
+UEFA-session key, never a domestic league-season key. `competition=all` is a
+union of the player's exact UCL, UEL, and UECL session shards for that season;
+it never chooses an arbitrary first tournament. A missing member makes a
+non-empty union `partial` and is named in `partialCoverage`; a union with no
+committed member returns the explicit unavailable envelope.
 
 ## Goal-mouth coordinates and identifiers
 
@@ -85,5 +87,8 @@ rows and shotmap shards. It writes
 `data/final_third_shotmap_coverage.csv` (coverage by exact API context family)
 and `data/final_third_shotmap_unavailable_contexts.csv` (player/context keys
 that still have no source snapshot). Domestic scope entries are repeated only
-where that league is eligible for the requested comparison scope; European
-entries retain their exact `ucl`, `uel`, or `uecl` competition code.
+where that league is eligible for the requested comparison scope. European
+entries retain their exact `ucl`, `uel`, or `uecl` code and also include the
+real `all` union context. The report distinguishes full availability,
+partially sourced unions, and unavailable contexts, and reads each season
+shard with the same lookup used by the API.
