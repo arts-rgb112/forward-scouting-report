@@ -989,6 +989,69 @@ def _v2_aerial_wins(record: dict[str, object]) -> float | None:
     return 0.0 if _v2_aerial_zero_attempts(record) else _detail_number(record.get("aerial_duels_won_raw"))
 
 
+def _v2_combined_attempts(record: dict[str, object]) -> float | None:
+    ground, aerial = _v2_ground_attempts(record), _v2_aerial_attempts(record)
+    return ground + aerial if ground is not None and aerial is not None else None
+
+
+def _v2_combined_wins(record: dict[str, object]) -> float | None:
+    ground, aerial = _v2_ground_wins(record), _v2_aerial_wins(record)
+    return ground + aerial if ground is not None and aerial is not None else None
+
+
+def _v2_combined_losses(record: dict[str, object]) -> float | None:
+    ground, aerial = _v2_ground_losses(record), _v2_aerial_losses(record)
+    return ground + aerial if ground is not None and aerial is not None else None
+
+
+def _v2_combined_zero_attempts(record: dict[str, object]) -> bool:
+    return _v2_ground_zero_attempts(record) and _v2_aerial_zero_attempts(record)
+
+
+def _v2_combined_rate(record: dict[str, object]) -> tuple[float | None, str]:
+    attempts, wins = _v2_combined_attempts(record), _v2_combined_wins(record)
+    if _v2_combined_zero_attempts(record):
+        return 0.0, "zero_attempts_observed"
+    if attempts is None or wins is None or attempts <= 0 or wins < 0 or wins > attempts:
+        return None, "unavailable"
+    return wins * 100.0 / attempts, "provider_wins_attempts_derived_rate"
+
+
+def _v2_margin_per90(record: dict[str, object], wins, losses) -> float | None:
+    won, lost = wins(record), losses(record)
+    return _v2_per90(won - lost, record) if won is not None and lost is not None else None
+
+
+def _v2_ground_margin_per90(record: dict[str, object]) -> float | None:
+    return _v2_margin_per90(record, _v2_ground_wins, _v2_ground_losses)
+
+
+def _v2_aerial_margin_per90(record: dict[str, object]) -> float | None:
+    return _v2_margin_per90(record, _v2_aerial_wins, _v2_aerial_losses)
+
+
+def _v2_combined_margin_per90(record: dict[str, object]) -> float | None:
+    return _v2_margin_per90(record, _v2_combined_wins, _v2_combined_losses)
+
+
+def _v2_net_progression_per90(record: dict[str, object]) -> float | None:
+    direct = lambda field: _detail_number(record.get(field))
+    values = (
+        _v2_per90(direct("dribbles_succeeded_raw"), record),
+        _v2_per90(direct("fouls_won_raw"), record),
+        _v2_per90(direct("penalties_awarded_raw"), record),
+        _v2_per90(_v2_ground_wins(record), record),
+        _v2_per90(_v2_aerial_wins(record), record),
+        _v2_per90(_v2_ground_losses(record), record),
+        _v2_per90(_v2_aerial_losses(record), record),
+        _v2_per90(_v2_losses(record, "dribbles_succeeded_raw", "dribble_success_rate_raw"), record),
+        _v2_per90(direct("dispossessed_raw"), record),
+    )
+    if any(value is None for value in values):
+        return None
+    return sum(values[:5]) - sum(values[5:])
+
+
 def _v2_display_comparison(value: float | None, values: list[float], direction: str) -> DetailV2Comparison:
     if value is None or not values:
         ordered = sorted(values)
@@ -1079,14 +1142,15 @@ def _v2_pair(
     records: list[dict[str, object]], record: dict[str, object], *, identifier: str,
     label: str, unit: str, direction: str, total_evaluator, total_observed: bool,
     total_formula: str | None = None, observed_source: str = "player_season_total",
+    zero_attempts_floor: bool = False,
 ) -> DetailV2Metric:
     total = total_evaluator(record)
     per90 = _v2_per90(total, record)
     per90_evaluator = lambda row: _v2_per90(total_evaluator(row), row)
     return DetailV2Metric(
         id=identifier, label=label,
-        total=_v2_datum(total, unit, direction, _v2_values(records, total_evaluator), observed=total_observed, formula_id=total_formula, observed_source=observed_source),
-        per90=_v2_datum(per90, "per90", direction, _v2_values(records, per90_evaluator), observed=False, formula_id="per90-v2"),
+        total=_v2_datum(total, unit, direction, _v2_values(records, total_evaluator), observed=total_observed, formula_id=total_formula, observed_source=observed_source, zero_attempts_floor=zero_attempts_floor),
+        per90=_v2_datum(per90, "per90", direction, _v2_values(records, per90_evaluator), observed=False, formula_id="per90-v2", zero_attempts_floor=zero_attempts_floor),
         pairState="complete" if total is not None and per90 is not None else "partial" if total is not None else "unavailable",
         pairReason=None if total is not None and per90 is not None else "minutes_unavailable_or_nonpositive" if total is not None else "source_unavailable",
     )
@@ -1194,11 +1258,16 @@ def _v2_scalar(
     records: list[dict[str, object]], record: dict[str, object], *, identifier: str,
     label: str, unit: str, direction: str, evaluator, observed: bool,
     formula_id: str | None = None, observed_source: str = "player_season_total",
+    zero_attempts_floor: bool = False,
 ) -> DetailV2Metric:
     value = evaluator(record)
     return DetailV2Metric(
         id=identifier, label=label,
-        value=_v2_datum(value, unit, direction, _v2_values(records, evaluator), observed=observed, formula_id=formula_id, observed_source=observed_source),
+        value=_v2_datum(
+            value, unit, direction, _v2_values(records, evaluator), observed=observed,
+            formula_id=formula_id, observed_source=observed_source,
+            zero_attempts_floor=zero_attempts_floor,
+        ),
         pairState="scalar",
         pairReason=None,
     )
@@ -1221,13 +1290,14 @@ def _v2_component_specs():
             ("dribble_attempts_raw", "higher_is_better", lambda row: _v2_per90(_v2_attempts(row, "dribbles_succeeded_raw", "dribble_success_rate_raw"), row), lambda row: False),
             ("dribbles_succeeded_raw", "higher_is_better", lambda row: _v2_per90(direct("dribbles_succeeded_raw")(row), row), lambda row: False),
             ("dribbles_failed_raw", "lower_is_better", lambda row: _v2_per90(_v2_losses(row, "dribbles_succeeded_raw", "dribble_success_rate_raw"), row), lambda row: False),
+            ("net_progression_per90", "higher_is_better", _v2_net_progression_per90, lambda row: False),
         ),
         "combinedDuel": (
-            ("combined_duel_attempts_raw", "higher_is_better", lambda row: _v2_per90(sum(value for value in (_v2_ground_attempts(row), _v2_aerial_attempts(row)) if value is not None) if _v2_ground_attempts(row) is not None and _v2_aerial_attempts(row) is not None else None, row), lambda row: False),
-            ("duels_won_raw", "higher_is_better", lambda row: _v2_per90(_v2_ground_wins(row), row), lambda row: False),
-            ("ground_duel_losses_raw", "lower_is_better", lambda row: _v2_per90(_v2_ground_losses(row), row), _v2_ground_zero_attempts),
-            ("aerial_duels_won_raw", "higher_is_better", lambda row: _v2_per90(_v2_aerial_wins(row), row), lambda row: False),
-            ("aerial_duel_losses_raw", "lower_is_better", lambda row: _v2_per90(_v2_aerial_losses(row), row), _v2_aerial_zero_attempts),
+            ("combined_duel_attempts_per90", "higher_is_better", lambda row: _v2_per90(_v2_combined_attempts(row), row), lambda row: False),
+            ("combined_duel_win_rate", "higher_is_better", lambda row: _v2_combined_rate(row)[0], _v2_combined_zero_attempts),
+            ("combined_duel_margin_per90", "higher_is_better", _v2_combined_margin_per90, _v2_combined_zero_attempts),
+            ("ground_duel_win_rate", "higher_is_better", lambda row: _v2_ground_rate(row)[0], _v2_ground_zero_attempts),
+            ("aerial_duel_win_rate", "higher_is_better", lambda row: _v2_aerial_rate(row)[0], _v2_aerial_zero_attempts),
         ),
         "spaceControl": (
             ("cca_area_pct", "higher_is_better", direct("cca_area_pct"), lambda row: False),
@@ -1392,9 +1462,6 @@ def _v2_category_from_rating(category: str, rating: dict[str, object], compariso
 
 def _v2_category(record: dict[str, object], records: list[dict[str, object]], category: str, rating: dict[str, object]) -> DuelPressDetailV2Category:
     direct = lambda field: lambda row: _detail_number(row.get(field))
-    attempts_ground = _v2_ground_attempts
-    attempts_air = _v2_aerial_attempts
-    combined_attempts = lambda row: (attempts_ground(row) or 0) + (attempts_air(row) or 0) if attempts_ground(row) is not None and attempts_air(row) is not None else None
     groups = {
         "outsideShot": [DetailV2Group(id="outsideBoxShooting", label="Outside-box shooting", kind="count_rate_pair", metrics=[
             _v2_pair(records, record, identifier="outsideBoxShotAttempts", label="Outside-box shot attempts", unit="count", direction="higher_is_better", total_evaluator=direct("out_box_shots_raw"), total_observed=True),
@@ -1410,16 +1477,22 @@ def _v2_category(record: dict[str, object], records: list[dict[str, object]], ca
             _v2_pair(records, record, identifier="dribbleAttempts", label="Dribble attempts", unit="count", direction="higher_is_better", total_evaluator=lambda row: _v2_attempts(row, "dribbles_succeeded_raw", "dribble_success_rate_raw"), total_observed=False, total_formula="attempts-from-success-rate-v2"),
             _v2_pair(records, record, identifier="successfulDribbles", label="Successful dribbles", unit="count", direction="higher_is_better", total_evaluator=direct("dribbles_succeeded_raw"), total_observed=True),
             _v2_pair(records, record, identifier="failedDribbles", label="Failed dribbles", unit="count", direction="lower_is_better", total_evaluator=lambda row: _v2_losses(row, "dribbles_succeeded_raw", "dribble_success_rate_raw"), total_observed=False, total_formula="losses-from-success-rate-v2"),
+            _v2_scalar(records, record, identifier="netProgressionPer90", label="Net progression /90", unit="per90", direction="higher_is_better", evaluator=_v2_net_progression_per90, observed=False, formula_id="net-progression-v1"),
         ])],
         "combinedDuel": [
             DetailV2Group(id="combinedDuelVolume", label="Combined duel volume", kind="count_rate_pair", metrics=[
-                _v2_pair(records, record, identifier="combinedDuelAttempts", label="Combined duel attempts", unit="count", direction="higher_is_better", total_evaluator=combined_attempts, total_observed=False, total_formula="combined-duel-attempts-v2"),
+                _v2_pair(records, record, identifier="combinedDuelAttempts", label="Combined duel attempts", unit="count", direction="higher_is_better", total_evaluator=_v2_combined_attempts, total_observed=False, total_formula="combined-duel-attempts-v2"),
+                _v2_pair(records, record, identifier="combinedDuelWins", label="Combined duel wins", unit="count", direction="higher_is_better", total_evaluator=_v2_combined_wins, total_observed=False, total_formula="combined-duel-wins-v2"),
+                _v2_pair(records, record, identifier="combinedDuelLosses", label="Combined duel losses", unit="count", direction="lower_is_better", total_evaluator=_v2_combined_losses, total_observed=False, total_formula="combined-duel-losses-v2", zero_attempts_floor=_v2_combined_zero_attempts(record)),
+                _v2_scalar(records, record, identifier="combinedDuelWinRate", label="Combined duel success rate", unit="percent", direction="higher_is_better", evaluator=lambda row: _v2_combined_rate(row)[0], observed=True, observed_source=_v2_combined_rate(record)[1], zero_attempts_floor=_v2_combined_zero_attempts(record)),
+                _v2_scalar(records, record, identifier="combinedDuelSuccessMarginPer90", label="Combined duel success margin /90", unit="per90", direction="higher_is_better", evaluator=_v2_combined_margin_per90, observed=False, formula_id="combined-duel-margin-v2", zero_attempts_floor=_v2_combined_zero_attempts(record)),
             ]),
             DetailV2Group(id="groundDuels", label="Ground duels", kind="duel_split", metrics=[
                 _v2_ground_attempt_pair(records, record),
                 _v2_duel_wins_pair(records, record, identifier="groundDuelWins", label="Ground duel wins", evaluator=_v2_ground_wins, zero_attempts=_v2_ground_zero_attempts),
                 _v2_duel_losses_pair(records, record, identifier="groundDuelLosses", label="Ground duel losses", evaluator=_v2_ground_losses, zero_attempts=_v2_ground_zero_attempts),
-                _v2_scalar(records, record, identifier="groundDuelWinRate", label="Ground duel success rate", unit="percent", direction="higher_is_better", evaluator=lambda row: _v2_ground_rate(row)[0], observed=True, observed_source=_v2_ground_rate(record)[1]),
+                _v2_scalar(records, record, identifier="groundDuelWinRate", label="Ground duel success rate", unit="percent", direction="higher_is_better", evaluator=lambda row: _v2_ground_rate(row)[0], observed=True, observed_source=_v2_ground_rate(record)[1], zero_attempts_floor=_v2_ground_zero_attempts(record)),
+                _v2_scalar(records, record, identifier="groundDuelSuccessMarginPer90", label="Ground duel success margin /90", unit="per90", direction="higher_is_better", evaluator=_v2_ground_margin_per90, observed=False, formula_id="ground-duel-margin-v2", zero_attempts_floor=_v2_ground_zero_attempts(record)),
             ]),
             DetailV2Group(id="aerialDuels", label="Aerial duels", kind="duel_split", metrics=[
                 _v2_aerial_attempt_pair(records, record),
@@ -1429,8 +1502,9 @@ def _v2_category(record: dict[str, object], records: list[dict[str, object]], ca
                     records, record, identifier="aerialDuelWinRate", label="Aerial duel success rate",
                     unit="percent", direction="higher_is_better",
                     evaluator=lambda row: _v2_aerial_rate(row)[0], observed=True,
-                    observed_source=_v2_aerial_rate(record)[1],
+                    observed_source=_v2_aerial_rate(record)[1], zero_attempts_floor=_v2_aerial_zero_attempts(record),
                 ),
+                _v2_scalar(records, record, identifier="aerialDuelSuccessMarginPer90", label="Aerial duel success margin /90", unit="per90", direction="higher_is_better", evaluator=_v2_aerial_margin_per90, observed=False, formula_id="aerial-duel-margin-v2", zero_attempts_floor=_v2_aerial_zero_attempts(record)),
             ]),
         ],
         "spaceControl": [DetailV2Group(id="spaceControl", label="Space control", kind="spatial", metrics=[
@@ -1457,11 +1531,6 @@ def _v2_context_indicators(record: dict[str, object], records: list[dict[str, ob
     fouls = lambda row: _v2_per90(direct("fouls_won_raw")(row), row)
     penalties = lambda row: _v2_per90(direct("penalties_awarded_raw")(row), row)
     dispossessed = lambda row: _v2_per90(direct("dispossessed_raw")(row), row)
-    def progression(row):
-        values = (successful(row), fouls(row), penalties(row), ground_won(row), aerial_won(row), ground_lost(row), aerial_lost(row), failed(row), dispossessed(row))
-        if any(value is None for value in values):
-            return None
-        return sum(values[:5]) - sum(values[5:])
     goals_minus_xgot = lambda row: (direct("goals_raw")(row) - direct("xgot_raw")(row) if direct("goals_raw")(row) is not None and direct("xgot_raw")(row) is not None else None)
     net_facts = [
         _v2_scalar(records, record, identifier="successfulDribblesPer90", label="Successful dribbles /90", unit="per90", direction="higher_is_better", evaluator=successful, observed=False, formula_id="per90-v2"),
@@ -1475,7 +1544,7 @@ def _v2_context_indicators(record: dict[str, object], records: list[dict[str, ob
         _v2_scalar(records, record, identifier="dispossessedPer90", label="Dispossessed /90", unit="per90", direction="lower_is_better", evaluator=dispossessed, observed=False, formula_id="per90-v2"),
     ]
     return [
-        DuelPressDetailV2ContextIndicator(id="netProgressionPer90", label="Net progression /90", metric=_v2_scalar(records, record, identifier="netProgressionPer90", label="Net progression /90", unit="per90", direction="higher_is_better", evaluator=progression, observed=False, formula_id="net-progression-v1"), tooltipFacts=net_facts),
+        DuelPressDetailV2ContextIndicator(id="netProgressionPer90", label="Net progression /90", metric=_v2_scalar(records, record, identifier="netProgressionPer90", label="Net progression /90", unit="per90", direction="higher_is_better", evaluator=_v2_net_progression_per90, observed=False, formula_id="net-progression-v1"), tooltipFacts=net_facts),
         DuelPressDetailV2ContextIndicator(id="goalsMinusXgot", label="Goals minus xGOT", metric=_v2_scalar(records, record, identifier="goalsMinusXgot", label="Goals minus xGOT", unit="goals", direction="higher_is_better", evaluator=goals_minus_xgot, observed=False, formula_id="goals-minus-xgot-v1"), tooltipFacts=[
             _v2_scalar(records, record, identifier="goals", label="Goals", unit="goals", direction="higher_is_better", evaluator=direct("goals_raw"), observed=True),
             _v2_scalar(records, record, identifier="xgot", label="xGOT", unit="goals", direction="higher_is_better", evaluator=direct("xgot_raw"), observed=True),
