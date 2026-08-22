@@ -12,7 +12,8 @@ from pydantic import ValidationError
 from api_server.main import app
 from api_server import service
 from api_server.schemas import (
-    FinalThirdEffectiveShotEnvelope, FinalThirdShot, FinalThirdShotEnvelope,
+    FinalThirdEffectiveShotEnvelope, FinalThirdGoalMouthEnvelope, FinalThirdShot,
+    FinalThirdShotEnvelope,
 )
 from scripts.audit_shotmap_coverage import audit_trajectories
 from scripts.build_shotmap_points import normalize_shotmap
@@ -104,6 +105,49 @@ def test_effective_conversion_v2_counts_mutually_exclusive_goal_and_on_target_st
         "effective-on-target-plus-goal-divided-by-shots-v2"
     )
     assert central.fieldStates.effectiveShotCount.formulaVersion == "status-goal-or-on-target-v2"
+
+
+def test_goal_mouth_v3_returns_server_owned_front_two_xgot_minus_xg_caption() -> None:
+    v3_fixture = json.loads((
+        Path(__file__).resolve().parents[1]
+        / "docs" / "fixtures" / "final_third_goal_mouth_v3" / "source_cases.json"
+    ).read_text(encoding="utf-8"))
+    fixture = json.loads((
+        Path(__file__).resolve().parents[1]
+        / "docs" / "fixtures" / "final_third_shot_map_effective_v2" / "source_cases.json"
+    ).read_text(encoding="utf-8"))
+    payload = _build(fixture["rows"], conversion_version=v3_fixture["conversionVersion"])
+    assert isinstance(payload, FinalThirdGoalMouthEnvelope)
+    assert payload.schemaVersion == "3.0.0"
+    assert payload.chartTaxonomyVersion == "final-third-shot-map-goal-mouth-v3"
+    quality = payload.data.shootingQuality
+    expected = v3_fixture["shootingQuality"]["observed"]
+    assert (quality.totalShotCount, quality.eligibleShotCount) == (
+        expected["totalShotCount"], expected["eligibleShotCount"],
+    )
+    assert (quality.xgTotal, quality.xgotTotal, quality.xgotMinusXg) == (
+        expected["xgTotal"], expected["xgotTotal"], expected["xgotMinusXg"],
+    )
+    assert (quality.state, quality.reason, quality.source) == (
+        "observed", None, "player_season_shot_events",
+    )
+
+
+def test_goal_mouth_v3_keeps_missing_quality_partial_or_unavailable_without_zero_fill() -> None:
+    partial = _build([_goal(), {**_goal(), "outcome": "on_target", "xgot": None}, _blocked()], conversion_version="goal-mouth-v3")
+    assert isinstance(partial, FinalThirdGoalMouthEnvelope)
+    quality = partial.data.shootingQuality
+    assert (quality.totalShotCount, quality.eligibleShotCount) == (3, 1)
+    assert (quality.xgTotal, quality.xgotTotal, quality.xgotMinusXg) == (0.2, 0.5, 0.3)
+    assert quality.state == "partial"
+    assert quality.reason == "xgot_or_xg_unavailable_for_2_front_two_shots"
+
+    unavailable = _build([_blocked(xgot=None)], conversion_version="goal-mouth-v3")
+    assert isinstance(unavailable, FinalThirdGoalMouthEnvelope)
+    no_quality = unavailable.data.shootingQuality
+    assert (no_quality.totalShotCount, no_quality.eligibleShotCount) == (1, 0)
+    assert (no_quality.xgTotal, no_quality.xgotTotal, no_quality.xgotMinusXg) == (None, None, None)
+    assert no_quality.state == "unavailable"
 
 
 def test_canonical_source_fixture_exercises_math_and_endpoint_contract() -> None:
@@ -222,6 +266,13 @@ def test_endpoint_context_front2_only_and_cors_boundaries() -> None:
     effective_payload = FinalThirdEffectiveShotEnvelope.model_validate(effective.json())
     assert effective_payload.data.conversionDefinition == "effective-on-target-plus-goal-divided-by-shots-v2"
     assert all(zone.effectiveShotCount is not None for zone in effective_payload.data.zones)
+    goal_mouth = CLIENT.get(base, params={
+        "season": "2025/2026", "mode": "league", "scope": 8,
+        "competition": "all", "conversionVersion": "goal-mouth-v3",
+    })
+    assert goal_mouth.status_code == 200
+    goal_mouth_payload = FinalThirdGoalMouthEnvelope.model_validate(goal_mouth.json())
+    assert goal_mouth_payload.data.shootingQuality.formulaVersion == "sum-xgot-minus-sum-xg-v1"
     invalid_conversion = CLIENT.get(base, params={
         "season": "2025/2026", "mode": "league", "scope": 8,
         "competition": "all", "conversionVersion": "client-derived-v0",
@@ -360,15 +411,17 @@ def test_openapi_exposes_strict_final_third_contract() -> None:
     schema = CLIENT.get("/openapi.json").json()
     contract = schema["components"]["schemas"]["FinalThirdShotEnvelope"]
     effective_contract = schema["components"]["schemas"]["FinalThirdEffectiveShotEnvelope"]
+    goal_mouth_contract = schema["components"]["schemas"]["FinalThirdGoalMouthEnvelope"]
     assert contract["additionalProperties"] is False
     assert effective_contract["additionalProperties"] is False
+    assert goal_mouth_contract["additionalProperties"] is False
     assert "/api/v2/players/{player_id}/final-third-shot-map" in schema["paths"]
     assert schema["components"]["schemas"]["FinalThirdShot"]["additionalProperties"] is False
     assert schema["components"]["schemas"]["FinalThirdEffectiveShotZone"]["additionalProperties"] is False
     assert schema["components"]["schemas"]["FinalThirdEffectiveShotZoneFieldStates"]["additionalProperties"] is False
     parameters = schema["paths"]["/api/v2/players/{player_id}/final-third-shot-map"]["get"]["parameters"]
     conversion = next(parameter for parameter in parameters if parameter["name"] == "conversionVersion")
-    assert conversion["schema"]["enum"] == ["goals-v1", "effective-shot-v2"]
+    assert conversion["schema"]["enum"] == ["goals-v1", "effective-shot-v2", "goal-mouth-v3"]
 
 
 def test_trajectory_audit_accepts_additive_source_event_identity() -> None:

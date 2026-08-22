@@ -58,6 +58,7 @@ from .schemas import (
     FinalThirdMarkerSizeScale, FinalThirdShot, FinalThirdShotContext,
     FinalThirdEffectiveShotData, FinalThirdEffectiveShotEnvelope, FinalThirdEffectiveShotZone,
     FinalThirdEffectiveShotZoneFieldStates,
+    FinalThirdGoalMouthData, FinalThirdGoalMouthEnvelope, FinalThirdShootingQualitySummary,
     FinalThirdQualityScale, FinalThirdShotData, FinalThirdShotEnvelope, FinalThirdShotZone,
     FinalThirdZoneFieldStates,
 )
@@ -2294,6 +2295,7 @@ FINAL_THIRD_COMPETITION_UNAVAILABLE_REASON = "competition_scoped_shot_event_snap
 FINAL_THIRD_QUALITY_FORMULA = "avg-xgot-minus-avg-xg-v1"
 FINAL_THIRD_EFFECTIVE_CONVERSION_FORMULA = "effective-on-target-plus-goal-divided-by-shots-v2"
 FINAL_THIRD_EFFECTIVE_COUNT_FORMULA = "status-goal-or-on-target-v2"
+FINAL_THIRD_SHOOTING_QUALITY_FORMULA = "sum-xgot-minus-sum-xg-v1"
 GOAL_MOUTH_WIDTH_PITCH_PCT = 7.32 / 68.0 * 100.0
 GOAL_MOUTH_CROSSBAR_METERS = 2.44
 FINAL_THIRD_EUROPE_COMPETITIONS = (
@@ -2376,6 +2378,45 @@ def _final_third_quality_values(point: ShotmapPoint) -> tuple[float, float] | No
     return point.xg, point.xgot
 
 
+def _final_third_shooting_quality_summary(
+    points: list[ShotmapPoint], *, source_partial_reason: str | None = None,
+    unavailable_reason: str | None = None,
+) -> FinalThirdShootingQualitySummary:
+    """Return the caption value from the same source-event eligibility as zone quality.
+
+    This is deliberately server-owned: clients receive a total and never sum
+    xG/xGOT from the per-shot display array.
+    """
+    if unavailable_reason is not None:
+        return FinalThirdShootingQualitySummary(
+            totalShotCount=None, eligibleShotCount=None, xgTotal=None, xgotTotal=None,
+            xgotMinusXg=None, state="unavailable", reason=unavailable_reason, source=None,
+        )
+    total = len(points)
+    eligible = [value for point in points if (value := _final_third_quality_values(point)) is not None]
+    missing = total - len(eligible)
+    if not eligible and total:
+        return FinalThirdShootingQualitySummary(
+            totalShotCount=total, eligibleShotCount=0, xgTotal=None, xgotTotal=None,
+            xgotMinusXg=None, state="unavailable",
+            reason="xgot_or_xg_unavailable_for_all_front_two_shots",
+            source=FINAL_THIRD_SOURCE,
+        )
+    xg_total = round(sum(xg for xg, _ in eligible), 4)
+    xgot_total = round(sum(xgot for _, xgot in eligible), 4)
+    delta = round(xgot_total - xg_total, 4)
+    reason = source_partial_reason
+    if missing:
+        missing_reason = f"xgot_or_xg_unavailable_for_{missing}_front_two_shots"
+        reason = f"{reason};{missing_reason}" if reason else missing_reason
+    return FinalThirdShootingQualitySummary(
+        totalShotCount=total, eligibleShotCount=len(eligible), xgTotal=xg_total,
+        xgotTotal=xgot_total, xgotMinusXg=delta,
+        state="partial" if reason else "observed", reason=reason,
+        source=FINAL_THIRD_SOURCE,
+    )
+
+
 def _final_third_snapshot_identity(heatmap_key: str | None, raw: object, occurrence: int) -> str:
     """Return a collision-resistant identity for legacy ID-less static records.
 
@@ -2452,10 +2493,11 @@ def _build_final_third_shot_map_cached(
     player_id: int, season: str, mode: str, scope: int, competition: str,
     snapshot_revision: tuple[int, int] | None,
     conversion_version: str = "goals-v1",
-) -> FinalThirdShotEnvelope | FinalThirdEffectiveShotEnvelope | None:
+) -> FinalThirdShotEnvelope | FinalThirdEffectiveShotEnvelope | FinalThirdGoalMouthEnvelope | None:
     """Aggregate one immutable shotmap snapshot without any provider request."""
     del snapshot_revision  # cache invalidation input; the store owns file access.
-    effective_conversion = conversion_version == "effective-shot-v2"
+    goal_mouth_v3 = conversion_version == "goal-mouth-v3"
+    effective_conversion = conversion_version in {"effective-shot-v2", "goal-mouth-v3"}
     player = find_v2_player(player_id, season, mode, scope, competition)
     if player is None:
         return None
@@ -2470,9 +2512,7 @@ def _build_final_third_shot_map_cached(
     if not snapshots:
         unavailable_zones = _final_third_unavailable_zones(unavailable_reason)
         if effective_conversion:
-            return FinalThirdEffectiveShotEnvelope(
-                context=context,
-                data=FinalThirdEffectiveShotData(
+            effective_data = dict(
                     available=False, completeness="unavailable", reason=unavailable_reason,
                     qualityScale=FinalThirdQualityScale(),
                     markerSizeScale=FinalThirdMarkerSizeScale(),
@@ -2490,8 +2530,18 @@ def _build_final_third_shot_map_cached(
                         },
                     }) for zone in unavailable_zones],
                     shots=[], endpointUnavailableCount=0, endpointUnavailableShotIds=[], partialCoverage=[],
-                ),
             )
+            if goal_mouth_v3:
+                return FinalThirdGoalMouthEnvelope(
+                    context=context,
+                    data=FinalThirdGoalMouthData(
+                        **effective_data,
+                        shootingQuality=_final_third_shooting_quality_summary(
+                            [], unavailable_reason=unavailable_reason,
+                        ),
+                    ),
+                )
+            return FinalThirdEffectiveShotEnvelope(context=context, data=FinalThirdEffectiveShotData(**effective_data))
         return FinalThirdShotEnvelope(
             context=context,
             data=FinalThirdShotData(
@@ -2676,17 +2726,26 @@ def _build_final_third_shot_map_cached(
     completeness = "partial" if coverage else "complete"
     endpoint_unavailable_ids = [shot.shotId for shot in shots if not shot.endpointAvailable]
     if effective_conversion:
-        return FinalThirdEffectiveShotEnvelope(
-            context=context,
-            data=FinalThirdEffectiveShotData(
+        effective_data = dict(
                 available=True, completeness=completeness, reason=None,
                 qualityScale=FinalThirdQualityScale(),
                 markerSizeScale=FinalThirdMarkerSizeScale(),
                 goalMouthCoordinates=FinalThirdGoalMouthCoordinates(), zones=zones, shots=shots,
                 endpointUnavailableCount=len(endpoint_unavailable_ids),
                 endpointUnavailableShotIds=endpoint_unavailable_ids, partialCoverage=coverage,
-            ),
         )
+        if goal_mouth_v3:
+            all_points = [point for zone in zone_points.values() for point in zone]
+            return FinalThirdGoalMouthEnvelope(
+                context=context,
+                data=FinalThirdGoalMouthData(
+                    **effective_data,
+                    shootingQuality=_final_third_shooting_quality_summary(
+                        all_points, source_partial_reason=source_partial_reason,
+                    ),
+                ),
+            )
+        return FinalThirdEffectiveShotEnvelope(context=context, data=FinalThirdEffectiveShotData(**effective_data))
     return FinalThirdShotEnvelope(
         context=context,
         data=FinalThirdShotData(
@@ -2703,7 +2762,7 @@ def _build_final_third_shot_map_cached(
 def build_final_third_shot_map(
     player_id: int, season: str, mode: str, scope: int, competition: str,
     conversion_version: str = "goals-v1",
-) -> FinalThirdShotEnvelope | FinalThirdEffectiveShotEnvelope | None:
+) -> FinalThirdShotEnvelope | FinalThirdEffectiveShotEnvelope | FinalThirdGoalMouthEnvelope | None:
     """Return only snapshot-backed data and invalidate aggregates on source refresh."""
     return _build_final_third_shot_map_cached(
         player_id, season, mode, scope, competition, shotmap_snapshot_revision(season), conversion_version,
