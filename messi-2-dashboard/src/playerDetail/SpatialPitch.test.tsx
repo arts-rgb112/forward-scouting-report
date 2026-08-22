@@ -58,6 +58,42 @@ describe("perspective spatial pitch", () => {
     expect(container.querySelector("[data-shot-trajectory]")).not.toBeInTheDocument();
   });
 
+  it("projects authoritative goal-mouth and blocked trajectories and exposes their direction accessibly", () => {
+    const shots = [
+      { x: 80, y: 20, outcome: "goal" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 52, endZMeters: 1.2, source: "fotmob" as const } },
+      { x: 70, y: 60, outcome: "blocked" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "blocked" as const, endX: 78, endY: 56, endZMeters: null, source: "fotmob" as const } },
+      { x: 75, y: 40, outcome: "off_target" as const, trajectory: null },
+    ];
+    const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
+    const paths = [...container.querySelectorAll("[data-shot-trajectory]")];
+    expect(paths).toHaveLength(2);
+    const goalPath = container.querySelector('[data-trajectory-kind="goal_mouth"]')!;
+    const blockedPath = container.querySelector('[data-trajectory-kind="blocked"]')!;
+    const goalGround = projectPerspective({ x: 100, y: 52 });
+    const blockedEnd = projectPerspective({ x: 78, y: 56 });
+    expect(goalPath).toHaveAttribute("data-end-ground-x", String(goalGround.x));
+    expect(goalPath).toHaveAttribute("data-end-ground-y", String(goalGround.y));
+    expect(Number(goalPath.getAttribute("data-end-render-y"))).toBeLessThan(goalGround.y);
+    expect(blockedPath).toHaveAttribute("data-end-render-x", String(blockedEnd.x));
+    expect(blockedPath).toHaveAttribute("data-end-render-y", String(blockedEnd.y));
+    expect(blockedPath).toHaveAttribute("stroke-dasharray", "4 4");
+    expect(container.querySelector('[data-shot-marker][data-shot-outcome="goal"]')).toHaveAccessibleName(/Goal-mouth trajectory to 100\.0, 52\.0, height 1\.20 metres/);
+    expect(screen.getByRole("list", { name: "Authoritative shot events" })).toHaveTextContent(/blocked trajectory to \(78\.0, 56\.0\)/);
+  });
+
+  it("filters matching trajectory paths and keeps the exact 2D fallback marker-only", () => {
+    const shots = [
+      { x: 80, y: 20, outcome: "goal" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 52, endZMeters: 1.2, source: "fotmob" as const } },
+      { x: 70, y: 60, outcome: "blocked" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "blocked" as const, endX: 78, endY: 56, endZMeters: null, source: "fotmob" as const } },
+    ];
+    const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
+    fireEvent.click(screen.getByRole("button", { name: /Goals, 1 shots/ }), { detail: 0 });
+    expect(container.querySelector('[data-trajectory-kind="goal_mouth"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-trajectory-kind="blocked"]')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "2D plan" }));
+    expect(container.querySelector("[data-shot-trajectory]")).not.toBeInTheDocument();
+  });
+
   it("uses one projection for populated heat and shot source coordinates", () => {
     const point = { x: 44, y: 21.82 };
     const analysis = analysisWith({ heatmapPointCount: 1, heatmapPoints: [point], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ ...point, outcome: "goal", xg: .72, xgot: .84 }] });

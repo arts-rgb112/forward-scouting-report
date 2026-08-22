@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"; import { adaptAnalysis, adaptEnvelope } from "./adapter"; import { parsePlayersEnvelope, playerDetailEnvelopeSchema, playerDtoSchema, playerSummaryEnvelopeSchema } from "./contracts";
+import { describe, expect, it } from "vitest"; import shotmapTrajectoryV1 from "../test/fixtures/shotmapTrajectoryV1.json"; import { adaptAnalysis, adaptEnvelope } from "./adapter"; import { parsePlayersEnvelope, playerDetailEnvelopeSchema, playerDtoSchema, playerSummaryEnvelopeSchema } from "./contracts";
 const asset = { id: 1, name: "Asset", icon: null }; const player = { id: 1, rank: 3, name: "Player", position: "CF", archetype: "Type A", age: null, minutes: 1000, tier: { code: "iron", level: 5, label: "Iron V" }, score: 70, face: null, nation: null, league: asset, club: asset, stats: { outsideShot: 1, boxThreat: 2, dangerZone: 3, aerial: 4, groundDuel: 5, spaceControl: 6 } }; const envelope = { data: [player], meta: { schemaVersion: "1.0.0", season: "2025/2026", scope: 7, population: 1, returned: 1, generatedAt: "2026-08-10T12:00:00+09:00", source: "messi-static-cohort" } };
 describe("strict v1 contract", () => { it("accepts nullable fields and all six sectors", () => expect(parsePlayersEnvelope(envelope, { season: "2025/2026", scope: 7 }).data[0].tier.level).toBe(5)); it("rejects extra and old metric keys", () => expect(() => parsePlayersEnvelope({ ...envelope, data: [{ ...player, stats: { ...player.stats, pressing: 10 } }] }, { season: "2025/2026", scope: 7 })).toThrow()); it("rejects request metadata mismatch", () => expect(() => parsePlayersEnvelope(envelope, { season: "2024/2025", scope: 7 })).toThrow()); it("rejects duplicate ranks", () => expect(() => parsePlayersEnvelope({ ...envelope, data: [player, { ...player, id: 2 }], meta: { ...envelope.meta, returned: 2, population: 2 } }, { season: "2025/2026", scope: 7 })).toThrow()); it("rejects non-HTTPS assets", () => expect(() => parsePlayersEnvelope({ ...envelope, data: [{ ...player, face: "http://images.test/p.png" }] }, { season: "2025/2026", scope: 7 })).toThrow()); });
 
@@ -41,6 +41,34 @@ describe("detail spatial contract", () => {
   it("accepts a valid unavailable snapshot and an available zero-shot snapshot", () => {
     expect(playerDetailEnvelopeSchema.parse(detail({ ...validSpatial, shotmapPointCount: 0, shotmapPoints: [], shotmapSnapshotAvailable: false })).data.analysis?.spatial.shotmapSnapshotAvailable).toBe(false);
     expect(playerDetailEnvelopeSchema.parse(detail({ ...validSpatial, shotmapPointCount: 0, shotmapPoints: [], shotmapSnapshotAvailable: true })).data.analysis?.spatial.shotmapPoints).toEqual([]);
+  });
+
+  it("accepts legacy, null, goal-mouth, and blocked trajectory variants and deep-clones source trajectories", () => {
+    const goalTrajectory = { schemaVersion: "shotmap-trajectory-v1", endpointKind: "goal_mouth", endX: 100, endY: 48, endZMeters: 1.4, source: "fotmob" };
+    const blockedTrajectory = { schemaVersion: "shotmap-trajectory-v1", endpointKind: "blocked", endX: 78, endY: 43, endZMeters: null, source: "fotmob" };
+    expect(playerDetailEnvelopeSchema.safeParse(detail()).success).toBe(true);
+    expect(playerDetailEnvelopeSchema.safeParse(detail({ ...validSpatial, shotmapPoints: [{ ...validSpatial.shotmapPoints[0], trajectory: null }] })).success).toBe(true);
+    const parsedGoal = playerDetailEnvelopeSchema.parse(detail({ ...validSpatial, shotmapPoints: [{ ...validSpatial.shotmapPoints[0], trajectory: goalTrajectory }] }));
+    const cloned = adaptAnalysis(parsedGoal.data.analysis!);
+    expect(cloned.spatial.shotmapPoints[0].trajectory).toEqual(goalTrajectory);
+    expect(cloned.spatial.shotmapPoints[0].trajectory).not.toBe(parsedGoal.data.analysis!.spatial.shotmapPoints[0].trajectory);
+    expect(playerDetailEnvelopeSchema.safeParse(detail({ ...validSpatial, shotmapPoints: [{ x: 70, y: 40, outcome: "blocked", trajectory: blockedTrajectory }] })).success).toBe(true);
+  });
+
+  it("accepts the authoritative backend shotmap-trajectory-v1 fixture unchanged", () => {
+    const parsed = playerDetailEnvelopeSchema.parse(detail({ ...validSpatial, shotmapPointCount: shotmapTrajectoryV1.length, shotmapPoints: shotmapTrajectoryV1 }));
+    expect(parsed.data.analysis?.spatial.shotmapPoints).toEqual(shotmapTrajectoryV1);
+  });
+
+  it.each([
+    ["trajectory extra field", { schemaVersion: "shotmap-trajectory-v1", endpointKind: "goal_mouth", endX: 100, endY: 50, endZMeters: 1, source: "fotmob", extra: true }, "goal"],
+    ["trajectory coordinate range", { schemaVersion: "shotmap-trajectory-v1", endpointKind: "goal_mouth", endX: 100, endY: 101, endZMeters: 1, source: "fotmob" }, "goal"],
+    ["goal semantic endpoint", { schemaVersion: "shotmap-trajectory-v1", endpointKind: "blocked", endX: 80, endY: 50, endZMeters: null, source: "fotmob" }, "goal"],
+    ["goal-mouth endX", { schemaVersion: "shotmap-trajectory-v1", endpointKind: "goal_mouth", endX: 99, endY: 50, endZMeters: 1, source: "fotmob" }, "on_target"],
+    ["blocked semantic endpoint", { schemaVersion: "shotmap-trajectory-v1", endpointKind: "goal_mouth", endX: 100, endY: 50, endZMeters: 1, source: "fotmob" }, "blocked"],
+    ["blocked height", { schemaVersion: "shotmap-trajectory-v1", endpointKind: "blocked", endX: 80, endY: 50, endZMeters: 0, source: "fotmob" }, "blocked"],
+  ])("rejects malformed %s", (_label, trajectory, outcome) => {
+    expect(playerDetailEnvelopeSchema.safeParse(detail({ ...validSpatial, shotmapPoints: [{ x: 70, y: 40, outcome, trajectory }] })).success).toBe(false);
   });
 
   it.each([

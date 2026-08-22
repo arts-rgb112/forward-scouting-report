@@ -16,15 +16,23 @@ export const outcomePresentation: Record<ShotOutcome, { label: string; plural: s
 const singleClickDelayMs = 350;
 const validCoordinate = (value: number) => Number.isFinite(value) && value >= 0 && value <= 100;
 const isOutcome = (value: unknown): value is ShotOutcome => typeof value === "string" && (outcomeOrder as readonly string[]).includes(value);
-export const validShot = (shot: ShotmapPoint) => validCoordinate(shot.x) && validCoordinate(shot.y) && isOutcome(shot.outcome);
+const validTrajectory = (shot: ShotmapPoint) => {
+  const trajectory = shot.trajectory;
+  if (trajectory == null) return true;
+  if (trajectory.schemaVersion !== "shotmap-trajectory-v1" || trajectory.source !== "fotmob" || !validCoordinate(trajectory.endX) || !validCoordinate(trajectory.endY)) return false;
+  if (shot.outcome === "blocked") return trajectory.endpointKind === "blocked" && trajectory.endZMeters === null;
+  return trajectory.endpointKind === "goal_mouth" && trajectory.endX === 100 && (trajectory.endZMeters === null || Number.isFinite(trajectory.endZMeters) && trajectory.endZMeters >= 0);
+};
+export const validShot = (shot: ShotmapPoint) => validCoordinate(shot.x) && validCoordinate(shot.y) && isOutcome(shot.outcome) && validTrajectory(shot);
 export const shotIntegrity = (spatial: Spatial | undefined) => Boolean(spatial?.shotmapSnapshotAvailable && spatial.shotmapPointCount === spatial.shotmapPoints.length && spatial.shotmapPoints.every(validShot));
 export const formatShotMetric = (value: number | null | undefined) => Number.isFinite(value) ? Number(value).toFixed(2) : "—";
-export const shotMarkerLabel = (shot: ShotmapPoint) => `${outcomePresentation[shot.outcome].label}. xG ${formatShotMetric(shot.xg)}. xGOT ${formatShotMetric(shot.xgot)}.`;
+const trajectorySummary = (shot: ShotmapPoint) => !shot.trajectory ? "No trajectory available." : shot.trajectory.endpointKind === "blocked" ? `Blocked trajectory to ${shot.trajectory.endX.toFixed(1)}, ${shot.trajectory.endY.toFixed(1)}.` : `Goal-mouth trajectory to ${shot.trajectory.endX.toFixed(1)}, ${shot.trajectory.endY.toFixed(1)}, height ${shot.trajectory.endZMeters == null ? "unavailable" : `${shot.trajectory.endZMeters.toFixed(2)} metres`}.`;
+export const shotMarkerLabel = (shot: ShotmapPoint) => `${outcomePresentation[shot.outcome].label}. xG ${formatShotMetric(shot.xg)}. xGOT ${formatShotMetric(shot.xgot)}. ${trajectorySummary(shot)}`;
 export const outcomeSummary = (outcomes: readonly ShotOutcome[]) => outcomes.length ? outcomes.map((outcome) => outcomePresentation[outcome].plural).join(", ") : "none";
 
 function snapshotIdentity(contextIdentity: string, spatial: Spatial | undefined) {
   if (!spatial) return `${contextIdentity}|no-spatial`;
-  return `${contextIdentity}|${spatial.shotmapSnapshotAvailable}|${spatial.shotmapPointCount}|${spatial.shotmapPoints.map((shot) => `${shot.x},${shot.y},${shot.outcome},${shot.xg ?? "—"},${shot.xgot ?? "—"}`).join(";")}`;
+  return `${contextIdentity}|${spatial.shotmapSnapshotAvailable}|${spatial.shotmapPointCount}|${spatial.shotmapPoints.map((shot) => `${shot.x},${shot.y},${shot.outcome},${shot.xg ?? "—"},${shot.xgot ?? "—"},${shot.trajectory ? `${shot.trajectory.endpointKind},${shot.trajectory.endX},${shot.trajectory.endY},${shot.trajectory.endZMeters ?? "—"}` : "no-trajectory"}`).join(";")}`;
 }
 
 export function useShotOutcomeVisibility(spatial: Spatial | undefined, contextIdentity = "") {
