@@ -8,10 +8,10 @@ const value = (query: URLSearchParams, names: string[], required = false): strin
 const only = (query: URLSearchParams, keys: string[]) => [...query.keys()].every((key) => keys.includes(key));
 
 function side(query: URLSearchParams, prefix: "left" | "right"): CompareSide | null {
-  const playerRaw = value(query, [`${prefix}_player`, `${prefix}PlayerId`], true); const seasonRaw = value(query, [`${prefix}_season`, `${prefix}Season`], true); const mode = value(query, [`${prefix}_mode`, `${prefix}Mode`], true); const taxonomyRaw = value(query, [`${prefix}_taxonomy`, `${prefix}Taxonomy`]);
-  const scopeRaw = value(query, [`${prefix}_scope`, `${prefix}Scope`]); const competitionRaw = value(query, [`${prefix}_competition`, `${prefix}Competition`]); const taxonomy = taxonomyRaw ?? "legacy-v1"; const competition = competitionRaw ?? "all";
+  const playerRaw = value(query, [`${prefix}_player`], true); const seasonRaw = value(query, [`${prefix}_season`], true); const mode = value(query, [`${prefix}_mode`], true);
+  const scopeRaw = value(query, [`${prefix}_scope`]); const competitionRaw = value(query, [`${prefix}_competition`]); const taxonomy = "legacy-v1"; const competition = competitionRaw ?? "all";
   const playerId = Number(playerRaw); const contextSeason = season(seasonRaw ?? null);
-  if (playerRaw === undefined || seasonRaw === undefined || mode === undefined || taxonomyRaw === undefined || scopeRaw === undefined || competitionRaw === undefined || !contextSeason || !Number.isSafeInteger(playerId) || playerId <= 0 || !["legacy-v1", "duel-press-v1"].includes(taxonomy)) return null;
+  if (playerRaw === undefined || seasonRaw === undefined || mode === undefined || scopeRaw === undefined || competitionRaw === undefined || !contextSeason || !Number.isSafeInteger(playerId) || playerId <= 0) return null;
   if (mode === "europe") return scopeRaw === null && ["all", "ucl", "uel", "uecl"].includes(competition) ? { playerId, taxonomy: taxonomy as CompareSide["taxonomy"], context: { season: contextSeason, mode, scope: null, competition: competition as "all" | "ucl" | "uel" | "uecl" } } : null;
   const scope = Number(scopeRaw); return mode === "league" && [3, 5, 7, 8].includes(scope) && competition === "all" ? { playerId, taxonomy: taxonomy as CompareSide["taxonomy"], context: { season: contextSeason, mode, scope: scope as 3 | 5 | 7 | 8, competition: "all" } } : null;
 }
@@ -23,7 +23,7 @@ export function legacyRootAdapter(search: string): string | null {
   const page = pageValues[0];
   if (page === "about") return only(query, ["page"]) ? "/about/messi" : rootRecovery;
   if (page === "compare") {
-    const allowed = ["page", ...["left", "right"].flatMap((prefix) => [`${prefix}_player`, `${prefix}PlayerId`, `${prefix}_season`, `${prefix}Season`, `${prefix}_mode`, `${prefix}Mode`, `${prefix}_taxonomy`, `${prefix}Taxonomy`, `${prefix}_scope`, `${prefix}Scope`, `${prefix}_competition`, `${prefix}Competition`])];
+    const allowed = ["page", ...["left", "right"].flatMap((prefix) => [`${prefix}_player`, `${prefix}_season`, `${prefix}_mode`, `${prefix}_scope`, `${prefix}_competition`])];
     if (!only(query, allowed)) return compareRecovery;
     const left = side(query, "left"); const right = side(query, "right"); return left && right ? duelPressCompareHref(left, right) : compareRecovery;
   }
