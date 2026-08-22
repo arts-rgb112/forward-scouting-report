@@ -1,0 +1,7 @@
+import { describe, expect, it } from "vitest";
+import { finalThirdShotMapEnvelopeSchema } from "./finalThirdShotMapContracts";
+import { finalThirdShotMapFixture } from "../test/fixtures/finalThirdShotMap";
+describe("final-third v1 contract", () => {
+  it("accepts canonical ordering and preserves observed zero nulls", () => { const parsed = finalThirdShotMapEnvelopeSchema.parse(finalThirdShotMapFixture); expect(parsed.data.zones.map((zone) => zone.zoneId)).toEqual(["depth6_lane1", "depth6_lane2", "depth6_lane3", "depth6_lane4", "depth6_lane5", "depth5_lane1", "depth5_lane2", "depth5_lane3", "depth5_lane4", "depth5_lane5"]); expect(parsed.data.zones[0].conversionRatePct).toBeNull(); });
+  it("fails closed on unknown fields, wrong version, inferred endpoints, and reordered tiles", () => { expect(finalThirdShotMapEnvelopeSchema.safeParse({ ...finalThirdShotMapFixture, extra: true }).success).toBe(false); expect(finalThirdShotMapEnvelopeSchema.safeParse({ ...finalThirdShotMapFixture, schemaVersion: "2.0.0" }).success).toBe(false); const inferred = structuredClone(finalThirdShotMapFixture); inferred.data.shots[1].goalMouthY = 0 as never; expect(finalThirdShotMapEnvelopeSchema.safeParse(inferred).success).toBe(false); const reordered = structuredClone(finalThirdShotMapFixture); [reordered.data.zones[0], reordered.data.zones[1]] = [reordered.data.zones[1], reordered.data.zones[0]]; expect(finalThirdShotMapEnvelopeSchema.safeParse(reordered).success).toBe(false); });
+});

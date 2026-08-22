@@ -43,15 +43,25 @@ export const LEGACY_POSITIONAL_SEGMENTS = [
   { axis: "lane", boundary: 100, start: { x: 0, y: 100 }, end: { x: 100, y: 100 } },
 ] as const;
 
-type PitchPoint = { x: number; y: number };
-type ScreenPoint = { x: number; y: number };
+export type PitchPoint = { x: number; y: number };
+export type ScreenPoint = { x: number; y: number };
 type Projection = (point: PitchPoint) => ScreenPoint;
 type ViewMode = "perspective" | "plan";
 type ZoomLevel = 1 | 2 | 3;
 type Viewport = { x: number; y: number };
 type DensityMeshCell = { index: number; row: number; column: number; normalized: number; fill: string; fillOpacity: number; d: string };
 
-const BASE_VIEWPORT = { width: 1000, height: 650 } as const;
+/** Shared native SVG plan dimensions for player-detail companion charts. */
+export const SPATIAL_PITCH_VIEWBOX = { width: 1000, height: 650 } as const;
+/** Shared matrix translation and crop bounds for vertical companion views of the plan pitch. */
+export const PLAN_VERTICAL_TRANSFORM_Y = 1000;
+export const finalThirdPlanCrop = () => {
+  const opponentEnd = projectPlan({ x: 100, y: 50 }).x;
+  const depth5Boundary = projectPlan({ x: POSITIONAL_DEPTH_BOUNDARIES[4], y: 50 }).x;
+  const laneNear = projectPlan({ x: 50, y: 0 }).y, laneFar = projectPlan({ x: 50, y: 100 }).y;
+  return { x: Math.min(laneNear, laneFar), y: PLAN_VERTICAL_TRANSFORM_Y - opponentEnd, width: Math.abs(laneFar - laneNear), height: opponentEnd - depth5Boundary };
+};
+const BASE_VIEWPORT = SPATIAL_PITCH_VIEWBOX;
 const EMPTY_HEAT: PitchPoint[] = [];
 
 const clamp = (value: number) => Math.min(100, Math.max(0, value));
@@ -105,7 +115,7 @@ function projectedCircle(projection: Projection, center: PitchPoint, radiusX: nu
   return polygonPath(projection, points);
 }
 
-function PitchMarkings({ projection }: { projection: Projection }) {
+export function PitchMarkings({ projection }: { projection: Projection }) {
   const sixYardBoxes = [
     [{ x: 0, y: SIX_YARD_BOX_Y[0] }, { x: 5.5, y: SIX_YARD_BOX_Y[0] }, { x: 5.5, y: SIX_YARD_BOX_Y[1] }, { x: 0, y: SIX_YARD_BOX_Y[1] }],
     [{ x: 94.5, y: SIX_YARD_BOX_Y[0] }, { x: 100, y: SIX_YARD_BOX_Y[0] }, { x: 100, y: SIX_YARD_BOX_Y[1] }, { x: 94.5, y: SIX_YARD_BOX_Y[1] }],
@@ -117,7 +127,7 @@ function PitchMarkings({ projection }: { projection: Projection }) {
   </g>;
 }
 
-function PositionalGrid({ projection }: { projection: Projection }) {
+export function PositionalGrid({ projection }: { projection: Projection }) {
   return <g data-layer="positional-grid">
     <g fill="none" stroke="#fb923c" strokeOpacity=".92" strokeWidth="1.35" vectorEffect="non-scaling-stroke">
       {LEGACY_POSITIONAL_SEGMENTS.map((segment, index) => <path key={`${segment.axis}-${segment.boundary}-${index}`} data-grid-segment={index} data-grid-axis={segment.axis} data-boundary={segment.boundary} data-start={`${segment.start.x},${segment.start.y}`} data-end={`${segment.end.x},${segment.end.y}`} d={pathBetween(projection, segment.start, segment.end)} />)}
@@ -125,7 +135,7 @@ function PositionalGrid({ projection }: { projection: Projection }) {
   </g>;
 }
 
-function GoalFrames({ projection }: { projection: Projection }) {
+export function GoalFrames({ projection }: { projection: Projection }) {
   return <g data-layer="goals" fill="none" stroke="#f8fafc" strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke">
     {([0, 100] as const).map((end) => {
       const near = projection({ x: end, y: GOAL_POST_Y[0] });
@@ -140,6 +150,13 @@ function GoalFrames({ projection }: { projection: Projection }) {
       </g>;
     })}
   </g>;
+}
+
+/** Shared, unmodified 1000×650 plan primitives. Companion charts may crop/transform this group only. */
+export function PlanPitchGeometry({ geometryId = "shared-plan-pitch" }: { geometryId?: string }) {
+  const projection = projectPlan;
+  const pitchShape = polygonPath(projection, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
+  return <g data-shared-plan-pitch={geometryId}><defs><linearGradient id={`${geometryId}-grass`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#0f6f42"/><stop offset="1" stopColor="#06432e"/></linearGradient></defs><path data-shared-plan-boundary d={pitchShape} fill={`url(#${geometryId}-grass)`} stroke="#143d2f" strokeWidth="9"/><GoalFrames projection={projection}/><PitchMarkings projection={projection}/><PositionalGrid projection={projection}/></g>;
 }
 
 function prepareDensityMesh(normalized: Float64Array, projection: Projection): DensityMeshCell[] {
