@@ -22,9 +22,9 @@ describe("native player detail panels", () => {
     render(<TacticalSummary player={player} analysis={analysis} quality={{ kind: "idle" }} />);
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
   });
-  it("uses one horizontal pitch SVG without synthetic or focusable shot markers", () => {
+  it("uses the calibrated legacy pitch image plus noninteractive density/event layers", () => {
     render(<SpatialPitch analysis={analysis} />); const section = screen.getByRole("region", { name: "Spatial pitch" });
-    expect(within(section).getByRole("img")).toHaveAttribute("viewBox", "0 0 141 100"); expect(section.querySelectorAll("svg")).toHaveLength(1); expect(section.querySelectorAll("[tabindex]")).toHaveLength(0);
+    expect(within(section).getByRole("img")).toHaveAttribute("viewBox", "-4 0 108 100"); expect(section.querySelector('[data-layer="legacy-pitch"] image')).toHaveAttribute("href", "/assets/positional-grid-pitch.webp"); expect(section.querySelectorAll("svg")).toHaveLength(2); expect(section.querySelector("canvas[data-layer=\"legacy-density\"]")).toBeInTheDocument(); expect(section.querySelectorAll("[tabindex]")).toHaveLength(0);
   });
   it("renders a six-sector, server-readout board with accessible non-fabricated score bars", () => {
     render(<PercentileProfile player={player} analysis={analysis} quality={{ kind: "idle" }} />); const section = screen.getByRole("region", { name: "Percentile profile" });

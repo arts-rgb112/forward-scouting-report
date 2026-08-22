@@ -1,0 +1,96 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { LegacySpatialPitch } from "./LegacySpatialPitch";
+
+const core = { available: true, definitionVersion: "continuous-hdr-50-v1", targetDensityPct: 50, achievedDensityPct: 50, coreAreaPct: 5, densityThreshold: .1, thresholdOfPeak: .5, gridColumns: 32, gridRows: 22 };
+const baseSpatial = { available: true, source: "messi-static-cohort", heatmapPointCount: 2, heatmapPoints: [{ x: 10, y: 20 }, { x: 90, y: 80 }], shotmapSnapshotAvailable: true, shotmapPointCount: 4, shotmapPoints: [{ x: 10, y: 20, outcome: "goal" }, { x: 20, y: 30, outcome: "on_target" }, { x: 30, y: 40, outcome: "off_target" }, { x: 40, y: 50, outcome: "blocked" }], continuousCore: core, inBoxRatio: null, outBoxFinalRatio: null, midThirdRatio: null, finalThirdRatio: null, ccaAreaPct: null, laneRatios: [], depthRatios: [], positionalGrid: [], trueCore: { available: false, definitionVersion: "true-core-30-zone-v1", targetDensityPct: 50, achievedDensityPct: 0, coreAreaPct: 0, zoneIds: [], zones: [] }, dangerZoneDensity: null, deepBoxZoneScore: null };
+const analysis = (spatial: unknown) => ({ spatial }) as never;
+
+const clearRect = vi.fn();
+const putImageData = vi.fn();
+const resizeCallbacks: ResizeObserverCallback[] = [];
+const originalResizeObserver = globalThis.ResizeObserver;
+const bounds = (width: number, height: number) => ({ x: 0, y: 0, width, height, top: 0, right: width, bottom: height, left: 0, toJSON: () => ({}) }) as DOMRect;
+
+beforeEach(() => {
+  clearRect.mockReset(); putImageData.mockReset(); resizeCallbacks.length = 0;
+  vi.spyOn(HTMLCanvasElement.prototype, "getBoundingClientRect").mockReturnValue(bounds(108, 70.9));
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({
+    clearRect,
+    createImageData: (width: number, height: number) => ({ width, height, colorSpace: "srgb", data: new Uint8ClampedArray(width * height * 4) }),
+    putImageData,
+  }) as never);
+  Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: 3 });
+  globalThis.ResizeObserver = class {
+    constructor(callback: ResizeObserverCallback) { resizeCallbacks.push(callback); }
+    observe() { /* test spy is the registered callback */ }
+    unobserve() { /* no-op */ }
+    disconnect() { /* no-op */ }
+  } as never;
+});
+
+afterEach(() => {
+  cleanup(); vi.restoreAllMocks();
+  globalThis.ResizeObserver = originalResizeObserver;
+});
+
+function expectCanvasClearedAfter(nextSpatial: unknown) {
+  const view = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
+  const canvas = view.container.querySelector("canvas")!;
+  expect(canvas.width).toBe(216); expect(canvas.height).toBe(142); expect(putImageData).toHaveBeenCalledTimes(1);
+  view.rerender(<LegacySpatialPitch analysis={analysis(nextSpatial)} />);
+  expect(clearRect).toHaveBeenLastCalledWith(0, 0, 216, 142);
+  expect(canvas.width).toBe(0); expect(canvas.height).toBe(0); expect(putImageData).toHaveBeenCalledTimes(1);
+}
+
+describe("LegacySpatialPitch", () => {
+  it("renders one source shot per marker and retains the exact legacy summary/count lines", () => {
+    render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
+    const section = screen.getByRole("region", { name: "Spatial pitch" });
+    expect(within(section).getByText("2 activity points. 4 shots. Goal ◇ · on target ● · off target × · blocked ■.")).toBeInTheDocument();
+    expect(section.querySelectorAll("[data-shot-index]")).toHaveLength(4);
+    expect(section.querySelectorAll('[data-shot-outcome="goal"]')).toHaveLength(1);
+    expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke", "#C044FF");
+    expect(section).toHaveTextContent("Goals 1"); expect(section).toHaveTextContent("On target 1"); expect(section).toHaveTextContent("Off target 1"); expect(section).toHaveTextContent("Blocked 1");
+  });
+
+  it("fails closed on heatmap or shot count integrity mismatches", () => {
+    const { rerender, container } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, heatmapPointCount: 3 })} />);
+    expect(screen.getByText(/Activity heatmap integrity mismatch/)).toBeInTheDocument();
+    rerender(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, shotmapPointCount: 3 })} />);
+    expect(screen.getByText(/Shot snapshot integrity mismatch/)).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(0);
+  });
+
+  it("distinguishes unavailable snapshots from verified zero snapshots", () => {
+    const { rerender } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, available: false, heatmapPointCount: 0, heatmapPoints: [], shotmapSnapshotAvailable: false, shotmapPointCount: 0, shotmapPoints: [] })} />);
+    expect(screen.getByText(/Activity heatmap unavailable.*Shot snapshot unavailable/)).toBeInTheDocument();
+    rerender(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, heatmapPointCount: 0, heatmapPoints: [], shotmapPointCount: 0, shotmapPoints: [] })} />);
+    expect(screen.getByText(/Verified zero activity points.*Verified zero shots/)).toBeInTheDocument();
+  });
+
+  it("clears the painted raster on populated to unavailable transitions", () => {
+    expectCanvasClearedAfter({ ...baseSpatial, available: false, heatmapPointCount: 0, heatmapPoints: [] });
+  });
+
+  it("clears the painted raster on populated to integrity-mismatch transitions", () => {
+    expectCanvasClearedAfter({ ...baseSpatial, heatmapPointCount: 3 });
+  });
+
+  it("clears the painted raster on populated to verified-zero transitions", () => {
+    expectCanvasClearedAfter({ ...baseSpatial, heatmapPointCount: 0, heatmapPoints: [] });
+  });
+
+  it("caps DPR at two and redraws through ResizeObserver using the new responsive dimensions", () => {
+    const rectSpy = vi.spyOn(HTMLCanvasElement.prototype, "getBoundingClientRect");
+    const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
+    const canvas = container.querySelector("canvas")!;
+    expect(canvas.width).toBe(216); expect(canvas.height).toBe(142); expect(resizeCallbacks).toHaveLength(1);
+    rectSpy.mockReturnValue(bounds(54, 35.45));
+    act(() => resizeCallbacks[0]([], {} as ResizeObserver));
+    expect(canvas.width).toBe(108); expect(canvas.height).toBe(71); expect(putImageData).toHaveBeenCalledTimes(2);
+  });
+});

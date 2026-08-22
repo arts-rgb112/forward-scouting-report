@@ -12,6 +12,7 @@ import { TierBadge } from "../dashboard/components/TierBadge";
 import type { DatasetRouteState, Player, PlayerAnalysis, TacticalQuadrant } from "../dashboard/types";
 import { axisDetail, detailMetrics, metricProfile, seasonScoreRows, selectedScore, tacticalCopy, wholeScore } from "./playerDetailViewModel";
 import { BenchmarkPanel, VolumeBenchmarkRadar as ServerVolumeBenchmarkRadar } from "./VolumeBenchmarkRadar";
+import { LegacySpatialPitch } from "./LegacySpatialPitch";
 import { useRatioBenchmark } from "./useRatioBenchmark";
 import { tacticalSummaryEnabled, useTacticalSummary } from "./useTacticalSummary";
 import { useVolumeBenchmark } from "./useVolumeBenchmark";
@@ -107,12 +108,8 @@ export function TacticalSummary({ player, analysis, quadrant, quality, config, d
   </section>;
 }
 
-function shotMarker(point: PlayerAnalysis["spatial"]["shotmapPoints"][number], index: number) { const x = 3 + point.x * 1.35; const y = 3 + point.y * .94; if (point.outcome === "goal") return <path key={index} d={`M${x} ${y - 2}L${x + 2} ${y}L${x} ${y + 2}L${x - 2} ${y}Z`} className="fill-lime-300 stroke-white" />; if (point.outcome === "on_target") return <circle key={index} cx={x} cy={y} r="1.7" className="fill-cyan-300 stroke-zinc-950" />; if (point.outcome === "off_target") return <path key={index} d={`M${x - 1.6} ${y - 1.6}L${x + 1.6} ${y + 1.6}M${x + 1.6} ${y - 1.6}L${x - 1.6} ${y + 1.6}`} className="stroke-orange-300" strokeWidth=".8" />; return <rect key={index} x={x - 1.5} y={y - 1.5} width="3" height="3" className="fill-amber-300 stroke-zinc-300" />; }
-export function SpatialPitch({ analysis }: { analysis?: PlayerAnalysis }) {
-  const spatial = analysis?.spatial; const heatState = !spatial?.available ? "Activity heatmap unavailable" : spatial.heatmapPoints.length ? `${spatial.heatmapPoints.length} activity points` : "Verified zero activity points"; const shotState = !spatial?.shotmapSnapshotAvailable ? "Shot snapshot unavailable" : spatial.shotmapPoints.length ? `${spatial.shotmapPoints.length} shots` : "Verified zero shots";
-  const counts = { goal: 0, on_target: 0, off_target: 0, blocked: 0 }; spatial?.shotmapPoints.forEach((shot) => counts[shot.outcome]++);
-  return <section className={panel} aria-labelledby="spatial-pitch-heading"><h2 id="spatial-pitch-heading" className="text-sm font-black">Spatial pitch</h2><figure className="mt-3"><svg viewBox="0 0 141 100" className="w-full rounded bg-[#063525]" role="img" aria-label={`Horizontal pitch. ${heatState}. ${shotState}.`}><defs><filter id="heat-blur"><feGaussianBlur stdDeviation="3" /></filter></defs><rect x="3" y="3" width="135" height="94" fill="none" stroke="#b5d2bf" strokeWidth=".7"/><line x1="70.5" x2="70.5" y1="3" y2="97" stroke="#b5d2bf" strokeWidth=".7"/><circle cx="70.5" cy="50" r="10" fill="none" stroke="#b5d2bf" strokeWidth=".7"/><rect x="3" y="25" width="17" height="50" fill="none" stroke="#b5d2bf" strokeWidth=".7"/><rect x="121" y="25" width="17" height="50" fill="none" stroke="#b5d2bf" strokeWidth=".7"/>{spatial?.available && spatial.heatmapPoints.map((point, index) => <circle key={index} cx={3 + point.x * 1.35} cy={3 + point.y * .94} r="5" className="fill-cyan-300/25" filter="url(#heat-blur)"/>)}{spatial?.shotmapSnapshotAvailable && spatial.shotmapPoints.map(shotMarker)}</svg><figcaption className="mt-2 text-xs text-zinc-400">{heatState}. {shotState}. Goal ◇ · on target ● · off target × · blocked ■.</figcaption></figure><ul className="mt-2 flex flex-wrap gap-x-3 text-xs text-zinc-400"><li>Goals {counts.goal}</li><li>On target {counts.on_target}</li><li>Off target {counts.off_target}</li><li>Blocked {counts.blocked}</li></ul></section>;
-}
+/** Compatibility export for existing route consumers and tests. */
+export const SpatialPitch = LegacySpatialPitch;
 
 export function PercentileProfile({ player, analysis, quality }: { player: Player; analysis?: PlayerAnalysis; quality: QualityDisplay }) {
   return <section className={`${panel} six-sector-board`} aria-label="Percentile profile"><div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-sm font-black">Six-sector board</h2><p className="text-[10px] uppercase tracking-[0.16em] text-zinc-400">Server score + volume / ratio readouts</p></div><div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-3">{metricProfile(player, analysis, quality).map((metric) => {
