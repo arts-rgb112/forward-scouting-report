@@ -123,6 +123,7 @@ describe("scope-8 direct-route capability gate", () => {
     expect(await screen.findByRole("heading", { name: samplePlayers[0].name })).toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "Duel press detailed stats board" })).toHaveTextContent("상세 스탯 보드");
     expect(screen.queryByRole("region", { name: "Duel and pressing companion" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Duel press detailed stats board" }).closest('[data-layout="detail-board-slot"]')).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
     expect(transport.detailReadouts).toHaveBeenCalledWith(expect.anything(), 1, { season: "2024/2025", mode: "league", scope: 5, competition: "all" }, expect.any(AbortSignal));
   });
@@ -135,6 +136,7 @@ describe("scope-8 direct-route capability gate", () => {
     expect(await screen.findByRole("heading", { name: samplePlayers[0].name })).toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent("detail board unavailable");
     expect(screen.getByRole("region", { name: "Tactical and spatial analysis" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Duel press detailed stats board" }).closest('[data-layout="detail-board-slot"]')).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Aerial duels")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Ground duels")).not.toBeInTheDocument();
@@ -147,6 +149,7 @@ describe("scope-8 direct-route capability gate", () => {
     render(<StaticRoute />);
     expect(await screen.findByRole("heading", { name: samplePlayers[0].name })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Duel press detailed stats board" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("region", { name: "Duel press detailed stats board" }).closest('[data-layout="detail-board-slot"]')).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Aerial duels")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Ground duels")).not.toBeInTheDocument();

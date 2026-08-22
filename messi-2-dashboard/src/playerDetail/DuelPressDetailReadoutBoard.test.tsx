@@ -126,4 +126,35 @@ describe("duel-press detailed stats board", () => {
     expect(categories?.className).not.toContain("overflow-x");
     expect(contexts?.className).not.toContain("overflow-x");
   });
+
+  it("uses a container-safe one/two-column rail layout without viewport xl columns", () => {
+    const { container } = render(<DuelPressDetailReadoutBoard data={presentationFixture()} layout="rail"/>);
+    const categories = container.querySelector('[data-layout="detail-readout-grid"]');
+    const contexts = container.querySelector('[data-layout="auxiliary-measurements"]');
+    expect(categories).toHaveClass("grid-cols-1", "sm:grid-cols-2", "min-w-0");
+    expect(categories?.className).not.toContain("xl:grid-cols-3");
+    expect(contexts).toHaveClass("grid-cols-1", "sm:grid-cols-2", "min-w-0");
+    expect(container.querySelectorAll('[data-card="category"]')).toHaveLength(6);
+    expect(container.querySelectorAll('[data-card="context"]')).toHaveLength(2);
+  });
+
+  it("uses MetricScore badge geometry and shared bands for comparison percentile buttons", () => {
+    const { container } = render(<DuelPressDetailReadoutBoard data={presentationFixture()} layout="rail"/>);
+    const category = within(container.querySelector('[data-card="category"]')!).getAllByRole("button")[0];
+    const row = screen.getByRole("button", { name: /^outsideBoxXgot / });
+    expect(category.firstElementChild).toHaveClass("inline-flex", "min-w-10", "rounded-md", "border", "px-2", "font-mono", "text-[13px]", "font-bold", "h-8", "border-violet-300/45");
+    expect(row.firstElementChild).toHaveClass("inline-flex", "h-8", "border-orange-300/45", "text-orange-100");
+  });
+
+  it("keeps unavailable context core values neutral and opens tooltip by touch click", () => {
+    const { container } = render(<DuelPressDetailReadoutBoard data={presentationFixture()} layout="rail"/>);
+    const unavailable = within(container.querySelectorAll('[data-card="context"]')[1]).getByRole("button");
+    expect(unavailable.firstElementChild).toHaveClass("border-zinc-400/30", "bg-zinc-400/10", "text-zinc-300");
+    expect(unavailable.firstElementChild?.className).not.toContain("border-violet");
+    const touchTarget = screen.getByRole("button", { name: /^outsideBoxShots / });
+    fireEvent.click(touchTarget);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.keyDown(touchTarget, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
 });
