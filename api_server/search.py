@@ -33,4 +33,7 @@ def canonical_search_key(value: str) -> str:
         for character in transliterated
         if not unicodedata.category(character).startswith("M")
     )
-    return " ".join(without_marks.split())
+    # NFKD also decomposes Hangul syllables into Jamo. Recompose the final
+    # key so non-Latin scripts retain their canonical user-visible form while
+    # Latin marks already removed above stay folded.
+    return unicodedata.normalize("NFC", " ".join(without_marks.split()))

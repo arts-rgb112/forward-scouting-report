@@ -89,9 +89,9 @@ def test_normalized_haystack_matches_name_club_and_league_once_per_cohort() -> N
     ("endpoint", "context"),
     [
         ("/api/v2/leaderboards", {"mode": "league", "scope": 8, "competition": "all"}),
-        ("/api/v2/leaderboards", {"mode": "europe", "scope": 8, "competition": "ucl"}),
+        ("/api/v2/leaderboards", {"mode": "europe", "competition": "ucl"}),
         ("/api/v2/leaderboards/duel-press", {"mode": "league", "scope": 8, "competition": "all"}),
-        ("/api/v2/leaderboards/duel-press", {"mode": "europe", "scope": 8, "competition": "ucl"}),
+        ("/api/v2/leaderboards/duel-press", {"mode": "europe", "competition": "ucl"}),
     ],
 )
 def test_ascii_and_accented_queries_have_identical_server_page_results(
