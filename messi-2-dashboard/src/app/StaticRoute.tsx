@@ -6,6 +6,7 @@ import { MessiApiError } from "../api/errors";
 import { fetchComparison, fetchLeaderboardOptions, fetchPlayerDetail, fetchTacticalQuadrant } from "../api/leaderboardsApi";
 import { fetchDuelPressDetail, DuelPressApiError } from "../api/duelPressApi";
 import { leaderboardTaxonomyMode } from "../api/duelPressFeatureGate";
+import { duelPressV2Enabled } from "../api/duelPressV2FeatureGate";
 import type { DuelPressPlayerCore } from "../api/duelPressTypes";
 import { DuelPressDetailMetrics } from "../dashboard/components/DuelPressDetailMetrics";
 import { DataQualityBadge } from "../dashboard/components/DataQualityBadge";
@@ -174,9 +175,11 @@ export function StaticRoute() {
   if (path === "/about/messi") return <Page><FocusTitle>M.E.S.S.I. methodology</FocusTitle><div className="mt-3 space-y-3 text-sm text-zinc-300"><p>Crystal-v2 preserves legacy continuity. Scores, ranks and cohorts are server-authoritative; the browser does not calculate analytics.</p><p>Duel-press-v1 orders outside shot, box threat, danger zone, combined duel, space control and forward press. Combined duel retains ground and aerial evidence; its two contextual indicators are net progression per 90 and shooting luck or goalkeeper impact.</p><p>Source and provenance remain visible. Zero is observed, null is unavailable, and explicit imputed or fallback values are not silently substituted.</p><p>Spatial Pitch is server-provided: 2D/perspective density, the 30-zone model, zoom/pan and source-only shot trajectories. No trajectory is inferred.</p></div><a href="/" className="mt-6 inline-flex min-h-11 items-center text-lime-300 hover:underline">Browse leaderboard</a></Page>;
   if (path === "/compare") return <ContextualCompareRoute config={config} />;
   const playerId = Number(path.split("/")[2]);
-  const duelPressRequested = new URLSearchParams(window.location.search).get("taxonomy") === "duel-press-v1";
+  const taxonomy = new URLSearchParams(window.location.search).get("taxonomy");
+  const duelPressRequested = taxonomy === "duel-press-v1";
   const duelPressEnabled = leaderboardTaxonomyMode(import.meta.env, import.meta.env.MODE) === "duel-press-v1";
-  return <NativePlayerDetailRoute id={playerId} dataset={dataset} config={config} duelPressDetailRequested={duelPressRequested && duelPressEnabled} />;
+  const duelPressV2Requested = duelPressV2Enabled(import.meta.env) && (taxonomy === "duel-press-v2" || taxonomy === "duel-press-v1");
+  return <NativePlayerDetailRoute id={playerId} dataset={dataset} config={config} duelPressDetailRequested={duelPressRequested && duelPressEnabled && !duelPressV2Requested} duelPressV2Requested={duelPressV2Requested} />;
 }
 
 /** A strict taxonomy companion. It never owns or replaces the native player detail route. */

@@ -6,6 +6,8 @@ import { MessiApiError } from "../api/errors";
 import { fetchLeaderboardOptions, fetchPlayerDetail, fetchTacticalQuadrant } from "../api/leaderboardsApi";
 import { fetchDuelPressDetailReadouts } from "../api/duelPressDetailReadoutApi";
 import type { DuelPressDetailReadoutEnvelope } from "../api/duelPressDetailReadoutContracts";
+import { DuelPressV2ApiError, fetchDuelPressV2DetailMetrics } from "../api/duelPressV2Api";
+import type { DuelPressV2DetailMetrics } from "../api/duelPressV2Contracts";
 import type { DuelPressModeContext } from "../api/duelPressTypes";
 import { fetchHistoryLeaderboardOptions, fetchPlayerSummary, type PlayerHistoryEntry } from "../api/playerHistoryApi";
 import { datasetHref } from "../dashboard/datasetRoute";
@@ -20,6 +22,7 @@ import { useRatioBenchmark } from "./useRatioBenchmark";
 import { tacticalSummaryEnabled, useTacticalSummary } from "./useTacticalSummary";
 import { useVolumeBenchmark } from "./useVolumeBenchmark";
 import { DuelPressDetailReadoutBoard, DuelPressDetailReadoutUnavailable } from "./DuelPressDetailReadoutBoard";
+import { DuelPressV2DetailReadoutBoard, DuelPressV2DetailReadoutUnavailable } from "./DuelPressV2DetailReadoutBoard";
 import { FinalThirdShootingMap } from "./FinalThirdShootingMap";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
@@ -157,9 +160,9 @@ export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality,
   </>;
 }
 
-export function PlayerDetailRoute({ id, dataset, config: providedConfig, afterPanels, duelPressDetailRequested = false }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig; afterPanels?: ReactNode; duelPressDetailRequested?: boolean }) {
+export function PlayerDetailRoute({ id, dataset, config: providedConfig, afterPanels, duelPressDetailRequested = false, duelPressV2Requested = false }: { id: number; dataset: DatasetRouteState; config?: MessiApiConfig; afterPanels?: ReactNode; duelPressDetailRequested?: boolean; duelPressV2Requested?: boolean }) {
   let parsedConfig = providedConfig; if (!parsedConfig) try { parsedConfig = parseMessiApiConfig(import.meta.env, import.meta.env.MODE); } catch { /* surfaced below */ }
-  const config = parsedConfig; const scope8 = useScope8(config, dataset); const [detail, setDetail] = useState<{ player: Player; analysis?: PlayerAnalysis }>(); const [quadrant, setQuadrant] = useState<TacticalQuadrant>(); const [quality, setQuality] = useState<QualityDisplay>({ kind: "idle" }); const [error, setError] = useState<"config" | "network" | "not-found">(); const [retry, setRetry] = useState(0); const [readoutRetry, setReadoutRetry] = useState(0); const [readouts, setReadouts] = useState<DuelPressDetailReadoutEnvelope>(); const [readoutError, setReadoutError] = useState<string>(); const readoutGeneration = useRef(0); const titleRef = useRef<HTMLHeadingElement>(null);
+  const config = parsedConfig; const scope8 = useScope8(config, dataset); const [detail, setDetail] = useState<{ player: Player; analysis?: PlayerAnalysis }>(); const [quadrant, setQuadrant] = useState<TacticalQuadrant>(); const [quality, setQuality] = useState<QualityDisplay>({ kind: "idle" }); const [error, setError] = useState<"config" | "network" | "not-found">(); const [retry, setRetry] = useState(0); const [readoutRetry, setReadoutRetry] = useState(0); const [readouts, setReadouts] = useState<DuelPressDetailReadoutEnvelope>(); const [readoutError, setReadoutError] = useState<string>(); const [v2Readouts, setV2Readouts] = useState<DuelPressV2DetailMetrics>(); const [v2ReadoutError, setV2ReadoutError] = useState<string>(); const readoutGeneration = useRef(0); const v2ReadoutGeneration = useRef(0); const titleRef = useRef<HTMLHeadingElement>(null);
   const history = useHistory(config, id, dataset, scope8 === "supported" && Boolean(detail));
   useEffect(() => {
     if (!config || scope8 !== "supported" || !validId(id)) { if (!validId(id)) setError("not-found"); else if (!config) setError("config"); return; }
@@ -180,10 +183,18 @@ export function PlayerDetailRoute({ id, dataset, config: providedConfig, afterPa
     void fetchDuelPressDetailReadouts(config, id, context, controller.signal).then((value) => { if (live()) setReadouts(value); }).catch((cause: unknown) => { if (live()) setReadoutError(cause instanceof Error ? cause.message : "상세 스탯을 불러올 수 없습니다."); });
     return () => controller.abort();
   }, [config, dataset.competition, dataset.mode, dataset.scope, dataset.season, duelPressDetailRequested, id, readoutRetry]);
+  useEffect(() => {
+    if (!duelPressV2Requested) { setV2Readouts(undefined); setV2ReadoutError(undefined); return; }
+    if (!config || !validId(id)) { setV2Readouts(undefined); setV2ReadoutError("v2 상세 스탯 API 설정 또는 선수 식별자가 유효하지 않습니다."); return; }
+    const contextController = new AbortController(); const generation = ++v2ReadoutGeneration.current; const live = () => generation === v2ReadoutGeneration.current && !contextController.signal.aborted;
+    setV2Readouts(undefined); setV2ReadoutError(undefined);
+    void fetchDuelPressV2DetailMetrics(config, id, dataset, contextController.signal).then((value) => { if (live()) setV2Readouts(value); }).catch((cause: unknown) => { if (live()) setV2ReadoutError(cause instanceof DuelPressV2ApiError ? cause.message : "v2 상세 스탯을 불러올 수 없습니다."); });
+    return () => { contextController.abort(); };
+  }, [config, dataset.competition, dataset.mode, dataset.scope, dataset.season, duelPressV2Requested, id, readoutRetry]);
   useEffect(() => { if (detail) titleRef.current?.focus(); }, [detail]);
-  const detailBoard = duelPressDetailRequested ? readouts ? <DuelPressDetailReadoutBoard data={readouts} layout="rail"/> : <DuelPressDetailReadoutUnavailable loading={!readoutError} message={readoutError} onRetry={() => setReadoutRetry((value) => value + 1)}/> : undefined;
+  const detailBoard = duelPressV2Requested ? v2Readouts ? <DuelPressV2DetailReadoutBoard data={v2Readouts} layout="rail"/> : <DuelPressV2DetailReadoutUnavailable loading={!v2ReadoutError} message={v2ReadoutError} onRetry={() => setReadoutRetry((value) => value + 1)}/> : duelPressDetailRequested ? readouts ? <DuelPressDetailReadoutBoard data={readouts} layout="rail"/> : <DuelPressDetailReadoutUnavailable loading={!readoutError} message={readoutError} onRetry={() => setReadoutRetry((value) => value + 1)}/> : undefined;
   const back = datasetHref("/", dataset); if (scope8 === "unsupported") return <main id="main-content" className="mx-auto max-w-[1580px] p-4 text-zinc-100"><h1 tabIndex={-1}>8-league dataset unavailable</h1><p role="alert">8개 리그 데이터 is unavailable for this context.</p><a href={back}>Back to leaderboard</a></main>;
   if (error) return <main id="main-content" className="mx-auto max-w-[1580px] p-4 text-zinc-100"><h1 tabIndex={-1} ref={titleRef}>{error === "not-found" ? "Player not found" : "Player details unavailable"}</h1><p role="alert">{error === "config" ? "Dashboard API configuration is unavailable." : "This player could not be loaded in the selected context."}</p>{error !== "not-found" && <button className="mt-4 min-h-11 rounded border px-4" onClick={() => setRetry((value) => value + 1)}>Retry</button>}<p><a href={back}>Back to leaderboard</a></p></main>;
   if (!detail) return <main id="main-content" className="mx-auto max-w-[1580px] p-4 text-zinc-100"><a href={back}>← Back to leaderboard</a><h1 tabIndex={-1} ref={titleRef} className="mt-4 text-3xl font-black">Player profile</h1><div aria-busy="true" className="mt-4 grid min-w-0 gap-3 md:grid-cols-2 lg:grid-cols-[minmax(272px,300px)_minmax(240px,280px)_minmax(0,1fr)]"><div className="h-72 animate-pulse rounded bg-white/10 motion-reduce:animate-none"/><div className="h-72 animate-pulse rounded bg-white/10 motion-reduce:animate-none"/><div className="h-72 animate-pulse rounded bg-white/10 motion-reduce:animate-none"/></div></main>;
-  return <main id="main-content" className="mx-auto max-w-[1580px] overflow-x-hidden p-3 text-zinc-100 sm:p-6"><a href={back} className="inline-flex min-h-11 items-center text-lime-300 focus-visible:ring-2">← Back to leaderboard</a><h1 ref={titleRef} tabIndex={-1} className="text-3xl font-black outline-none">{detail.player.name}</h1><p className="mt-1 text-xs text-zinc-400">{contextLabel(dataset)} · {dataset.season}</p><PlayerDetailDossierLayout player={detail.player} analysis={detail.analysis} quadrant={quadrant} quality={quality} history={history} config={config} dataset={dataset} afterPanels={afterPanels} detailReadoutBoard={detailBoard} detailReadouts={readouts} renewedDetailRequested={duelPressDetailRequested}/></main>;
+  return <main id="main-content" className="mx-auto max-w-[1580px] overflow-x-hidden p-3 text-zinc-100 sm:p-6"><a href={back} className="inline-flex min-h-11 items-center text-lime-300 focus-visible:ring-2">← Back to leaderboard</a><h1 ref={titleRef} tabIndex={-1} className="text-3xl font-black outline-none">{detail.player.name}</h1><p className="mt-1 text-xs text-zinc-400">{contextLabel(dataset)} · {dataset.season}</p><PlayerDetailDossierLayout player={detail.player} analysis={detail.analysis} quadrant={quadrant} quality={quality} history={history} config={config} dataset={dataset} afterPanels={afterPanels} detailReadoutBoard={detailBoard} detailReadouts={readouts} renewedDetailRequested={duelPressDetailRequested || duelPressV2Requested}/></main>;
 }

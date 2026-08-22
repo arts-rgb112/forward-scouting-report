@@ -1,0 +1,64 @@
+import { z } from "zod";
+
+export const DUEL_PRESS_V2_CATEGORIES = ["outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress"] as const;
+export const DUEL_PRESS_V2_CONTEXT_INDICATORS = ["netProgressionPer90", "goalsMinusXgot"] as const;
+export type DuelPressV2CategoryId = typeof DUEL_PRESS_V2_CATEGORIES[number];
+export type DuelPressV2ContextIndicatorId = typeof DUEL_PRESS_V2_CONTEXT_INDICATORS[number];
+
+const finite = z.number().finite();
+const score = z.number().int().min(0).max(99);
+const scope = z.union([z.literal(3), z.literal(5), z.literal(7), z.literal(8)]);
+const direction = z.enum(["higher_is_better", "lower_is_better", "neutral"]);
+const comparison = z.object({ state: z.enum(["available", "unavailable", "not_applicable"]), median: finite.nullable(), rank: z.number().int().positive().nullable(), population: z.number().int().nonnegative(), percentileScore: score.nullable() }).strict().superRefine((value, ctx) => {
+  if (value.state === "available" && (value.median === null || value.rank === null || value.percentileScore === null || value.population < 1 || value.rank > value.population)) ctx.addIssue({ code: "custom", message: "available comparison must be complete" });
+  if (value.state === "not_applicable" && (value.median !== null || value.rank !== null || value.percentileScore !== null || value.population !== 0)) ctx.addIssue({ code: "custom", message: "not applicable comparison must be empty" });
+  if (value.state === "unavailable" && value.rank !== null && value.rank > value.population) ctx.addIssue({ code: "custom", message: "unavailable rank exceeds population" });
+});
+
+const metricValue = z.object({ value: finite.nullable(), unit: z.enum(["count", "per90", "goals", "percent", "score"]), direction, state: z.enum(["observed", "server_derived", "imputed", "unavailable"]), source: z.enum(["player_season_total", "league_per90_fallback", "tactical_ratio_static", "server_derived", "unavailable"]), percentileScore: score.nullable(), formulaId: z.string().min(1).nullable(), formulaVersion: z.string().min(1).nullable(), comparison }).strict().superRefine((value, ctx) => {
+  if (value.value === null && value.state !== "unavailable") ctx.addIssue({ code: "custom", message: "null metric value must be unavailable" });
+  if (value.value !== null && value.state === "unavailable") ctx.addIssue({ code: "custom", message: "numeric metric cannot be unavailable" });
+  if (value.state === "unavailable" && value.source !== "unavailable") ctx.addIssue({ code: "custom", message: "unavailable metric requires unavailable source" });
+  if (value.state !== "unavailable" && value.source === "unavailable") ctx.addIssue({ code: "custom", message: "numeric metric cannot have unavailable source" });
+});
+
+const pairMetric = z.object({ id: z.string().min(1), label: z.string().min(1), pairReason: z.string().min(1).nullable(), pairState: z.enum(["complete", "partial", "unavailable", "scalar"]), per90: metricValue.nullable(), total: metricValue.nullable(), value: metricValue.nullable() }).strict().superRefine((metric, ctx) => {
+  if (metric.pairState === "complete" && (!metric.total || !metric.per90 || metric.total.value === null || metric.per90.value === null)) ctx.addIssue({ code: "custom", message: "complete pair requires numeric total and per90" });
+  if (metric.pairState === "partial" && (!metric.total || metric.total.value === null || metric.per90?.value !== null)) ctx.addIssue({ code: "custom", message: "partial pair requires numeric total and unavailable per90" });
+  if (metric.pairState === "unavailable" && (metric.total?.value !== null || metric.per90?.value !== null)) ctx.addIssue({ code: "custom", message: "unavailable pair cannot contain numeric values" });
+  if (metric.pairState === "scalar" && (!metric.value || metric.total !== null || metric.per90 !== null)) ctx.addIssue({ code: "custom", message: "scalar metric must use value only" });
+});
+
+const group = z.object({ id: z.string().min(1), label: z.string().min(1), kind: z.enum(["count_rate_pair", "duel_split", "spatial", "pressing"]), metrics: z.array(pairMetric).min(1) }).strict();
+const category = z.object({ id: z.enum(DUEL_PRESS_V2_CATEGORIES), label: z.string().min(1), percentileScore: score, scoreState: z.enum(["observed", "imputed", "unavailable"]), imputedComponents: z.array(z.string().min(1)), direction, comparison, formulaId: z.string().min(1), formulaVersion: z.string().min(1), groups: z.array(group).min(1) }).strict().superRefine((value, ctx) => {
+  if (value.scoreState === "imputed" && value.imputedComponents.length === 0) ctx.addIssue({ code: "custom", message: "imputed category must identify components" });
+  if (value.scoreState !== "imputed" && value.imputedComponents.length > 0) ctx.addIssue({ code: "custom", message: "imputed components require imputed category" });
+});
+
+const context = z.object({ playerId: z.number().int().positive().safe(), idNamespace: z.literal("fotmob"), season: z.string().regex(/^20\d{2}\/20\d{2}$/), mode: z.enum(["league", "europe"]), scope: scope.nullable(), competition: z.enum(["all", "ucl", "uel", "uecl"]).nullable() }).strict().superRefine((value, ctx) => {
+  if (value.mode === "league" && (value.scope === null || value.competition !== null)) ctx.addIssue({ code: "custom", message: "league context must echo scope and null competition" });
+  if (value.mode === "europe" && (value.scope !== null || value.competition === null)) ctx.addIssue({ code: "custom", message: "Europe context must echo competition and null scope" });
+});
+
+const indicator = z.object({ aggregate: z.boolean(), id: z.enum(DUEL_PRESS_V2_CONTEXT_INDICATORS), label: z.string().min(1), metric: pairMetric, tooltipFacts: z.array(pairMetric) }).strict();
+const identity = z.object({ id: z.number().int().positive().safe(), idNamespace: z.literal("fotmob"), name: z.string().min(1), position: z.string().min(1), club: z.object({ id: z.number().int(), name: z.string().min(1), icon: z.string().url() }).strict(), league: z.object({ id: z.number().int(), name: z.string().min(1), icon: z.string().url() }).strict() }).strict();
+const statSummary = z.object({ direction, imputedComponents: z.array(z.string()), percentileScore: score, scoreState: z.enum(["observed", "imputed", "unavailable"]) }).strict();
+const stats = z.object({ outsideShot: statSummary, boxThreat: statSummary, dangerZone: statSummary, combinedDuel: statSummary, spaceControl: statSummary, forwardPress: statSummary }).strict();
+const playerData = z.object({ id: z.number().int().positive().safe(), idNamespace: z.literal("fotmob"), name: z.string().min(1), position: z.string().min(1), age: z.number().int().nonnegative().nullable(), minutes: z.number().int().nonnegative(), archetype: z.string().min(1), face: z.string().url(), club: z.object({ id: z.number().int(), name: z.string().min(1), icon: z.string().url() }).strict(), league: z.object({ id: z.number().int(), name: z.string().min(1), icon: z.string().url() }).strict(), nation: z.object({ id: z.number().int(), name: z.string().min(1), icon: z.string().url() }).strict().nullable(), rank: z.number().int().positive(), tier: z.object({ code: z.string().min(1), label: z.string().min(1), level: z.number().int().positive(), taxonomyVersion: z.literal("crystal-v2") }).strict(), overallRating: z.object({ direction, formulaId: z.string().min(1), formulaVersion: z.string().min(1), percentileScore: score, rawValue: finite, state: z.enum(["observed", "imputed", "unavailable"]), comparison }).strict(), stats }).strict();
+const envelopeFields = { schemaVersion: z.literal("2.0.0"), metricTaxonomyVersion: z.literal("duel-press-v2"), readoutVersion: z.literal("detail-readout-v2"), ratingVersion: z.literal("stat-pairs-v2"), ratingSnapshotId: z.string().regex(/^stat-pairs-v2:[0-9a-f]{16}$/) };
+
+export const duelPressV2DetailMetricsSchema = z.object({ ...envelopeFields, context, cohortPopulation: z.number().int().nonnegative(), player: identity, categories: z.array(category).length(6), contextIndicators: z.array(indicator).length(2) }).strict().superRefine((value, ctx) => {
+  if (value.categories.map((item) => item.id).join("|") !== DUEL_PRESS_V2_CATEGORIES.join("|")) ctx.addIssue({ code: "custom", message: "v2 category order is invalid" });
+  if (value.contextIndicators.map((item) => item.id).join("|") !== DUEL_PRESS_V2_CONTEXT_INDICATORS.join("|")) ctx.addIssue({ code: "custom", message: "v2 indicator order is invalid" });
+});
+export const duelPressV2PlayerSchema = z.object({ ...envelopeFields, context, cohortPopulation: z.number().int().nonnegative(), data: playerData }).strict().superRefine((value, ctx) => { if (value.context.playerId !== value.data.id || value.context.idNamespace !== value.data.idNamespace) ctx.addIssue({ code: "custom", message: "v2 player identity mismatch" }); });
+const leaderboardMeta = z.object({ applied: z.object({ ageBand: z.string(), minutesBand: z.string(), order: z.enum(["asc", "desc"]), position: z.string().nullable(), q: z.string().nullable(), role: z.string().nullable(), sort: z.string() }).strict(), competition: z.enum(["all", "ucl", "uel", "uecl"]).nullable(), generatedAt: z.string().min(1), hasNextPage: z.boolean(), mode: z.enum(["league", "europe"]), page: z.number().int().positive(), pageSize: z.literal(50), population: z.number().int().nonnegative(), returned: z.number().int().nonnegative(), schemaVersion: z.literal("2.0.0"), scope: scope.nullable(), season: z.string().regex(/^20\d{2}\/20\d{2}$/), source: z.string().min(1), totalItems: z.number().int().nonnegative(), totalPages: z.number().int().nonnegative() }).strict();
+const leaderboardContext = z.object({ season: z.string().regex(/^20\d{2}\/20\d{2}$/), mode: z.enum(["league", "europe"]), scope: scope.nullable(), competition: z.enum(["all", "ucl", "uel", "uecl"]).nullable() }).strict();
+export const duelPressV2LeaderboardSchema = z.object({ ...envelopeFields, context: leaderboardContext, cohortPopulation: z.number().int().nonnegative(), data: z.array(playerData), meta: leaderboardMeta }).strict();
+
+export type DuelPressV2DetailMetrics = z.infer<typeof duelPressV2DetailMetricsSchema>;
+export type DuelPressV2Player = z.infer<typeof duelPressV2PlayerSchema>;
+export type DuelPressV2Leaderboard = z.infer<typeof duelPressV2LeaderboardSchema>;
+export type DuelPressV2Category = z.infer<typeof category>;
+export type DuelPressV2Metric = z.infer<typeof pairMetric>;
+export type DuelPressV2Context = z.infer<typeof context>;
