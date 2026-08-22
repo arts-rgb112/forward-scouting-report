@@ -49,11 +49,12 @@ describe("scope-8 direct-route capability gate", () => {
     expect(window.location.search).toContain("scope=8");
   });
 
-  it("uses native recovery for legacy compare queries without invoking the legacy GET transport", async () => {
+  it("fails closed for legacy compare queries without invoking the legacy GET transport", async () => {
     transport.options.mockRejectedValue(new Error("options unavailable"));
     window.history.replaceState(null, "", "/compare?players=1,2&scope=8");
     render(<StaticRoute />);
-    expect(screen.getByLabelText("Left player FotMob player ID")).toHaveValue("1");
+    expect(screen.getByLabelText("Left player FotMob player ID")).toHaveValue("");
+    expect(screen.getByText(/does not include each player’s full context/)).toBeInTheDocument();
     expect(transport.comparison).not.toHaveBeenCalled();
     return;
     window.history.replaceState(null, "", "/compare?players=1,2&scope=8");
