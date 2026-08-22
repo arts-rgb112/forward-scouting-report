@@ -46,11 +46,11 @@ describe("duel-press detailed stats board", () => {
 
   it("defaults to authoritative integer comparison percentiles without raw scores or metadata", () => {
     render(<DuelPressDetailReadoutBoard data={presentationFixture()}/>);
-    expect(screen.getByRole("button", { name: "박스 밖 슈팅 카테고리 상세 정보" })).toHaveTextContent("99");
-    expect(screen.getByRole("button", { name: "outsideBoxShots 상세 정보" })).toHaveTextContent("99");
-    expect(screen.getByRole("button", { name: "outsideBoxXg 상세 정보" })).toHaveTextContent("99");
-    expect(screen.getByRole("button", { name: "outsideBoxXgot 상세 정보" })).toHaveTextContent("0");
-    expect(screen.getByRole("button", { name: "outsideBoxShotQualityGoals 상세 정보" })).toHaveTextContent("제공 불가");
+    expect(screen.getByRole("button", { name: "박스 밖 슈팅 카테고리 99 상세 정보" })).toHaveTextContent("99");
+    expect(screen.getByRole("button", { name: "outsideBoxShots 99 상세 정보" })).toHaveTextContent("99");
+    expect(screen.getByRole("button", { name: "outsideBoxXg 99 상세 정보" })).toHaveTextContent("99");
+    expect(screen.getByRole("button", { name: "outsideBoxXgot 0 상세 정보" })).toHaveTextContent("0");
+    expect(screen.getByRole("button", { name: "outsideBoxShotQualityGoals 제공 불가 상세 정보" })).toHaveTextContent("제공 불가");
     expect(screen.queryByText("42.75")).not.toBeInTheDocument();
     expect(screen.queryByText("99.61")).not.toBeInTheDocument();
     expect(screen.queryByText("100")).not.toBeInTheDocument();
@@ -72,7 +72,8 @@ describe("duel-press detailed stats board", () => {
 
   it("reveals supplied raw, comparison, provenance, and imputation details on hover and keyboard focus", () => {
     render(<DuelPressDetailReadoutBoard data={presentationFixture()}/>);
-    const rowTrigger = screen.getByRole("button", { name: "outsideBoxShots 상세 정보" });
+    const rowTrigger = screen.getByRole("button", { name: "outsideBoxShots 99 상세 정보" });
+    expect(rowTrigger).toHaveAccessibleName("outsideBoxShots 99 상세 정보");
     fireEvent.pointerEnter(rowTrigger);
     const hoverTooltip = screen.getByRole("tooltip");
     expect(rowTrigger).toHaveAttribute("aria-describedby", hoverTooltip.id);
@@ -85,7 +86,7 @@ describe("duel-press detailed stats board", () => {
     fireEvent.pointerLeave(rowTrigger);
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
-    const categoryTrigger = screen.getByRole("button", { name: "박스 안 슈팅 카테고리 상세 정보" });
+    const categoryTrigger = screen.getByRole("button", { name: "박스 안 슈팅 카테고리 88 상세 정보" });
     fireEvent.focus(categoryTrigger);
     const focusTooltip = screen.getByRole("tooltip");
     expect(categoryTrigger).toHaveAttribute("aria-describedby", focusTooltip.id);
@@ -98,7 +99,7 @@ describe("duel-press detailed stats board", () => {
 
   it("uses existing legend score tokens for percentile text and bars, with no bespoke gradient", () => {
     const { container } = render(<DuelPressDetailReadoutBoard data={presentationFixture()}/>);
-    expect(screen.getByRole("button", { name: "박스 밖 슈팅 카테고리 상세 정보" }).firstElementChild).toHaveClass("text-violet-100");
+    expect(screen.getByRole("button", { name: "박스 밖 슈팅 카테고리 99 상세 정보" }).firstElementChild).toHaveClass("text-violet-100");
     const bar = screen.getByRole("progressbar", { name: "박스 밖 슈팅 비교 백분위" });
     expect(bar).toHaveAttribute("aria-valuenow", "99");
     expect(bar.firstElementChild).toHaveClass("bg-violet-300");
@@ -109,9 +110,9 @@ describe("duel-press detailed stats board", () => {
 
   it("keeps context values as server core values and comparison bars independent of the six categories", () => {
     render(<DuelPressDetailReadoutBoard data={presentationFixture()}/>);
-    expect(screen.getByRole("button", { name: "순수 전진 기여도 상세 정보" })).toHaveTextContent("2.1 /90");
+    expect(screen.getByRole("button", { name: "순수 전진 기여도 2.1 /90 상세 정보" })).toHaveTextContent("2.1 /90");
     expect(screen.getByRole("progressbar", { name: "순수 전진 기여도 비교 백분위" })).toHaveAttribute("aria-valuenow", "88");
-    expect(screen.getByRole("button", { name: "득점 운·상대 선방 상세 정보" })).toHaveTextContent("제공 불가");
+    expect(screen.getByRole("button", { name: "득점 운·상대 선방 제공 불가 상세 정보" })).toHaveTextContent("제공 불가");
     expect(screen.queryByRole("progressbar", { name: "득점 운·상대 선방 비교 백분위" })).not.toBeInTheDocument();
     expect(screen.getByText("비교 제공 불가")).toBeInTheDocument();
   });

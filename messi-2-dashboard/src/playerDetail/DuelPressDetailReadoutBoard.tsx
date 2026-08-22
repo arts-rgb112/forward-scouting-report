@@ -39,13 +39,13 @@ function comparisonDetails(comparison: DuelPressDetailReadout["comparison"]) {
   </>;
 }
 
-function DetailsTooltip({ label, children, trigger }: { label: string; children: ReactNode; trigger: ReactNode }) {
+function DetailsTooltip({ label, displayValue, children, trigger }: { label: string; displayValue: string; children: ReactNode; trigger: ReactNode }) {
   const [open, setOpen] = useState(false);
   const tooltipId = `detail-tooltip-${useId().replace(/:/g, "")}`;
   return <span className="relative inline-flex min-w-0" onPointerEnter={() => setOpen(true)} onPointerLeave={() => setOpen(false)}>
     <button
       type="button"
-      aria-label={`${label} 상세 정보`}
+      aria-label={`${label} ${displayValue} 상세 정보`}
       aria-describedby={open ? tooltipId : undefined}
       className="min-w-0 rounded text-inherit outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
       onFocus={() => setOpen(true)}
@@ -89,10 +89,11 @@ function ReadoutRows({ items }: { items: readonly DuelPressDetailReadout[] }) {
     <dt className="sr-only">서버 측정값</dt>
     {items.map((item) => {
       const percentile = formatAuthoritativePercentile(item.comparison.percentile);
+      const displayValue = percentile === null ? "제공 불가" : String(percentile);
       return <div key={item.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-2">
         <dt className="min-w-0 break-words font-medium text-zinc-300">{item.label}</dt>
         <dd className="text-right font-mono font-bold tabular-nums">
-          <DetailsTooltip label={item.label} trigger={<span className={percentile === null ? "text-zinc-500" : scoreTextToken(percentile)}>{percentile ?? "제공 불가"}</span>}><ReadoutDetails item={item}/></DetailsTooltip>
+          <DetailsTooltip label={item.label} displayValue={displayValue} trigger={<span className={percentile === null ? "text-zinc-500" : scoreTextToken(percentile)}>{displayValue}</span>}><ReadoutDetails item={item}/></DetailsTooltip>
         </dd>
       </div>;
     })}
@@ -102,13 +103,14 @@ function ReadoutRows({ items }: { items: readonly DuelPressDetailReadout[] }) {
 function CategoryCard({ category }: { category: DuelPressDetailReadoutEnvelope["categories"][number] }) {
   const copy = categoryCopy[category.id];
   const percentile = formatAuthoritativePercentile(category.comparison.percentile);
+  const displayValue = percentile === null ? "제공 불가" : String(percentile);
   const groups = category.id === "combinedDuel"
     ? [["지상 경합", category.readouts.filter((item) => ground.has(item.id))], ["공중 경합", category.readouts.filter((item) => !ground.has(item.id))]] as const
     : [[undefined, category.readouts]] as const;
   return <article data-card="category" className="min-w-0 rounded-xl border border-white/10 bg-[#101415] p-3 shadow-sm">
     <div className="flex min-w-0 items-start justify-between gap-3">
       <h3 className="min-w-0 text-sm font-black text-white">{copy.label}</h3>
-      <DetailsTooltip label={`${copy.label} 카테고리`} trigger={<b className={`text-2xl font-black tabular-nums ${percentile === null ? "text-zinc-500" : scoreTextToken(percentile)}`}>{percentile ?? "제공 불가"}</b>}><CategoryDetails category={category}/></DetailsTooltip>
+      <DetailsTooltip label={`${copy.label} 카테고리`} displayValue={displayValue} trigger={<b className={`text-2xl font-black tabular-nums ${percentile === null ? "text-zinc-500" : scoreTextToken(percentile)}`}>{displayValue}</b>}><CategoryDetails category={category}/></DetailsTooltip>
     </div>
     <PercentileBar label={copy.label} percentile={category.comparison.percentile}/>
     {groups.map(([title, items]) => <section key={title ?? "all"} aria-label={title} className={title ? "mt-3 min-w-0" : "min-w-0"}>
@@ -120,10 +122,11 @@ function CategoryCard({ category }: { category: DuelPressDetailReadoutEnvelope["
 
 function ContextCard({ readout, label }: { readout: DuelPressDetailReadout; label: string }) {
   const percentile = formatAuthoritativePercentile(readout.comparison.percentile);
+  const displayValue = readout.value === null ? "제공 불가" : `${number(readout.value)} ${units[readout.unit]}`;
   return <article data-card="context" className="min-w-0 rounded-xl border border-white/10 bg-[#101415] p-3 shadow-sm">
     <div className="flex min-w-0 items-start justify-between gap-3">
       <h3 className="min-w-0 text-sm font-black text-white">{label}</h3>
-      <DetailsTooltip label={label} trigger={<b className={`text-right text-lg font-black tabular-nums ${percentile === null ? "text-zinc-100" : scoreTextToken(percentile)}`}>{readout.value === null ? "제공 불가" : `${number(readout.value)} ${units[readout.unit]}`}</b>}><ReadoutDetails item={readout}/></DetailsTooltip>
+      <DetailsTooltip label={label} displayValue={displayValue} trigger={<b className={`text-right text-lg font-black tabular-nums ${percentile === null ? "text-zinc-100" : scoreTextToken(percentile)}`}>{displayValue}</b>}><ReadoutDetails item={readout}/></DetailsTooltip>
     </div>
     <PercentileBar label={label} percentile={readout.comparison.percentile}/>
   </article>;
