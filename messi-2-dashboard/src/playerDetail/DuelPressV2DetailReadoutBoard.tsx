@@ -16,10 +16,20 @@ function MetricTooltip({ metric }: { metric: DuelPressV2Metric }) {
   return <div className="space-y-1">{values.map((item, index) => <p key={`${item!.unit}-${index}`}>{index === 0 && metric.pairState !== "scalar" ? "총량" : metric.pairState === "scalar" ? "원천값" : "/90"}: {item!.value === null ? "데이터 없음" : `${item!.value} ${unitLabel(item!.unit)}`} · {item!.state} · {item!.source}</p>)}{metric.pairReason && <p>사유: {metric.pairReason}</p>}{metric.total?.comparison.rank !== null && <p>순위: {metric.total?.comparison.rank}/{metric.total?.comparison.population} · 중앙값 {metric.total?.comparison.median}</p>}</div>;
 }
 
+function ScoreRow({ metric, label, score, slot }: { metric: DuelPressV2Metric; label: string; score: number | null; slot: "value" | "total" | "per90" }) {
+  const displayScore = formatAuthoritativePercentile(score);
+  const band = displayScore === null ? null : getScoreBand(displayScore);
+  return <div data-metric-slot={slot} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-white/10 py-2"><span className="min-w-0 break-words text-xs text-zinc-300">{label}</span><Tooltip label={label} content={<MetricTooltip metric={metric}/>}><b className={`inline-flex min-w-9 items-center justify-center rounded border px-2 py-1 font-mono text-xs ${band?.className ?? "border-zinc-400/30 bg-zinc-400/10 text-zinc-400"}`}>{displayScore ?? "—"}</b></Tooltip></div>;
+}
+
 function MetricRow({ metric }: { metric: DuelPressV2Metric }) {
-  const score = formatAuthoritativePercentile(metric.value?.percentileScore ?? metric.total?.percentileScore ?? metric.per90?.percentileScore ?? null);
-  const band = score === null ? null : getScoreBand(score);
-  return <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-white/10 py-2"><span className="min-w-0 break-words text-xs text-zinc-300">{metric.label}</span><Tooltip label={metric.label} content={<MetricTooltip metric={metric}/>}><b className={`inline-flex min-w-9 items-center justify-center rounded border px-2 py-1 font-mono text-xs ${band?.className ?? "border-zinc-400/30 bg-zinc-400/10 text-zinc-400"}`}>{score ?? "—"}</b></Tooltip></div>;
+  if (metric.pairState === "scalar") {
+    return <ScoreRow metric={metric} label={metric.label} score={metric.value?.percentileScore ?? null} slot="value"/>;
+  }
+  return <>
+    <ScoreRow metric={metric} label={`${metric.label} — Total`} score={metric.total?.percentileScore ?? null} slot="total"/>
+    <ScoreRow metric={metric} label={`${metric.label} — /90`} score={metric.per90?.percentileScore ?? null} slot="per90"/>
+  </>;
 }
 
 function CategoryCard({ category }: { category: DuelPressV2Category }) {
