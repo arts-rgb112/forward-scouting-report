@@ -1,0 +1,42 @@
+[
+  {
+    "x": 99.0,
+    "y": 50.0,
+    "outcome": "goal",
+    "xg": 0.4,
+    "xgot": 0.8,
+    "trajectory": {"schemaVersion": "shotmap-trajectory-v1", "endpointKind": "goal_mouth", "endX": 100.0, "endY": 56.795, "endZMeters": 1.17, "source": "fotmob"}
+  },
+  {
+    "x": 85.0,
+    "y": 45.0,
+    "outcome": "on_target",
+    "xg": 0.2,
+    "xgot": 0.3,
+    "trajectory": {"schemaVersion": "shotmap-trajectory-v1", "endpointKind": "goal_mouth", "endX": 100.0, "endY": 50.0, "endZMeters": 0.8, "source": "fotmob"}
+  },
+  {
+    "x": 80.0,
+    "y": 40.0,
+    "outcome": "off_target",
+    "xg": 0.08,
+    "xgot": null,
+    "trajectory": {"schemaVersion": "shotmap-trajectory-v1", "endpointKind": "goal_mouth", "endX": 100.0, "endY": 63.0, "endZMeters": 3.2, "source": "fotmob"}
+  },
+  {
+    "x": 70.0,
+    "y": 44.118,
+    "outcome": "blocked",
+    "xg": 0.1,
+    "xgot": null,
+    "trajectory": {"schemaVersion": "shotmap-trajectory-v1", "endpointKind": "blocked", "endX": 78.571, "endY": 40.0, "endZMeters": null, "source": "fotmob"}
+  },
+  {
+    "x": 75.0,
+    "y": 55.0,
+    "outcome": "off_target",
+    "xg": null,
+    "xgot": null,
+    "trajectory": null
+  }
+]

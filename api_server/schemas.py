@@ -523,6 +523,34 @@ class HeatmapPoint(BaseModel):
     y: float = Field(ge=0, le=100)
 
 
+class ShotTrajectory(BaseModel):
+    """Provider-backed shot endpoint; absent/null means no endpoint evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["shotmap-trajectory-v1"] = "shotmap-trajectory-v1"
+    endpointKind: Literal["goal_mouth", "blocked"]
+    endX: float = Field(ge=0, le=100)
+    endY: float = Field(ge=0, le=100)
+    endZMeters: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Provider-observed goal crossing height in metres. Null for blocked "
+            "endpoints or when the source does not provide a valid height."
+        ),
+    )
+    source: Literal["fotmob"] = "fotmob"
+
+    @model_validator(mode="after")
+    def validate_endpoint_semantics(self) -> "ShotTrajectory":
+        if self.endpointKind == "blocked" and self.endZMeters is not None:
+            raise ValueError("blocked endpoints cannot contain endZMeters")
+        if self.endpointKind == "goal_mouth" and self.endX != 100.0:
+            raise ValueError("goal_mouth endpoints must terminate at endX=100")
+        return self
+
+
 class ShotmapPoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -531,6 +559,25 @@ class ShotmapPoint(BaseModel):
     outcome: Literal["goal", "on_target", "off_target", "blocked"]
     xg: float | None = Field(default=None, ge=0)
     xgot: float | None = Field(default=None, ge=0)
+    trajectory: ShotTrajectory | None = Field(
+        default=None,
+        description=(
+            "Optional provider-backed endpoint in the same normalized 0..100 pitch "
+            "space as x/y. Null means endpoint coordinates were unavailable or invalid; "
+            "clients must not infer a replacement endpoint."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_trajectory_matches_outcome(self) -> "ShotmapPoint":
+        if self.trajectory is None:
+            return self
+        expected_kind = "blocked" if self.outcome == "blocked" else "goal_mouth"
+        if self.trajectory.endpointKind != expected_kind:
+            raise ValueError(
+                f"{self.outcome} shots require a {expected_kind} trajectory endpoint"
+            )
+        return self
 
 
 class PositionalGridCell(BaseModel):

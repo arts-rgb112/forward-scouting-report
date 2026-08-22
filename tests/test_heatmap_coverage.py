@@ -1,4 +1,5 @@
 import unittest
+import json
 import subprocess
 import sys
 import tempfile
@@ -37,6 +38,7 @@ from tactical_ratio import (
     passes_final_third_filter,
 )
 from scripts.backfill_true_core_zones import DEFINITION_VERSION
+from scripts.build_shotmap_points import build as build_shotmap_points
 from scripts.build_shotmap_points import normalize_shotmap, shot_outcome
 from fotmob_client import FotMobError, _get, _league_selections
 from scripts.audit_shotmap_coverage import load_source_exceptions
@@ -176,11 +178,20 @@ class CcaOverlayTests(unittest.TestCase):
         self.assertEqual(summary["gridRows"], 22)
         self.assertNotIn("density", summary)
 
-    def test_shotmap_snapshot_keeps_only_source_coordinates(self) -> None:
+    def test_shotmap_snapshot_adds_only_valid_source_trajectory_coordinates(self) -> None:
         raw = [
-            {"x": 103.95, "y": 34, "eventType": "Goal", "expectedGoals": 0.4},
-            {"x": 80, "y": 40, "eventType": "AttemptSaved", "isOnTarget": True, "expectedGoalsOnTarget": 0.2},
-            {"x": 70, "y": 30, "eventType": "AttemptSaved", "isBlocked": True},
+            {
+                "x": 103.95, "y": 34, "eventType": "Goal", "expectedGoals": 0.4,
+                "goalCrossedY": 38.6205, "goalCrossedZ": 1.17,
+            },
+            {
+                "x": 80, "y": 40, "eventType": "AttemptSaved", "isOnTarget": True,
+                "expectedGoalsOnTarget": 0.2, "goalCrossedY": 34, "goalCrossedZ": 0.8,
+            },
+            {
+                "x": 70, "y": 30, "eventType": "AttemptSaved", "isBlocked": True,
+                "blockedX": 82.5, "blockedY": 27.2,
+            },
             {"x": 120, "y": 40, "eventType": "Miss"},
         ]
         shots = normalize_shotmap(raw)
@@ -189,7 +200,143 @@ class CcaOverlayTests(unittest.TestCase):
         self.assertEqual(shots[0]["y"], 50.0)
         self.assertEqual(shots[0]["xg"], 0.4)
         self.assertIsNone(shots[0]["xgot"])
+        self.assertEqual(shots[0]["trajectory"]["endpointKind"], "goal_mouth")
+        self.assertAlmostEqual(shots[0]["trajectory"]["endY"], 56.795, places=3)
+        self.assertEqual(shots[0]["trajectory"]["endZMeters"], 1.17)
+        self.assertEqual(shots[2]["trajectory"]["endpointKind"], "blocked")
+        self.assertAlmostEqual(shots[2]["trajectory"]["endX"], 78.571, places=3)
+        self.assertAlmostEqual(shots[2]["trajectory"]["endY"], 40.0, places=3)
         self.assertEqual(shot_outcome({"eventType": "Miss"}), "off_target")
+
+    def test_invalid_or_partial_endpoints_do_not_drop_or_invent_shots(self) -> None:
+        raw = [
+            {"x": 90, "y": 34, "eventType": "Goal", "goalCrossedY": float("inf")},
+            {"x": 80, "y": 20, "eventType": "Miss", "goalCrossedY": 90},
+            {
+                "x": 70, "y": 30, "eventType": "AttemptSaved", "isBlocked": True,
+                "blockedX": 75,
+            },
+        ]
+
+        shots = normalize_shotmap(raw)
+
+        self.assertEqual(len(shots), 3)
+        self.assertTrue(all("trajectory" not in shot for shot in shots))
+
+    def test_trajectory_backfill_requires_explicit_refresh_existing(self) -> None:
+        row = {
+            "heatmap_key": "194165:54:73956",
+            "competition_name": "Bundesliga",
+        }
+        provider_payload = {"season_records": [{
+            "league_name": "Bundesliga",
+            "stats": {"shotmap": [{
+                "x": 90, "y": 34, "eventType": "Goal",
+                "goalCrossedY": 34, "goalCrossedZ": 1,
+            }]},
+        }]}
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "snapshot.json"
+            output.write_text('{"194165:54:73956":[]}', encoding="utf-8")
+            with (
+                patch("scripts.build_shotmap_points._output_path", return_value=output),
+                patch(
+                    "scripts.build_shotmap_points._targets",
+                    return_value={("194165", "2025/2026"): [row]},
+                ),
+                patch(
+                    "scripts.build_shotmap_points.fetch_player_multi_season_data",
+                    return_value=provider_payload,
+                ) as fetch,
+            ):
+                self.assertEqual(build_shotmap_points("2025/2026"), (1, 0))
+                fetch.assert_not_called()
+                self.assertEqual(
+                    build_shotmap_points("2025/2026", refresh_existing=True),
+                    (1, 1),
+                )
+                fetch.assert_called_once()
+
+            refreshed = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(
+                refreshed["194165:54:73956"][0]["trajectory"]["schemaVersion"],
+                "shotmap-trajectory-v1",
+            )
+
+    def test_refresh_preserves_populated_snapshot_for_missing_or_non_list_source(self) -> None:
+        key = "194165:54:73956"
+        row = {"heatmap_key": key, "competition_name": "Bundesliga"}
+        populated = [{
+            "x": 90.0, "y": 50.0, "outcome": "goal", "xg": 0.4, "xgot": 0.7,
+        }]
+        source_variants = (
+            {},
+            {"shotmap": None},
+            {"shotmap": {"unexpected": "object"}},
+        )
+        for stats in source_variants:
+            with self.subTest(stats=stats), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / "snapshot.json"
+                output.write_text(json.dumps({key: populated}), encoding="utf-8")
+                provider_payload = {"season_records": [{
+                    "league_name": "Bundesliga", "stats": stats,
+                }]}
+                with (
+                    patch("scripts.build_shotmap_points._output_path", return_value=output),
+                    patch(
+                        "scripts.build_shotmap_points._targets",
+                        return_value={("194165", "2025/2026"): [row]},
+                    ),
+                    patch(
+                        "scripts.build_shotmap_points.fetch_player_multi_season_data",
+                        return_value=provider_payload,
+                    ),
+                    patch("builtins.print") as log,
+                ):
+                    self.assertEqual(
+                        build_shotmap_points(
+                            "2025/2026", refresh_existing=True,
+                        ),
+                        (1, 0),
+                    )
+
+                self.assertEqual(
+                    json.loads(output.read_text(encoding="utf-8"))[key], populated,
+                )
+                self.assertTrue(any(
+                    "preserved session" in str(call.args[0]) for call in log.call_args_list
+                ))
+
+    def test_refresh_treats_explicit_empty_list_as_verified_zero(self) -> None:
+        key = "194165:54:73956"
+        row = {"heatmap_key": key, "competition_name": "Bundesliga"}
+        populated = [{
+            "x": 90.0, "y": 50.0, "outcome": "goal", "xg": 0.4, "xgot": 0.7,
+        }]
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "snapshot.json"
+            output.write_text(json.dumps({key: populated}), encoding="utf-8")
+            with (
+                patch("scripts.build_shotmap_points._output_path", return_value=output),
+                patch(
+                    "scripts.build_shotmap_points._targets",
+                    return_value={("194165", "2025/2026"): [row]},
+                ),
+                patch(
+                    "scripts.build_shotmap_points.fetch_player_multi_season_data",
+                    return_value={"season_records": [{
+                        "league_name": "Bundesliga", "stats": {"shotmap": []},
+                    }]},
+                ),
+            ):
+                self.assertEqual(
+                    build_shotmap_points("2025/2026", refresh_existing=True),
+                    (1, 1),
+                )
+
+            self.assertEqual(
+                json.loads(output.read_text(encoding="utf-8"))[key], [],
+            )
     def test_etl_script_can_import_the_root_positional_grid_when_run_as_a_script(self) -> None:
         root = Path(__file__).resolve().parents[1]
         result = subprocess.run(
