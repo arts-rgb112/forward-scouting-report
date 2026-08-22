@@ -13,7 +13,7 @@ const entries: WatchlistEntry[] = [
 
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
 
-describe("WatchlistDrawer legacy Compare handoff", () => {
+describe("WatchlistDrawer native Compare links", () => {
   const props = { open: true, entries, onClose: vi.fn(), onRemove: vi.fn(), onToggleSelection: vi.fn(), feedback: "" };
 
   it("keeps Compare unavailable until exactly two saved contexts are selected", () => {
@@ -22,26 +22,25 @@ describe("WatchlistDrawer legacy Compare handoff", () => {
     expect(screen.getByText(/1\/2 selected/)).toBeInTheDocument();
   });
 
-  it("uses the selected order and passes both contexts to the enabled Streamlit handoff", () => {
-    vi.stubEnv("VITE_LEGACY_HANDOFF_ENABLED", "true");
+  it("uses selected order in the native canonical compare URL", () => {
     render(<WatchlistDrawer {...props} selectedKeys={["right", "left"]} />);
     const href = screen.getByRole("link", { name: "Open comparison page" }).getAttribute("href")!;
-    const params = new URL(href).searchParams;
-    expect(params.get("left_player")).toBe("202");
-    expect(params.get("left_competition")).toBe("uel");
-    expect(params.has("left_scope")).toBe(false);
-    expect(params.get("right_player")).toBe("101");
-    expect(params.get("right_scope")).toBe("5");
-    expect(params.has("right_competition")).toBe(false);
+    const params = new URL(href, "https://native.test").searchParams;
+    expect(params.get("leftPlayerId")).toBe("202");
+    expect(params.get("leftCompetition")).toBe("uel");
+    expect(params.get("leftScope")).toBe("null");
+    expect(params.get("rightPlayerId")).toBe("101");
+    expect(params.get("rightScope")).toBe("5");
+    expect(href).not.toMatch(/streamlit/i);
   });
 
-  it("keeps malformed saved contexts internal and still provides a nonempty compare fallback", () => {
+  it("keeps malformed saved contexts internal and produces a native recovery URL", () => {
     const malformed: WatchlistEntry[] = [
       { ...entries[0], key: "bad-league", context: { ...entries[0].context, scope: null } },
       { ...entries[1], key: "bad-europe", context: { ...entries[1].context, competition: null } },
     ];
     render(<WatchlistDrawer {...props} entries={malformed} selectedKeys={["bad-league", "bad-europe"]} />);
     expect(screen.getAllByRole("link", { name: "View detail" }).map((link) => link.getAttribute("href"))).toEqual([expect.stringContaining("/players/101"), expect.stringContaining("/players/202")]);
-    expect(screen.getByRole("link", { name: "Open comparison page" })).toHaveAttribute("href", "/compare");
+    expect(screen.getByRole("link", { name: "Open comparison page" })).toHaveAttribute("href", expect.stringMatching(/^\/compare\?/));
   });
 });
