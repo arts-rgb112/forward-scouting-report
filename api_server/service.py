@@ -20,6 +20,8 @@ from .schemas import (
     DuelPressAppliedFilters, DuelPressComponents, DuelPressLeaderboardEnvelope,
     DuelPressLeaderboardSort, DuelPressPlayerEnvelope, DuelPressPlayerResponse,
     DuelPressPlayerStats, DuelPressRawMetrics, DuelPressRequestContext,
+    DetailReadoutComparison, DuelPressDetailCategory, DuelPressDetailPlayerIdentity,
+    DuelPressDetailReadout, DuelPressDetailReadoutEnvelope,
     DuelPressMetricRanks, MetricRankContext, MetricRankRequestEntry,
     MetricRankResult, MetricRankValue,
     LeaderboardPageEnvelope, MessiDataQuality, MessiScoreAnalysis, PlayerAnalysis,
@@ -512,6 +514,259 @@ def find_duel_press_player(
         competition=competition if mode == "europe" else None,
     )
     return DuelPressPlayerEnvelope(context=context, data=player)
+
+
+# The detail endpoint intentionally reads only the already-cached static
+# leaderboard frame.  These formula identifiers correspond to the legacy
+# quadrant bars, so a browser never needs to reconstruct an attempt, loss,
+# margin, finishing delta, or contextual indicator.
+DETAIL_READOUT_FORMULA_VERSION = "legacy-bars-v1"
+
+
+def _detail_number(value: object) -> float | None:
+    number = _optional_number(value)
+    return round(number, 4) if number is not None else None
+
+
+def _detail_comparison(
+    value: float | None, values: list[float], direction: str,
+) -> DetailReadoutComparison:
+    """Calculate an exact-context distribution position from static values."""
+    if not values:
+        return DetailReadoutComparison(state="unavailable", population=0)
+    ordered = sorted(values)
+    count = len(ordered)
+    midpoint = count // 2
+    median = (
+        ordered[midpoint]
+        if count % 2
+        else (ordered[midpoint - 1] + ordered[midpoint]) / 2.0
+    )
+    if value is None:
+        return DetailReadoutComparison(
+            state="unavailable", median=round(float(median), 4), population=count,
+        )
+    if direction == "lower_is_better":
+        rank = 1 + sum(candidate < value for candidate in ordered)
+    else:
+        # Neutral indicators expose distribution location only; the client
+        # must consult ``direction: neutral`` before inferring desirability.
+        rank = 1 + sum(candidate > value for candidate in ordered)
+    percentile = 100.0 if count == 1 else round((count - rank) * 100.0 / (count - 1), 2)
+    return DetailReadoutComparison(
+        state="available", median=round(float(median), 4), rank=rank,
+        percentile=percentile, population=count,
+    )
+
+
+def _detail_readout(
+    *, identifier: str, label: str, value: float | None, unit: str,
+    direction: str, source: str, comparison_values: list[float],
+    formula_id: str | None = None, state: str = "observed",
+    missing_components: list[str] | None = None,
+) -> DuelPressDetailReadout:
+    if value is None:
+        return DuelPressDetailReadout(
+            id=identifier, label=label, value=None, unit=unit, direction=direction,
+            source="unavailable", state="unavailable",
+            comparison=_detail_comparison(None, comparison_values, direction),
+            missingComponents=missing_components,
+        )
+    return DuelPressDetailReadout(
+        id=identifier, label=label, value=value, unit=unit, direction=direction,
+        source=source, state=state,
+        comparison=_detail_comparison(value, comparison_values, direction),
+        formulaId=formula_id if state == "server_derived" else None,
+        formulaVersion=DETAIL_READOUT_FORMULA_VERSION if state == "server_derived" else None,
+        missingComponents=missing_components,
+    )
+
+
+def _detail_frame_records(season: str, mode: str, scope: int, competition: str) -> list[dict[str, object]]:
+    """Return only detail-eligible rows for one canonical static context."""
+    target = leaderboard_target(mode, scope, competition)
+    frame = get_spear_leaderboard(target, season, scope)
+    eligible_ids = {player.id for player in build_duel_press_players(season, mode, scope, competition)}
+    records: list[dict[str, object]] = []
+    for record in frame.to_dict(orient="records"):
+        try:
+            if _source_player_id(record.get("player_id")) in eligible_ids:
+                records.append(record)
+        except (TypeError, ValueError):
+            continue
+    return records
+
+
+def _detail_values(records: list[dict[str, object]], column: str) -> list[float]:
+    return [value for record in records if (value := _detail_number(record.get(column))) is not None]
+
+
+def _detail_missing_score_components(record: dict[str, object], category: str) -> list[str]:
+    required = {
+        "outsideShot": ("out_box_shots_raw", "out_box_shot_quality_goals_raw"),
+        "boxThreat": ("in_box_shots_raw", "in_box_finishing_per90_raw", "deep_box_zone_score"),
+        "dangerZone": ("dribble_attempts_raw", "dribble_margin_per90_raw", "danger_zone_density"),
+        "combinedDuel": (
+            "ground_duel_attempts_raw", "aerial_duel_attempts_raw",
+            "duel_margin_per90_raw", "aerial_margin_per90_raw",
+        ),
+        "spaceControl": ("cca_area_pct", "danger_zone_density"),
+        "forwardPress": ("recoveries_per90", "final_third_possessions_won_per90"),
+    }[category]
+    return [field for field in required if _detail_number(record.get(field)) is None]
+
+
+def _detail_forward_readout(
+    *, identifier: str, label: str, value: float | None, unit: str,
+    source: str | None, comparison_values: list[float], is_total: bool,
+) -> DuelPressDetailReadout:
+    if source is None:
+        return _detail_readout(
+            identifier=identifier, label=label, value=None, unit=unit,
+            direction="higher_is_better", source="unavailable",
+            comparison_values=comparison_values,
+        )
+    fallback_total = source == "league_per90_fallback" and is_total
+    return _detail_readout(
+        identifier=identifier, label=label, value=value, unit=unit,
+        direction="higher_is_better", source=source,
+        comparison_values=comparison_values,
+        formula_id="league-per90-total-v1" if fallback_total else None,
+        state="server_derived" if fallback_total else "observed",
+    )
+
+
+def find_duel_press_detail_readouts(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> DuelPressDetailReadoutEnvelope | None:
+    """Build a strict, server-owned detail readout without provider fan-out."""
+    players = build_duel_press_players(season, mode, scope, competition)
+    player = next((row for row in players if row.id == player_id), None)
+    if player is None:
+        return None
+    records = _detail_frame_records(season, mode, scope, competition)
+    record = next((
+        row for row in records
+        if _source_player_id(row.get("player_id")) == player_id
+    ), None)
+    if record is None:
+        return None
+
+    def raw(column: str) -> float | None:
+        return _detail_number(record.get(column))
+
+    def values(column: str) -> list[float]:
+        return _detail_values(records, column)
+
+    def direct(identifier: str, label: str, column: str, unit: str, direction: str = "higher_is_better") -> DuelPressDetailReadout:
+        return _detail_readout(
+            identifier=identifier, label=label, value=raw(column), unit=unit,
+            direction=direction, source="player_season_total", comparison_values=values(column),
+        )
+
+    def derived(identifier: str, label: str, column: str, unit: str, direction: str = "higher_is_better", formula_id: str = "legacy-bars-v1") -> DuelPressDetailReadout:
+        return _detail_readout(
+            identifier=identifier, label=label, value=raw(column), unit=unit,
+            direction=direction, source="server_derived", comparison_values=values(column),
+            formula_id=formula_id, state="server_derived",
+        )
+
+    def spatial(identifier: str, label: str, column: str, unit: str) -> DuelPressDetailReadout:
+        return _detail_readout(
+            identifier=identifier, label=label, value=raw(column), unit=unit,
+            direction="higher_is_better", source="tactical_ratio_static", comparison_values=values(column),
+        )
+
+    score_values = {
+        "outsideShot": [row.stats.outsideShot for row in players],
+        "boxThreat": [row.stats.boxThreat for row in players],
+        "dangerZone": [row.stats.dangerZone for row in players],
+        "combinedDuel": [row.stats.combinedDuel for row in players],
+        "spaceControl": [row.stats.spaceControl for row in players],
+        "forwardPress": [row.stats.forwardPress for row in players],
+    }
+    scores = {
+        "outsideShot": player.stats.outsideShot, "boxThreat": player.stats.boxThreat,
+        "dangerZone": player.stats.dangerZone, "combinedDuel": player.stats.combinedDuel,
+        "spaceControl": player.stats.spaceControl, "forwardPress": player.stats.forwardPress,
+    }
+    labels = {
+        "outsideShot": "박스 밖 슈팅", "boxThreat": "박스 위협", "dangerZone": "돌파와 위험 지역",
+        "combinedDuel": "통합 경합", "spaceControl": "공간 점유", "forwardPress": "전방 압박",
+    }
+    category_readouts = {
+        "outsideShot": [
+            direct("outsideBoxShots", "박스 밖 슈팅", "out_box_shots_raw", "count"),
+            direct("outsideBoxXg", "박스 밖 xG", "out_box_xg_raw", "goals"),
+            direct("outsideBoxXgot", "박스 밖 xGOT", "out_box_xgot_raw", "goals"),
+            derived("outsideBoxShotQualityGoals", "박스 밖 슈팅 질 (xGOT-xG)", "out_box_shot_quality_goals_raw", "goals"),
+        ],
+        "boxThreat": [
+            direct("inBoxShots", "박스 안 슈팅", "in_box_shots_raw", "count"),
+            direct("inBoxXg", "박스 안 xG", "in_box_xg_raw", "goals"),
+            direct("inBoxXgot", "박스 안 xGOT", "in_box_xgot_raw", "goals"),
+            derived("inBoxFinishingGoals", "박스 안 순수 결정력 (xGOT-xG)", "in_box_finishing_goals_raw", "goals"),
+            derived("inBoxFinishingPer90", "박스 안 순수 결정력 /90", "in_box_finishing_per90_raw", "per90", formula_id="per90-finishing-v1"),
+            spatial("deepBoxZoneScore", "딥 박스 존 점유", "deep_box_zone_score", "score"),
+        ],
+        "dangerZone": [
+            derived("successfulDribblesPer90", "성공 드리블 /90", "dribbles_succeeded_per90_raw", "per90", formula_id="per90-successful-dribbles-v1"),
+            derived("failedDribblesPer90", "실패 드리블 /90", "dribbles_failed_per90_raw", "per90", "lower_is_better", "failed-dribbles-v1"),
+            derived("dribbleMarginPer90", "드리블 마진 /90", "dribble_margin_per90_raw", "per90", formula_id="dribble-margin-v1"),
+            derived("dribbleAttempts", "드리블 시도", "dribble_attempts_raw", "count", formula_id="attempts-from-rate-v1"),
+            direct("dribbleSuccessRate", "드리블 성공률", "dribble_success_rate_raw", "percent"),
+            spatial("dangerZoneDensity", "위험 지역 밀도", "danger_zone_density", "percent"),
+        ],
+        "combinedDuel": [
+            derived("groundDuelAttempts", "지상 경합 시도", "ground_duel_attempts_raw", "count", formula_id="attempts-from-rate-v1"),
+            derived("groundWonPer90", "지상 경합 승리 /90", "ground_won_per90_raw", "per90", formula_id="per90-ground-wins-v1"),
+            derived("groundLostPer90", "지상 경합 패배 /90", "ground_lost_per90_raw", "per90", "lower_is_better", "ground-losses-from-rate-v1"),
+            derived("duelMarginPer90", "지상 경합 마진 /90", "duel_margin_per90_raw", "per90", formula_id="ground-margin-v1"),
+            direct("groundDuelWinRate", "지상 경합 승률", "ground_duel_win_rate_raw", "percent"),
+            derived("aerialDuelAttempts", "공중 경합 시도", "aerial_duel_attempts_raw", "count", formula_id="attempts-from-rate-v1"),
+            derived("aerialWonPer90", "공중 경합 승리 /90", "aerial_won_per90_raw", "per90", formula_id="per90-aerial-wins-v1"),
+            derived("aerialLostPer90", "공중 경합 패배 /90", "aerial_lost_per90_raw", "per90", "lower_is_better", "aerial-losses-from-rate-v1"),
+            derived("aerialMarginPer90", "공중 경합 마진 /90", "aerial_margin_per90_raw", "per90", formula_id="aerial-margin-v1"),
+            direct("aerialDuelWinRate", "공중 경합 승률", "aerial_duel_win_rate_raw", "percent"),
+        ],
+        "spaceControl": [
+            spatial("ccaAreaPct", "CCA 면적", "cca_area_pct", "percent"),
+            spatial("dangerZoneDensity", "위험 지역 밀도", "danger_zone_density", "percent"),
+        ],
+        "forwardPress": [
+            _detail_forward_readout(identifier="recoveries", label="회수", value=raw("recoveries"), unit="count", source=_optional_source(record.get("recoveries_source")), comparison_values=values("recoveries"), is_total=True),
+            _detail_forward_readout(identifier="recoveriesPer90", label="회수 /90", value=raw("recoveries_per90"), unit="per90", source=_optional_source(record.get("recoveries_source")), comparison_values=values("recoveries_per90"), is_total=False),
+            _detail_forward_readout(identifier="finalThirdPossessionsWon", label="파이널 서드 볼 탈취", value=raw("final_third_possessions_won"), unit="count", source=_optional_source(record.get("final_third_possessions_won_source")), comparison_values=values("final_third_possessions_won"), is_total=True),
+            _detail_forward_readout(identifier="finalThirdPossessionsWonPer90", label="파이널 서드 볼 탈취 /90", value=raw("final_third_possessions_won_per90"), unit="per90", source=_optional_source(record.get("final_third_possessions_won_source")), comparison_values=values("final_third_possessions_won_per90"), is_total=False),
+        ],
+    }
+    categories: list[DuelPressDetailCategory] = []
+    for category in ("outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress"):
+        missing_components = _detail_missing_score_components(record, category)
+        categories.append(DuelPressDetailCategory(
+            id=category, label=labels[category], score=scores[category],
+            scoreState="imputed" if missing_components else "observed",
+            imputedComponents=missing_components,
+            comparison=_detail_comparison(scores[category], score_values[category], "higher_is_better"),
+            readouts=category_readouts[category],
+        ))
+    context_indicators = [
+        derived("netProgressionPer90", "순수 전진 /90", "net_progression_per90_raw", "per90", "neutral", "net-progression-v1"),
+        derived("shootingLuckOrGoalkeeperImpact", "득점 운 · 상대 선방", "shooting_luck_or_goalkeeper_impact_raw", "goals", "neutral", "goals-minus-xgot-v1"),
+    ]
+    context = DuelPressRequestContext(
+        playerId=player_id, season=season, mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+    )
+    return DuelPressDetailReadoutEnvelope(
+        context=context,
+        player=DuelPressDetailPlayerIdentity(
+            id=player.id, name=player.name, position=player.position,
+            club=player.club, league=player.league,
+        ),
+        categories=categories, contextIndicators=context_indicators,
+    )
 
 
 DUEL_PRESS_METRIC_FIELDS = (
