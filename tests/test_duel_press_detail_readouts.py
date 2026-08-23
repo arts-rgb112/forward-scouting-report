@@ -652,6 +652,42 @@ def test_v2_lower_is_better_score_is_inverted_and_zero_to_99() -> None:
     assert (worst.rank, worst.percentileScore) == (fixture["worst"]["rank"], fixture["worst"]["percentileScore"])
 
 
+def test_v2_more_duel_losses_reduce_duel_and_net_progression_scores() -> None:
+    """Losses may be lower-is-better readouts, never a positive category input.
+
+    Hold wins fixed while increasing the observed attempt denominator.  That
+    creates more losses, a lower success rate, and a lower win-minus-loss
+    margin.  Both the combined-duel score and net-progression component must
+    fall across the same static cohort.
+    """
+    base = _record()
+
+    def row(player_id: int, attempts: float, rate: float) -> dict[str, object]:
+        return {
+            **base,
+            "player_id": player_id,
+            "minutes_played": 900.0,
+            "ground_duel_attempts_provider_raw": attempts,
+            "aerial_duel_attempts_provider_raw": attempts,
+            "duels_won_raw": 12.0,
+            "aerial_duels_won_raw": 12.0,
+            "ground_duel_win_rate_raw": rate,
+            "aerial_duel_win_rate_raw": rate,
+        }
+
+    better, middle, worse = row(1, 20.0, 60.0), row(3, 30.0, 40.0), row(2, 40.0, 30.0)
+    _, ratings = service._v2_rating_snapshot(
+        [better, middle, worse], "2025/2026", "league", 8, "all",
+    )
+
+    assert service._v2_combined_losses(better) == 16.0
+    assert service._v2_combined_losses(middle) == 36.0
+    assert service._v2_combined_losses(worse) == 56.0
+    assert ratings[1]["categories"]["combinedDuel"] > ratings[3]["categories"]["combinedDuel"] > ratings[2]["categories"]["combinedDuel"]
+    assert ratings[1]["categories"]["dangerZone"] > ratings[3]["categories"]["dangerZone"] > ratings[2]["categories"]["dangerZone"]
+    assert all("loss" not in identifier for identifier, *_rest in service._v2_component_specs()["combinedDuel"])
+
+
 def test_v2_official_rating_rounding_is_exact_half_up_and_order_independent() -> None:
     """Published M.E.S.S.I. scores must never depend on float expression order."""
     categories = {
