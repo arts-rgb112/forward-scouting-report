@@ -886,6 +886,15 @@ V2_OVERALL_WEIGHT_POINTS = {
     "forwardPress": 10,
 }
 
+# A rate calculated from a handful of events is a fact, but not yet reliable
+# evidence of a repeatable skill.  We preserve the raw fact in the detail
+# response and attenuate only its *positive percentile contribution* to the
+# category score.  The attenuation factor is the exact-context percentile of
+# the relevant total attempt sample, so this policy never mixes seasons,
+# competitions, or domestic/european populations.
+V2_EFFICIENCY_RELIABILITY_POLICY = "attempt-percentile-upper-shrink-v1"
+V2_EFFICIENCY_RELIABILITY_ANCHOR = 50
+
 
 def _v2_per90(total: float | None, record: dict[str, object]) -> float | None:
     minutes = _detail_number(record.get("minutes_played"))
@@ -1064,6 +1073,25 @@ def _v2_net_progression_per90(record: dict[str, object]) -> float | None:
     return sum(values[:5]) - sum(values[5:])
 
 
+def _v2_progression_observation_total(record: dict[str, object]) -> float | None:
+    """Return the total event sample supporting net progression.
+
+    It intentionally includes every count that can move the progression
+    result, not minutes-normalised values.  Statistical reliability comes
+    from observed events; the displayed performance metric remains /90.
+    """
+    direct = lambda field: _detail_number(record.get(field))
+    values = (
+        _v2_attempts(record, "dribbles_succeeded_raw", "dribble_success_rate_raw"),
+        _v2_ground_attempts(record),
+        _v2_aerial_attempts(record),
+        direct("fouls_won_raw"),
+        direct("penalties_awarded_raw"),
+        direct("dispossessed_raw"),
+    )
+    return sum(values) if all(value is not None and value >= 0 for value in values) else None
+
+
 def _v2_xgot_minus_xg(record: dict[str, object], *, xgot_key: str, xg_key: str) -> float | None:
     """Return an observed finishing-quality delta without treating a gap as zero."""
     xgot, xg = _detail_number(record.get(xgot_key)), _detail_number(record.get(xg_key))
@@ -1174,6 +1202,42 @@ def _v2_percentile_score_from_sorted(
     else:
         rank = 1 + population - bisect_right(ordered_values, value)
     return 99 if population == 1 else int(round(99 * (population - rank) / (population - 1)))
+
+
+def _v2_reliability_adjusted_percentile(score: int | None, attempt_percentile: int | None) -> int | None:
+    """Conservatively shrink only an unsupported high efficiency score.
+
+    A score at or below the cohort midpoint is never lifted.  Above the
+    midpoint, the distance from 50 is multiplied by the player's total-attempt
+    percentile.  This makes a 5/6 aerial rate a real raw fact but prevents it
+    from receiving the same category credit as a high-volume 5/6 rate.
+    """
+    if score is None or attempt_percentile is None:
+        return None
+    if score <= V2_EFFICIENCY_RELIABILITY_ANCHOR:
+        return score
+    return _v2_round_half_up(
+        V2_EFFICIENCY_RELIABILITY_ANCHOR * 99
+        + attempt_percentile * (score - V2_EFFICIENCY_RELIABILITY_ANCHOR),
+        99,
+    )
+
+
+def _v2_component_reliability_evaluator(category: str, source_field: str):
+    """Map efficiency/loss components to their exact total-event sample."""
+    if category == "combinedDuel":
+        if source_field in {"combined_duel_win_rate", "combined_duel_margin_per90"}:
+            return _v2_combined_attempts
+        if source_field == "ground_duel_win_rate":
+            return _v2_ground_attempts
+        if source_field == "aerial_duel_win_rate":
+            return _v2_aerial_attempts
+    if category == "dangerZone":
+        if source_field == "dribbles_failed_raw":
+            return lambda row: _v2_attempts(row, "dribbles_succeeded_raw", "dribble_success_rate_raw")
+        if source_field == "net_progression_per90":
+            return _v2_progression_observation_total
+    return None
 
 
 def _v2_pair(
@@ -1365,6 +1429,16 @@ def _v2_rating_snapshot(
         for category, components in specs.items()
         for source_field, _direction, evaluator, _zero_attempt_floor in components
     }
+    reliability_evaluators = {
+        (category, source_field): evaluator
+        for category, components in specs.items()
+        for source_field, _direction, _component_evaluator, _zero_attempt_floor in components
+        if (evaluator := _v2_component_reliability_evaluator(category, source_field)) is not None
+    }
+    reliability_distributions = {
+        key: sorted(_v2_values(records, evaluator))
+        for key, evaluator in reliability_evaluators.items()
+    }
     ratings: dict[int, dict[str, object]] = {}
     for record in records:
         try:
@@ -1384,6 +1458,14 @@ def _v2_rating_snapshot(
                 score = _v2_percentile_score_from_sorted(
                     value, distributions[(category, source_field)], direction,
                 )
+                reliability_evaluator = reliability_evaluators.get((category, source_field))
+                if score is not None and reliability_evaluator is not None:
+                    attempt_percentile = _v2_percentile_score_from_sorted(
+                        reliability_evaluator(record),
+                        reliability_distributions[(category, source_field)],
+                        "higher_is_better",
+                    )
+                    score = _v2_reliability_adjusted_percentile(score, attempt_percentile)
                 if score is None:
                     scores.append(V2_MISSING_COMPONENT_SCORE)
                     absent.append(source_field)
@@ -1442,7 +1524,10 @@ def _v2_rating_snapshot(
     ]
     digest = hashlib.sha256(json.dumps(
         {"season": season, "mode": mode, "scope": scope, "competition": competition,
-         "ratingVersion": DETAIL_V2_FORMULA_VERSION, "ratings": material, "frame": frame_material},
+         "ratingVersion": DETAIL_V2_FORMULA_VERSION,
+         "efficiencyReliabilityPolicy": V2_EFFICIENCY_RELIABILITY_POLICY,
+         "efficiencyReliabilityAnchor": V2_EFFICIENCY_RELIABILITY_ANCHOR,
+         "ratings": material, "frame": frame_material},
         sort_keys=True, separators=(",", ":"), default=str,
     ).encode("utf-8")).hexdigest()[:16]
     return f"stat-pairs-v2:{digest}", ratings
