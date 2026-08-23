@@ -655,37 +655,48 @@ def test_v2_lower_is_better_score_is_inverted_and_zero_to_99() -> None:
 def test_v2_more_duel_losses_reduce_duel_and_net_progression_scores() -> None:
     """Losses may be lower-is-better readouts, never a positive category input.
 
-    Hold wins fixed while increasing the observed attempt denominator.  That
+    Hold the observed attempt denominator fixed while reducing wins.  That
     creates more losses, a lower success rate, and a lower win-minus-loss
     margin.  Both the combined-duel score and net-progression component must
-    fall across the same static cohort.
+    fall across the same static cohort, independently of sample reliability.
     """
     base = _record()
 
-    def row(player_id: int, attempts: float, rate: float) -> dict[str, object]:
+    def row(player_id: int, wins: float, rate: float) -> dict[str, object]:
         return {
             **base,
             "player_id": player_id,
             "minutes_played": 900.0,
-            "ground_duel_attempts_provider_raw": attempts,
-            "aerial_duel_attempts_provider_raw": attempts,
-            "duels_won_raw": 12.0,
-            "aerial_duels_won_raw": 12.0,
+            "ground_duel_attempts_provider_raw": 40.0,
+            "aerial_duel_attempts_provider_raw": 40.0,
+            "duels_won_raw": wins,
+            "aerial_duels_won_raw": wins,
             "ground_duel_win_rate_raw": rate,
             "aerial_duel_win_rate_raw": rate,
         }
 
-    better, middle, worse = row(1, 20.0, 60.0), row(3, 30.0, 40.0), row(2, 40.0, 30.0)
+    better, middle, worse = row(1, 24.0, 60.0), row(3, 16.0, 40.0), row(2, 12.0, 30.0)
     _, ratings = service._v2_rating_snapshot(
         [better, middle, worse], "2025/2026", "league", 8, "all",
     )
 
-    assert service._v2_combined_losses(better) == 16.0
-    assert service._v2_combined_losses(middle) == 36.0
+    assert service._v2_combined_losses(better) == 32.0
+    assert service._v2_combined_losses(middle) == 48.0
     assert service._v2_combined_losses(worse) == 56.0
     assert ratings[1]["categories"]["combinedDuel"] > ratings[3]["categories"]["combinedDuel"] > ratings[2]["categories"]["combinedDuel"]
     assert ratings[1]["categories"]["dangerZone"] > ratings[3]["categories"]["dangerZone"] > ratings[2]["categories"]["dangerZone"]
     assert all("loss" not in identifier for identifier, *_rest in service._v2_component_specs()["combinedDuel"])
+
+
+def test_v2_attempt_percentile_reliability_shrinks_only_unsupported_upside() -> None:
+    """Low-volume excellence regresses to 50; low scores never get a boost."""
+    assert service._v2_reliability_adjusted_percentile(99, 0) == 50
+    assert service._v2_reliability_adjusted_percentile(99, 11) == 55
+    assert service._v2_reliability_adjusted_percentile(88, 1) == 50
+    assert service._v2_reliability_adjusted_percentile(88, 99) == 88
+    assert service._v2_reliability_adjusted_percentile(42, 1) == 42
+    assert service._v2_reliability_adjusted_percentile(None, 50) is None
+    assert service._v2_reliability_adjusted_percentile(75, None) is None
 
 
 def test_v2_official_rating_rounding_is_exact_half_up_and_order_independent() -> None:
