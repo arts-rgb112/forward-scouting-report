@@ -19,7 +19,18 @@ export type DuelPressModeContext =
   | { season: string; mode: "league"; scope: 3 | 5 | 7 | 8; competition: "all" }
   | { season: string; mode: "europe"; scope: null; competition: "all" | "ucl" | "uel" | "uecl" };
 export type DuelPressSearch = { page: number; pageSize: 50; q: string; role: "all" | "Type A" | "Type B"; position: string; ageBand: "all" | "u23" | "u25" | "26-30" | "31-plus"; minutesBand: "all" | "200-499" | "500-999" | "1000-1499" | "1500-1999" | "2000-2999" | "3000-plus"; sort: DuelPressSortKey; direction: "asc" | "desc" };
-export type DuelPressLeaderboardPayload = { players: DuelPressPlayerCore[]; meta: import("./duelPressContracts").DuelPressLeaderboardDto["meta"]; serverPage: { page: number; pageSize: 50; totalPages: number; hasNextPage: boolean } };
+export type DuelPressLeaderboardPayload = {
+  players: DuelPressPlayerCore[];
+  meta: import("./duelPressContracts").DuelPressLeaderboardDto["meta"];
+  serverPage: { page: number; pageSize: 50; totalPages: number; hasNextPage: boolean };
+  /**
+   * Server-owned v2 rating snapshot.  This is deliberately absent for the
+   * legacy/v1 transport so consumers cannot accidentally treat v1 data as a
+   * v2 snapshot.  It participates in resource identity and cache invalidation;
+   * it is never used to calculate or transform a score in the browser.
+   */
+  ratingSnapshotId?: string;
+};
 export type TaxonomyPlayerCore =
   | { metricTaxonomyVersion: "legacy-v1"; player: import("../dashboard/types").LegacyPlayer }
   | { metricTaxonomyVersion: "duel-press-v1"; player: DuelPressPlayerCore };
