@@ -55,4 +55,21 @@ describe("flag-enabled Watchlist V3 dashboard wiring", () => {
     await waitFor(() => expect(dialog).toHaveTextContent("0 exact contexts · 0/2 selected"));
     expect(screen.getByRole("button", { name: "Watchlist 0" })).toBeInTheDocument();
   });
+
+  it("keeps the main-board Watch controls enabled for compact v2 rows", async () => {
+    vi.resetModules();
+    const [{ default: Dashboard }, provider, repository] = await Promise.all([
+      import("./DuelPressLeaderboardDashboard"),
+      import("./WatchlistV3Provider"),
+      import("./watchlistV3Repository"),
+    ]);
+    render(
+      <provider.WatchlistV3Provider lockCoordinator={repository.createMemoryWatchlistV3LockCoordinator()}>
+        <Dashboard payload={payload} dataset={dataset} search={search} refreshing={false} v2Source onRefresh={() => undefined} onDatasetChange={() => undefined} onSearchChange={() => undefined} onPageChange={() => undefined} />
+      </provider.WatchlistV3Provider>,
+    );
+    const saveButtons = screen.getAllByRole("button", { name: /Save Harry Kane.*duel and press taxonomy/i });
+    expect(saveButtons.length).toBeGreaterThan(0);
+    expect(saveButtons[0]).toBeEnabled();
+  });
 });
