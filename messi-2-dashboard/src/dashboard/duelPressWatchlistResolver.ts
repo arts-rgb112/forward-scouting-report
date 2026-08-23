@@ -1,4 +1,6 @@
 import { DuelPressApiError, duelPressResourceKey, fetchDuelPressDetailByContext } from "../api/duelPressApi";
+import { DuelPressV2ApiError, fetchDuelPressV2Player } from "../api/duelPressV2Api";
+import { adaptDuelPressV2PlayerCore } from "../api/duelPressAdapter";
 import type { MessiApiConfig } from "../api/env";
 import type { DuelPressPlayerCore } from "../api/duelPressTypes";
 import type { DuelPressV3Entry } from "./watchlistV3Contracts";
@@ -6,10 +8,21 @@ import type { DuelPressV3Entry } from "./watchlistV3Contracts";
 export type DuelWatchlistResolution = { status: "pending" | "current" | "unavailable" | "offline" | "contract-error"; player?: DuelPressPlayerCore };
 export type DuelWatchlistResolver = (config: MessiApiConfig, entry: DuelPressV3Entry, signal: AbortSignal) => Promise<DuelPressPlayerCore>;
 export const resolveDuelWatchlistEntry: DuelWatchlistResolver = (config, entry, signal) => fetchDuelPressDetailByContext(config, entry.playerId, entry.context, signal);
+/** Resolve the current row through the same official v2 player contract used by
+ * the main leaderboard. The saved entry remains a v1 snapshot by design. */
+export const resolveDuelWatchlistEntryV2: DuelWatchlistResolver = async (config, entry, signal) => {
+  const response = await fetchDuelPressV2Player(config, entry.playerId, {
+    season: entry.context.season,
+    mode: entry.context.mode,
+    scope: entry.context.mode === "league" ? entry.context.scope : 8,
+    competition: entry.context.mode === "league" ? "all" : entry.context.competition,
+  }, signal);
+  return adaptDuelPressV2PlayerCore(response.data);
+};
 export const duelWatchlistResourceKey = (entry: DuelPressV3Entry) => duelPressResourceKey(`player:${entry.playerId}`, entry.context);
 
 export function duelResolutionFromError(error: unknown): DuelWatchlistResolution {
-  if (error instanceof DuelPressApiError) {
+  if (error instanceof DuelPressApiError || error instanceof DuelPressV2ApiError) {
     if (error.kind === "not-found" || error.kind === "invalid-request") return { status: "unavailable" };
     if (error.kind === "schema") return { status: "contract-error" };
   }
