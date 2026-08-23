@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PlayerAnalysis } from "../dashboard/types";
 import { ATTACKING_GOAL_FRAME_LIFT, GOAL_CROSSBAR_HEIGHT_METERS, GOAL_POST_Y, GOAL_WIDTH_METERS, LEGACY_POSITIONAL_SEGMENTS, PITCH_WIDTH_METERS, POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES, projectPerspective, SIX_YARD_BOX_Y, SpatialPitch } from "./SpatialPitch";
 import { HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, legacyDensityGrid, legacyHeatmapColor, normalizeDensity } from "./legacyHeatmap";
+import { outcomePresentation } from "./shotOutcomeVisibility";
 
 const analysisWith = (spatial: Partial<PlayerAnalysis["spatial"]>): PlayerAnalysis => ({
   score: { value: 80, rank: 1, topPercent: 1, population: 100, archetype: "Type A" },
@@ -157,6 +158,7 @@ describe("perspective spatial pitch", () => {
     expect(blockedPath).toHaveAttribute("data-end-render-x", String(blockedEnd.x));
     expect(blockedPath).toHaveAttribute("data-end-render-y", String(blockedEnd.y));
     expect(blockedPath).toHaveAttribute("stroke-dasharray", "4 4");
+    expect(blockedPath).toHaveAttribute("stroke", outcomePresentation.blocked.color);
     expect(container.querySelector('[data-shot-marker][data-shot-outcome="goal"]')).toHaveAccessibleName(/Goal-mouth trajectory to 100\.0, 52\.0, height 1\.20 metres/);
     expect(screen.getByRole("list", { name: "Authoritative shot events" })).toHaveTextContent(/blocked trajectory to \(78\.0, 56\.0\)/);
   });

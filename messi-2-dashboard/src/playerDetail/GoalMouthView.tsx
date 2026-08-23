@@ -8,7 +8,7 @@ type RenderableData = FinalThirdRenderableData | FinalThirdShotMapV3Data;
 type ShotStatus = Exclude<FinalThirdShot["status"], "blocked">;
 type VisibleStatus = "all" | ShotStatus;
 const statuses = ["goal", "on_target", "off_target"] as const satisfies readonly ShotStatus[];
-const statusStyle = { goal: { color: "#a3e635", text: "G", label: "Goal" }, on_target: { color: "#38bdf8", text: "T", label: "On target" }, off_target: { color: "#fbbf24", text: "X", label: "Off target" }, blocked: { color: "#f472b6", text: "B", label: "Blocked" } } as const;
+const statusStyle = { goal: { color: "#a3e635", text: "G", label: "Goal" }, on_target: { color: "#38bdf8", text: "T", label: "On target" }, off_target: { color: "#fbbf24", text: "X", label: "Off target" }, blocked: { color: "#EAB308", text: "B", label: "Blocked" } } as const;
 /** Project normalized provider coordinates onto a regulation 7.32m × 2.44m goal. */
 const GOAL_WIDTH_METERS = 7.32;
 const GOAL_HEIGHT_METERS = 2.44;

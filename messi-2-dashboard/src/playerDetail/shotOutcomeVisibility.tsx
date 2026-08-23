@@ -10,7 +10,7 @@ export const outcomePresentation: Record<ShotOutcome, { label: string; plural: s
   goal: { label: "Goal", plural: "Goals", color: "#F8FAFC", symbol: "star", size: 12, summary: "◇" },
   on_target: { label: "On target", plural: "On target", color: "#22D3EE", symbol: "circle", size: 9, summary: "●" },
   off_target: { label: "Off target", plural: "Off target", color: "#FB923C", symbol: "x", size: 9, summary: "×" },
-  blocked: { label: "Blocked", plural: "Blocked", color: "#A3A3A3", symbol: "diamond-open", size: 8, summary: "■" },
+  blocked: { label: "Blocked", plural: "Blocked", color: "#EAB308", symbol: "diamond-open", size: 8, summary: "■" },
 };
 
 const singleClickDelayMs = 350;
