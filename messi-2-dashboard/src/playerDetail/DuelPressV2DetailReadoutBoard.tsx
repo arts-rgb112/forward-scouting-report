@@ -35,8 +35,25 @@ function MetricRow({ metric }: { metric: DuelPressV2Metric }) {
 }
 
 function CategoryCard({ category }: { category: DuelPressV2Category }) {
-  const score = formatAuthoritativePercentile(category.percentileScore); const band = getScoreBand(score ?? 0);
-  return <article data-taxonomy="duel-press-v2" className="min-w-0 rounded-xl border border-white/10 bg-[#101415] p-3 shadow-sm"><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">{category.id}</p><h3 className="truncate text-sm font-black text-white">{labels[category.id] ?? category.label}</h3></div><Tooltip label={labels[category.id] ?? category.label} content={<><p>서버 백분위 점수: {category.percentileScore}/99</p><p>상태: {category.scoreState}</p><p>중앙값: {category.comparison.median ?? "데이터 없음"} · 순위: {category.comparison.rank ?? "데이터 없음"}/{category.comparison.population}</p>{category.imputedComponents.length > 0 && <p className="text-amber-200">대체 구성요소: {category.imputedComponents.join(", ")}</p>}</>}><b className={`inline-flex min-w-11 items-center justify-center rounded border px-2 py-1 font-mono text-lg font-black ${band.className}`}>{score}</b></Tooltip></div><div role="progressbar" aria-label={`${labels[category.id] ?? category.label} 백분위`} aria-valuemin={0} aria-valuemax={99} aria-valuenow={score ?? 0} className="mt-3 h-1.5 overflow-hidden rounded bg-white/10"><span className={`block h-full rounded ${band.dotClassName}`} style={{ width: `${score}%` }} /></div>{category.groups.map((group) => <section key={group.id} className="mt-3 min-w-0" aria-label={group.label}><h4 className="border-b border-white/10 pb-1 text-xs font-bold text-zinc-200">{group.label}</h4>{group.metrics.map((metric) => <MetricRow key={metric.id} metric={metric} />)}</section>)}</article>;
+  const [expanded, setExpanded] = useState(false);
+  const score = formatAuthoritativePercentile(category.percentileScore);
+  const band = getScoreBand(score ?? 0);
+  const title = labels[category.id] ?? category.label;
+  const panelId = `duel-v2-category-${category.id}-details`;
+  return <article data-taxonomy="duel-press-v2" data-category-collapsed={!expanded} className="min-w-0 rounded-xl border border-white/10 bg-[#101415] p-3 shadow-sm">
+    <div className="flex min-w-0 items-start justify-between gap-3">
+      <button type="button" aria-expanded={expanded} aria-controls={panelId} aria-label={`${title} 상세 지표 ${expanded ? "접기" : "펼치기"}`} onClick={() => setExpanded((value) => !value)} className="min-w-0 flex-1 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-lime-300">
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">{category.id}</p>
+        <h3 className="truncate text-sm font-black text-white">{title}</h3>
+        <span className="mt-1 block text-[10px] text-zinc-500">{expanded ? "하위 지표 접기" : "하위 지표 펼치기"}</span>
+      </button>
+      <Tooltip label={title} content={<><p>?쒕쾭 諛깅텇???먯닔: {category.percentileScore}/99</p><p>?곹깭: {category.scoreState}</p><p>以묒븰媛? {category.comparison.median ?? "?곗씠???놁쓬"} 쨌 ?쒖쐞: {category.comparison.rank ?? "?곗씠???놁쓬"}/{category.comparison.population}</p>{category.imputedComponents.length > 0 && <p className="text-amber-200">?泥?援ъ꽦?붿냼: {category.imputedComponents.join(", ")}</p>}</>}><b className={`inline-flex min-w-11 items-center justify-center rounded border px-2 py-1 font-mono text-lg font-black ${band.className}`}>{score}</b></Tooltip>
+    </div>
+    <div role="progressbar" aria-label={`${title} 諛깅텇??`} aria-valuemin={0} aria-valuemax={99} aria-valuenow={score ?? 0} className="mt-3 h-1.5 overflow-hidden rounded bg-white/10"><span className={`block h-full rounded ${band.dotClassName}`} style={{ width: `${score}%` }} /></div>
+    <div id={panelId} hidden={!expanded} data-category-details>
+      {category.groups.map((group) => <section key={group.id} className="mt-3 min-w-0" aria-label={group.label}><h4 className="border-b border-white/10 pb-1 text-xs font-bold text-zinc-200">{group.label}</h4>{group.metrics.map((metric) => <MetricRow key={metric.id} metric={metric} />)}</section>)}
+    </div>
+  </article>;
 }
 
 function IndicatorCard({ indicator }: { indicator: DuelPressV2DetailMetrics["contextIndicators"][number] }) {

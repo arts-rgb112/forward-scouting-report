@@ -18,6 +18,10 @@ describe("DuelPressV2DetailReadoutBoard", () => {
     pair.total.percentileScore = 87;
     pair.per90.percentileScore = 79;
     render(<DuelPressV2DetailReadoutBoard data={duelPressV2DetailMetricsSchema.parse(input)} layout="page"/>);
+    const firstCategoryToggle = screen.getAllByRole("button", { name: /상세 지표 펼치기/ })[0];
+    expect(firstCategoryToggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(firstCategoryToggle);
+    expect(firstCategoryToggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("박스 밖 슈팅")).toBeTruthy();
     expect(screen.getByText("박스 안 슈팅")).toBeTruthy();
     expect(screen.getByText("온볼 전개 영향력")).toBeTruthy();
@@ -34,6 +38,7 @@ describe("DuelPressV2DetailReadoutBoard", () => {
 
   it("keeps scalar metrics as one row and exposes an unavailable per-90 row for partial pairs", () => {
     render(<DuelPressV2DetailReadoutBoard data={parseDetail("partial_pair")} layout="page"/>);
+    fireEvent.click(screen.getAllByRole("button", { name: /상세 지표 펼치기/ })[0]);
     expect(screen.getAllByText("Outside-box shot attempts — Total").length).toBeGreaterThan(0);
     const unavailable = screen.getAllByText("Outside-box shot attempts — /90")[0].parentElement!;
     expect(within(unavailable).getByText("—")).toBeTruthy();
@@ -43,6 +48,7 @@ describe("DuelPressV2DetailReadoutBoard", () => {
 
   it("renders unavailable pairs explicitly instead of synthesizing zero", () => {
     render(<DuelPressV2DetailReadoutBoard data={parseDetail("unavailable")} layout="page"/>);
+    fireEvent.click(screen.getAllByRole("button", { name: /상세 지표 펼치기/ })[0]);
     const unavailable = screen.getAllByText("Failed dribbles — /90")[0].parentElement!;
     expect(within(unavailable).getByText("—")).toBeTruthy();
   });
@@ -53,6 +59,7 @@ describe("DuelPressV2DetailReadoutBoard", () => {
     pair.total.percentileScore = 0;
     pair.per90.percentileScore = 0;
     const { unmount } = render(<DuelPressV2DetailReadoutBoard data={duelPressV2DetailMetricsSchema.parse(input)} layout="page"/>);
+    fireEvent.click(screen.getAllByRole("button", { name: /상세 지표 펼치기/ })[0]);
     expect(within(screen.getAllByText("Outside-box shot attempts — Total")[0].parentElement!).getByText("0")).toBeTruthy();
     expect(within(screen.getAllByText("Outside-box shot attempts — /90")[0].parentElement!).getByText("0")).toBeTruthy();
     unmount();
@@ -69,6 +76,7 @@ describe("DuelPressV2DetailReadoutBoard", () => {
     delta.per90.percentileScore = 98;
     input.categories[0].groups[0].metrics.splice(3, 0, delta);
     render(<DuelPressV2DetailReadoutBoard data={duelPressV2DetailMetricsSchema.parse(input)} layout="page"/>);
+    fireEvent.click(screen.getAllByRole("button", { name: /상세 지표 펼치기/ })[0]);
     const xgot = screen.getByText("Outside-box xGOT — Total").parentElement!;
     const total = screen.getByText("Outside-box xGOT minus xG — Total").parentElement!;
     const per90 = screen.getByText("Outside-box xGOT minus xG — /90").parentElement!;
@@ -80,6 +88,7 @@ describe("DuelPressV2DetailReadoutBoard", () => {
 
   it("uses scalar comparison rank and median in ground/aerial rate tooltips", async () => {
     render(<DuelPressV2DetailReadoutBoard data={parseDetail("complete_league")} layout="page"/>);
+    fireEvent.click(screen.getAllByRole("button", { name: /상세 지표 펼치기/ })[3]);
     const trigger = screen.getByRole("button", { name: /Ground duel success rate 상세 정보/ });
     fireEvent.focus(trigger);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("중앙값 66");
