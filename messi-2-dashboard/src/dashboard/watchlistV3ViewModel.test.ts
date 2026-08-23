@@ -11,4 +11,11 @@ describe("shared Watchlist V3 view model", () => {
   it("applies query, position, age, and minutes filters together", () => { const rows = filterAndSortWatchlistV3(entries, { ...defaultWatchlistV3Filters, query: "Player 5", role: "Type B", position: "ST", ageBand: "26-30", minutesBand: "2000-2999" }); expect(rows.length).toBeGreaterThan(0); expect(rows.every((entry) => entry.snapshot.name.startsWith("Player 5") && entry.snapshot.position === "ST")).toBe(true); });
   it("matches saved display values without requiring diacritics", () => { const diaz = legacyV3Entry(99, { ...base, name: "Luis Díaz", clubName: "Real Betis", leagueName: "La Liga" }, context, "2026-01-02T00:00:00.000Z"); expect(filterAndSortWatchlistV3([diaz], { ...defaultWatchlistV3Filters, query: "Luis Diaz" })).toEqual([diaz]); });
   it("sorts null last in both directions with deterministic key ties and clamps pages", () => { const asc = filterAndSortWatchlistV3(entries, { ...defaultWatchlistV3Filters, sort: "score", direction: "asc" }); const desc = filterAndSortWatchlistV3(entries, { ...defaultWatchlistV3Filters, sort: "score", direction: "desc" }); expect(asc.at(-1)?.snapshot.score).toBeUndefined(); expect(desc.at(-1)?.snapshot.score).toBeUndefined(); const page = watchlistV3Page(entries, defaultWatchlistV3Filters, 99); expect(page.page).toBe(2); expect(page.visible).toHaveLength(10); });
+  it("sorts by the current displayed profile when an override is available", () => {
+    const first = entries[0]; const second = entries[1];
+    const sorted = filterAndSortWatchlistV3([first, second], { ...defaultWatchlistV3Filters, sort: "score", direction: "desc" }, {
+      [first.key]: { score: 10 }, [second.key]: { score: 90 },
+    });
+    expect(sorted.map((entry) => entry.key)).toEqual([second.key, first.key]);
+  });
 });

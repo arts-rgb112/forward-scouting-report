@@ -21,7 +21,7 @@ import { useVisibleDuelWatchlistResolution } from "./useVisibleDuelWatchlistReso
 import { useLegacyWatchlistResolution } from "./useLegacyWatchlistResolution";
 import { useLegacyWatchlistQuality } from "./useLegacyWatchlistQuality";
 import { watchlistV3Key, type DuelPressV3Entry, type LegacyV3Entry } from "./watchlistV3Contracts";
-import { defaultWatchlistV3Filters, watchlistV3Page, type WatchlistV3Filters } from "./watchlistV3ViewModel";
+import { defaultWatchlistV3Filters, filterAndSortWatchlistV3, watchlistV3Page, type WatchlistV3Filters, type WatchlistV3SortOverrides } from "./watchlistV3ViewModel";
 import { useMetricRanks, type MetricRankTarget } from "./useMetricRanks";
 
 type Props = { payload: DuelPressLeaderboardPayload; apiConfig?: MessiApiConfig; dataset: DatasetRouteState; options?: LeaderboardOptions; search: DuelPressSearch; refreshing: boolean; onRefresh(): void; onDatasetChange(state: DatasetRouteState): void; onSearchChange(search: DuelPressSearch, replace?: boolean): void; onPageChange(page: number): void; warning?: React.ReactNode; v2Source?: boolean };
@@ -57,17 +57,39 @@ export default function DuelPressLeaderboardDashboard({ payload, apiConfig, data
   const meta = duelPressDisplayMeta(payload.meta); const total = payload.meta.totalItems;
   const start = payload.players.length ? (payload.meta.page - 1) * payload.meta.pageSize + 1 : 0; const end = start ? start + payload.players.length - 1 : 0;
   const range = payload.players.length ? `${start}–${end} of ${total}` : `0 of ${total}`; const presentationSort = { key: search.sort, direction: search.direction };
-  const watchView = useMemo(() => watchlistV3Page(enabled ? v3!.entries : [], watchFilters, enabled ? v3!.watchlistPage : 1), [enabled, v3?.entries, v3?.watchlistPage, watchFilters]); const watchPage = watchView.page;
+  // Filtering is independent of the sort key. Build the full candidate set
+  // first so a current-server metric can reorder every saved context, not only
+  // whichever 50 happened to be on the previous snapshot-sorted page.
+  const watchCandidates = useMemo(() => filterAndSortWatchlistV3(enabled ? v3!.entries : [], { ...watchFilters, sort: "savedAt", direction: "asc" }), [enabled, v3?.entries, watchFilters]);
+  const candidateDuel = useMemo(() => watchCandidates.filter((entry): entry is DuelPressV3Entry => entry.taxonomy === "duel-press-v1"), [watchCandidates]);
+  const candidateLegacy = useMemo(() => watchCandidates.filter((entry): entry is LegacyV3Entry => entry.taxonomy === "legacy-v1"), [watchCandidates]);
+  // Keep the live Watchlist presentation on the same official taxonomy as the
+  // mainboard. Saved entries remain immutable v1 snapshots; only the default
+  // “current server data” selection uses v2 when the mainboard does.
+  const resolutions = useVisibleDuelWatchlistResolution(apiConfig, candidateDuel, enabled && isWatchlist, retryEpoch, v2Source);
+  const legacyResolutions = useLegacyWatchlistResolution(apiConfig, candidateLegacy, enabled && isWatchlist, retryEpoch);
+  const legacyQuality = useLegacyWatchlistQuality(apiConfig, candidateLegacy, legacyResolutions, enabled && isWatchlist);
+  const watchlistSortOverrides = useMemo<WatchlistV3SortOverrides>(() => {
+    const overrides: Record<string, WatchlistV3SortOverrides[string]> = {};
+    for (const entry of candidateDuel) {
+      const result = resolutions[entry.key];
+      if (v3!.displayPreference[entry.key] !== "saved" && result?.status === "current" && result.player) {
+        overrides[entry.key] = { name: result.player.name, clubName: result.player.club.name, leagueName: result.player.league.name, position: result.player.position, archetype: result.player.archetype, age: result.player.age, minutes: result.player.minutes, score: result.player.score, stats: result.player.stats };
+      }
+    }
+    for (const entry of candidateLegacy) {
+      const result = legacyResolutions[entry.key];
+      if (v3!.displayPreference[entry.key] !== "saved" && result?.status === "current" && result.player) {
+        overrides[entry.key] = { name: result.player.name, clubName: result.player.club.name, leagueName: result.player.league.name, position: result.player.position, archetype: result.player.archetype, age: result.player.age, minutes: result.player.minutes, score: result.player.score, stats: result.player.stats };
+      }
+    }
+    return overrides;
+  }, [candidateDuel, candidateLegacy, legacyResolutions, resolutions, v3?.displayPreference]);
+  const watchView = useMemo(() => watchlistV3Page(enabled ? v3!.entries : [], watchFilters, enabled ? v3!.watchlistPage : 1, watchlistSortOverrides), [enabled, v3?.entries, v3?.watchlistPage, watchFilters, watchlistSortOverrides]); const watchPage = watchView.page;
   useEffect(() => { if (enabled && v3!.watchlistPage !== watchPage) v3!.setWatchlistPage(watchPage); }, [enabled, v3, watchPage]);
   const visibleEntries = watchView.visible;
   const visibleDuel = useMemo(() => visibleEntries.filter((entry): entry is DuelPressV3Entry => entry.taxonomy === "duel-press-v1"), [visibleEntries]);
   const visibleLegacy = useMemo(() => visibleEntries.filter((entry): entry is LegacyV3Entry => entry.taxonomy === "legacy-v1"), [visibleEntries]);
-  // Keep the live Watchlist presentation on the same official taxonomy as the
-  // mainboard. Saved entries remain immutable v1 snapshots; only the default
-  // “current server data” selection uses v2 when the mainboard does.
-  const resolutions = useVisibleDuelWatchlistResolution(apiConfig, visibleDuel, enabled && isWatchlist, retryEpoch, v2Source);
-  const legacyResolutions = useLegacyWatchlistResolution(apiConfig, visibleLegacy, enabled && isWatchlist, retryEpoch);
-  const legacyQuality = useLegacyWatchlistQuality(apiConfig, visibleLegacy, legacyResolutions, enabled && isWatchlist);
   const pending = Object.values(resolutions).some((resolution) => resolution.status === "pending") || Object.values(legacyResolutions).some((resolution) => resolution.status === "pending");
   const canonicalContext = useMemo(() => contextFromPayload(payload), [payload]);
   const leaderboardRankTargets = useMemo<MetricRankTarget[]>(() => !isWatchlist ? payload.players.slice(0, 50).map((player) => ({ key: leaderboardMetricRankKey(player.id), playerId: player.id, context: canonicalContext })) : [], [canonicalContext, isWatchlist, payload.players]);
