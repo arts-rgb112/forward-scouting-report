@@ -8,7 +8,23 @@ type ShotStatus = Exclude<FinalThirdShot["status"], "blocked">;
 type VisibleStatus = "all" | ShotStatus;
 const statuses = ["goal", "on_target", "off_target"] as const satisfies readonly ShotStatus[];
 const statusStyle = { goal: { color: "#a3e635", text: "G", label: "Goal" }, on_target: { color: "#38bdf8", text: "T", label: "On target" }, off_target: { color: "#fbbf24", text: "X", label: "Off target" }, blocked: { color: "#f472b6", text: "B", label: "Blocked" } } as const;
-const frame = { left: 160, right: 540, top: 100, bottom: 360 } as const;
+/** Project normalized provider coordinates onto a regulation 7.32m × 2.44m goal. */
+const GOAL_WIDTH_METERS = 7.32;
+const GOAL_HEIGHT_METERS = 2.44;
+const SVG_UNITS_PER_METER = 100;
+const GOAL_DEPTH_METERS = 2;
+const frame = {
+  left: 180,
+  right: 180 + GOAL_WIDTH_METERS * SVG_UNITS_PER_METER,
+  top: 220,
+  bottom: 220 + GOAL_HEIGHT_METERS * SVG_UNITS_PER_METER,
+} as const;
+const rearFrame = {
+  left: frame.left + GOAL_DEPTH_METERS * SVG_UNITS_PER_METER * 0.6,
+  right: frame.right + GOAL_DEPTH_METERS * SVG_UNITS_PER_METER * 0.6,
+  top: frame.top - GOAL_DEPTH_METERS * SVG_UNITS_PER_METER * 0.36,
+  bottom: frame.bottom - GOAL_DEPTH_METERS * SVG_UNITS_PER_METER * 0.36,
+} as const;
 type ZoomLevel = 1 | 2 | 3;
 
 function zoomedViewBox(base: { minX: number; minY: number; width: number; height: number }, zoom: ZoomLevel) {
@@ -46,19 +62,23 @@ function Marker({ shot, data }: { shot: FinalThirdShot; data: RenderableData }) 
 }
 
 function GoalNet() {
-  return <g data-goal-net-3d aria-hidden="true">
-    <path d="M 160 100 H 540 V 360 H 160 Z" fill="#0b1520" fillOpacity=".96" stroke="#e4e4e7" strokeWidth="7"/>
-    <path d="M 190 78 H 510 V 338 H 190 Z" fill="none" stroke="#64748b" strokeOpacity=".8" strokeWidth="4"/>
-    <path d="M 160 100 L 190 78 M 540 100 L 510 78 M 160 360 L 190 338 M 540 360 L 510 338" stroke="#94a3b8" strokeOpacity=".9" strokeWidth="4"/>
+  const frontWidth = frame.right - frame.left;
+  const frontHeight = frame.bottom - frame.top;
+  const rearWidth = rearFrame.right - rearFrame.left;
+  const rearHeight = rearFrame.bottom - rearFrame.top;
+  return <g data-goal-net-3d data-goal-frame-width-meters={GOAL_WIDTH_METERS} data-goal-frame-height-meters={GOAL_HEIGHT_METERS} data-goal-frame-aspect-ratio={GOAL_WIDTH_METERS / GOAL_HEIGHT_METERS} data-goal-depth-meters={GOAL_DEPTH_METERS} aria-hidden="true">
+    <path d={`M ${frame.left} ${frame.top} H ${frame.right} V ${frame.bottom} H ${frame.left} Z`} fill="#0b1520" fillOpacity=".96" stroke="#e4e4e7" strokeWidth="7"/>
+    <path d={`M ${rearFrame.left} ${rearFrame.top} H ${rearFrame.right} V ${rearFrame.bottom} H ${rearFrame.left} Z`} fill="none" stroke="#64748b" strokeOpacity=".8" strokeWidth="4"/>
+    <path d={`M ${frame.left} ${frame.top} L ${rearFrame.left} ${rearFrame.top} M ${frame.right} ${frame.top} L ${rearFrame.right} ${rearFrame.top} M ${frame.left} ${frame.bottom} L ${rearFrame.left} ${rearFrame.bottom} M ${frame.right} ${frame.bottom} L ${rearFrame.right} ${rearFrame.bottom}`} stroke="#94a3b8" strokeOpacity=".9" strokeWidth="4"/>
     <g stroke="#64748b" strokeOpacity=".42" strokeWidth="1.5">
-      {Array.from({ length: 7 }, (_, index) => <path key={`front-v${index}`} d={`M ${160 + index * 63.33} 100 V 360`}/>)}
-      {Array.from({ length: 5 }, (_, index) => <path key={`front-h${index}`} d={`M 160 ${100 + index * 65} H 540`}/>)}
-      {Array.from({ length: 7 }, (_, index) => <path key={`back-v${index}`} d={`M ${190 + index * 53.33} 78 V 338`}/>)}
-      {Array.from({ length: 5 }, (_, index) => <path key={`back-h${index}`} d={`M 190 ${78 + index * 65} H 510`}/>)}
-      {Array.from({ length: 7 }, (_, index) => <path key={`top-v${index}`} d={`M ${160 + index * 63.33} 100 L ${190 + index * 53.33} 78`}/>)}
-      {Array.from({ length: 7 }, (_, index) => <path key={`bottom-v${index}`} d={`M ${160 + index * 63.33} 360 L ${190 + index * 53.33} 338`}/>)}
-      {Array.from({ length: 5 }, (_, index) => <path key={`left-h${index}`} d={`M 160 ${100 + index * 65} L 190 ${78 + index * 65}`}/>)}
-      {Array.from({ length: 5 }, (_, index) => <path key={`right-h${index}`} d={`M 540 ${100 + index * 65} L 510 ${78 + index * 65}`}/>)}
+      {Array.from({ length: 7 }, (_, index) => <path key={`front-v${index}`} d={`M ${frame.left + index * (frontWidth / 6)} ${frame.top} V ${frame.bottom}`}/>)}
+      {Array.from({ length: 5 }, (_, index) => <path key={`front-h${index}`} d={`M ${frame.left} ${frame.top + index * (frontHeight / 4)} H ${frame.right}`}/>)}
+      {Array.from({ length: 7 }, (_, index) => <path key={`back-v${index}`} d={`M ${rearFrame.left + index * (rearWidth / 6)} ${rearFrame.top} V ${rearFrame.bottom}`}/>)}
+      {Array.from({ length: 5 }, (_, index) => <path key={`back-h${index}`} d={`M ${rearFrame.left} ${rearFrame.top + index * (rearHeight / 4)} H ${rearFrame.right}`}/>)}
+      {Array.from({ length: 7 }, (_, index) => <path key={`top-v${index}`} d={`M ${frame.left + index * (frontWidth / 6)} ${frame.top} L ${rearFrame.left + index * (rearWidth / 6)} ${rearFrame.top}`}/>)}
+      {Array.from({ length: 7 }, (_, index) => <path key={`bottom-v${index}`} d={`M ${frame.left + index * (frontWidth / 6)} ${frame.bottom} L ${rearFrame.left + index * (rearWidth / 6)} ${rearFrame.bottom}`}/>)}
+      {Array.from({ length: 5 }, (_, index) => <path key={`left-h${index}`} d={`M ${frame.left} ${frame.top + index * (frontHeight / 4)} L ${rearFrame.left} ${rearFrame.top + index * (rearHeight / 4)}`}/>)}
+      {Array.from({ length: 5 }, (_, index) => <path key={`right-h${index}`} d={`M ${frame.right} ${frame.top + index * (frontHeight / 4)} L ${rearFrame.right} ${rearFrame.top + index * (rearHeight / 4)}`}/>)}
     </g>
   </g>;
 }
