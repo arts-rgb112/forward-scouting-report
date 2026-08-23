@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, PointerEvent } from "react";
 import type { FinalThirdShot } from "../api/finalThirdShotMapContracts";
 import type { FinalThirdRenderableData } from "../api/finalThirdShotMapV2Contracts";
 import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contracts";
@@ -26,6 +27,20 @@ const rearFrame = {
   bottom: frame.bottom - GOAL_DEPTH_METERS * SVG_UNITS_PER_METER * 0.36,
 } as const;
 type ZoomLevel = 1 | 2 | 3;
+type Viewport = { x: number; y: number };
+
+const zoomViewport = (base: { width: number; height: number }, zoom: ZoomLevel) => ({ width: base.width / zoom, height: base.height / zoom });
+const clampViewport = (viewport: Viewport, base: { width: number; height: number }, zoom: ZoomLevel): Viewport => {
+  const visible = zoomViewport(base, zoom);
+  return {
+    x: Math.min(Math.max(0, base.width - visible.width), Math.max(0, viewport.x)),
+    y: Math.min(Math.max(0, base.height - visible.height), Math.max(0, viewport.y)),
+  };
+};
+const centeredViewport = (from: Viewport, base: { width: number; height: number }, fromZoom: ZoomLevel, toZoom: ZoomLevel): Viewport => {
+  const previous = zoomViewport(base, fromZoom), next = zoomViewport(base, toZoom);
+  return clampViewport({ x: from.x + previous.width / 2 - next.width / 2, y: from.y + previous.height / 2 - next.height / 2 }, base, toZoom);
+};
 
 function zoomedViewBox(base: { minX: number; minY: number; width: number; height: number }, zoom: ZoomLevel) {
   if (zoom === 1) return `${base.minX} ${base.minY} ${base.width} ${base.height}`;
@@ -95,15 +110,59 @@ function qualitySummary(data: RenderableData) {
 export function GoalMouthView({ data }: { data: RenderableData }) {
   const [visibleStatus, setVisibleStatus] = useState<VisibleStatus>("all");
   const [zoom, setZoom] = useState<ZoomLevel>(1);
+  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0 });
+  const pointerPan = useRef<{ pointerId: number; clientX: number; clientY: number; viewport: Viewport } | null>(null);
   const endpointShots = data.shots.filter((shot) => shot.endpointAvailable && shot.goalMouthY !== null && shot.goalMouthZ !== null && shot.status !== "blocked");
   const unplotted = data.shots.filter((shot) => !shot.endpointAvailable);
   const points = endpointShots.map(endpointPoint), padding = 52;
-  const minX = Math.min(frame.left, ...points.map((point) => point.x)) - padding, maxX = Math.max(frame.right, ...points.map((point) => point.x)) + padding;
-  const minY = Math.min(frame.top, ...points.map((point) => point.y)) - padding, maxY = Math.max(frame.bottom, ...points.map((point) => point.y)) + padding;
+  const framePoints = [
+    { x: frame.left, y: frame.top }, { x: frame.right, y: frame.top }, { x: frame.left, y: frame.bottom }, { x: frame.right, y: frame.bottom },
+    { x: rearFrame.left, y: rearFrame.top }, { x: rearFrame.right, y: rearFrame.top }, { x: rearFrame.left, y: rearFrame.bottom }, { x: rearFrame.right, y: rearFrame.bottom },
+  ];
+  const allBoundsPoints = [...framePoints, ...points];
+  const minX = Math.min(...allBoundsPoints.map((point) => point.x)) - padding, maxX = Math.max(...allBoundsPoints.map((point) => point.x)) + padding;
+  const minY = Math.min(...allBoundsPoints.map((point) => point.y)) - padding, maxY = Math.max(...allBoundsPoints.map((point) => point.y)) + padding;
   const baseViewBox = { minX, minY, width: maxX - minX, height: maxY - minY };
-  const viewBox = zoomedViewBox(baseViewBox, zoom);
+  const visibleViewport = zoomViewport(baseViewBox, zoom);
+  const safeViewport = clampViewport(viewport, baseViewBox, zoom);
+  const viewBox = zoom === 1
+    ? zoomedViewBox(baseViewBox, zoom)
+    : `${baseViewBox.minX + safeViewport.x} ${baseViewBox.minY + safeViewport.y} ${visibleViewport.width} ${visibleViewport.height}`;
   const visibleShots = useMemo(() => visibleStatus === "all" ? endpointShots : endpointShots.filter((shot) => shot.status === visibleStatus), [endpointShots, visibleStatus]);
   const counts = { all: data.shots.length, goal: data.shots.filter((shot) => shot.status === "goal").length, on_target: data.shots.filter((shot) => shot.status === "on_target").length, off_target: data.shots.filter((shot) => shot.status === "off_target").length };
   const summary = qualitySummary(data);
-  return <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#081018]"><div className="flex flex-wrap items-center gap-2 border-b border-white/10 p-3"><div role="group" aria-label="Goal-Mouth shot visibility" className="flex flex-wrap items-center gap-2">{(["all", ...statuses] as const).map((status) => <button key={status} type="button" aria-pressed={visibleStatus === status} onClick={() => setVisibleStatus(status)} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold aria-pressed:border-lime-300 aria-pressed:bg-lime-300 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-lime-300">{status === "all" ? "All" : statusStyle[status].label} {counts[status]}</button>)}</div><div role="group" aria-label="Goal-Mouth zoom controls" className="ml-auto flex items-center gap-1"><button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoom((current) => (current - 1) as ZoomLevel)} className="min-h-10 min-w-10 rounded border border-white/20 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">−</button><button type="button" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoom((current) => (current + 1) as ZoomLevel)} className="min-h-10 min-w-10 rounded border border-white/20 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">+</button><button type="button" aria-label="Reset zoom" disabled={zoom === 1} onClick={() => setZoom(1)} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">Reset</button><span aria-live="polite" data-goal-mouth-zoom className="ml-1 min-w-20 text-right text-xs text-zinc-400">Zoom {zoom}×</span></div><span className="w-full text-xs text-zinc-400 sm:w-auto sm:ml-2">Blocked {unplotted.length} · audit only</span></div><svg data-goal-mouth-viewbox={viewBox} viewBox={viewBox} className="block h-auto w-full" role="img" aria-label={`Three-dimensional goal-mouth plot with ${visibleShots.length} visible authoritative endpoints and ${unplotted.length} unplotted endpoints. Zoom ${zoom}x.`}><GoalNet/>{visibleShots.map((shot) => <Marker key={shot.shotId} shot={shot} data={data}/>)}</svg><div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>G goal · T on target · X off target. Marker size uses the shared source xG scale; gray ? means xG unavailable.</p>{summary && <p data-shooting-quality className="mt-1 text-cyan-100">{summary}</p>}{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div></div>;
+  useEffect(() => { setViewport({ x: 0, y: 0 }); setZoom(1); pointerPan.current = null; }, [data]);
+  const setZoomLevel = (next: ZoomLevel) => { setViewport((current) => centeredViewport(current, baseViewBox, zoom, next)); setZoom(next); };
+  const resetViewport = () => { pointerPan.current = null; setZoom(1); setViewport({ x: 0, y: 0 }); };
+  const panBy = (x: number, y: number) => setViewport((current) => clampViewport({ x: current.x + x, y: current.y + y }, baseViewBox, zoom));
+  const onPointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    if (zoom === 1 || event.defaultPrevented) return;
+    pointerPan.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport: safeViewport };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+  const onPointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    const start = pointerPan.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    setViewport(clampViewport({
+      x: start.viewport.x - (event.clientX - start.clientX) * visibleViewport.width / bounds.width,
+      y: start.viewport.y - (event.clientY - start.clientY) * visibleViewport.height / bounds.height,
+    }, baseViewBox, zoom));
+  };
+  const endPointerPan = (event: PointerEvent<SVGSVGElement>) => {
+    if (pointerPan.current?.pointerId !== event.pointerId) return;
+    pointerPan.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+  const onKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
+    if (event.key === "Escape") { event.preventDefault(); resetViewport(); return; }
+    if (zoom === 1) return;
+    const step = Math.min(48, visibleViewport.width / 5);
+    if (event.key === "ArrowLeft") { event.preventDefault(); panBy(-step, 0); }
+    else if (event.key === "ArrowRight") { event.preventDefault(); panBy(step, 0); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); panBy(0, -step); }
+    else if (event.key === "ArrowDown") { event.preventDefault(); panBy(0, step); }
+  };
+  return <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#081018]"><div className="flex flex-wrap items-center gap-2 border-b border-white/10 p-3"><div role="group" aria-label="Goal-Mouth shot visibility" className="flex flex-wrap items-center gap-2">{(["all", ...statuses] as const).map((status) => <button key={status} type="button" aria-pressed={visibleStatus === status} onClick={() => setVisibleStatus(status)} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold aria-pressed:border-lime-300 aria-pressed:bg-lime-300 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-lime-300">{status === "all" ? "All" : statusStyle[status].label} {counts[status]}</button>)}</div><div role="group" aria-label="Goal-Mouth zoom controls" className="ml-auto flex items-center gap-1"><button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-10 min-w-10 rounded border border-white/20 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">−</button><button type="button" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-10 min-w-10 rounded border border-white/20 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">+</button><button type="button" aria-label="Reset zoom and pan" disabled={zoom === 1 && safeViewport.x === 0 && safeViewport.y === 0} onClick={resetViewport} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">Reset</button><span aria-live="polite" data-goal-mouth-zoom className="ml-1 min-w-20 text-right text-xs text-zinc-400">Zoom {zoom}×</span></div><span className="w-full text-xs text-zinc-400 sm:w-auto sm:ml-2">Blocked {unplotted.length} · audit only</span></div><svg data-goal-mouth-viewbox={viewBox} viewBox={viewBox} className="block h-auto w-full touch-none cursor-grab active:cursor-grabbing" role="img" tabIndex={0} aria-label={`Three-dimensional goal-mouth plot with ${visibleShots.length} visible authoritative endpoints and ${unplotted.length} unplotted endpoints. Zoom ${zoom}x. Drag to pan when zoomed.`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointerPan} onPointerCancel={endPointerPan} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={onKeyDown}><GoalNet/>{visibleShots.map((shot) => <Marker key={shot.shotId} shot={shot} data={data}/>)}</svg><div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>G goal · T on target · X off target. Marker size uses the shared source xG scale; gray ? means xG unavailable.</p>{summary && <p data-shooting-quality className="mt-1 text-cyan-100">{summary}</p>}{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div></div>;
 }
