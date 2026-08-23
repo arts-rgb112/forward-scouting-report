@@ -62,7 +62,10 @@ export default function DuelPressLeaderboardDashboard({ payload, apiConfig, data
   const visibleEntries = watchView.visible;
   const visibleDuel = useMemo(() => visibleEntries.filter((entry): entry is DuelPressV3Entry => entry.taxonomy === "duel-press-v1"), [visibleEntries]);
   const visibleLegacy = useMemo(() => visibleEntries.filter((entry): entry is LegacyV3Entry => entry.taxonomy === "legacy-v1"), [visibleEntries]);
-  const resolutions = useVisibleDuelWatchlistResolution(apiConfig, visibleDuel, enabled && isWatchlist, retryEpoch);
+  // Keep the live Watchlist presentation on the same official taxonomy as the
+  // mainboard. Saved entries remain immutable v1 snapshots; only the default
+  // “current server data” selection uses v2 when the mainboard does.
+  const resolutions = useVisibleDuelWatchlistResolution(apiConfig, visibleDuel, enabled && isWatchlist, retryEpoch, v2Source);
   const legacyResolutions = useLegacyWatchlistResolution(apiConfig, visibleLegacy, enabled && isWatchlist, retryEpoch);
   const legacyQuality = useLegacyWatchlistQuality(apiConfig, visibleLegacy, legacyResolutions, enabled && isWatchlist);
   const pending = Object.values(resolutions).some((resolution) => resolution.status === "pending") || Object.values(legacyResolutions).some((resolution) => resolution.status === "pending");

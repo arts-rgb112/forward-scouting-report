@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
 import validLeaderboard from "../../../docs/fixtures/duel_press_v1/valid_leaderboard.json";
 import { duelPressPlayerSchema } from "../api/duelPressContracts";
 import { DuelPressApiError } from "../api/duelPressApi";
 import { duelPressEntry } from "./watchlistStorageV3";
-import { duelResolutionFromError, resolveVisibleDuelWatchlistEntries } from "./duelPressWatchlistResolver";
+import { duelResolutionFromError, resolveDuelWatchlistEntryV2, resolveVisibleDuelWatchlistEntries } from "./duelPressWatchlistResolver";
 
 const config = { baseUrl: "https://api.test", season: "2025/2026", scope: 8 as const, limit: 1000 }; const context = { season: "2025/2026", mode: "league" as const, scope: 8 as const, competition: "all" as const };
 const base = duelPressPlayerSchema.parse(validLeaderboard.data[0]);
@@ -20,5 +21,15 @@ describe("visible duel watchlist resolver", () => {
   });
   it("isolates 404, 422, schema, and network statuses", () => {
     expect(duelResolutionFromError(new DuelPressApiError("not-found")).status).toBe("unavailable"); expect(duelResolutionFromError(new DuelPressApiError("invalid-request")).status).toBe("unavailable"); expect(duelResolutionFromError(new DuelPressApiError("schema")).status).toBe("contract-error"); expect(duelResolutionFromError(new TypeError("offline")).status).toBe("offline");
+  });
+  it("resolves current watchlist values through the official v2 player contract", async () => {
+    const fixture = JSON.parse(readFileSync("../docs/fixtures/duel_press_v2/complete_league.json", "utf8")).responses.player;
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(fixture), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetcher);
+    const entry = duelPressEntry(base, context);
+    const current = await resolveDuelWatchlistEntryV2(config, entry, new AbortController().signal);
+    expect(new URL(fetcher.mock.calls[0][0]).pathname).toBe(`/api/v2/players/${base.id}/duel-press-v2`);
+    expect(current.stats.outsideShot).toBe(fixture.data.stats.outsideShot.percentileScore);
+    expect(current.score).toBe(fixture.data.overallRating.rawValue);
   });
 });
