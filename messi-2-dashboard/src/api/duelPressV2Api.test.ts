@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { duelPressV2PlayerSchema } from "./duelPressV2Contracts";
 import { adaptDuelPressV2PlayerCore } from "./duelPressAdapter";
-import { buildDuelPressV2DetailMetricsUrl, buildDuelPressV2LeaderboardUrl } from "./duelPressV2Api";
+import { buildDuelPressV2DetailMetricsUrl, buildDuelPressV2LeaderboardUrl, duelPressV2ResourceKey } from "./duelPressV2Api";
 
 const league = { season: "2025/2026", mode: "league" as const, scope: 8 as const, competition: "all" as const };
 const europe = { season: "2025/2026", mode: "europe" as const, scope: 8 as const, competition: "ucl" as const };
@@ -32,5 +32,11 @@ describe("duel-press-v2 URL contracts", () => {
     expect(url.searchParams.get("mode")).toBe("europe");
     expect(url.searchParams.get("competition")).toBe("ucl");
     expect(url.searchParams.has("scope")).toBe(false);
+  });
+  it("keeps rating snapshots in the resource identity so a new server snapshot cannot reuse old rows", () => {
+    const previous = duelPressV2ResourceKey("leaderboard", 0, league, "stat-pairs-v2:aaaaaaaaaaaaaaaa");
+    const current = duelPressV2ResourceKey("leaderboard", 0, league, "stat-pairs-v2:bbbbbbbbbbbbbbbb");
+    expect(previous).not.toBe(current);
+    expect(current).toContain("stat-pairs-v2:bbbbbbbbbbbbbbbb");
   });
 });
