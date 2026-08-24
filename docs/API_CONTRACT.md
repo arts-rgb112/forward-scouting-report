@@ -3,12 +3,12 @@
 ## 진행 중인 작업
 
 - 상태: 완료
-- 작업: 범용 백엔드 파이프라인용 Claude Code 프로젝트 서브에이전트 3종 생성
+- 작업: 범용 백엔드 파이프라인용 Codex 프로젝트 서브에이전트 3종 추가
 - 담당: 백엔드 메인 오케스트레이터
-- 시작: 2026-08-24 21:19 KST
-- 종료: 2026-08-24 21:24 KST
-- 결과: `.claude/agents/`에 `sync-checker`, `dependency-mapper`, `implementer` 정의 추가
-- 범위: `.claude/agents/` 정의와 본 공유 계약 문서만 변경
+- 시작: 2026-08-24 21:27 KST
+- 종료: 2026-08-24 21:29 KST
+- 결과: `.codex/agents/`에 Terra 기반 `sync-checker`, `dependency-mapper`, `implementer` 정의 추가 및 프로젝트 `AGENTS.md`에 계약 우선 규칙 추가
+- 범위: `.codex/agents/`, Codex용 `AGENTS.md` 지침, 본 공유 계약 문서
 - 외부 상태: API, 데이터, feature flag, 배포 변경 없음
 
 ## Backend orchestration guardrails
