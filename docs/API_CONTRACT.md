@@ -3,12 +3,12 @@
 ## 진행 중인 작업
 
 - 상태: 완료
-- 작업: 범용 백엔드 파이프라인용 Codex 프로젝트 서브에이전트 3종 추가
+- 작업: 백엔드 오케스트레이션 에이전트 설정을 origin/main에 게시
 - 담당: 백엔드 메인 오케스트레이터
-- 시작: 2026-08-24 21:27 KST
-- 종료: 2026-08-24 21:29 KST
-- 결과: `.codex/agents/`에 Terra 기반 `sync-checker`, `dependency-mapper`, `implementer` 정의 추가 및 프로젝트 `AGENTS.md`에 계약 우선 규칙 추가
-- 범위: `.codex/agents/`, Codex용 `AGENTS.md` 지침, 본 공유 계약 문서
+- 시작: 2026-08-24 21:30 KST
+- 종료: 2026-08-24 21:31 KST
+- 결과: Claude Code용 Sonnet 정의와 Codex용 Terra 정의를 함께 보존하고, Codex 프로젝트 규칙 및 계약 우선 지침을 main 게시 대상으로 확정
+- 범위: `agent/backend-orchestration-agents`를 최신 `origin/main`에 안전하게 반영하고 push
 - 외부 상태: API, 데이터, feature flag, 배포 변경 없음
 
 ## Backend orchestration guardrails
