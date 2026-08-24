@@ -3,13 +3,14 @@
 ## 진행 중인 작업
 
 - 상태: 완료
-- 작업: Git 관리 checkout을 `forward-scouting-report-GIT-METADATA-DO-NOT-DELETE`로 명확히 이름 변경
+- 작업: contextual compare historical league fixture 해소 상태 sync-checker 재검증 및 stale handoff 정리
 - 담당: 백엔드 메인 오케스트레이터
-- 시작: 2026-08-24 21:56 KST
-- 종료: 2026-08-24 21:57 KST
-- 결과: Git 메타데이터 checkout을 삭제 없이 이름 변경하고 24개 등록 worktree 연결을 repair; 작업 경로와 절대 삭제 금지 목적을 워크스페이스 지침에 반영
-- 범위: 로컬 Git 메타데이터 checkout 이름 변경 및 연결된 worktree 무결성 확인
+- 시작: 2026-08-24 22:20 KST
+- 종료: 2026-08-24 22:27 KST
+- 결과: HEAD와 origin/main(e541704)에서 historical fixture의 enclosing/nested context 일치와 legacy right payload 부재를 재확인; backend contextual 17건과 frontend strict/contextual 10건 및 stale-context 음성 회귀가 통과하여 구현·배포 불필요 판정, 해소된 2026-08-22 handoff만 삭제
+- 범위: fixture 직접 파싱, backend/frontend strict·negative regression, 호환 회귀 및 staged handoff 삭제 적정성 확인
 - 외부 상태: API, 데이터, feature flag, 배포 변경 없음
+- 검증 메모: duel/press 확장 회귀 59건은 통과했으며 별도 source-audit 1건은 assertion 실패가 아니라 Windows `%TEMP%\\pytest-of-USER`의 `tmp_path` 생성 PermissionError로 실행 불가; historical fixture 범위와 무관
 
 ## Backend orchestration guardrails
 
