@@ -18,6 +18,7 @@ from api_server.schemas import ApiErrorEnvelope, ContextualCompareEnvelope, Cont
 
 FIXTURES = Path(__file__).parents[1] / "docs" / "fixtures" / "contextual_compare_v1"
 PRODUCTION_ORIGIN = "https://forward-scouting-report-6dn7-tau.vercel.app"
+CUSTOM_DOMAIN_ORIGIN = "https://messi.my"
 PREVIEW_ORIGIN = "https://forward-scouting-report-6dn7-feature-42-messiflick.vercel.app"
 
 
@@ -269,7 +270,7 @@ def test_body_limit_cors_preflight_and_hostile_origin_contract() -> None:
     hostile = post({"comparisonVersion": "contextual-compare-v1", "left": side(), "right": side(season="2024/2025")}, "https://hostile.example")
     assert hostile.status_code == 403
     assert "access-control-allow-origin" not in hostile.headers
-    for origin in (PRODUCTION_ORIGIN, PREVIEW_ORIGIN):
+    for origin in (PRODUCTION_ORIGIN, CUSTOM_DOMAIN_ORIGIN, PREVIEW_ORIGIN):
         preflight = client.options(
             "/api/v2/compare/contextual",
             headers={"Origin": origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "Content-Type"},

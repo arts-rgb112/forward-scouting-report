@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 진행 중 — messi.my 백엔드 CORS/POST 허용 준비
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
+- 범위: `https://messi.my`만 DEFAULT CORS 및 보호 POST origin allowlist에 추가한다. 기존 canonical Vercel Origin과 Preview regex는 유지하고, `www.messi.my`, 점수·기능 플래그·공유 계산 모듈은 변경하지 않는다. Render `MESSI_CORS_ORIGINS`에는 기존 값을 삭제하지 않고 새 Origin만 추가한다.
+
 - 상태: 완료 — Production Goal-Mouth baseline 공개
 - 작업: 사용자 승인에 따라 Production `VITE_GOAL_MOUTH_BASELINE_ENABLED` 한 값만 true로 변경하고 재배포·실측 QA를 수행했다. `VITE_FINAL_THIRD_SHOT_MAP_V3_ENABLED=true`과 `VITE_DUEL_PRESS_V2_ENABLED` 및 다른 모든 변수는 변경·삭제·재생성하지 않았다. 문제 시 코드 롤백 대신 이 baseline 값만 false로 복구 후 재배포한다.
 - 담당: backend orchestrator / frontend handoff

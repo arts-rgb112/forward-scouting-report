@@ -100,17 +100,20 @@ def test_cors_environment_is_an_exact_comma_separated_allowlist(monkeypatch):
     assert cors_origins() == ["https://dashboard.example.test", "https://preview.example.test"]
 
 
-def test_watchlist_post_cors_is_limited_to_the_fixed_production_origin():
-    origin = "https://forward-scouting-report-6dn7-tau.vercel.app"
-    allowed = client.options("/api/v2/watchlist/resolve", headers={
-        "Origin": origin,
-        "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "Content-Type",
-    })
-    assert allowed.status_code == 200
-    assert allowed.headers["access-control-allow-origin"] == origin
-    assert "POST" in allowed.headers["access-control-allow-methods"]
-    assert allowed.headers.get("access-control-allow-credentials") is None
+def test_watchlist_post_cors_is_limited_to_exact_dashboard_origins():
+    for origin in (
+        "https://forward-scouting-report-6dn7-tau.vercel.app",
+        "https://messi.my",
+    ):
+        allowed = client.options("/api/v2/watchlist/resolve", headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type",
+        })
+        assert allowed.status_code == 200
+        assert allowed.headers["access-control-allow-origin"] == origin
+        assert "POST" in allowed.headers["access-control-allow-methods"]
+        assert allowed.headers.get("access-control-allow-credentials") is None
 
     preview = "https://forward-scouting-report-6dn7-pr-160-messiflick.vercel.app"
     denied = client.options("/api/v2/watchlist/resolve", headers={
@@ -289,6 +292,18 @@ def test_watchlist_resolve_keeps_order_and_isolates_invalid_contexts():
     assert results[0]["player"]["playerId"] == player_id
     assert results[0]["player"]["tier"]["taxonomyVersion"] == "crystal-v2"
     assert results[0]["context"] != results[2]["context"]
+
+
+def test_custom_domain_can_resolve_watchlist_entries():
+    response = client.post(
+        "/api/v2/watchlist/resolve",
+        headers={"Origin": "https://messi.my"},
+        json={"entries": []},
+    )
+    # An empty body is intentionally invalid, but it must pass the protected
+    # origin guard before request validation (422 rather than 403).
+    assert response.status_code == 422
+    assert response.headers["access-control-allow-origin"] == "https://messi.my"
 
 
 def test_son_data_quality_exposes_recovered_spatial_data_without_changing_player_dto():

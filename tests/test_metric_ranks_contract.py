@@ -14,6 +14,7 @@ from api_server.schemas import MetricRanksEnvelope, MetricRanksRequest
 
 FIXTURES = Path(__file__).parents[1] / "docs" / "fixtures" / "metric_ranks_v1"
 PRODUCTION_ORIGIN = "https://forward-scouting-report-6dn7-tau.vercel.app"
+CUSTOM_DOMAIN_ORIGIN = "https://messi.my"
 PREVIEW_ORIGIN = "https://forward-scouting-report-6dn7-feature-42-messiflick.vercel.app"
 
 
@@ -119,8 +120,8 @@ def test_body_limit_is_413_and_hostile_origin_gets_no_cors_header() -> None:
     assert "access-control-allow-origin" not in hostile.headers
 
 
-@pytest.mark.parametrize("origin", [PRODUCTION_ORIGIN, PREVIEW_ORIGIN])
-def test_post_preflight_allows_production_and_approved_preview(origin: str) -> None:
+@pytest.mark.parametrize("origin", [PRODUCTION_ORIGIN, CUSTOM_DOMAIN_ORIGIN, PREVIEW_ORIGIN])
+def test_post_preflight_allows_dashboard_origins_and_approved_preview(origin: str) -> None:
     response = TestClient(app).options(
         "/api/v2/metric-ranks",
         headers={
@@ -132,6 +133,12 @@ def test_post_preflight_allows_production_and_approved_preview(origin: str) -> N
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == origin
     assert response.headers.get("access-control-allow-credentials") is None
+
+
+def test_custom_domain_can_submit_metric_ranks() -> None:
+    response = post([entry("messi-my")], origin=CUSTOM_DOMAIN_ORIGIN)
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == CUSTOM_DOMAIN_ORIGIN
 
 
 def test_batch_groups_same_context_without_n_plus_one(monkeypatch) -> None:
