@@ -2,6 +2,9 @@
 
 ## 진행 중인 작업
 
+- 상태: 진행 중 — Render Blueprint 메타데이터 동기화
+- 범위: 실제 운영 Render 서비스 `forward-scouting-report`의 Dashboard 플랜 `Starter`와 일치하도록, 미연결 참조 파일 `render.yaml`의 name/plan만 `forward-scouting-report`/`starter`로 갱신한다. 기능 코드·API·기능 플래그·점수 모듈은 변경하지 않는다. main 병합 뒤 20분 이상 유휴 첫 `/health` 응답 시간을 별도 실측한다.
+
 - 상태: 완료 — messi.my 백엔드 CORS/POST 허용 준비
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
 - 범위/코드: PR `#283` (`Allow messi.my dashboard origin`)가 main에 병합되었고 merge SHA는 `4ac7fb1b8e4f59feca467a7c6121040afd7bfdb8`이다. `https://messi.my`만 `DEFAULT_ORIGINS`와 보호 POST dashboard allowlist에 추가했다. 기존 canonical Vercel Origin은 롤백 경로로 유지했으며, immutable Preview 전용 `VERCEL_PREVIEW_ORIGIN_REGEX`는 변경하지 않았다. `www.messi.my`, 점수·기능 플래그·공유 계산 모듈은 변경하지 않았다.
