@@ -2,6 +2,11 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료 — additive `benchmark-radar-v2` 계약 및 position 비교군 정합성 (커밋 승인 대기)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
+- 범위/검증: 기존 Volume/Ratio benchmark v1과 M.E.S.S.I. 점수 공식을 보존한 채, duel-press-v2의 여섯 축(`outsideShot`, `boxThreat`, `dangerZone`, `combinedDuel`, `spaceControl`, `forwardPress`)을 위한 별도 레이더 계약을 로컬 구현·테스트했다. 새 strict suite 6건과 기존 v1 Volume/Ratio·tactical summary·Duel/Press V2 회귀는 프로젝트 내부 base temp로 `70 passed`였다. 기본 Windows `%TEMP%` 실행의 1건은 assertion이 아니라 기존 `tmp_path` ACL PermissionError였다. 사용자 승인 전에는 커밋·PR·배포·기능 플래그 변경을 하지 않는다. `rankings.py`, `tactical_ratio.py`, `spear.py`는 변경하지 않았다.
+- 알려진 데이터 품질 이슈(이번 범위 밖): `metrics.py`는 FotMob `base.primaryPosition`의 **현재** label을 모든 과거 season record에 복사한다. 따라서 은퇴 뒤 직책이 Coach로 바뀐 실제 선수 시즌 8행과 `forward`/`midfielder`/`defender` 같은 넓은 현재 label이 historical cohort에 존재한다. 기존 leaderboard·rating cohort는 변경하지 않는다. 새 v2 레이더에서는 텍스트 정규화만 적용하고 의미 병합은 하지 않으며, Coach의 position reference만 `position_label_not_player_role`로 unavailable 처리한다. 글로벌 cohort에는 Coach 행을 그대로 유지한다.
+
 - 상태: 완료 — Render Blueprint 메타데이터 동기화 및 always-on 유휴 검증
 - 범위/병합: 실제 운영 Render 서비스 `forward-scouting-report`의 Dashboard 플랜 `Starter`와 일치하도록, 미연결 참조 파일 `render.yaml`의 name/plan을 `forward-scouting-report`/`starter`로 갱신했다. PR `#285` merge SHA는 `549f12e79154be6850104f368ecc4e3aa6f5e065`이다. 기능 코드·API·기능 플래그·점수 모듈은 변경하지 않았다.
 - 유휴 실측: main 병합 뒤 **20분 이상 서비스 요청 없이** 대기한 다음 첫 `GET https://forward-scouting-report.onrender.com/health`를 한 번만 측정했다. 결과는 HTTP 200, total `0.320820s`, connect `0.014554s`, start-transfer `0.320766s`였다. 이는 2026-08-25 free 플랜의 최대 32.3초/504 패턴과 달리 always-on 기대 범위이며, 이번 실측에서 504는 없었다.
