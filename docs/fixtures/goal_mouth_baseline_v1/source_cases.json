@@ -1,0 +1,21 @@
+{
+  "coordinateVersion": "goal-mouth-v1",
+  "minimumCellSample": 150,
+  "acceptedEdges": [
+    {"mouthY": 0.0, "mouthZ": 0.0, "cellId": "row1_column1"},
+    {"mouthY": 1.0, "mouthZ": 1.0, "cellId": "row5_column10"}
+  ],
+  "excludedCases": [
+    "blocked_has_no_goal_mouth_endpoint",
+    "goal_mouth_endpoint_unavailable_in_source",
+    "off_frame_normalized_goal_mouth_coordinate",
+    "nonfinite_normalized_goal_mouth_coordinate"
+  ],
+  "audit": {
+    "eligibleShots": 104612,
+    "goals": 34436,
+    "observedCells": 50,
+    "lowSampleCells": [],
+    "unavailableCells": []
+  }
+}

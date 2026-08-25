@@ -2,13 +2,22 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·계약 검증 완료 — 프런트 fail-closed / 사용자 배포 승인 대기
+- 작업: Goal-Mouth 핫/콜드존 기준표(전역 10×5 득점 확률 baseline)와 선수 슈팅맵 오버레이
+- 담당: frontend_integration / backend owner handoff
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
+- 시작: 2026-08-25 KST
+- 범위와 가드: 새 additive `GET /api/v2/goal-mouth-baseline`만 요청한다. 기존 final-third-shot-map v1/v2/v3, `goalMouthY/Z` 변환, `rankings.py`, `tactical_ratio.py`, `spear.py`는 변경하지 않는다. 프런트는 `VITE_GOAL_MOUTH_BASELINE_ENABLED=false`를 기본값으로 유지하고, strict schema·fixture·OpenAPI·CORS·운영 검증 증거 수신 전에는 UI를 활성화하지 않는다.
+- 로컬 검증: 고정 5개 정적 snapshot만 읽어 유효 엔드포인트 104,612개·득점 34,436개를 집계했다. `minimumCellSample=150`으로 50셀 전부 관측값을 반환한다. 미래의 150 미만 셀도 실제 `shots`/`goals`/득점률은 숨기지 않고 `state=low_sample`, `lowSample=true`, 서버 Wilson 95% 신뢰구간으로 표시한다. source 부재만 `state=unavailable`/null이다. `GET /api/v2/goal-mouth-baseline`의 strict OpenAPI·422 query 거부·캐시·CORS 및 Final Third 회귀 테스트 47건이 로컬에서 통과했다.
+- 다음 단계: 사용자 배포 승인 후에만 별도 커밋·PR·merge·Render 배포와 Production/immutable Preview CORS 증거를 진행한다. 그 증거를 받은 프런트는 strict parser·background layer·on/off 토글·cell tooltip을 별도 변경으로 구현하고 로컬 실데이터 QA를 수행한다.
+
 - 상태: 완료 (main 병합됨)
 - 작업: Goal-Mouth 골대 3D 디테일 커밋 · Vercel Preview · PR 생성 · main 병합
 - 담당: frontend_integration (병합은 Claude Code)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
 - 후속 작업 상태: 완료 (PR 병합 승인 대기) — Goal-Mouth 오프프레임 툴팁의 viewBox 경계 반전·가독성 보강. 클라이언트 렌더링만 수정하며 API/원본 좌표 계약은 변경하지 않는다.
 - 후속 작업 결과: 완료 — 우측 마커는 좌측, 상단 마커는 하단으로 자동 반전하고, 미터 설명을 줄별로 배치·가변 폭 배경에 표시한다. 원본 `goalMouthY/Z`는 시각 툴팁에서 제거했으나 title/aria-label에 유지했다. 로컬 194165/2025-26/League/scope7/`taxonomy=duel-press-v1` 실데이터에서 우측 끝(오른쪽 포스트 밖 13.8m)과 상단 끝(크로스바 위 3.4m) 툴팁이 모두 패널 안에 표시됨을 확인했다. focused test 15건·production build 통과. 커밋·PR·배포 미수행.
-- 후속 작업 PR: `https://github.com/arts-rgb112/forward-scouting-report/pull/274` 생성 완료. head `agent/backend-orchestration-agents`의 커밋 `73de4b8`을 포함하며, 사용자 병합 승인 전까지 main에 병합하지 않는다.
+- 후속 작업 PR: `https://github.com/arts-rgb112/forward-scouting-report/pull/274`는 사용자 승인에 따라 main에 병합 완료. 병합 커밋 `1f354c0157b9992d9eeebe1a94318ab4f594c482`, 병합 시각 2026-08-25 04:17:47 UTC. Goal-Mouth tooltip UI 변경이며 baseline API 계약과는 독립적이다.
 - 시작: 2026-08-24 KST
 - 결과: 명시적 VP(546,78) 기반 rear frame/mesh, 좌우 측면, 진한 격자형 네트, 지면과 맞닿는 그림자, 잔디 제거, 진초록 Goal 축구공 및 소형 공 패턴을 구현했다. FinalThirdShootingMap focused tests 14건과 production build가 통과했다. 이제 사용자 승인에 따라 커밋 후 Preview 환경변수 확인, Preview 실데이터 QA와 PR 생성을 진행한다. main 병합은 명시적으로 금지한다.
 - 범위: messi-2-dashboard/src/playerDetail/GoalMouthView.tsx의 클라이언트 렌더링/UX 설계만. api_server/service.py와 data contract 변경 금지.

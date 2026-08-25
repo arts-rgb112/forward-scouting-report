@@ -61,6 +61,8 @@ from .schemas import (
     FinalThirdGoalMouthData, FinalThirdGoalMouthEnvelope, FinalThirdShootingQualitySummary,
     FinalThirdQualityScale, FinalThirdShotData, FinalThirdShotEnvelope, FinalThirdShotZone,
     FinalThirdZoneFieldStates,
+    GoalMouthBaselineCell, GoalMouthBaselineConfidenceInterval, GoalMouthBaselineData, GoalMouthBaselineEnvelope,
+    GoalMouthBaselineProvenance,
 )
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
 from .search import canonical_search_key
@@ -2495,6 +2497,170 @@ FINAL_THIRD_EUROPE_COMPETITIONS = (
     ("uel", "Europa League"),
     ("uecl", "Europa Conference League"),
 )
+GOAL_MOUTH_BASELINE_SEASONS = (
+    "2021/2022", "2022/2023", "2023/2024", "2024/2025", "2025/2026",
+)
+GOAL_MOUTH_BASELINE_MINIMUM_CELL_SAMPLE = 150
+GOAL_MOUTH_BASELINE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+
+
+def _goal_mouth_baseline_shards() -> tuple[Path, ...]:
+    """Return only the documented five static baseline inputs, in season order."""
+    return tuple(
+        GOAL_MOUTH_BASELINE_DATA_DIR / f"tactical_shotmap_points_{season.replace('/', '_')}.json"
+        for season in GOAL_MOUTH_BASELINE_SEASONS
+    )
+
+
+def goal_mouth_baseline_snapshot_revision() -> tuple[tuple[str, int, int], ...] | None:
+    """Revision key for the closed five-shard manifest, or None when any shard is absent."""
+    revision: list[tuple[str, int, int]] = []
+    for path in _goal_mouth_baseline_shards():
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            raise ShotmapContractViolation(
+                f"Goal-mouth baseline static snapshot could not be statted: {path.name}."
+            ) from exc
+        revision.append((path.name, stat.st_mtime_ns, stat.st_size))
+    return tuple(revision)
+
+
+def _goal_mouth_baseline_cells(
+    counts: list[list[list[int]]], *, unavailable_reason: str | None = None,
+) -> list[GoalMouthBaselineCell]:
+    cells: list[GoalMouthBaselineCell] = []
+    for row in range(1, 6):
+        for column in range(1, 11):
+            shots, goals = counts[row - 1][column - 1]
+            cell_kwargs = dict(
+                cellId=f"row{row}_column{column}", column=column, row=row,
+                yMin=(column - 1) / 10, yMax=column / 10,
+                zMin=(row - 1) / 5, zMax=row / 5,
+            )
+            if unavailable_reason is not None:
+                cells.append(GoalMouthBaselineCell(
+                    **cell_kwargs, shots=None, goals=None, goalRatePct=None,
+                    state="unavailable", lowSample=False, confidenceIntervalPct=None,
+                    reason=unavailable_reason,
+                ))
+            elif shots < GOAL_MOUTH_BASELINE_MINIMUM_CELL_SAMPLE:
+                cells.append(GoalMouthBaselineCell(
+                    **cell_kwargs, shots=shots, goals=goals,
+                    goalRatePct=(100.0 * goals / shots) if shots else None,
+                    state="low_sample", lowSample=True,
+                    confidenceIntervalPct=_goal_mouth_baseline_confidence_interval(goals, shots),
+                    reason="insufficient_baseline_sample",
+                ))
+            else:
+                cells.append(GoalMouthBaselineCell(
+                    **cell_kwargs, shots=shots, goals=goals,
+                    goalRatePct=100.0 * goals / shots,
+                    state="observed", lowSample=False,
+                    confidenceIntervalPct=_goal_mouth_baseline_confidence_interval(goals, shots),
+                    reason=None,
+                ))
+    return cells
+
+
+def _goal_mouth_baseline_confidence_interval(
+    goals: int, shots: int,
+) -> GoalMouthBaselineConfidenceInterval | None:
+    """Return the unrounded 95% Wilson interval, in percentage points."""
+    if shots == 0:
+        return None
+    z = 1.959963984540054
+    proportion = goals / shots
+    z_squared = z * z
+    denominator = 1.0 + z_squared / shots
+    center = (proportion + z_squared / (2.0 * shots)) / denominator
+    half_width = z * math.sqrt(
+        (proportion * (1.0 - proportion) + z_squared / (4.0 * shots)) / shots
+    ) / denominator
+    return GoalMouthBaselineConfidenceInterval(
+        lower=max(0.0, 100.0 * (center - half_width)),
+        upper=min(100.0, 100.0 * (center + half_width)),
+    )
+
+
+def _goal_mouth_baseline_unavailable() -> GoalMouthBaselineEnvelope:
+    reason = "required_static_snapshot_missing"
+    return GoalMouthBaselineEnvelope(data=GoalMouthBaselineData(
+        available=False, reason=reason,
+        provenance=GoalMouthBaselineProvenance(totalShots=None, totalGoals=None),
+        cells=_goal_mouth_baseline_cells(
+            [[[0, 0] for _ in range(10)] for _ in range(5)], unavailable_reason=reason,
+        ),
+    ))
+
+
+@lru_cache(maxsize=2)
+def _build_goal_mouth_baseline_cached(
+    revision: tuple[tuple[str, int, int], ...] | None,
+) -> GoalMouthBaselineEnvelope:
+    """Aggregate the fixed historical static manifest; no player or provider data is used."""
+    if revision is None:
+        return _goal_mouth_baseline_unavailable()
+    counts = [[[0, 0] for _ in range(10)] for _ in range(5)]
+    total_shots = 0
+    total_goals = 0
+    for path in _goal_mouth_baseline_shards():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            # A deployment/data-refresh race must preserve the published
+            # unavailable contract rather than pretending any partial total.
+            return _goal_mouth_baseline_unavailable()
+        except (OSError, ValueError) as exc:
+            raise ShotmapContractViolation(
+                f"Goal-mouth baseline static snapshot could not be loaded: {path.name}."
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ShotmapContractViolation(
+                f"Goal-mouth baseline static snapshot must contain an object: {path.name}."
+            )
+        for heatmap_key, source_rows in payload.items():
+            if not isinstance(source_rows, list):
+                raise ShotmapContractViolation(
+                    f"Goal-mouth baseline static snapshot entry must contain an array: {path.name}:{heatmap_key}."
+                )
+            for source_index, raw in enumerate(source_rows):
+                raw_point, _ = _shotmap_point_without_internal_identity(raw)
+                try:
+                    point = ShotmapPoint.model_validate(raw_point)
+                except (TypeError, ValueError, ValidationError) as exc:
+                    raise ShotmapContractViolation(
+                        "Goal-mouth baseline static snapshot contains an invalid record "
+                        f"at {path.name}:{heatmap_key} index {source_index}."
+                    ) from exc
+                endpoint_available, mouth_y, mouth_z, _, _ = _final_third_endpoint(point)
+                if not (
+                    endpoint_available
+                    and mouth_y is not None and mouth_z is not None
+                    and math.isfinite(mouth_y) and math.isfinite(mouth_z)
+                    and 0 <= mouth_y <= 1 and 0 <= mouth_z <= 1
+                ):
+                    continue
+                column = min(9, math.floor(mouth_y * 10))
+                row = min(4, math.floor(mouth_z * 5))
+                counts[row][column][0] += 1
+                counts[row][column][1] += int(point.outcome == "goal")
+                total_shots += 1
+                total_goals += int(point.outcome == "goal")
+    return GoalMouthBaselineEnvelope(data=GoalMouthBaselineData(
+        available=True, reason=None,
+        provenance=GoalMouthBaselineProvenance(
+            totalShots=total_shots, totalGoals=total_goals,
+        ),
+        cells=_goal_mouth_baseline_cells(counts),
+    ))
+
+
+def build_goal_mouth_baseline() -> GoalMouthBaselineEnvelope:
+    """Return the cached global 10×5 baseline, invalidating only on its five inputs."""
+    return _build_goal_mouth_baseline_cached(goal_mouth_baseline_snapshot_revision())
 
 
 def _final_third_segment(value: float, boundaries: tuple[float, ...]) -> int:

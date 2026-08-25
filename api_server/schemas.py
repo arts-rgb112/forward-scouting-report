@@ -2258,6 +2258,174 @@ class WatchlistDataQualityEnvelope(BaseModel):
     results: list[WatchlistDataQualityResult] = Field(max_length=100)
 
 
+GoalMouthBaselineCellState = Literal["observed", "low_sample", "unavailable"]
+
+
+class GoalMouthBaselineGrid(BaseModel):
+    """Fixed normalized goal-mouth coordinate system for the global baseline."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    columns: Literal[10] = 10
+    rows: Literal[5] = 5
+    coordinateVersion: Literal["goal-mouth-v1"] = "goal-mouth-v1"
+    origin: Literal["bottom_left_shooter_view"] = "bottom_left_shooter_view"
+    horizontalDirection: Literal["shooter_left_to_right"] = "shooter_left_to_right"
+    verticalDirection: Literal["ground_to_crossbar"] = "ground_to_crossbar"
+
+
+class GoalMouthBaselineProvenance(BaseModel):
+    """Static-source and transform facts for a global, non-player baseline."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sourceSeasons: tuple[
+        Literal["2021/2022"], Literal["2022/2023"], Literal["2023/2024"],
+        Literal["2024/2025"], Literal["2025/2026"],
+    ] = ("2021/2022", "2022/2023", "2023/2024", "2024/2025", "2025/2026")
+    source: Literal["static_shotmap_snapshots"] = "static_shotmap_snapshots"
+    transformVersion: Literal["goal-mouth-baseline-v1"] = "goal-mouth-baseline-v1"
+    formulaVersion: Literal["goals-divided-by-shots-goal-mouth-baseline-v1"] = (
+        "goals-divided-by-shots-goal-mouth-baseline-v1"
+    )
+    eligibilityRule: Literal[
+        "endpoint-available-finite-normalized-goal-mouth-y-and-z-inclusive-0-to-1"
+    ] = "endpoint-available-finite-normalized-goal-mouth-y-and-z-inclusive-0-to-1"
+    totalShots: int | None = Field(default=None, ge=0)
+    totalGoals: int | None = Field(default=None, ge=0)
+
+
+class GoalMouthBaselineConfidenceInterval(BaseModel):
+    """Server-authored Wilson interval for a positive-sample cell rate."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    level: Literal[95] = 95
+    method: Literal["wilson-score-v1"] = "wilson-score-v1"
+    lower: float = Field(ge=0, le=100)
+    upper: float = Field(ge=0, le=100)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "GoalMouthBaselineConfidenceInterval":
+        if self.lower > self.upper:
+            raise ValueError("goal-mouth baseline confidence interval bounds must be ordered")
+        return self
+
+
+class GoalMouthBaselineCell(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cellId: str = Field(pattern=r"^row[1-5]_column(?:10|[1-9])$")
+    column: int = Field(ge=1, le=10)
+    row: int = Field(ge=1, le=5)
+    yMin: float = Field(ge=0, le=1)
+    yMax: float = Field(ge=0, le=1)
+    zMin: float = Field(ge=0, le=1)
+    zMax: float = Field(ge=0, le=1)
+    shots: int | None = Field(default=None, ge=0)
+    goals: int | None = Field(default=None, ge=0)
+    goalRatePct: float | None = Field(default=None, ge=0, le=100)
+    state: GoalMouthBaselineCellState
+    lowSample: bool
+    confidenceIntervalPct: GoalMouthBaselineConfidenceInterval | None = None
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_state(self) -> "GoalMouthBaselineCell":
+        if self.cellId != f"row{self.row}_column{self.column}":
+            raise ValueError("goal-mouth baseline cellId must match its row and column")
+        if (
+            self.yMin != (self.column - 1) / 10
+            or self.yMax != self.column / 10
+            or self.zMin != (self.row - 1) / 5
+            or self.zMax != self.row / 5
+        ):
+            raise ValueError("goal-mouth baseline cell bounds must match its canonical grid position")
+        metrics = (self.shots, self.goals, self.goalRatePct)
+        if self.state in {"observed", "low_sample"}:
+            if any(value is None for value in (self.shots, self.goals)):
+                raise ValueError("sampled goal-mouth baseline cells require numeric shot and goal counts")
+            if (
+                self.shots is None or self.goals is None or self.goals > self.shots
+            ):
+                raise ValueError("goal-mouth baseline goals cannot exceed shots")
+            if self.shots == 0:
+                if self.goalRatePct is not None or self.confidenceIntervalPct is not None:
+                    raise ValueError("zero-shot goal-mouth baseline cells have no rate or confidence interval")
+            else:
+                if self.goalRatePct is None or self.confidenceIntervalPct is None:
+                    raise ValueError("positive-sample goal-mouth baseline cells require rate and confidence interval")
+                if self.goalRatePct != 100.0 * self.goals / self.shots:
+                    raise ValueError("goal-mouth baseline goal rate must equal goals divided by shots")
+            if self.state == "observed":
+                if self.lowSample or self.reason is not None:
+                    raise ValueError("observed goal-mouth baseline cells cannot be marked low sample")
+            elif not self.lowSample or self.reason != "insufficient_baseline_sample":
+                raise ValueError("low-sample goal-mouth baseline cells require the low-sample reason")
+        elif (
+            any(value is not None for value in metrics)
+            or self.lowSample
+            or self.confidenceIntervalPct is not None
+            or not self.reason
+        ):
+            raise ValueError("unavailable goal-mouth baseline cells require null metrics and no low-sample flag")
+        return self
+
+
+class GoalMouthBaselineData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    available: bool
+    reason: str | None = None
+    grid: GoalMouthBaselineGrid = Field(default_factory=GoalMouthBaselineGrid)
+    minimumCellSample: Literal[150] = 150
+    provenance: GoalMouthBaselineProvenance
+    cells: list[GoalMouthBaselineCell] = Field(min_length=50, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_baseline(self) -> "GoalMouthBaselineData":
+        expected = [(row, column) for row in range(1, 6) for column in range(1, 11)]
+        actual = [(cell.row, cell.column) for cell in self.cells]
+        if actual != expected:
+            raise ValueError("goal-mouth baseline cells must be 50 fixed row-major cells")
+        if self.available:
+            if self.reason is not None:
+                raise ValueError("available goal-mouth baseline data cannot have a reason")
+            if self.provenance.totalShots is None or self.provenance.totalGoals is None:
+                raise ValueError("available goal-mouth baseline provenance requires totals")
+            observed_shots = sum(cell.shots or 0 for cell in self.cells)
+            observed_goals = sum(cell.goals or 0 for cell in self.cells)
+            if (
+                self.provenance.totalShots != observed_shots
+                or self.provenance.totalGoals != observed_goals
+                or self.provenance.totalGoals > self.provenance.totalShots
+            ):
+                raise ValueError("goal-mouth baseline provenance totals must match its cells")
+            for cell in self.cells:
+                if cell.state == "observed" and (cell.shots is None or cell.shots < self.minimumCellSample):
+                    raise ValueError("observed goal-mouth baseline cells require the minimum sample")
+                if cell.state == "low_sample" and (cell.shots is None or cell.shots >= self.minimumCellSample):
+                    raise ValueError("low-sample goal-mouth baseline cells must be below the minimum sample")
+                if cell.state == "unavailable":
+                    raise ValueError("available goal-mouth baseline cannot contain unavailable cells")
+        else:
+            if self.reason != "required_static_snapshot_missing":
+                raise ValueError("unavailable goal-mouth baseline requires the static snapshot reason")
+            if self.provenance.totalShots is not None or self.provenance.totalGoals is not None:
+                raise ValueError("unavailable goal-mouth baseline provenance totals must be null")
+            if any(cell.state != "unavailable" or cell.reason != self.reason for cell in self.cells):
+                raise ValueError("unavailable goal-mouth baseline cells must match the root reason")
+        return self
+
+
+class GoalMouthBaselineEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    baselineTaxonomyVersion: Literal["goal-mouth-baseline-v1"] = "goal-mouth-baseline-v1"
+    data: GoalMouthBaselineData
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     season: str
