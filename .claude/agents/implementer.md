@@ -21,6 +21,8 @@ explicitly requests a local commit. Return tested local changes to the parent.
 
 코드 변경 후에는 반드시 실제 로컬 개발 서버를 띄우고(V1은 streamlit run app.py, V2는 pnpm dev) 결과를 눈으로 직접 확인한 뒤 완료 보고하라. 빌드 통과만으로는 충분하지 않다.
 
+로컬 서버를 종료했다고 보고하기 전에 반드시 포트가 실제로 해제됐는지 확인하라. kill 명령을 실행한 것과 포트가 비는 것은 다르다. `Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in 5173,8000 }` 등으로 결과가 비어있음을 확인한 뒤에 보고하라.
+
 Every invocation starts fresh. Require a complete task packet containing the
 objective, current behavior, prior decisions, exact context keys, API and file
 paths, evidence, strict schema/null-zero-state expectations, constraints,

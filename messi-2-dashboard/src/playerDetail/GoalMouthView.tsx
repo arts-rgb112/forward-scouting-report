@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, PointerEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
+import type { MessiApiConfig } from "../api/env";
+import type { GoalMouthBaselineCell, GoalMouthBaselineData } from "../api/goalMouthBaselineContracts";
 import type { FinalThirdShot } from "../api/finalThirdShotMapContracts";
 import type { FinalThirdRenderableData } from "../api/finalThirdShotMapV2Contracts";
 import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contracts";
+import { useGoalMouthBaseline } from "./useGoalMouthBaseline";
 
 type RenderableData = FinalThirdRenderableData | FinalThirdShotMapV3Data;
 type ShotStatus = Exclude<FinalThirdShot["status"], "blocked">;
@@ -186,10 +189,40 @@ function Marker({ shot, data, endpointShots, fanOffset, fanCount, active, onActi
   return <g data-goal-mouth-shot={shot.shotId} data-xg-size={xgUnavailable ? "unavailable" : "observed"} data-marker-footprint={size} transform={`translate(${point.x} ${point.y})`} aria-label={`${style.label}; xG ${xgLabel}`}><title>{`${style.label}; xG ${xgLabel}`}</title><rect data-marker-footprint-box x={-size} y={-size} width={size * 2} height={size * 2} fill="none" stroke="none" pointerEvents="none"/><Shape shot={shot} size={size} color={xgUnavailable ? "#a1a1aa" : style.color}/>{xgUnavailable && <text data-size-unavailable y="4" textAnchor="middle" fill="#111827" fontSize="10" fontWeight="900">?</text>}<text y={size + 13} textAnchor="middle" fill="#f4f4f5" fontSize="10" fontWeight="800">{style.text}</text></g>;
 }
 
-function GoalNet() {
+function baselineFill(rate: number | null) {
+  if (rate === null) return "#334155";
+  if (rate < 20) return "#1e3a5f";
+  if (rate < 30) return "#0f766e";
+  if (rate < 40) return "#a16207";
+  if (rate < 50) return "#c2410c";
+  return "#dc2626";
+}
+
+function baselineTooltip(cell: GoalMouthBaselineCell) {
+  const rate = cell.goalRatePct === null ? "rate unavailable" : `${cell.goalRatePct.toFixed(1)}%`;
+  const confidence = cell.confidenceIntervalPct === null ? "confidence unavailable" : `95% CI ${cell.confidenceIntervalPct.lower.toFixed(1)}–${cell.confidenceIntervalPct.upper.toFixed(1)}%`;
+  return `${cell.cellId}: ${rate}; ${cell.shots ?? "—"} shots; ${confidence}${cell.state === "low_sample" ? "; low sample" : ""}`;
+}
+
+function GoalMouthBaselineLayer({ baseline, activeCellId, onActivate, onDeactivate, patternId }: { baseline: GoalMouthBaselineData; activeCellId: string | null; onActivate: (cellId: string) => void; onDeactivate: (cellId: string) => void; patternId: string }) {
+  return <g data-goal-mouth-baseline data-goal-mouth-baseline-source={baseline.provenance.source} aria-label="Five-season league-wide goal-mouth scoring baseline">
+    <defs><pattern id={patternId} width="11" height="11" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="11" stroke="#f8fafc" strokeOpacity=".55" strokeWidth="3"/></pattern></defs>
+    {baseline.cells.map((cell) => {
+      // Use server-provided intervals directly. SVG y increases downward whereas mouth Z increases upward.
+      const x = frame.left + cell.yMin * (frame.right - frame.left), y = frame.bottom - cell.zMax * (frame.bottom - frame.top), width = (cell.yMax - cell.yMin) * (frame.right - frame.left), height = (cell.zMax - cell.zMin) * (frame.bottom - frame.top), active = activeCellId === cell.cellId;
+      return <g key={cell.cellId} data-goal-mouth-baseline-cell={cell.cellId} data-baseline-state={cell.state} tabIndex={0} role="img" aria-label={baselineTooltip(cell)} onMouseEnter={() => onActivate(cell.cellId)} onMouseLeave={() => onDeactivate(cell.cellId)} onFocus={() => onActivate(cell.cellId)} onBlur={() => onDeactivate(cell.cellId)}>
+        <title>{baselineTooltip(cell)}</title><rect x={x} y={y} width={width} height={height} fill={baselineFill(cell.goalRatePct)} fillOpacity={cell.state === "low_sample" ? ".20" : ".30"} stroke="#e2e8f0" strokeOpacity=".12" strokeWidth="1"/>
+        {cell.state === "low_sample" && <rect data-baseline-low-sample-hatch x={x} y={y} width={width} height={height} fill={`url(#${patternId})`} opacity=".48" pointerEvents="none"/>}
+        {active && <g data-goal-mouth-baseline-tooltip pointerEvents="none"><rect x={x + 5} y={y + 5} width="176" height="44" rx="5" fill="#020617" fillOpacity=".94" stroke="#cbd5e1" strokeOpacity=".75"/><text x={x + 12} y={y + 21} fill="#f8fafc" fontSize="11" fontWeight="800">{cell.goalRatePct === null ? "Rate unavailable" : `${cell.goalRatePct.toFixed(1)}% · ${cell.shots} shots`}</text><text x={x + 12} y={y + 37} fill="#cbd5e1" fontSize="10">{cell.confidenceIntervalPct === null ? "Confidence unavailable" : `95% CI ${cell.confidenceIntervalPct.lower.toFixed(1)}–${cell.confidenceIntervalPct.upper.toFixed(1)}%`}</text></g>}
+      </g>;
+    })}
+  </g>;
+}
+
+function GoalNet({ baselineLayer }: { baselineLayer?: ReactNode }) {
   const frontWidth = frame.right - frame.left;
   const frontHeight = frame.bottom - frame.top;
-  return <g data-goal-net-3d data-goal-net-vanishing-point={`${vanishingPoint.x} ${vanishingPoint.y}`} data-goal-frame-width-meters={GOAL_WIDTH_METERS} data-goal-frame-height-meters={GOAL_HEIGHT_METERS} data-goal-frame-aspect-ratio={GOAL_WIDTH_METERS / GOAL_HEIGHT_METERS} data-goal-depth-meters={GOAL_DEPTH_METERS} aria-hidden="true">
+  return <g data-goal-net-3d data-goal-net-vanishing-point={`${vanishingPoint.x} ${vanishingPoint.y}`} data-goal-frame-width-meters={GOAL_WIDTH_METERS} data-goal-frame-height-meters={GOAL_HEIGHT_METERS} data-goal-frame-aspect-ratio={GOAL_WIDTH_METERS / GOAL_HEIGHT_METERS} data-goal-depth-meters={GOAL_DEPTH_METERS} aria-hidden={baselineLayer ? undefined : true}>
     <defs><linearGradient id="goal-pipe" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#ffffff"/><stop offset=".25" stopColor="#f8fafc"/><stop offset=".5" stopColor="#cbd5e1"/><stop offset=".75" stopColor="#64748b"/><stop offset="1" stopColor="#1e293b"/></linearGradient><filter id="goal-shadow"><feGaussianBlur stdDeviation="10"/></filter></defs>
     <ellipse cx={(frame.left + frame.right) / 2} cy={frame.bottom + 18} rx={frontWidth * .46} ry="18" fill="#020617" opacity=".76" filter="url(#goal-shadow)"/>
     {/* low-contrast rear frame is deliberately secondary to the front regulation opening */}
@@ -204,6 +237,7 @@ function GoalNet() {
     </g>
     {/* layered stroke creates a pipe with bright highlight and shaded underside */}
     <path d={`M ${frame.left} ${frame.top} H ${frame.right} V ${frame.bottom} H ${frame.left} Z`} fill="#0b1520" fillOpacity=".74" stroke="#020617" strokeWidth="19" strokeLinejoin="round"/>
+    {baselineLayer}
     <path d={`M ${frame.left} ${frame.top} H ${frame.right} V ${frame.bottom} H ${frame.left} Z`} fill="none" stroke="url(#goal-pipe)" strokeWidth="13" strokeLinejoin="round"/>
     <path d={`M ${frame.left + 6} ${frame.top + 5} H ${frame.right - 6} M ${frame.left + 5} ${frame.top + 6} V ${frame.bottom - 8}`} fill="none" stroke="#ffffff" strokeOpacity=".94" strokeWidth="2.5" strokeLinecap="round"/>
     <path d={`M ${frame.left + 5} ${frame.bottom} H ${frame.right - 5}`} fill="none" stroke="#0f172a" strokeWidth="3.5"/>
@@ -219,11 +253,15 @@ function qualitySummary(data: RenderableData) {
   return `${prefix}: xGOT − xG ${delta} · ${quality.eligibleShotCount ?? "—"}/${quality.totalShotCount ?? "—"} eligible shots`;
 }
 
-export function GoalMouthView({ data }: { data: RenderableData }) {
+export function GoalMouthView({ data, config }: { data: RenderableData; config?: MessiApiConfig }) {
   const [visibleStatus, setVisibleStatus] = useState<VisibleStatus>("all");
   const [zoom, setZoom] = useState<ZoomLevel>(1);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0 });
   const [activeOffFrameShotId, setActiveOffFrameShotId] = useState<string | null>(null);
+  const [baselineVisible, setBaselineVisible] = useState(true);
+  const [activeBaselineCellId, setActiveBaselineCellId] = useState<string | null>(null);
+  const baselineId = useId().replace(/:/g, "");
+  const baseline = useGoalMouthBaseline(config);
   const pointerPan = useRef<{ pointerId: number; clientX: number; clientY: number; viewport: Viewport } | null>(null);
   const endpointShots = data.shots.filter((shot) => shot.endpointAvailable && shot.goalMouthY !== null && shot.goalMouthZ !== null && shot.status !== "blocked");
   const unplotted = data.shots.filter((shot) => !shot.endpointAvailable);
@@ -249,7 +287,7 @@ export function GoalMouthView({ data }: { data: RenderableData }) {
   }, [endpointShots]);
   const counts = { all: data.shots.length, goal: data.shots.filter((shot) => shot.status === "goal").length, on_target: data.shots.filter((shot) => shot.status === "on_target").length, off_target: data.shots.filter((shot) => shot.status === "off_target").length };
   const summary = qualitySummary(data);
-  useEffect(() => { setViewport({ x: 0, y: 0 }); setZoom(1); setActiveOffFrameShotId(null); pointerPan.current = null; }, [data]);
+  useEffect(() => { setViewport({ x: 0, y: 0 }); setZoom(1); setActiveOffFrameShotId(null); setActiveBaselineCellId(null); pointerPan.current = null; }, [data]);
   const setZoomLevel = (next: ZoomLevel) => { setViewport((current) => centeredViewport(current, baseViewBox, zoom, next)); setZoom(next); };
   const resetViewport = () => { pointerPan.current = null; setZoom(1); setViewport({ x: 0, y: 0 }); };
   const panBy = (x: number, y: number) => setViewport((current) => clampViewport({ x: current.x + x, y: current.y + y }, baseViewBox, zoom));
@@ -282,5 +320,19 @@ export function GoalMouthView({ data }: { data: RenderableData }) {
     else if (event.key === "ArrowUp") { event.preventDefault(); panBy(0, -step); }
     else if (event.key === "ArrowDown") { event.preventDefault(); panBy(0, step); }
   };
-  return <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#081018]"><div className="flex flex-wrap items-center gap-2 border-b border-white/10 p-3"><div role="group" aria-label="Goal-Mouth shot visibility" className="flex flex-wrap items-center gap-2">{(["all", ...statuses] as const).map((status) => <button key={status} type="button" aria-pressed={visibleStatus === status} onClick={() => setVisibleStatus(status)} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold aria-pressed:border-lime-300 aria-pressed:bg-lime-300 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-lime-300">{status === "all" ? "All" : statusStyle[status].label} {counts[status]}</button>)}</div><div role="group" aria-label="Goal-Mouth zoom controls" className="ml-auto flex items-center gap-1"><button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-10 min-w-10 rounded border border-white/20 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">−</button><button type="button" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-10 min-w-10 rounded border border-white/20 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">+</button><button type="button" aria-label="Reset zoom and pan" disabled={zoom === 1 && safeViewport.x === 0 && safeViewport.y === 0} onClick={resetViewport} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">Reset</button><span aria-live="polite" data-goal-mouth-zoom className="ml-1 min-w-20 text-right text-xs text-zinc-400">Zoom {zoom}×</span></div><span className="w-full text-xs text-zinc-400 sm:w-auto sm:ml-2">Blocked {unplotted.length} · audit only</span></div><svg data-goal-mouth-viewbox={viewBox} viewBox={viewBox} className="block h-auto w-full touch-none cursor-grab active:cursor-grabbing" role="img" tabIndex={0} aria-label={`Three-dimensional goal-mouth plot with ${visibleShots.length} visible authoritative endpoints and ${unplotted.length} unplotted endpoints. Zoom ${zoom}x. Drag to pan when zoomed.`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointerPan} onPointerCancel={endPointerPan} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={onKeyDown}><GoalNet/>{visibleShots.map((shot) => { const group = offFrameGroups.get(`${shot.goalMouthY}:${shot.goalMouthZ}`) ?? [shot]; const groupIndex = group.findIndex((candidate) => candidate.shotId === shot.shotId); return <Marker key={shot.shotId} shot={shot} data={data} endpointShots={endpointShots} fanOffset={group.length > 1 ? groupIndex - (group.length - 1) / 2 : 0} fanCount={group.length} active={activeOffFrameShotId === shot.shotId} onActivate={() => setActiveOffFrameShotId(shot.shotId)} onDeactivate={() => setActiveOffFrameShotId((current) => current === shot.shotId ? null : current)} tooltipBounds={tooltipBounds}/>; })}</svg><div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>축구공: Goal 초록 · On target 하늘색 · Off target 호박색 + X. Marker size uses the shared source xG scale; gray ? means xG unavailable.</p>{summary && <p data-shooting-quality className="mt-1 text-cyan-100">{summary}</p>}{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div></div>;
+  const baselineLayer = baselineVisible && baseline.state.kind === "ready"
+    ? <GoalMouthBaselineLayer baseline={baseline.state.data.data} activeCellId={activeBaselineCellId} onActivate={setActiveBaselineCellId} onDeactivate={(cellId) => setActiveBaselineCellId((current) => current === cellId ? null : current)} patternId={`goal-mouth-baseline-hatch-${baselineId}`}/>
+    : undefined;
+  return <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#081018]">
+    <div className="flex flex-wrap items-center gap-2 border-b border-white/10 p-3">
+      <div role="group" aria-label="Goal-Mouth shot visibility" className="flex flex-wrap items-center gap-2">{(["all", ...statuses] as const).map((status) => <button key={status} type="button" aria-pressed={visibleStatus === status} onClick={() => setVisibleStatus(status)} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold aria-pressed:border-lime-300 aria-pressed:bg-lime-300 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-lime-300">{status === "all" ? "All" : statusStyle[status].label} {counts[status]}</button>)}</div>
+      {baseline.state.kind === "ready" && <button type="button" aria-pressed={baselineVisible} onClick={() => setBaselineVisible((value) => !value)} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold aria-pressed:border-rose-300 aria-pressed:bg-rose-300/15 focus-visible:ring-2 focus-visible:ring-lime-300">Goal probability baseline</button>}
+      <div role="group" aria-label="Goal-Mouth zoom controls" className="ml-auto flex items-center gap-1"><button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-10 min-w-10 rounded border border-white/20 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">−</button><button type="button" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-10 min-w-10 rounded border border-white/20 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">+</button><button type="button" aria-label="Reset zoom and pan" disabled={zoom === 1 && safeViewport.x === 0 && safeViewport.y === 0} onClick={resetViewport} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">Reset</button><span aria-live="polite" data-goal-mouth-zoom className="ml-1 min-w-20 text-right text-xs text-zinc-400">Zoom {zoom}×</span></div>
+      <span className="w-full text-xs text-zinc-400 sm:w-auto sm:ml-2">Blocked {unplotted.length} · audit only</span>
+    </div>
+    <svg data-goal-mouth-viewbox={viewBox} viewBox={viewBox} className="block h-auto w-full touch-none cursor-grab active:cursor-grabbing" role="img" tabIndex={0} aria-label={`Three-dimensional goal-mouth plot with ${visibleShots.length} visible authoritative endpoints and ${unplotted.length} unplotted endpoints. Zoom ${zoom}x. Drag to pan when zoomed.`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointerPan} onPointerCancel={endPointerPan} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={onKeyDown}>
+      <GoalNet baselineLayer={baselineLayer}/>{visibleShots.map((shot) => { const group = offFrameGroups.get(`${shot.goalMouthY}:${shot.goalMouthZ}`) ?? [shot]; const groupIndex = group.findIndex((candidate) => candidate.shotId === shot.shotId); return <Marker key={shot.shotId} shot={shot} data={data} endpointShots={endpointShots} fanOffset={group.length > 1 ? groupIndex - (group.length - 1) / 2 : 0} fanCount={group.length} active={activeOffFrameShotId === shot.shotId} onActivate={() => setActiveOffFrameShotId(shot.shotId)} onDeactivate={() => setActiveOffFrameShotId((current) => current === shot.shotId ? null : current)} tooltipBounds={tooltipBounds}/>; })}
+    </svg>
+    <div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>축구공: Goal 초록 · On target 하늘색 · Off target 호박색 + X. Marker size uses the shared source xG scale; gray ? means xG unavailable.</p>{summary && <p data-shooting-quality className="mt-1 text-cyan-100">{summary}</p>}{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
+  </div>;
 }
