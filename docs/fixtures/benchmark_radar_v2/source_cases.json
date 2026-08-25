@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0.0",
+  "benchmarkTaxonomyVersion": "benchmark-radar-v2",
+  "axisOrder": [
+    "outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress"
+  ],
+  "league": {
+    "playerId": 194165,
+    "season": "2025/2026",
+    "sourceContext": {"mode": "league", "scope": 8, "competition": null},
+    "benchmarkContext": {"mode": "league", "scope": 8, "competition": null},
+    "requiredComponents": {
+      "volume.forwardPress": ["recoveries", "final_third_possessions_won"],
+      "ratio.combinedDuel": ["combined_duel_win_rate", "combined_duel_margin_per90", "ground_duel_win_rate", "aerial_duel_win_rate"]
+    }
+  },
+  "lowSample": {
+    "playerId": 967093,
+    "season": "2025/2026",
+    "rawPosition": "forward",
+    "state": "low_sample",
+    "reason": "position_population_below_minimum",
+    "population": 1
+  },
+  "coach": {
+    "playerId": 179772,
+    "season": "2023/2024",
+    "rawPosition": "Coach",
+    "state": "unavailable",
+    "reason": "position_label_not_player_role"
+  }
+}

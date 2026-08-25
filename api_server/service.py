@@ -10,6 +10,7 @@ import math
 from pathlib import Path
 from threading import RLock
 import time
+import unicodedata
 from pydantic import ValidationError
 
 from rankings import (
@@ -54,6 +55,10 @@ from .schemas import (
     TacticalSummaryData, TacticalSummaryLine,
     VolumeBenchmarkAxis, VolumeBenchmarkData,
     VolumeBenchmarkSourceContext,
+    BenchmarkRadarV2Axis, BenchmarkRadarV2BenchmarkContext, BenchmarkRadarV2Component,
+    BenchmarkRadarV2Data, BenchmarkRadarV2Envelope, BenchmarkRadarV2PositionReference,
+    BenchmarkRadarV2ReferenceScore, BenchmarkRadarV2Score, BenchmarkRadarV2Series,
+    BenchmarkRadarV2SourceContext,
     FinalThirdCoverageIssue, FinalThirdFieldState, FinalThirdGoalMouthCoordinates,
     FinalThirdMarkerSizeScale, FinalThirdShot, FinalThirdShotContext,
     FinalThirdEffectiveShotData, FinalThirdEffectiveShotEnvelope, FinalThirdEffectiveShotZone,
@@ -2181,6 +2186,280 @@ def build_ratio_benchmark(
     return RatioBenchmarkData(
         playerId=player_id, season=season, sourceContext=source_context,
         available=True, reason="partial_source_imputed" if imputed else "complete", axes=axes,
+    )
+
+
+# ---------------------------------------------------------------------------
+# benchmark-radar-v2: additive v2-axis benchmark companion
+# ---------------------------------------------------------------------------
+
+BENCHMARK_RADAR_V2_FORMULA_ID = "v2-component-percentile-average-v1"
+BENCHMARK_RADAR_V2_MINIMUM_POSITION_POPULATION = 20
+
+
+def _benchmark_position_key(position: object) -> str:
+    """Normalize text presentation only; never merge football-role meanings."""
+    return " ".join(unicodedata.normalize("NFKC", str(position or "")).casefold().split())
+
+
+def _benchmark_press_total(record: dict[str, object], total_key: str, source_key: str) -> float | None:
+    """Reuse the v2 press source invariant for the radar-only total representation."""
+    return _detail_number(record.get(total_key)) if _optional_source(record.get(source_key)) is not None else None
+
+
+def _benchmark_radar_v2_specs() -> dict[str, dict[str, tuple[dict[str, object], ...]]]:
+    """Select only approved v2 raw evaluators; no legacy radar attributes enter here."""
+    v2 = _v2_component_specs()
+    lookup = {
+        category: {
+            identifier: (direction, evaluator, zero_attempt_floor)
+            for identifier, direction, evaluator, zero_attempt_floor in components
+        }
+        for category, components in v2.items()
+    }
+
+    def v2_component(category: str, identifier: str, label: str, unit: str, *,
+                     source: str, formula_id: str | None = None) -> dict[str, object]:
+        direction, evaluator, zero_attempt_floor = lookup[category][identifier]
+        return {
+            "id": identifier, "label": label, "unit": unit, "direction": direction,
+            "evaluator": evaluator, "zero_attempt_floor": zero_attempt_floor,
+            "source": source, "formula_id": formula_id,
+            "category": category,
+        }
+
+    def press_total(identifier: str, label: str, total_key: str, source_key: str) -> dict[str, object]:
+        return {
+            "id": identifier, "label": label, "unit": "count", "direction": "higher_is_better",
+            "evaluator": lambda row, total_key=total_key, source_key=source_key: _benchmark_press_total(row, total_key, source_key),
+            "zero_attempt_floor": lambda _row: False,
+            "source": "press_total", "formula_id": None, "category": "forwardPress",
+        }
+
+    return {
+        "volume": {
+            "outsideShot": (
+                v2_component("outsideShot", "out_box_shots_raw", "Outside-box shot attempts /90", "per90", source="player_season_total", formula_id="per90-v2"),
+                v2_component("outsideShot", "out_box_xg_raw", "Outside-box xG /90", "per90", source="player_season_total", formula_id="per90-v2"),
+                v2_component("outsideShot", "out_box_xgot_raw", "Outside-box xGOT /90", "per90", source="player_season_total", formula_id="per90-v2"),
+            ),
+            "boxThreat": (
+                v2_component("boxThreat", "in_box_shots_raw", "In-box shot attempts /90", "per90", source="player_season_total", formula_id="per90-v2"),
+                v2_component("boxThreat", "in_box_xg_raw", "In-box xG /90", "per90", source="player_season_total", formula_id="per90-v2"),
+                v2_component("boxThreat", "in_box_xgot_raw", "In-box xGOT /90", "per90", source="player_season_total", formula_id="per90-v2"),
+            ),
+            "dangerZone": (
+                v2_component("dangerZone", "dribble_attempts_raw", "Dribble attempts /90", "per90", source="server_derived", formula_id="attempts-from-success-rate-v2"),
+                v2_component("dangerZone", "dribbles_succeeded_raw", "Successful dribbles /90", "per90", source="player_season_total", formula_id="per90-v2"),
+            ),
+            "combinedDuel": (
+                v2_component("combinedDuel", "combined_duel_attempts_per90", "Combined duel attempts /90", "per90", source="server_derived", formula_id="combined-duel-attempts-v2"),
+            ),
+            "spaceControl": (
+                v2_component("spaceControl", "cca_area_pct", "CCA area", "percent", source="tactical_ratio_static"),
+            ),
+            "forwardPress": (
+                press_total("recoveries", "Recoveries", "recoveries", "recoveries_source"),
+                press_total("final_third_possessions_won", "Final-third possessions won", "final_third_possessions_won", "final_third_possessions_won_source"),
+            ),
+        },
+        "ratio": {
+            "outsideShot": (
+                v2_component("outsideShot", "out_box_xgot_minus_xg_per90", "Outside-box xGOT minus xG /90", "per90", source="server_derived", formula_id="xgot-minus-xg-v1"),
+            ),
+            "boxThreat": (
+                v2_component("boxThreat", "in_box_xgot_minus_xg_per90", "In-box xGOT minus xG /90", "per90", source="server_derived", formula_id="xgot-minus-xg-v1"),
+            ),
+            "dangerZone": (
+                v2_component("dangerZone", "dribbles_failed_raw", "Failed dribbles /90", "per90", source="server_derived", formula_id="losses-from-success-rate-v2"),
+                v2_component("dangerZone", "net_progression_per90", "Net progression /90", "per90", source="server_derived", formula_id="net-progression-v1"),
+            ),
+            "combinedDuel": (
+                v2_component("combinedDuel", "combined_duel_win_rate", "Combined duel success rate", "percent", source="duel_rate"),
+                v2_component("combinedDuel", "combined_duel_margin_per90", "Combined duel success margin /90", "per90", source="server_derived", formula_id="combined-duel-margin-v2"),
+                v2_component("combinedDuel", "ground_duel_win_rate", "Ground duel success rate", "percent", source="duel_rate"),
+                v2_component("combinedDuel", "aerial_duel_win_rate", "Aerial duel success rate", "percent", source="duel_rate"),
+            ),
+            "spaceControl": (
+                v2_component("spaceControl", "danger_zone_density", "Danger-zone density", "percent", source="tactical_ratio_static"),
+            ),
+            "forwardPress": (
+                v2_component("forwardPress", "recoveries_per90", "Recoveries /90", "per90", source="press_per90"),
+                v2_component("forwardPress", "final_third_possessions_won_per90", "Final-third possessions won /90", "per90", source="press_per90"),
+            ),
+        },
+    }
+
+
+def _benchmark_radar_v2_source(record: dict[str, object], spec: dict[str, object]) -> tuple[str, str, str | None]:
+    """Expose the exact v2 provenance rather than inferring it in a client."""
+    source = str(spec["source"])
+    if source == "press_total":
+        source_key = "recoveries_source" if spec["id"] == "recoveries" else "final_third_possessions_won_source"
+        value = _optional_source(record.get(source_key))
+        return (value or "unavailable", "observed" if value else "unavailable", None)
+    if source == "press_per90":
+        source_key = "recoveries_source" if spec["id"] == "recoveries_per90" else "final_third_possessions_won_source"
+        value = _optional_source(record.get(source_key))
+        return (value or "unavailable", "observed" if value else "unavailable", None)
+    if source == "duel_rate":
+        identifier = str(spec["id"])
+        if identifier == "combined_duel_win_rate":
+            value, provenance = _v2_combined_rate(record)
+        elif identifier == "ground_duel_win_rate":
+            value, provenance = _v2_ground_rate(record)
+        else:
+            value, provenance = _v2_aerial_rate(record)
+        del value
+        return provenance, "observed" if provenance != "unavailable" else "unavailable", "zero_attempts_floor" if provenance == "zero_attempts_observed" else None
+    return source, "server_derived" if source == "server_derived" else "observed", None
+
+
+def _benchmark_radar_v2_component(
+    record: dict[str, object], spec: dict[str, object], distributions: dict[tuple[str, str], list[float]],
+    reliability_distributions: dict[tuple[str, str], list[float]],
+) -> BenchmarkRadarV2Component:
+    category, identifier = str(spec["category"]), str(spec["id"])
+    evaluator = spec["evaluator"]
+    value = evaluator(record)
+    zero_floor = bool(spec["zero_attempt_floor"](record))
+    source, state, source_floor = _benchmark_radar_v2_source(record, spec)
+    if value is None or source == "unavailable":
+        return BenchmarkRadarV2Component(
+            id=identifier, label=str(spec["label"]), value=None, unit=str(spec["unit"]),
+            direction=str(spec["direction"]), source="unavailable", state="unavailable",
+            percentileScore=None, formulaId=None, formulaVersion=None,
+        )
+    if zero_floor:
+        score = 0
+        state = "zero_attempts_floor"
+        source = "zero_attempts_observed"
+    else:
+        score = _v2_percentile_score_from_sorted(value, distributions[(category, identifier)], str(spec["direction"]))
+        reliability = _v2_component_reliability_evaluator(category, identifier)
+        if score is not None and reliability is not None:
+            attempt_score = _v2_percentile_score_from_sorted(
+                reliability(record), reliability_distributions[(category, identifier)], "higher_is_better",
+            )
+            score = _v2_reliability_adjusted_percentile(score, attempt_score)
+    if score is None:
+        return BenchmarkRadarV2Component(
+            id=identifier, label=str(spec["label"]), value=None, unit=str(spec["unit"]),
+            direction=str(spec["direction"]), source="unavailable", state="unavailable",
+            percentileScore=None, formulaId=None, formulaVersion=None,
+        )
+    formula_id = spec["formula_id"]
+    return BenchmarkRadarV2Component(
+        id=identifier, label=str(spec["label"]), value=round(float(value), 4), unit=str(spec["unit"]),
+        direction=str(spec["direction"]), source=source, state=state if source_floor is None else source_floor,
+        percentileScore=int(score), formulaId=str(formula_id) if formula_id else None,
+        formulaVersion=DETAIL_V2_FORMULA_VERSION if formula_id else None,
+        zeroAttemptsFloor=zero_floor,
+    )
+
+
+def _benchmark_radar_v2_axis_score(
+    record: dict[str, object], specs: tuple[dict[str, object], ...], distributions: dict[tuple[str, str], list[float]],
+    reliability_distributions: dict[tuple[str, str], list[float]],
+) -> tuple[int, str, list[BenchmarkRadarV2Component]]:
+    components = [_benchmark_radar_v2_component(record, spec, distributions, reliability_distributions) for spec in specs]
+    component_scores = [component.percentileScore if component.percentileScore is not None else V2_MISSING_COMPONENT_SCORE for component in components]
+    return _v2_round_half_up(sum(component_scores), len(component_scores)), ("imputed" if any(component.state == "unavailable" for component in components) else "observed"), components
+
+
+def _benchmark_radar_v2_distributions(
+    records: list[dict[str, object]], specs: dict[str, dict[str, tuple[dict[str, object], ...]]],
+) -> tuple[dict[tuple[str, str], list[float]], dict[tuple[str, str], list[float]]]:
+    components = [component for series in specs.values() for axes in series.values() for component in axes]
+    distributions = {
+        (str(component["category"]), str(component["id"])): sorted(_v2_values(records, component["evaluator"]))
+        for component in components
+    }
+    reliability = {
+        (str(component["category"]), str(component["id"])): evaluator
+        for component in components
+        if (evaluator := _v2_component_reliability_evaluator(str(component["category"]), str(component["id"]))) is not None
+    }
+    reliability_distributions = {key: sorted(_v2_values(records, evaluator)) for key, evaluator in reliability.items()}
+    return distributions, reliability_distributions
+
+
+def _benchmark_radar_v2_reference(scores: list[int], population: int, state: str, reason: str | None = None) -> BenchmarkRadarV2ReferenceScore:
+    return BenchmarkRadarV2ReferenceScore(
+        score=round(sum(scores) / len(scores), 2) if scores else None,
+        population=population, state=state, reason=reason,
+    )
+
+
+@lru_cache(maxsize=128)
+def build_benchmark_radar_v2(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> BenchmarkRadarV2Data | None:
+    """Project a selected v2 context onto one fixed domestic eight-league frame.
+
+    This is deliberately a benchmark-only companion.  It reuses v2 evaluator
+    semantics but never writes or reweights category/overall M.E.S.S.I. scores.
+    """
+    selected_records, selected_players, _snapshot, _ratings = _v2_frame(season, mode, scope, competition)
+    selected_player = next((item for item in selected_players if item.id == player_id), None)
+    selected_record = next((item for item in selected_records if _source_player_id(item.get("player_id")) == player_id), None)
+    if selected_player is None or selected_record is None:
+        return None
+    benchmark_records, _benchmark_players, _benchmark_snapshot, _benchmark_ratings = _v2_frame(season, "league", 8, "all")
+    if not benchmark_records:
+        return None
+    raw_position = selected_player.position
+    position_key = _benchmark_position_key(raw_position)
+    position_records = [record for record in benchmark_records if _benchmark_position_key(record.get("position")) == position_key]
+    if position_key == "coach":
+        position_state, position_reason = "unavailable", "position_label_not_player_role"
+    elif len(position_records) < BENCHMARK_RADAR_V2_MINIMUM_POSITION_POPULATION:
+        position_state, position_reason = "low_sample", "position_population_below_minimum"
+    else:
+        position_state, position_reason = "observed", None
+    position_reference = BenchmarkRadarV2PositionReference(
+        rawPosition=raw_position, comparisonKey=position_key,
+        population=len(position_records), state=position_state, reason=position_reason,
+    )
+    specs = _benchmark_radar_v2_specs()
+    distributions, reliability_distributions = _benchmark_radar_v2_distributions(benchmark_records, specs)
+
+    series: dict[str, BenchmarkRadarV2Series] = {}
+    for kind in ("volume", "ratio"):
+        axes: list[BenchmarkRadarV2Axis] = []
+        for category in V2_CATEGORY_ORDER:
+            axis_specs = specs[kind][category]
+            player_score, player_state, components = _benchmark_radar_v2_axis_score(selected_record, axis_specs, distributions, reliability_distributions)
+            global_scores = [_benchmark_radar_v2_axis_score(record, axis_specs, distributions, reliability_distributions)[0] for record in benchmark_records]
+            if position_state == "unavailable":
+                position_average = _benchmark_radar_v2_reference([], len(position_records), "unavailable", position_reason)
+            else:
+                position_scores = [_benchmark_radar_v2_axis_score(record, axis_specs, distributions, reliability_distributions)[0] for record in position_records]
+                position_average = _benchmark_radar_v2_reference(position_scores, len(position_records), position_state, position_reason)
+            radar_only = category in {"spaceControl", "forwardPress"} and kind == "volume"
+            axes.append(BenchmarkRadarV2Axis(
+                id=category, label={
+                    "outsideShot": "Outside-box shooting", "boxThreat": "In-box shooting",
+                    "dangerZone": "On-ball progression", "combinedDuel": "Combined duel",
+                    "spaceControl": "Off the ball", "forwardPress": "Forward pressing",
+                }[category],
+                radarOnlyRepresentation=radar_only,
+                representationLabel=("radar-only spatial representation; not a M.E.S.S.I. score" if category == "spaceControl" else "radar-only source-total representation; not a M.E.S.S.I. score") if radar_only else None,
+                components=components,
+                player=BenchmarkRadarV2Score(score=player_score, state=player_state),
+                globalAverage=_benchmark_radar_v2_reference(global_scores, len(benchmark_records), "observed"),
+                positionAverage=position_average,
+            ))
+        series[kind] = BenchmarkRadarV2Series(kind=kind, axes=axes)
+    return BenchmarkRadarV2Data(
+        sourceContext=BenchmarkRadarV2SourceContext(
+            playerId=player_id, season=season, mode=mode,
+            scope=scope if mode == "league" else None,
+            competition=competition if mode == "europe" else None,
+        ),
+        benchmarkContext=BenchmarkRadarV2BenchmarkContext(season=season),
+        positionReference=position_reference,
+        volume=series["volume"], ratio=series["ratio"],
     )
 
 

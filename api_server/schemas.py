@@ -2036,6 +2036,183 @@ class RatioBenchmarkEnvelope(BaseModel):
     data: RatioBenchmarkData
 
 
+BenchmarkRadarV2AxisId = Literal[
+    "outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress",
+]
+BenchmarkRadarV2Kind = Literal["volume", "ratio"]
+BenchmarkRadarV2DatumState = Literal["observed", "server_derived", "imputed", "unavailable", "zero_attempts_floor"]
+BenchmarkRadarV2ReferenceState = Literal["observed", "low_sample", "unavailable"]
+
+
+class BenchmarkRadarV2SourceContext(BaseModel):
+    """Exact selected player context; it is distinct from the fixed benchmark frame."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    idNamespace: Literal["fotmob"] = "fotmob"
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7, 8] | None = None
+    competition: CompetitionCode | None = None
+
+    @model_validator(mode="after")
+    def validate_context(self) -> "BenchmarkRadarV2SourceContext":
+        if self.mode == "league" and (self.scope is None or self.competition is not None):
+            raise ValueError("league source context requires scope and null competition")
+        if self.mode == "europe" and (self.scope is not None or self.competition is None):
+            raise ValueError("Europe source context requires null scope and competition")
+        return self
+
+
+class BenchmarkRadarV2BenchmarkContext(BaseModel):
+    """Fixed domestic 8-league frame used by both radar series."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    mode: Literal["league"] = "league"
+    scope: Literal[8] = 8
+    competition: None = None
+    label: Literal["8-league avg"] = "8-league avg"
+
+
+class BenchmarkRadarV2PositionReference(BaseModel):
+    """Text-normalized exact-position comparison, without semantic role remapping."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rawPosition: str = Field(min_length=1)
+    comparisonKey: str = Field(min_length=1)
+    minimumPopulation: Literal[20] = 20
+    population: int = Field(ge=0)
+    state: BenchmarkRadarV2ReferenceState
+    reason: Literal["position_label_not_player_role", "position_population_below_minimum"] | None = None
+
+    @model_validator(mode="after")
+    def validate_position_reference(self) -> "BenchmarkRadarV2PositionReference":
+        if self.state == "observed" and (self.population < self.minimumPopulation or self.reason is not None):
+            raise ValueError("observed position reference requires the minimum population and no reason")
+        if self.state == "low_sample" and (self.population >= self.minimumPopulation or self.reason != "position_population_below_minimum"):
+            raise ValueError("low-sample position reference requires its explicit reason")
+        if self.state == "unavailable" and self.reason != "position_label_not_player_role":
+            raise ValueError("unavailable position reference requires player-role reason")
+        return self
+
+
+class BenchmarkRadarV2Component(BaseModel):
+    """One raw v2 evaluator input. The browser never derives this value or score."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    value: float | None = None
+    unit: Literal["count", "goals", "per90", "percent"]
+    direction: Literal["higher_is_better", "lower_is_better"]
+    source: DetailV2Source
+    state: BenchmarkRadarV2DatumState
+    percentileScore: int | None = Field(default=None, ge=0, le=99)
+    formulaId: str | None = None
+    formulaVersion: Literal["stat-pairs-v2"] | None = None
+    zeroAttemptsFloor: bool = False
+
+    @model_validator(mode="after")
+    def validate_value_state(self) -> "BenchmarkRadarV2Component":
+        if self.value is None and (self.state != "unavailable" or self.source != "unavailable" or self.percentileScore is not None):
+            raise ValueError("unavailable radar component must use null value/source/score")
+        if self.value is not None and (self.state == "unavailable" or self.source == "unavailable" or self.percentileScore is None):
+            raise ValueError("available radar component needs a server score and non-unavailable state")
+        if self.zeroAttemptsFloor and self.percentileScore != 0:
+            raise ValueError("zero-attempt floor must publish score zero")
+        return self
+
+
+class BenchmarkRadarV2Score(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    score: int = Field(ge=0, le=99)
+    state: Literal["observed", "imputed"]
+
+
+class BenchmarkRadarV2ReferenceScore(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    score: float | None = Field(default=None, ge=0, le=99)
+    population: int = Field(ge=0)
+    state: BenchmarkRadarV2ReferenceState
+    reason: Literal["position_label_not_player_role", "position_population_below_minimum"] | None = None
+
+    @model_validator(mode="after")
+    def validate_reference_score(self) -> "BenchmarkRadarV2ReferenceScore":
+        if self.state == "unavailable" and self.score is not None:
+            raise ValueError("unavailable reference must not synthesize a score")
+        if self.state != "unavailable" and self.score is None:
+            raise ValueError("available or low-sample reference needs a server score")
+        return self
+
+
+class BenchmarkRadarV2Axis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: BenchmarkRadarV2AxisId
+    label: str = Field(min_length=1)
+    radarOnlyRepresentation: bool = False
+    representationLabel: str | None = None
+    components: list[BenchmarkRadarV2Component] = Field(min_length=1, max_length=5)
+    player: BenchmarkRadarV2Score
+    globalAverage: BenchmarkRadarV2ReferenceScore
+    positionAverage: BenchmarkRadarV2ReferenceScore
+
+    @model_validator(mode="after")
+    def validate_representation(self) -> "BenchmarkRadarV2Axis":
+        if self.radarOnlyRepresentation != (self.representationLabel is not None):
+            raise ValueError("radar-only representation requires its explicit label")
+        return self
+
+
+class BenchmarkRadarV2Series(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: BenchmarkRadarV2Kind
+    scoreFormulaId: Literal["v2-component-percentile-average-v1"] = "v2-component-percentile-average-v1"
+    scoreFormulaVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
+    axes: list[BenchmarkRadarV2Axis] = Field(min_length=6, max_length=6)
+
+    @model_validator(mode="after")
+    def validate_axis_order(self) -> "BenchmarkRadarV2Series":
+        expected = ["outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress"]
+        if [axis.id for axis in self.axes] != expected:
+            raise ValueError("benchmark-radar-v2 requires the exact v2 category axis order")
+        return self
+
+
+class BenchmarkRadarV2Data(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sourceContext: BenchmarkRadarV2SourceContext
+    benchmarkContext: BenchmarkRadarV2BenchmarkContext
+    positionReference: BenchmarkRadarV2PositionReference
+    volume: BenchmarkRadarV2Series
+    ratio: BenchmarkRadarV2Series
+
+    @model_validator(mode="after")
+    def validate_series_kinds(self) -> "BenchmarkRadarV2Data":
+        if self.volume.kind != "volume" or self.ratio.kind != "ratio":
+            raise ValueError("benchmark-radar-v2 requires volume and ratio series")
+        if self.sourceContext.season != self.benchmarkContext.season:
+            raise ValueError("source and benchmark seasons must match")
+        return self
+
+
+class BenchmarkRadarV2Envelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    benchmarkTaxonomyVersion: Literal["benchmark-radar-v2"] = "benchmark-radar-v2"
+    data: BenchmarkRadarV2Data
+
+
 TacticalSummaryReason = Literal[
     "complete", "partial_source_imputed", "summary_source_unavailable",
 ]
