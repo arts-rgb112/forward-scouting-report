@@ -10,6 +10,9 @@
 - 결과: 명시적 VP(546,78) 기반 rear frame/mesh, 좌우 측면, 진한 격자형 네트, 지면과 맞닿는 그림자, 잔디 제거, 진초록 Goal 축구공 및 소형 공 패턴을 구현했다. FinalThirdShootingMap focused tests 14건과 production build가 통과했다. 이제 사용자 승인에 따라 커밋 후 Preview 환경변수 확인, Preview 실데이터 QA와 PR 생성을 진행한다. main 병합은 명시적으로 금지한다.
 - 범위: messi-2-dashboard/src/playerDetail/GoalMouthView.tsx의 클라이언트 렌더링/UX 설계만. api_server/service.py와 data contract 변경 금지.
 - 외부 상태: API·데이터 계약 변경 없음. Preview feature flag 값은 배포 전에 읽기 전용으로 확인하며, 변경이 필요하면 배포를 중단하고 사용자 승인을 받는다.
+- Preview 배포: SHA `46b8bb5fd17063c2980be37188d1acf75be93701`; URL `https://forward-scouting-report-6dn7-jkpyuge0e-messiflick.vercel.app`; Inspect `https://vercel.com/messiflick/forward-scouting-report-6dn7/2QidExvWMnycX8mLJN2q9JyXdKKG`.
+- Preview feature flags: `VITE_FINAL_THIRD_SHOT_MAP_ENABLED=true`, `VITE_FINAL_THIRD_SHOT_MAP_V2_ENABLED=true`로 Preview 전용 설정을 갱신했다. `VITE_FINAL_THIRD_SHOT_MAP_V3_ENABLED=false`는 사용자 지시에 따라 변경하지 않고 fail-closed 상태로 유지했다.
+- Preview QA: `/players/194165?season=2025%2F2026&mode=league&scope=7&competition=all`의 Goal-Mouth 탭에서 118개 엔드포인트(Goal 36, On target 30, Off target 24)를 렌더링하고 Blocked 28개는 audit-only로 유지함을 확인했다. 상태 필터, 2× zoom/reset, off-frame 마커·원본 감사 정보 및 콘솔 오류 0건을 확인했다. main 병합은 수행하지 않는다.
 - 남은 후속 작업: (1) final-third-goalmouth-v3 처리 방식 별도 결정 필요, (2) search-diacritic-hotfix 잔여 폴더 삭제는 사용자 선택, (3) 현재 worktree 자체에도 새로 생긴 잠긴 .pytest_cache 있음(2026-08-24 22:22경 생성) — 급하지 않으나 추후 동일 방식으로 정리 가능
 - 동시편집 메모: 이 항목을 백엔드 오케스트레이터가 거의 동시에 갱신하려다 충돌 발생(Edit 도구가 안전하게 차단, 데이터 유실 없음). "각자 적는다" 방식의 실제 리스크 사례로 기록.
 - 검증 메모: duel/press 확장 회귀 59건은 통과했으며 별도 source-audit 1건은 assertion 실패가 아니라 Windows `%TEMP%\\pytest-of-USER`의 `tmp_path` 생성 PermissionError로 실행 불가; historical fixture 범위와 무관
