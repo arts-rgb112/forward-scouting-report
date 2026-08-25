@@ -2,9 +2,9 @@
 
 ## 진행 중인 작업
 
-- 상태: 진행 중 — Benchmark Radar v2 프런트엔드 렌더링
+- 상태: 로컬 구현·실데이터 QA 완료 — Benchmark Radar v2 프런트엔드 렌더링 (커밋 승인 대기)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config/messi-2-dashboard
-- 범위: 운영의 additive `benchmark-radar-v2` 계약만 strict하게 소비한다. `VITE_BENCHMARK_RADAR_V2_ENABLED`가 정확히 `true`일 때만 요청·두 레이더(Volume/Ratio)·선수/전체/동일 포지션 기준선을 표시한다. 기존 v1 레이더와 서버 점수·평균·percentile·원시 component 값은 보존하며, 브라우저는 어떤 산술·대체·재계산도 수행하지 않는다. Coach unavailable와 low-sample은 서버 state/reason/population을 그대로 렌더한다. 구현·로컬 실데이터 QA 뒤 사용자에게 커밋 전 보고한다. 공유 계산 모듈·API·점수 공식·Production 플래그는 변경하지 않는다.
+- 범위/로컬 QA: 운영의 additive `benchmark-radar-v2` 계약만 strict하게 소비한다. `VITE_BENCHMARK_RADAR_V2_ENABLED`가 정확히 `true`일 때만 요청·두 레이더(Volume/Ratio)·선수/전체/동일 포지션 기준선을 표시한다. 기존 v1 레이더와 서버 점수·평균·percentile·원시 component 값은 보존하며, 브라우저는 어떤 산술·대체·재계산도 수행하지 않는다. Coach unavailable와 low-sample은 서버 state/reason/population을 그대로 렌더한다. 로컬 uvicorn+Vite 실데이터 QA에서 194165(2025/26 league scope7)는 3중선, 179772(2021/22 league scope8)는 `position_label_not_player_role`로 포지션선 미표시, 281012(2021/22 league scope8)는 N=7 저표본 선·실제값을 각각 확인했다. build 및 기존 benchmark integration tests 3건이 통과했다. 공유 계산 모듈·API·점수 공식·Production 플래그는 변경하지 않았고, 로컬 서버 종료 후 5173/8000 리스너가 비어 있음을 확인했다. 커밋 전 사용자 보고 대기 중이다.
 
 - 상태: 완료 — additive `benchmark-radar-v2` 계약 및 position 비교군 정합성
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
