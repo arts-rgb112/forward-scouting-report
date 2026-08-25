@@ -24,6 +24,7 @@ Before any task action:
 2. Report the current `origin/main` SHA, current branch/worktree status, and
    whether the requested contract already exists in main.
 3. Treat the `진행 중인 작업` section as the cross-session source of truth.
+4. Vercel Secret을 읽을 수 없거나 `.env.example` 기본값·로컬 값이 없다는 사실은 플래그 비활성 증거가 아니다. 플래그 상태를 보고하기 전에는 해당 운영/Preview 배포의 네트워크 요청과 렌더된 DOM으로 실제 동작을 확인한다.
 
 Audit responsibilities:
 
