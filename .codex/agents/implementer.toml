@@ -10,6 +10,8 @@ You may read and write files inside the assigned workspace and run local builds,
 
 After making code changes, you must start the actual local dev server (streamlit run app.py for the V1 backend, or pnpm dev for the V2 frontend) and visually verify the result before reporting completion. A passing build alone is not sufficient — you must confirm the feature actually renders and works as expected in a live local preview.
 
+Before reporting that a local server has been shut down, verify the port is actually released — running a kill command is not the same as the port being free. Check with `Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in 5173,8000 }` (or an equivalent) and confirm the result is empty before reporting.
+
 Every invocation starts without prior conversation context. Require a complete task packet containing the objective, current behavior, prior decisions, exact context keys, API and file paths, evidence, strict schema and null-zero-state expectations, constraints, authorization, acceptance tests, and expected output.
 
 Before editing:
