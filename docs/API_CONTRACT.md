@@ -2,8 +2,9 @@
 
 ## 진행 중인 작업
 
-- 상태: 진행 중 — Render Blueprint 메타데이터 동기화
-- 범위: 실제 운영 Render 서비스 `forward-scouting-report`의 Dashboard 플랜 `Starter`와 일치하도록, 미연결 참조 파일 `render.yaml`의 name/plan만 `forward-scouting-report`/`starter`로 갱신한다. 기능 코드·API·기능 플래그·점수 모듈은 변경하지 않는다. main 병합 뒤 20분 이상 유휴 첫 `/health` 응답 시간을 별도 실측한다.
+- 상태: 완료 — Render Blueprint 메타데이터 동기화 및 always-on 유휴 검증
+- 범위/병합: 실제 운영 Render 서비스 `forward-scouting-report`의 Dashboard 플랜 `Starter`와 일치하도록, 미연결 참조 파일 `render.yaml`의 name/plan을 `forward-scouting-report`/`starter`로 갱신했다. PR `#285` merge SHA는 `549f12e79154be6850104f368ecc4e3aa6f5e065`이다. 기능 코드·API·기능 플래그·점수 모듈은 변경하지 않았다.
+- 유휴 실측: main 병합 뒤 **20분 이상 서비스 요청 없이** 대기한 다음 첫 `GET https://forward-scouting-report.onrender.com/health`를 한 번만 측정했다. 결과는 HTTP 200, total `0.320820s`, connect `0.014554s`, start-transfer `0.320766s`였다. 이는 2026-08-25 free 플랜의 최대 32.3초/504 패턴과 달리 always-on 기대 범위이며, 이번 실측에서 504는 없었다.
 
 - 상태: 완료 — messi.my 백엔드 CORS/POST 허용 준비
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
