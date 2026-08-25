@@ -55,9 +55,15 @@ DEFAULT_ORIGINS = (
     "http://localhost:4173",
     "http://127.0.0.1:4173",
     "https://forward-scouting-report-6dn7-tau.vercel.app",
+    "https://messi.my",
 )
 VERCEL_PREVIEW_ORIGIN_REGEX = r"^https://forward-scouting-report-6dn7-[a-z0-9-]+-messiflick\.vercel\.app$"
-WATCHLIST_ALLOWED_ORIGIN = "https://forward-scouting-report-6dn7-tau.vercel.app"
+# Canonical dashboard origins allowed to issue protected browser POST requests.
+# Keep the Vercel origin during the messi.my transition as a rollback path.
+DASHBOARD_ALLOWED_ORIGINS = frozenset({
+    "https://forward-scouting-report-6dn7-tau.vercel.app",
+    "https://messi.my",
+})
 WATCHLIST_MAX_BODY_BYTES = 64 * 1024
 PROTECTED_WATCHLIST_POST_PATHS = {
     "/api/v2/watchlist/resolve",
@@ -150,7 +156,7 @@ class ScopedCORSMiddleware(CORSMiddleware):
             and scope["path"] in PROTECTED_WATCHLIST_POST_PATHS
         ):
             origin = Headers(scope=scope).get("origin")
-            if origin and origin != WATCHLIST_ALLOWED_ORIGIN:
+            if origin and origin not in DASHBOARD_ALLOWED_ORIGINS:
                 response = PlainTextResponse("Disallowed CORS origin", status_code=403)
                 await response(scope, receive, send)
                 return
@@ -169,9 +175,9 @@ def cors_origin_regex() -> str:
 
 
 def is_metric_ranks_origin_allowed(origin: str | None) -> bool:
-    """POST batch ranks only from the production dashboard or this project's previews."""
+    """POST batch ranks only from an approved dashboard origin or this project's previews."""
     return bool(origin) and (
-        origin == WATCHLIST_ALLOWED_ORIGIN
+        origin in DASHBOARD_ALLOWED_ORIGINS
         or re.fullmatch(VERCEL_PREVIEW_ORIGIN_REGEX, origin) is not None
     )
 
@@ -223,7 +229,7 @@ async def guard_watchlist_resolution(request: Request, call_next):
         return await call_next(request)
     origin = request.headers.get("origin")
     origin_allowed = (
-        origin == WATCHLIST_ALLOWED_ORIGIN
+        origin in DASHBOARD_ALLOWED_ORIGINS
         if path in PROTECTED_WATCHLIST_POST_PATHS
         else is_metric_ranks_origin_allowed(origin)
     )
