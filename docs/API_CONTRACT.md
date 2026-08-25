@@ -2,6 +2,13 @@
 
 ## 진행 중인 작업
 
+- 상태: 완료 — Production Goal-Mouth baseline 공개
+- 작업: 사용자 승인에 따라 Production `VITE_GOAL_MOUTH_BASELINE_ENABLED` 한 값만 true로 변경하고 재배포·실측 QA를 수행했다. `VITE_FINAL_THIRD_SHOT_MAP_V3_ENABLED=true`과 `VITE_DUEL_PRESS_V2_ENABLED` 및 다른 모든 변수는 변경·삭제·재생성하지 않았다. 문제 시 코드 롤백 대신 이 baseline 값만 false로 복구 후 재배포한다.
+- 담당: backend orchestrator / frontend handoff
+- 시작: 2026-08-25 KST
+- 변경/배포: Vercel Config `VITE_GOAL_MOUTH_BASELINE_ENABLED=true`의 적용 범위를 기존 Preview에서 **Production 및 Preview**로 확장했다. 값·타입(Config)·기존 Preview 범위는 유지했고 Development는 선택하지 않았다. Production 재배포 `3hfjNPPwYvCuajiZY9HyLT8ggM6d` (Ready, `https://forward-scouting-report-6dn7-10u31jpv9-messiflick.vercel.app`)는 main merge `bb8a29f18f9465c2613302ecacb9a812cf460aad`를 사용한다. V3와 Duel/Press V2 및 다른 모든 환경변수는 변경하지 않았다.
+- Production QA: canonical `/players/194165?season=2025%2F2026&mode=league&scope=7&competition=all&taxonomy=duel-press-v1` Goal-Mouth에서 baseline 50셀, endpoint 마커 90개(Goal 36/On target 30/Off target 24), off-frame 24개, V3 품질 모듈 `+4.43`/`117/118`/partial reason, baseline on/off(0↔50셀), 2× zoom/reset을 확인했다. `row5_column1` 61.8%·212 shots는 SVG 상단, `row3_column5` 12.4%·2,064 shots는 중간 높이여서 Z축 반전이 없다. 이번 QA 세션의 console error/warning은 0건이었다. scope=8은 baseline과 무관한 기존 `8-league dataset unavailable` 상태이므로 승인 URL의 scope=7로 검증했다.
+
 - 상태: 완료 — main 병합됨
 - 작업: API·점수·좌표 계산을 바꾸지 않고 V3 서버 품질값을 한국어 품질 모듈로 렌더했다. 3D all-in-one은 구현하지 않고 현 SVG/좌표 계약 위의 가능성만 설계 검토했다.
 - 담당: backend orchestrator / frontend handoff
