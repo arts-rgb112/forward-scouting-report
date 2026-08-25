@@ -6,8 +6,9 @@
 - 작업: Goal-Mouth 골대 3D 디테일 커밋 · Vercel Preview · PR 생성 · main 병합
 - 담당: frontend_integration (병합은 Claude Code)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
-- 후속 작업 상태: 진행 중 — Goal-Mouth 오프프레임 툴팁의 viewBox 경계 반전·가독성 보강. 클라이언트 렌더링만 수정하며 API/원본 좌표 계약은 변경하지 않는다. 커밋·PR·배포는 사용자 승인 대기.
+- 후속 작업 상태: 완료 (PR 병합 승인 대기) — Goal-Mouth 오프프레임 툴팁의 viewBox 경계 반전·가독성 보강. 클라이언트 렌더링만 수정하며 API/원본 좌표 계약은 변경하지 않는다.
 - 후속 작업 결과: 완료 — 우측 마커는 좌측, 상단 마커는 하단으로 자동 반전하고, 미터 설명을 줄별로 배치·가변 폭 배경에 표시한다. 원본 `goalMouthY/Z`는 시각 툴팁에서 제거했으나 title/aria-label에 유지했다. 로컬 194165/2025-26/League/scope7/`taxonomy=duel-press-v1` 실데이터에서 우측 끝(오른쪽 포스트 밖 13.8m)과 상단 끝(크로스바 위 3.4m) 툴팁이 모두 패널 안에 표시됨을 확인했다. focused test 15건·production build 통과. 커밋·PR·배포 미수행.
+- 후속 작업 PR: `https://github.com/arts-rgb112/forward-scouting-report/pull/274` 생성 완료. head `agent/backend-orchestration-agents`의 커밋 `73de4b8`을 포함하며, 사용자 병합 승인 전까지 main에 병합하지 않는다.
 - 시작: 2026-08-24 KST
 - 결과: 명시적 VP(546,78) 기반 rear frame/mesh, 좌우 측면, 진한 격자형 네트, 지면과 맞닿는 그림자, 잔디 제거, 진초록 Goal 축구공 및 소형 공 패턴을 구현했다. FinalThirdShootingMap focused tests 14건과 production build가 통과했다. 이제 사용자 승인에 따라 커밋 후 Preview 환경변수 확인, Preview 실데이터 QA와 PR 생성을 진행한다. main 병합은 명시적으로 금지한다.
 - 범위: messi-2-dashboard/src/playerDetail/GoalMouthView.tsx의 클라이언트 렌더링/UX 설계만. api_server/service.py와 data contract 변경 금지.
