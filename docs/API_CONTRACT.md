@@ -2,14 +2,15 @@
 
 ## 진행 중인 작업
 
-- 상태: 로컬 구현·계약 검증 완료 — 프런트 fail-closed / 사용자 배포 승인 대기
+- 상태: Render Production 배포 완료 — 프런트 fail-closed / 별도 UI 구현 대기
 - 작업: Goal-Mouth 핫/콜드존 기준표(전역 10×5 득점 확률 baseline)와 선수 슈팅맵 오버레이
 - 담당: frontend_integration / backend owner handoff
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
 - 시작: 2026-08-25 KST
 - 범위와 가드: 새 additive `GET /api/v2/goal-mouth-baseline`만 요청한다. 기존 final-third-shot-map v1/v2/v3, `goalMouthY/Z` 변환, `rankings.py`, `tactical_ratio.py`, `spear.py`는 변경하지 않는다. 프런트는 `VITE_GOAL_MOUTH_BASELINE_ENABLED=false`를 기본값으로 유지하고, strict schema·fixture·OpenAPI·CORS·운영 검증 증거 수신 전에는 UI를 활성화하지 않는다.
 - 로컬 검증: 고정 5개 정적 snapshot만 읽어 유효 엔드포인트 104,612개·득점 34,436개를 집계했다. `minimumCellSample=150`으로 50셀 전부 관측값을 반환한다. 미래의 150 미만 셀도 실제 `shots`/`goals`/득점률은 숨기지 않고 `state=low_sample`, `lowSample=true`, 서버 Wilson 95% 신뢰구간으로 표시한다. source 부재만 `state=unavailable`/null이다. `GET /api/v2/goal-mouth-baseline`의 strict OpenAPI·422 query 거부·캐시·CORS 및 Final Third 회귀 테스트 47건이 로컬에서 통과했다.
-- 다음 단계: 사용자 배포 승인 후에만 별도 커밋·PR·merge·Render 배포와 Production/immutable Preview CORS 증거를 진행한다. 그 증거를 받은 프런트는 strict parser·background layer·on/off 토글·cell tooltip을 별도 변경으로 구현하고 로컬 실데이터 QA를 수행한다.
+- 배포 증거: backend PR `#275`, main 병합 SHA `99eb8d799f578361da0b0361cf061a54e51868e8`, Render deploy `dep-da6i8aflk1mc73b0lf50` (live). `GET https://forward-scouting-report.onrender.com/api/v2/goal-mouth-baseline`은 `schemaVersion=1.0.0`, `baselineTaxonomyVersion=goal-mouth-baseline-v1`, 50 observed cells와 104,612/34,436 provenance를 반환한다. fixture는 `docs/fixtures/goal_mouth_baseline_v1/source_cases.json`이다. Production Origin 및 immutable Preview preflight는 exact ACAO/200, hostile preflight는 400/no ACAO, hostile GET은 200/no ACAO였다. `VITE_GOAL_MOUTH_BASELINE_ENABLED`는 어느 환경에서도 생성·변경하지 않았으며 프런트 기본값은 계속 false다.
+- 다음 단계: 위 배포 증거를 받은 프런트는 strict parser·background layer·on/off 토글·cell tooltip을 별도 변경으로 구현하고 로컬 실데이터 QA를 수행한다. 이 작업은 feature flag를 false로 유지하며, 사용자 별도 승인 없이는 어떤 환경에서도 활성화하지 않는다.
 
 - 상태: 완료 (main 병합됨)
 - 작업: Goal-Mouth 골대 3D 디테일 커밋 · Vercel Preview · PR 생성 · main 병합
