@@ -2,13 +2,14 @@
 
 ## 진행 중인 작업
 
-- 상태: 로컬 구현·검증 완료 — 커밋/PR/배포 승인 대기
+- 상태: Preview QA 완료 — main 병합 승인 대기
 - 작업: API·점수·좌표 계산을 바꾸지 않고 V3 서버 품질값을 한국어 품질 모듈로 렌더했다. 3D all-in-one은 구현하지 않고 현 SVG/좌표 계약 위의 가능성만 설계 검토했다.
 - 담당: backend orchestrator / frontend handoff
 - 시작: 2026-08-25 KST
 - 실측 정정: `VITE_FINAL_THIRD_SHOT_MAP_V3_ENABLED`의 Vercel Secret 값은 읽을 수 없지만, Production `/players/194165?season=2025%2F2026&mode=league&scope=8&competition=all&taxonomy=duel-press-v1`의 Goal-Mouth는 `data-shooting-quality`에 `Shooting quality partial: xGOT − xG 4.43 · 117/118 eligible shots`를 렌더하고 V3 transport를 사용한다. 따라서 Production V3는 **활성**으로 취급하며, 이 작업에서 V3/baseline Production 플래그·API·점수 계산은 변경 금지다. Preview 변수도 기존 Secret과 중복되어 저장하지 않았고 변경은 없다.
 - Preview 실측: 기존 baseline-enabled Preview `https://forward-scouting-report-6dn7-r8qmjvkfp-messiflick.vercel.app`의 동일 QA URL도 V3 품질 문구 `4.43 · 117/118`와 baseline 50셀·Goal-Mouth 마커 90개를 함께 렌더한다. 따라서 별도 변수 삭제·재생성이나 Preview 재배포 없이 V3×기준선 통합 UI를 설계·검증할 수 있다.
 - 로컬 결과: `GoalMouthView.tsx`의 영문 한 줄을 `골문 기준선 · 슈팅 품질` 모듈로 교체했다. 서버의 `shootingQuality` 값만 표시하며, +값 emerald, −값 rose, 0 slate, partial amber/서버 reason, unavailable 숫자·표본 비노출을 적용했다. 실데이터 194165/2025-26/league/scope8/`taxonomy=duel-press-v1`에서 `+4.43`, `117/118`, partial reason 및 Goal-Mouth 마커 90개를 확인했다. `FinalThirdShootingMap.test.tsx` 19/19 및 `pnpm build`가 통과했다(기존 500kB chunk-size 경고만). 로컬 서버 종료 뒤 5173/8000 리스너는 비어 있음을 확인했다. Production/Preview 플래그·API·점수 계산은 변경하지 않았다.
+- PR/Preview: PR `#279` (`Integrate V3 shooting quality with Goal-Mouth baseline`), head `1d837d680ba3601b934601589f399ea9daaacf31`, Preview `https://forward-scouting-report-6dn7-el8eegqoa-messiflick.vercel.app`. QA URL의 Goal-Mouth에서 Korean module partial `+4.43`, `117/118`, 서버 reason, baseline 50셀, endpoint 마커 90개, endpoint-unavailable audit 28개를 확인했다. Goal 36 필터 및 2× zoom/reset 뒤에도 품질값이 유지되며 Preview 콘솔 error는 0건이다. Production V3=true 및 Production baseline=false는 변경하지 않았고 main 병합은 사용자 승인 대기다.
 
 - 상태: main 병합 완료 — Production baseline 활성화는 별도 사용자 승인 대기
 - 작업: Goal-Mouth 핫/콜드존 기준표(전역 10×5 득점 확률 baseline)와 선수 슈팅맵 오버레이
