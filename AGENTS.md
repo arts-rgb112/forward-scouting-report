@@ -3,7 +3,8 @@
 ## Contract-first rule
 
 - Before starting any task, read `docs/API_CONTRACT.md` completely. Do not inspect, plan, edit, test, delegate, or release project work before reading it.
-- At task start and completion, update the `진행 중인 작업` section in that contract on the active branch.
+- At task start and completion, update the `진행 중인 작업` section in that contract on the active branch, including the exact worktree path you are working in (`작업 폴더`).
+- Never trust another session's `작업 폴더` entry at face value: before touching a shared surface, independently confirm that path is still active (e.g. check its git status) rather than assuming the log is current.
 
 ## Shared-module safety
 
