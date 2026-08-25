@@ -244,13 +244,40 @@ function GoalNet({ baselineLayer }: { baselineLayer?: ReactNode }) {
   </g>;
 }
 
-function qualitySummary(data: RenderableData) {
+function ShootingQualityModule({ data }: { data: RenderableData }) {
   if (!("shootingQuality" in data)) return null;
   const quality = data.shootingQuality;
-  if (quality.state === "unavailable") return `Shooting quality unavailable: ${quality.reason ?? "source unavailable"}`;
-  const delta = quality.xgotMinusXg === null ? "unavailable" : quality.xgotMinusXg.toFixed(2);
-  const prefix = quality.state === "partial" ? "Shooting quality partial" : "Shooting quality";
-  return `${prefix}: xGOT − xG ${delta} · ${quality.eligibleShotCount ?? "—"}/${quality.totalShotCount ?? "—"} eligible shots`;
+  const unavailable = quality.state === "unavailable";
+  const tone = quality.xgotMinusXg === null
+    ? "text-slate-300"
+    : quality.xgotMinusXg > 0 ? "text-emerald-300"
+      : quality.xgotMinusXg < 0 ? "text-rose-300"
+        : "text-slate-200";
+  const value = quality.xgotMinusXg === null
+    ? null
+    : `${quality.xgotMinusXg > 0 ? "+" : ""}${quality.xgotMinusXg.toFixed(2)}`;
+  const hasServerSample = quality.eligibleShotCount !== null && quality.totalShotCount !== null;
+  const explanation = "xGOT−xG는 슈팅이 주어진 기회보다 얼마나 좋은 코스로 향했는지를 나타냅니다. 양수면 기회 대비 더 잘 마무리한 것이고, 음수면 기회 대비 손해를 뜻합니다.";
+  return <section data-shooting-quality-module data-shooting-quality-state={quality.state} aria-labelledby="shooting-quality-title" className="mt-3 rounded-md border border-cyan-200/20 bg-cyan-950/20 px-3 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-[10px] font-bold uppercase tracking-[.18em] text-cyan-100/75">골문 기준선 · 슈팅 품질</p>
+      {quality.state === "partial" && <span data-shooting-quality-partial className="rounded border border-amber-300/55 bg-amber-300/10 px-2 py-0.5 text-[10px] font-bold text-amber-200">일부 표본 누락</span>}
+      {unavailable && <span className="rounded border border-slate-400/40 bg-slate-400/10 px-2 py-0.5 text-[10px] font-bold text-slate-200">데이터 없음</span>}
+    </div>
+    <div className="mt-2 flex flex-wrap items-start justify-between gap-2">
+      <div>
+        <h3 id="shooting-quality-title" className="text-sm font-bold text-zinc-50">슈팅 품질 (xGOT − xG)</h3>
+        <p className="mt-1 text-[11px] leading-5 text-zinc-300">골문 확률 기준선은 5시즌 전체 관측값이며, 아래 값은 현재 선수·선택 컨텍스트의 서버 계산값입니다.</p>
+      </div>
+      <span tabIndex={0} role="img" aria-label={explanation} title={explanation} className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-cyan-100/45 text-xs font-black text-cyan-100 focus-visible:ring-2 focus-visible:ring-lime-300">?</span>
+    </div>
+    {unavailable ? <p data-shooting-quality-unavailable className="mt-3 text-sm font-semibold text-slate-300">슈팅 품질 데이터를 사용할 수 없습니다{quality.reason ? `: ${quality.reason}` : "."}</p> : <>
+      {value !== null && <p data-shooting-quality-value className={`mt-3 text-3xl font-black tabular-nums ${tone}`}>{value}</p>}
+      {hasServerSample && <p data-shooting-quality-sample className="mt-1 text-xs text-zinc-200">xG·xGOT 모두 관측된 표본 {quality.eligibleShotCount} / 전체 {quality.totalShotCount}슛</p>}
+      {quality.state === "partial" && <p data-shooting-quality-reason className="mt-2 text-xs text-amber-100">서버 표본 상태: {quality.reason}</p>}
+      <p data-shooting-quality-provenance className="mt-2 text-[10px] text-zinc-400">서버 원천: {quality.source ?? "unavailable"} · 계산식: {quality.formulaVersion}</p>
+    </>}
+  </section>;
 }
 
 export function GoalMouthView({ data, config }: { data: RenderableData; config?: MessiApiConfig }) {
@@ -286,7 +313,6 @@ export function GoalMouthView({ data, config }: { data: RenderableData; config?:
     return groups;
   }, [endpointShots]);
   const counts = { all: data.shots.length, goal: data.shots.filter((shot) => shot.status === "goal").length, on_target: data.shots.filter((shot) => shot.status === "on_target").length, off_target: data.shots.filter((shot) => shot.status === "off_target").length };
-  const summary = qualitySummary(data);
   useEffect(() => { setViewport({ x: 0, y: 0 }); setZoom(1); setActiveOffFrameShotId(null); setActiveBaselineCellId(null); pointerPan.current = null; }, [data]);
   const setZoomLevel = (next: ZoomLevel) => { setViewport((current) => centeredViewport(current, baseViewBox, zoom, next)); setZoom(next); };
   const resetViewport = () => { pointerPan.current = null; setZoom(1); setViewport({ x: 0, y: 0 }); };
@@ -333,6 +359,6 @@ export function GoalMouthView({ data, config }: { data: RenderableData; config?:
     <svg data-goal-mouth-viewbox={viewBox} viewBox={viewBox} className="block h-auto w-full touch-none cursor-grab active:cursor-grabbing" role="img" tabIndex={0} aria-label={`Three-dimensional goal-mouth plot with ${visibleShots.length} visible authoritative endpoints and ${unplotted.length} unplotted endpoints. Zoom ${zoom}x. Drag to pan when zoomed.`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointerPan} onPointerCancel={endPointerPan} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={onKeyDown}>
       <GoalNet baselineLayer={baselineLayer}/>{visibleShots.map((shot) => { const group = offFrameGroups.get(`${shot.goalMouthY}:${shot.goalMouthZ}`) ?? [shot]; const groupIndex = group.findIndex((candidate) => candidate.shotId === shot.shotId); return <Marker key={shot.shotId} shot={shot} data={data} endpointShots={endpointShots} fanOffset={group.length > 1 ? groupIndex - (group.length - 1) / 2 : 0} fanCount={group.length} active={activeOffFrameShotId === shot.shotId} onActivate={() => setActiveOffFrameShotId(shot.shotId)} onDeactivate={() => setActiveOffFrameShotId((current) => current === shot.shotId ? null : current)} tooltipBounds={tooltipBounds}/>; })}
     </svg>
-    <div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>축구공: Goal 초록 · On target 하늘색 · Off target 호박색 + X. Marker size uses the shared source xG scale; gray ? means xG unavailable.</p>{summary && <p data-shooting-quality className="mt-1 text-cyan-100">{summary}</p>}{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
+    <div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>축구공: Goal 초록 · On target 하늘색 · Off target 호박색 + X. Marker size uses the shared source xG scale; gray ? means xG unavailable.</p><ShootingQualityModule data={data}/>{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
   </div>;
 }

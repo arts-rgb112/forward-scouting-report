@@ -2,6 +2,14 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료 — 커밋/PR/배포 승인 대기
+- 작업: API·점수·좌표 계산을 바꾸지 않고 V3 서버 품질값을 한국어 품질 모듈로 렌더했다. 3D all-in-one은 구현하지 않고 현 SVG/좌표 계약 위의 가능성만 설계 검토했다.
+- 담당: backend orchestrator / frontend handoff
+- 시작: 2026-08-25 KST
+- 실측 정정: `VITE_FINAL_THIRD_SHOT_MAP_V3_ENABLED`의 Vercel Secret 값은 읽을 수 없지만, Production `/players/194165?season=2025%2F2026&mode=league&scope=8&competition=all&taxonomy=duel-press-v1`의 Goal-Mouth는 `data-shooting-quality`에 `Shooting quality partial: xGOT − xG 4.43 · 117/118 eligible shots`를 렌더하고 V3 transport를 사용한다. 따라서 Production V3는 **활성**으로 취급하며, 이 작업에서 V3/baseline Production 플래그·API·점수 계산은 변경 금지다. Preview 변수도 기존 Secret과 중복되어 저장하지 않았고 변경은 없다.
+- Preview 실측: 기존 baseline-enabled Preview `https://forward-scouting-report-6dn7-r8qmjvkfp-messiflick.vercel.app`의 동일 QA URL도 V3 품질 문구 `4.43 · 117/118`와 baseline 50셀·Goal-Mouth 마커 90개를 함께 렌더한다. 따라서 별도 변수 삭제·재생성이나 Preview 재배포 없이 V3×기준선 통합 UI를 설계·검증할 수 있다.
+- 로컬 결과: `GoalMouthView.tsx`의 영문 한 줄을 `골문 기준선 · 슈팅 품질` 모듈로 교체했다. 서버의 `shootingQuality` 값만 표시하며, +값 emerald, −값 rose, 0 slate, partial amber/서버 reason, unavailable 숫자·표본 비노출을 적용했다. 실데이터 194165/2025-26/league/scope8/`taxonomy=duel-press-v1`에서 `+4.43`, `117/118`, partial reason 및 Goal-Mouth 마커 90개를 확인했다. `FinalThirdShootingMap.test.tsx` 19/19 및 `pnpm build`가 통과했다(기존 500kB chunk-size 경고만). 로컬 서버 종료 뒤 5173/8000 리스너는 비어 있음을 확인했다. Production/Preview 플래그·API·점수 계산은 변경하지 않았다.
+
 - 상태: main 병합 완료 — Production baseline 활성화는 별도 사용자 승인 대기
 - 작업: Goal-Mouth 핫/콜드존 기준표(전역 10×5 득점 확률 baseline)와 선수 슈팅맵 오버레이
 - 담당: frontend_integration / backend owner handoff
@@ -13,7 +21,7 @@
 - 로컬 프런트 결과: `GoalMouthView.tsx`에 strict `goal-mouth-baseline-v1` parser/API/hook·서버 셀 배경 레이어·on/off 토글·hover/focus tooltip·low-sample hatch를 추가했다. 활성화 시 기본 on이지만 `.env.example` 및 Production은 계속 `VITE_GOAL_MOUTH_BASELINE_ENABLED=false`이며, flag가 false면 요청·토글·레이어가 모두 없다. 실데이터 194165/2025-26/league/scope8/`taxonomy=duel-press-v1`에서 50셀·90 마커·필터·2× zoom을 확인했고 `row5_column1`은 SVG 상단(뜨거운 61.8%), 중앙 저확률 셀은 아래와 구분되어 Z축 반전이 없었다. 로컬 백엔드/Vite 프로세스는 QA 후 종료했고, 포트 5173/8000 리스너가 비어 있음을 확인했다.
 - PR/Preview 증거: frontend/rules head `0c94c28d60e779f548d39976d421630082db9844`, PR `#277` (`Add fail-closed Goal-Mouth baseline overlay`). 최초 Preview `https://forward-scouting-report-6dn7-k5hpp1tzw-messiflick.vercel.app`에서 `VITE_GOAL_MOUTH_BASELINE_ENABLED=false` fail-closed를 확인했다(Goal-Mouth baseline API 호출·토글·레이어·셀 모두 0, 기존 골대/마커 정상). 전체 페이지에는 baseline 무관 기존 `GET /api/v2/players/194165?season=2021%2F2022&mode=europe&scope=8` 404 1건이 있으며, 2021/22 Europe 데이터 부재를 `Partial history: 1 context unavailable`로 처리하는 기존 동작이다.
 - 승인된 Preview-only QA: `VITE_GOAL_MOUTH_BASELINE_ENABLED=true`를 **Vercel Preview 환경에만** 추가했고 Production은 선택 해제·미변경 상태로 유지했다. `VITE_FINAL_THIRD_SHOT_MAP_V3_ENABLED=false`도 미변경이다. source `0c94c28` Preview redeploy `6o8oTX4jYxwVbMb7Z5kuxRZfDtsP`, URL `https://forward-scouting-report-6dn7-r8qmjvkfp-messiflick.vercel.app`에서 `taxonomy=duel-press-v1` 실데이터 QA를 통과했다: baseline 50셀, 90 마커, 24 off-frame 마커/tooltip, blocked audit 28개, On target 필터 30개, 2× zoom/reset, on/off 토글(0↔50셀), hover tooltip(61.8%·212 shots·95% CI 55.1–68.1%). baseline 관련 콘솔 오류는 없고, 위 기존 404 1건만 관측됐다. `row5_column1`/`row5_column10`은 SVG 상단 y=220의 red 61.8%/62.3%, 중앙 `row3_column5`/`row3_column6`은 y=317.6의 12.4%/12.0%로 Z축 반전이 없다.
-- main 병합: 사용자 승인에 따라 PR `#277`은 2026-08-25에 병합되었고 merge SHA는 `8a3d2db9734705cc597747b878c10b110492eef5`이다. Production의 `VITE_GOAL_MOUTH_BASELINE_ENABLED`는 계속 false/fail-closed이며, `VITE_FINAL_THIRD_SHOT_MAP_V3_ENABLED`도 false 유지·미변경이다. Production 활성화는 별도 승인 없이는 금지한다.
+- main 병합: 사용자 승인에 따라 PR `#277`은 2026-08-25에 병합되었고 merge SHA는 `8a3d2db9734705cc597747b878c10b110492eef5`이다. Production의 `VITE_GOAL_MOUTH_BASELINE_ENABLED`는 계속 false/fail-closed이다. 당시 V3 Secret은 읽을 수 없어 값 자체를 단정할 수 없었으며, 이후 Production 실동작에서 V3가 활성임을 확인했다(위 실측 정정 참조). Production baseline 활성화는 별도 승인 없이는 금지한다.
 
 - 상태: 완료 (main 병합됨)
 - 작업: Goal-Mouth 골대 3D 디테일 커밋 · Vercel Preview · PR 생성 · main 병합
@@ -27,7 +35,7 @@
 - 범위: messi-2-dashboard/src/playerDetail/GoalMouthView.tsx의 클라이언트 렌더링/UX 설계만. api_server/service.py와 data contract 변경 금지.
 - 외부 상태: API·데이터 계약 변경 없음. Preview feature flag 값은 배포 전에 읽기 전용으로 확인하며, 변경이 필요하면 배포를 중단하고 사용자 승인을 받는다.
 - Preview 배포: SHA `46b8bb5fd17063c2980be37188d1acf75be93701`; URL `https://forward-scouting-report-6dn7-jkpyuge0e-messiflick.vercel.app`; Inspect `https://vercel.com/messiflick/forward-scouting-report-6dn7/2QidExvWMnycX8mLJN2q9JyXdKKG`.
-- Preview feature flags: `VITE_FINAL_THIRD_SHOT_MAP_ENABLED=true`, `VITE_FINAL_THIRD_SHOT_MAP_V2_ENABLED=true`로 Preview 전용 설정을 갱신했다. `VITE_FINAL_THIRD_SHOT_MAP_V3_ENABLED=false`는 사용자 지시에 따라 변경하지 않고 fail-closed 상태로 유지했다.
+- Preview feature flags (당시 배포 시점 기록): `VITE_FINAL_THIRD_SHOT_MAP_ENABLED=true`, `VITE_FINAL_THIRD_SHOT_MAP_V2_ENABLED=true`로 Preview 전용 설정을 갱신했다. V3 Secret 값은 당시 읽을 수 없었고 변경하지 않았다. 현재 활성 상태 판정은 위의 배포 실동작 검증을 기준으로 한다.
 - Preview QA: `/players/194165?season=2025%2F2026&mode=league&scope=7&competition=all`의 Goal-Mouth 탭에서 118개 엔드포인트(Goal 36, On target 30, Off target 24)를 렌더링하고 Blocked 28개는 audit-only로 유지함을 확인했다. 상태 필터, 2× zoom/reset, off-frame 마커·원본 감사 정보 및 콘솔 오류 0건을 확인했다. main 병합은 수행하지 않는다.
 - PR: `https://github.com/arts-rgb112/forward-scouting-report/pull/273` — 사용자 승인 후 2026-08-25 09:19 KST 병합 완료. 병합 커밋 `963af4255b038843bc247f2d112a6b3f3cdac7f1` (origin/main). 병합 방식은 merge commit.
 - 병합 전 Claude Code 독립 검증(Preview 실배포 DOM 실측): 소실점 `546 78`, mesh stroke-opacity `0.72`/width `1.65`, 잔디 잔존 0개, 골대 밑단과 그림자 상단 갭 `0px`, 마커 90개 전량 흰 공면 적용(goal `#22c55e` / on_target `#38bdf8` / off_target `#fbbf24`), off-frame 24개. 로컬 실측값과 완전 일치 확인.
