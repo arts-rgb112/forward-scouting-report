@@ -2,10 +2,13 @@
 
 ## 진행 중인 작업
 
-- 상태: 완료 (Preview 승인 대기)
-- 작업: Goal-Mouth 골대 3D 디테일 커밋 · Vercel Preview · PR 생성
-- 담당: frontend_integration
+- 상태: 완료 (main 병합됨)
+- 작업: Goal-Mouth 골대 3D 디테일 커밋 · Vercel Preview · PR 생성 · main 병합
+- 담당: frontend_integration (병합은 Claude Code)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
+- 후속 작업 상태: 완료 (PR 병합 승인 대기) — Goal-Mouth 오프프레임 툴팁의 viewBox 경계 반전·가독성 보강. 클라이언트 렌더링만 수정하며 API/원본 좌표 계약은 변경하지 않는다.
+- 후속 작업 결과: 완료 — 우측 마커는 좌측, 상단 마커는 하단으로 자동 반전하고, 미터 설명을 줄별로 배치·가변 폭 배경에 표시한다. 원본 `goalMouthY/Z`는 시각 툴팁에서 제거했으나 title/aria-label에 유지했다. 로컬 194165/2025-26/League/scope7/`taxonomy=duel-press-v1` 실데이터에서 우측 끝(오른쪽 포스트 밖 13.8m)과 상단 끝(크로스바 위 3.4m) 툴팁이 모두 패널 안에 표시됨을 확인했다. focused test 15건·production build 통과. 커밋·PR·배포 미수행.
+- 후속 작업 PR: `https://github.com/arts-rgb112/forward-scouting-report/pull/274` 생성 완료. head `agent/backend-orchestration-agents`의 커밋 `73de4b8`을 포함하며, 사용자 병합 승인 전까지 main에 병합하지 않는다.
 - 시작: 2026-08-24 KST
 - 결과: 명시적 VP(546,78) 기반 rear frame/mesh, 좌우 측면, 진한 격자형 네트, 지면과 맞닿는 그림자, 잔디 제거, 진초록 Goal 축구공 및 소형 공 패턴을 구현했다. FinalThirdShootingMap focused tests 14건과 production build가 통과했다. 이제 사용자 승인에 따라 커밋 후 Preview 환경변수 확인, Preview 실데이터 QA와 PR 생성을 진행한다. main 병합은 명시적으로 금지한다.
 - 범위: messi-2-dashboard/src/playerDetail/GoalMouthView.tsx의 클라이언트 렌더링/UX 설계만. api_server/service.py와 data contract 변경 금지.
@@ -13,7 +16,9 @@
 - Preview 배포: SHA `46b8bb5fd17063c2980be37188d1acf75be93701`; URL `https://forward-scouting-report-6dn7-jkpyuge0e-messiflick.vercel.app`; Inspect `https://vercel.com/messiflick/forward-scouting-report-6dn7/2QidExvWMnycX8mLJN2q9JyXdKKG`.
 - Preview feature flags: `VITE_FINAL_THIRD_SHOT_MAP_ENABLED=true`, `VITE_FINAL_THIRD_SHOT_MAP_V2_ENABLED=true`로 Preview 전용 설정을 갱신했다. `VITE_FINAL_THIRD_SHOT_MAP_V3_ENABLED=false`는 사용자 지시에 따라 변경하지 않고 fail-closed 상태로 유지했다.
 - Preview QA: `/players/194165?season=2025%2F2026&mode=league&scope=7&competition=all`의 Goal-Mouth 탭에서 118개 엔드포인트(Goal 36, On target 30, Off target 24)를 렌더링하고 Blocked 28개는 audit-only로 유지함을 확인했다. 상태 필터, 2× zoom/reset, off-frame 마커·원본 감사 정보 및 콘솔 오류 0건을 확인했다. main 병합은 수행하지 않는다.
-- PR: `https://github.com/arts-rgb112/forward-scouting-report/pull/273` 생성 완료. Preview 육안 확인 후의 별도 사용자 승인 전까지 main에 병합하지 않는다.
+- PR: `https://github.com/arts-rgb112/forward-scouting-report/pull/273` — 사용자 승인 후 2026-08-25 09:19 KST 병합 완료. 병합 커밋 `963af4255b038843bc247f2d112a6b3f3cdac7f1` (origin/main). 병합 방식은 merge commit.
+- 병합 전 Claude Code 독립 검증(Preview 실배포 DOM 실측): 소실점 `546 78`, mesh stroke-opacity `0.72`/width `1.65`, 잔디 잔존 0개, 골대 밑단과 그림자 상단 갭 `0px`, 마커 90개 전량 흰 공면 적용(goal `#22c55e` / on_target `#38bdf8` / off_target `#fbbf24`), off-frame 24개. 로컬 실측값과 완전 일치 확인.
+- feature flag 정정 기록: 사용자가 Preview의 상세 스탯 보드가 Production과 다르게 보인다고 보고하여 `VITE_DUEL_PRESS_V2_ENABLED` 불일치를 의심했으나, 실제 원인은 QA URL에 `taxonomy` 쿼리 파라미터가 누락된 것이었다. `StaticRoute.tsx`의 `duelPressV2Requested`는 flag와 `taxonomy=duel-press-v1|duel-press-v2`를 동시에 요구하므로, taxonomy가 없으면 flag 값과 무관하게 legacy Six-sector board로 폴백한다. `taxonomy=duel-press-v1`을 붙여 Preview와 Production을 각각 실측한 결과 양쪽 모두 한글 STAT-PAIRS-V2 보드가 렌더링되어 **설정 불일치가 없음**을 확인했다. 따라서 `VITE_DUEL_PRESS_V2_ENABLED`는 어느 환경에서도 변경하지 않았다. 향후 상세 스탯 보드 QA URL에는 반드시 `taxonomy` 파라미터를 포함할 것.
 - 남은 후속 작업: (1) final-third-goalmouth-v3 처리 방식 별도 결정 필요, (2) search-diacritic-hotfix 잔여 폴더 삭제는 사용자 선택, (3) 현재 worktree 자체에도 새로 생긴 잠긴 .pytest_cache 있음(2026-08-24 22:22경 생성) — 급하지 않으나 추후 동일 방식으로 정리 가능
 - 동시편집 메모: 이 항목을 백엔드 오케스트레이터가 거의 동시에 갱신하려다 충돌 발생(Edit 도구가 안전하게 차단, 데이터 유실 없음). "각자 적는다" 방식의 실제 리스크 사례로 기록.
 - 검증 메모: duel/press 확장 회귀 59건은 통과했으며 별도 source-audit 1건은 assertion 실패가 아니라 Windows `%TEMP%\\pytest-of-USER`의 `tmp_path` 생성 PermissionError로 실행 불가; historical fixture 범위와 무관
