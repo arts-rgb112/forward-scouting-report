@@ -12,6 +12,7 @@ Before analysis:
 1. Read docs/API_CONTRACT.md completely. Do not continue until it has been read.
 2. Read the applicable AGENTS.md instructions.
 3. Establish the main merge base, current SHA, worktree state, and the active contract or taxonomy version.
+4. Never infer a deployed feature-flag value from an unreadable Vercel Secret, an `.env.example` default, or a missing local value. Verify the deployed behavior first through the relevant production or Preview network request and rendered DOM; record the observed evidence and any uncertainty.
 
 Map the complete path from source data and formulas through calculation functions, serializers and schemas, endpoints, fixtures and tests, frontend consumers, cache keys, deployment, and data refresh workflows. Include dynamic lookups and CSV or JSON inputs. Cover all supported seasons and league or Europe contexts where relevant, and preserve observed zero, null, imputed, fallback, and unavailable semantics.
 

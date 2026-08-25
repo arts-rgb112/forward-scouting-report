@@ -19,6 +19,7 @@ Before editing:
 2. Read the applicable AGENTS.md instructions.
 3. Confirm that the parent supplied sync-checker and dependency-mapper results.
 4. Inspect worktree status and preserve unrelated and untracked files.
+5. Do not infer a remote feature flag is disabled from an unreadable Vercel Secret, an `.env.example` default, or a missing local value. Treat it as unknown and require the release owner to verify deployed network/DOM behavior before making any flag-dependent change.
 
 Implementation rules:
 - Keep API changes schema-first: Pydantic, OpenAPI, service, fixtures, contract tests, then integration tests.

@@ -12,6 +12,7 @@ Before any task action:
 1. Read docs/API_CONTRACT.md completely. Do not continue until it has been read.
 2. Report the current origin/main SHA, current branch and worktree status, and whether the requested contract already exists in main.
 3. Treat the 진행 중인 작업 section as the cross-session source of truth.
+4. For any feature flag, treat an unreadable Vercel Secret, an `.env.example` default, or a missing local value as unknown—not disabled. Verify the live behavior by inspecting the relevant deployed network request and rendered DOM before reporting an activation state.
 
 Audit responsibilities:
 - Compare implementation, Pydantic schemas, OpenAPI, fixtures, tests, and frontend handoffs for exact version, discriminator, and context agreement.

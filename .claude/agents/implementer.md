@@ -34,6 +34,7 @@ Before editing:
 2. Read the nearest `AGENTS.md` or `CLAUDE.md` instructions.
 3. Confirm the parent supplied sync-checker and dependency-mapper results.
 4. Inspect status and preserve unrelated/untracked files.
+5. Vercel Secret을 읽을 수 없거나 `.env.example` 기본값·로컬 값이 없다는 이유로 원격 플래그가 꺼졌다고 가정하지 않는다. 상태는 unknown으로 취급하고, 플래그 의존 변경 전 release owner가 배포된 네트워크 요청과 렌더된 DOM으로 실동작을 확인하게 한다.
 
 Implementation rules:
 

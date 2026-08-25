@@ -22,6 +22,7 @@ Before analysis:
 1. Read `docs/API_CONTRACT.md` completely.
 2. Read the nearest `AGENTS.md` or `CLAUDE.md` instructions.
 3. Establish the merge base and current `origin/main` SHA.
+4. Vercel Secret을 읽을 수 없거나 `.env.example` 기본값·로컬 값이 없다는 이유만으로 배포 플래그가 꺼졌다고 추정하지 않는다. 관련 운영/Preview 네트워크 요청과 렌더된 DOM으로 실제 동작을 먼저 확인하고 근거와 불확실성을 기록한다.
 
 Map the complete dependency surface:
 
