@@ -1,8 +1,11 @@
+# Reference metadata only: no Render Blueprint instance currently consumes this
+# file. The live Render dashboard is authoritative; keep these fields in sync
+# with it so a future Blueprint connection does not recreate stale settings.
 services:
   - type: web
-    name: messi-api-staging
+    name: forward-scouting-report
     runtime: python
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements-api.txt
     startCommand: uvicorn api_server.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
