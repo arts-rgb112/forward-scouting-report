@@ -29,6 +29,7 @@ from .schemas import (
     PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
     ShotmapServiceErrorDetail, ShotmapServiceErrorEnvelope,
     FinalThirdEffectiveShotEnvelope, FinalThirdGoalMouthEnvelope, FinalThirdShotEnvelope,
+    GoalMouthBaselineEnvelope,
     WatchlistResolveEnvelope, WatchlistResolveRequest, TacticalQuadrantEnvelope,
 )
 from .service import (
@@ -43,7 +44,7 @@ from .service import (
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
     resolve_metric_rank_entries,
     build_ratio_benchmark, build_tactical_summary, build_volume_benchmark,
-    build_final_third_shot_map,
+    build_final_third_shot_map, build_goal_mouth_baseline,
     ShotmapContractViolation,
 )
 
@@ -253,6 +254,26 @@ def root() -> dict[str, str]:
 def health() -> HealthResponse:
     players = build_players("2025/2026", 8)
     return HealthResponse(season="2025/2026", players=len(players))
+
+
+@app.get(
+    "/api/v2/goal-mouth-baseline",
+    response_model=GoalMouthBaselineEnvelope,
+    tags=["players"],
+    responses={
+        422: {"description": "Goal-mouth baseline accepts no query parameters."},
+        500: {
+            "model": ShotmapServiceErrorEnvelope,
+            "description": "A required static goal-mouth baseline snapshot violates the strict contract.",
+        },
+    },
+)
+def get_goal_mouth_baseline(request: Request, response: Response) -> GoalMouthBaselineEnvelope:
+    """Return the closed five-season global goal-mouth baseline without player scoring."""
+    if request.query_params:
+        raise HTTPException(status_code=422, detail="goal-mouth-baseline accepts no query parameters")
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
+    return build_goal_mouth_baseline()
 
 
 @app.get("/api/v1/players", response_model=PlayersEnvelope, tags=["players"])
