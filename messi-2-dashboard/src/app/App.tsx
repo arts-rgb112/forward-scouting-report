@@ -5,6 +5,7 @@ import { DashboardErrorBoundary } from "../dashboard/components/DashboardErrorBo
 import { StaticRoute } from "./StaticRoute";
 import { WatchlistV3Provider } from "../dashboard/WatchlistV3Provider";
 import { legacyRootAdapter } from "./legacyRootAdapter";
+import { useGa4PageViews } from "./ga4";
 
 export function GlobalNavigation({ pathname }: { pathname: string }) {
   const active = pathname === "/compare" ? "compare" : pathname === "/about/messi" ? "about" : "leaderboard";
@@ -28,6 +29,7 @@ type AppProps = { navigate?: (target: string) => void };
 const browserNavigate = (target: string) => window.location.replace(target);
 
 export default function App({ navigate = browserNavigate }: AppProps) {
+  useGa4PageViews();
   const initialLocation = useRef({ pathname: window.location.pathname, search: window.location.search });
   const initialNavigate = useRef(navigate);
   const legacyRouteHandled = useRef(false);
