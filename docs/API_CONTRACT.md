@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료 — Dashboard 검색 아이콘 SVG arc hotfix (PR/배포 승인 대기)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-search-icon/messi-2-dashboard
+- 범위/결과: `DashboardToolbar`의 잘못된 search SVG path에서 두 번째 arc 반지름 `8 8` 누락을 고쳤다. 정상 path는 `Icon.tsx`의 `SEARCH_ICON_PATH` 공용 상수로 승격하고 `EmptyState`와 공유해 재발을 방지했다. dashboard component test 24건과 `pnpm build`가 통과했다. 로컬 Vite는 live Render API의 8-league unavailable 응답으로 정상 대시보드까지는 표시하지 못했지만, DOM 회귀 테스트가 input의 SVG `d` attribute와 정상 arc 반지름을 직접 검증했다. 코드·기능 플래그·GA 설정·배포는 변경하지 않았다.
+
 - 상태: 로컬 구현·검증 완료 — V2 Google Analytics 4 fail-closed SPA 계측 (배포 승인 대기)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-ga4-v2/messi-2-dashboard
 - 범위/결과: 기존 GA4 Measurement ID `G-8ZFS0ZM3NS`를 Vercel 환경변수 `VITE_GA_MEASUREMENT_ID`로만 주입하는 V2 클라이언트 계측을 추가했다. 값이 없거나 형식이 유효하지 않으면 script·event를 전부 만들지 않는다. `send_page_view:false` 후 SPA route가 바뀔 때 직접 `page_view`를 보낸다. `page_path`는 query 없는 pathname만 보내어 선수별 조회를 하나로 집계하고, 분석 컨텍스트는 `messi_season`, `messi_mode`, `messi_scope`, `messi_competition` 별도 이벤트 파라미터로 보낸다. 전체 URL은 `page_location`에만 유지하고, 동일 route 중복은 억제한다. V1 `app.py`의 GA 계측·서버/API/점수/기능 플래그는 변경하지 않았다. 커밋/PR/배포/Production 환경변수 변경 및 GA Realtime·DebugView 실측은 별도 승인 전 금지한다.
