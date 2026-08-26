@@ -2,9 +2,9 @@
 
 ## 진행 중인 작업
 
-- 상태: PR/Preview 완료 — Benchmark Radar v2 프런트엔드 렌더링 (Preview 기능 QA 활성화 승인 대기)
+- 상태: Preview 기능 QA 완료 — Benchmark Radar v2 프런트엔드 렌더링 (main 병합 승인 대기)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config/messi-2-dashboard
-- 범위/검증: 운영의 additive `benchmark-radar-v2` 계약만 strict하게 소비한다. `VITE_BENCHMARK_RADAR_V2_ENABLED`가 정확히 `true`일 때만 요청·두 레이더(Volume/Ratio)·선수/전체/동일 포지션 기준선을 표시한다. 기존 v1 레이더와 서버 점수·평균·percentile·원시 component 값은 보존하며, 브라우저는 어떤 산술·대체·재계산도 수행하지 않는다. Coach unavailable와 low-sample은 서버 state/reason/population을 그대로 렌더한다. 로컬 uvicorn+Vite 실데이터 QA에서 194165(2025/26 league scope7)는 3중선, 179772(2021/22 league scope8)는 `position_label_not_player_role`로 포지션선 미표시, 281012(2021/22 league scope8)는 N=7 저표본 선·실제값을 각각 확인했다. 새 observed/low_sample/unavailable 컴포넌트 회귀 3건과 기존 benchmark integration 3건, `pnpm build`가 통과했다. PR `#288` head `a0928c8`의 Vercel Preview는 Ready(`https://forward-scouting-report-6dn7-git-agent-benchm-0ba5d1-messiflick.vercel.app`)이고 CI도 통과했다. Preview의 flag는 아직 false라 v2 요청·렌더링이 없음을 실측했다. 실제 Preview 기능 QA는 Production을 건드리지 않는 Preview-only `VITE_BENCHMARK_RADAR_V2_ENABLED=true` 승인 후 진행한다. 공유 계산 모듈·API·점수 공식·Production 플래그는 변경하지 않았다.
+- 범위/검증: 운영의 additive `benchmark-radar-v2` 계약만 strict하게 소비한다. `VITE_BENCHMARK_RADAR_V2_ENABLED`가 정확히 `true`일 때만 요청·두 레이더(Volume/Ratio)·선수/전체/동일 포지션 기준선을 표시한다. 기존 v1 레이더와 서버 점수·평균·percentile·원시 component 값은 보존하며, 브라우저는 어떤 산술·대체·재계산도 수행하지 않는다. Coach unavailable와 low-sample은 서버 state/reason/population을 그대로 렌더한다. 새 observed/low_sample/unavailable 컴포넌트 회귀 3건과 기존 benchmark integration 3건, `pnpm build`가 통과했다. PR `#288` head `a0928c8`의 CI는 통과했고, Preview branch 재배포 `6mmsajnRVYQcpnPEwdmHExaPYgRJ`(Ready, source `3e5c5b0`, `https://forward-scouting-report-6dn7-git-agent-benchm-0ba5d1-messiflick.vercel.app`)에서 QA를 완료했다. Preview에만 `VITE_BENCHMARK_RADAR_V2_ENABLED=true`를 추가했고 Production 및 다른 플래그는 변경하지 않았다. 194165(2025/26 league scope7)는 Volume/Ratio 두 레이더와 각 선수/전체(N=1057)/포지션(N=300) 3중선을, 179772(2021/22 league scope8 Coach)는 두 포지션선을 숨기고 `position_label_not_player_role` 안내를, 281012(2021/22 league scope8 Wing-Back)는 N=7 저표본 경고와 포지션선을 각각 실측했다. 세 QA 세션의 browser error/warning 로그는 비어 있었다. 공유 계산 모듈·API·점수 공식·Production 플래그는 변경하지 않았다.
 
 - 상태: 완료 — additive `benchmark-radar-v2` 계약 및 position 비교군 정합성
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
