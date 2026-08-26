@@ -9,6 +9,7 @@ import { AssetImage } from "./AssetImage";
 import { DashboardLoading } from "./DashboardLoading";
 import { DashboardErrorBoundary } from "./DashboardErrorBoundary";
 import { DashboardToolbar } from "./DashboardToolbar";
+import { SEARCH_ICON_PATH } from "./Icon";
 import { DatasetHeader } from "./DatasetHeader";
 import { PlayerCardList } from "./PlayerCardList";
 import { PlayerTable } from "./PlayerTable";
@@ -34,6 +35,12 @@ describe("asset nullability", () => {
 });
 
 describe("dashboard contract UI", () => {
+  it("uses the shared valid search-icon arc path", () => {
+    const { container } = render(<DashboardToolbar query="" role="ALL" watchOnly={false} watchCount={0} hasFilters={false} players={samplePlayers} dataset={{ season: "2025/2026", mode: "league", scope: 7, competition: "all" }} onQueryChange={vi.fn()} onRoleChange={vi.fn()} onWatchOnlyChange={vi.fn()} onReset={vi.fn()} />);
+    expect(container.querySelector("input[aria-label='Search players']")?.parentElement?.querySelector("svg path")).toHaveAttribute("d", SEARCH_ICON_PATH);
+    expect(SEARCH_ICON_PATH).toContain(" 8 8 0 0 1 ");
+  });
+
   it("shows only six ability score ranges in the legend", () => {
     render(<ScoreLegend />);
     const legend = screen.getByLabelText("Ability score legend");
