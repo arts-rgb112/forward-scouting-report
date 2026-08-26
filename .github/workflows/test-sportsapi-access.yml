@@ -4,60 +4,62 @@ on:
   workflow_dispatch:
 
 jobs:
-  probe:
+  probe-status:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe endpoint permissions without exposing credentials
+      - name: Probe account status without exposing credentials
         env:
           ALL_LEAGUES_KEY: ${{ secrets.SPORTSAPIPRO_ALL_LEAGUES_API_KEY }}
           TOURNAMENT_KEY: ${{ secrets.SPORTSAPIPRO_TOURNAMENT_API_KEY }}
           PLAYER_KEY: ${{ secrets.SPORTSAPIPRO_API_KEY }}
         run: |
-          probe() {
+          set -u
+          status_url="https://api.sportsapipro.com/v2/football/status"
+
+          probe_status() {
             name="$1"
             key="$2"
-            url="$3"
-            status=$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" --header "x-api-key: $key" "$url")
+            body_file="$(mktemp)"
+            trap 'rm -f "$body_file"' RETURN
+
+            status="$(curl --silent --show-error --max-time 20 --output "$body_file" --write-out "%{http_code}" --header "x-api-key: $key" "$status_url")"
             echo "$name: HTTP $status"
-            if test "$status" -lt 200 -o "$status" -ge 300; then
+
+            if test "$status" = "402" -o "$status" = "429"; then
+              echo "HALTED: $name returned HTTP $status; no further probes will run."
+              exit 0
+            fi
+
+            if test "$status" -ge 200 -a "$status" -lt 300; then
+              python3 - "$name" "$body_file" <<'PY'
+          import json
+          import sys
+
+          name, path = sys.argv[1:]
+          with open(path, encoding="utf-8") as handle:
+              payload = json.load(handle)
+          root = payload.get("data", payload) if isinstance(payload, dict) else {}
+          account = root.get("account", {}) if isinstance(root, dict) else {}
+          usage = root.get("usage", {}) if isinstance(root, dict) else {}
+          print(
+              f"{name}: plan={account.get('plan')} "
+              f"daily_limit={usage.get('daily_limit')} "
+              f"remaining={usage.get('remaining')} "
+              f"requests_today={usage.get('requests_today')} "
+              f"reset_at={usage.get('reset_at')}"
+          )
+          PY
+            else
+              echo "$name: status unavailable; response body intentionally not logged."
               failed=1
             fi
+
+            rm -f "$body_file"
+            trap - RETURN
           }
+
           failed=0
-          probe "all-leagues" "$ALL_LEAGUES_KEY" "https://api.sportsapipro.com/v2/football/tournaments?refresh=false"
-          probe "tournament-seasons" "$TOURNAMENT_KEY" "https://api.sportsapipro.com/v2/football/tournaments/17/seasons"
-          probe "top-players-singular" "$TOURNAMENT_KEY" "https://api.sportsapipro.com/v2/football/tournament/17/season/76986/top-players"
-          probe "season-heatmap" "$PLAYER_KEY" "https://api.sportsapipro.com/v2/football/players/934235/tournament/17/season/76986/heatmap?type=overall"
-          probe "attribute-overviews" "$PLAYER_KEY" "https://api.sportsapipro.com/v2/football/players/934235/attribute-overviews"
-          curl --silent --show-error --header "x-api-key: $PLAYER_KEY" "https://api.sportsapipro.com/v2/football/players/934235/attribute-overviews" |
-            python3 -c 'import json,sys; data=json.load(sys.stdin); root=data.get("data", data); print("attribute-overviews keys:", sorted(root) if isinstance(root,dict) else type(root).__name__); [print(key, "count=", len(root.get(key, [])), "sample-keys=", sorted(root[key][0]) if isinstance(root.get(key),list) and root[key] and isinstance(root[key][0],dict) else "") for key in ("playerAttributeOverviews", "averageAttributeOverviews")]'
-      - name: Inspect wing and attacking-mid position detail safely
-        env:
-          TOURNAMENT_KEY: ${{ secrets.SPORTSAPIPRO_TOURNAMENT_API_KEY }}
-          PLAYER_KEY: ${{ secrets.SPORTSAPIPRO_API_KEY }}
-        run: |
-          python3 - <<'PY'
-          import json, os, urllib.request
-          def fetch(url, key):
-              request = urllib.request.Request(url, headers={"x-api-key": key, "Accept": "application/json", "User-Agent": "Mozilla/5.0 (compatible; ForwardScouting/3.2)"})
-              with urllib.request.urlopen(request, timeout=20) as response:
-                  return json.load(response)
-          ranking = fetch("https://api.sportsapipro.com/v2/football/tournament/8/season/77559/top-players", os.environ["TOURNAMENT_KEY"])
-          def walk(value):
-              if isinstance(value, dict):
-                  yield value
-                  for child in value.values(): yield from walk(child)
-              elif isinstance(value, list):
-                  for child in value: yield from walk(child)
-          candidate = next((item.get("player") for item in walk(ranking) if isinstance(item.get("player"), dict) and "lamine yamal" in str(item["player"].get("name", "")).lower()), None)
-          if not candidate:
-              raise SystemExit("Lamine Yamal not found in LaLiga top-player response")
-          print("wing-sample top-player keys:", sorted(candidate))
-          print("wing-sample top-player position:", candidate.get("position"))
-          profile = fetch(f"https://api.sportsapipro.com/v2/football/players/{candidate['id']}", os.environ["PLAYER_KEY"])
-          root = profile.get("data", profile) if isinstance(profile, dict) else {}
-          root = root.get("player", root) if isinstance(root, dict) else root
-          print("wing-sample profile keys:", sorted(root) if isinstance(root, dict) else type(root).__name__)
-          print("wing-sample profile position fields:", {key: root.get(key) for key in ("position", "positionName", "positionCode", "positions") if isinstance(root, dict) and key in root})
-          PY
+          probe_status "all-leagues" "$ALL_LEAGUES_KEY"
+          probe_status "tournament" "$TOURNAMENT_KEY"
+          probe_status "player" "$PLAYER_KEY"
           exit "$failed"
