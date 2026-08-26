@@ -2,9 +2,9 @@
 
 ## 진행 중인 작업
 
-- 상태: 진행 중 — SportsAPI Pro key별 priority endpoint 접근 범위 조사 2단계
+- 상태: 완료 — SportsAPI Pro key별 priority endpoint 접근 범위 조사
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
-- 1단계 결과/2단계 가드: Actions run `32917048776`에서 세 secret으로 `/status`만 각각 한 번 호출했고 모두 HTTP `404`였다. 이에 따라 usage 경로 재탐색은 중단하고, 사용자 승인에 따라 현재는 공식 문서의 8개 player/team priority endpoint를 각 key로 한 번씩만 호출한다(최대 24회). HTTP status와 JSON root/`data` field names만 기록하고 key·identity·response body는 남기지 않는다. 첫 `402`/`429`에서 전체 실행을 즉시 중단한다. 데이터 수집·ETL·계산·공유 모듈·main 병합은 금지한다.
+- 결과/가드: 1단계 Actions run `32917048776`에서 세 secret으로 `/status`만 각각 한 번 호출했고 모두 HTTP `404`였다. usage 경로 재탐색은 하지 않았다. 2단계 Actions run `32917411598`은 공식 문서의 8개 player/team priority endpoint를 각 key로 한 번씩, 총 24회 호출했다. HTTP `402`/`429`는 없었다. tournament/player key는 8/8 HTTP 200, all-leagues key는 season-statistics/statistics-seasons/characteristics에서 HTTP 503·나머지 5/8은 HTTP 200이었다. 200 response는 공통 root `cacheHit,data,source,success,timezone`만, `data`는 endpoint별 field names만 기록했고 key·identity·response body는 남기지 않았다. 데이터 수집·ETL·계산·공유 모듈·main 병합은 수행하지 않았다. 이 hard-coded 조사 workflow는 main에 병합하지 않으며, 사용자 확인 뒤 branch와 함께 삭제하는 것이 권장된다.
 
 - 상태: Production 활성화 완료 — Benchmark Radar v2; v1 Benchmark 공존 보강 결정 대기
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config/messi-2-dashboard
