@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료 — 외부 URL query 보존 / GA attribution hotfix (PR·배포 승인 대기)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-url-query-preservation
+- 범위/결과: native leaderboard가 URL을 정규화할 때 앱 소유 dashboard 키만 교체하고, UTM·광고 click-id·Tag Assistant 및 미래 caller-owned key는 보존한다. root legacy adapter도 외부 query를 거치게 하되, 앱의 잘못된 legacy alias·중복 context는 계속 fail-closed 한다. `utm_source`·`gclid`·`gtm_debug`·임의 `foo` 보존 회귀와 legacy/v1/v2 dashboard URL 회귀 33건, production build가 통과했다. 로컬 Vite에서도 같은 입력 URL이 변경 없이 남았고 console error/warning은 없었다. API·점수·기능 플래그·공유 계산 모듈은 바꾸지 않았다. PR은 제출하되 main 병합·Production 배포는 별도 승인 후에만 수행한다.
+
 - 상태: 로컬 구현·검증 완료 — V2 Google Analytics 4 fail-closed SPA 계측 (배포 승인 대기)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-ga4-v2/messi-2-dashboard
 - 범위/결과: 기존 GA4 Measurement ID `G-8ZFS0ZM3NS`를 Vercel 환경변수 `VITE_GA_MEASUREMENT_ID`로만 주입하는 V2 클라이언트 계측을 추가했다. 값이 없거나 형식이 유효하지 않으면 script·event를 전부 만들지 않는다. `send_page_view:false` 후 SPA route가 바뀔 때 직접 `page_view`를 보낸다. `page_path`는 query 없는 pathname만 보내어 선수별 조회를 하나로 집계하고, 분석 컨텍스트는 `messi_season`, `messi_mode`, `messi_scope`, `messi_competition` 별도 이벤트 파라미터로 보낸다. 전체 URL은 `page_location`에만 유지하고, 동일 route 중복은 억제한다. V1 `app.py`의 GA 계측·서버/API/점수/기능 플래그는 변경하지 않았다. 커밋/PR/배포/Production 환경변수 변경 및 GA Realtime·DebugView 실측은 별도 승인 전 금지한다.

@@ -57,6 +57,16 @@ describe("companion main dashboard integration", () => {
   });
 
   it("keeps server pagination and sends companion search order", async () => { render(<PlayersResourceContainer/>); await screen.findAllByText("Harry Kane"); expect(screen.getAllByText("Page 1 of 22")).toHaveLength(1); const call = transport.duel.mock.calls[0]; expect(call[2]).toMatchObject({ page: 1, pageSize: 50, sort: "score", direction: "desc" }); await waitFor(() => expect(location.search).toContain("pageSize=50")); });
+  it("normalizes dashboard state without dropping caller-owned attribution or debugger keys", async () => {
+    history.replaceState(null, "", "/?season=2025%2F2026&mode=league&scope=8&page=1&utm_source=twitter&gclid=TEST123&gtm_debug=x&foo=bar");
+    render(<PlayersResourceContainer/>); await screen.findAllByText("Harry Kane");
+    await waitFor(() => {
+      expect(location.search).toContain("utm_source=twitter");
+      expect(location.search).toContain("gclid=TEST123");
+      expect(location.search).toContain("gtm_debug=x");
+      expect(location.search).toContain("foo=bar");
+    });
+  });
   it("waits for authoritative scope-8 capability before loading players", async () => {
     let resolveOptions!: (value: typeof optionsWithScope8) => void;
     transport.options.mockReturnValue(new Promise((resolve) => { resolveOptions = resolve; }));
