@@ -2,9 +2,9 @@
 
 ## 진행 중인 작업
 
-- 상태: 완료(경로 확인 필요) — SportsAPI Pro key별 `/status` 접근 범위 조사 1단계
+- 상태: 진행 중 — SportsAPI Pro key별 priority endpoint 접근 범위 조사 2단계
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
-- 결과/가드: 임시 branch `agent/sportsapi-access-status-probe`의 Actions run `32917048776`에서 세 configured GitHub Actions secret으로 `GET https://api.sportsapipro.com/v2/football/status`만 각각 한 번씩 호출했다. all-leagues/tournament/player는 모두 HTTP `404`였으며 body·key·account identity는 로그에 남기지 않았다. `402`/`429`는 없었지만 plan/usage를 얻지 못했으므로 2단계 후보 endpoint probe는 실행하지 않는다. 공식 문서의 status example과 실제 legacy host route가 불일치할 가능성을 먼저 확인해야 한다. 데이터 수집·ETL·계산·공유 모듈·main 병합은 수행하지 않았다.
+- 1단계 결과/2단계 가드: Actions run `32917048776`에서 세 secret으로 `/status`만 각각 한 번 호출했고 모두 HTTP `404`였다. 이에 따라 usage 경로 재탐색은 중단하고, 사용자 승인에 따라 현재는 공식 문서의 8개 player/team priority endpoint를 각 key로 한 번씩만 호출한다(최대 24회). HTTP status와 JSON root/`data` field names만 기록하고 key·identity·response body는 남기지 않는다. 첫 `402`/`429`에서 전체 실행을 즉시 중단한다. 데이터 수집·ETL·계산·공유 모듈·main 병합은 금지한다.
 
 - 상태: Production 활성화 완료 — Benchmark Radar v2; v1 Benchmark 공존 보강 결정 대기
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config/messi-2-dashboard

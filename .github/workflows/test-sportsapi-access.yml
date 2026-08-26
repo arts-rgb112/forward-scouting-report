@@ -4,62 +4,82 @@ on:
   workflow_dispatch:
 
 jobs:
-  probe-status:
+  probe-priority-player-endpoints:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe account status without exposing credentials
+      - name: Probe priority endpoints without exposing credentials
         env:
           ALL_LEAGUES_KEY: ${{ secrets.SPORTSAPIPRO_ALL_LEAGUES_API_KEY }}
           TOURNAMENT_KEY: ${{ secrets.SPORTSAPIPRO_TOURNAMENT_API_KEY }}
           PLAYER_KEY: ${{ secrets.SPORTSAPIPRO_API_KEY }}
         run: |
           set -u
-          status_url="https://api.sportsapipro.com/v2/football/status"
+          base_url="https://api.sportsapipro.com/v2/football"
+          player_id="934235"
+          tournament_id="17"
+          season_id="76986"
+          team_id="42"
 
-          probe_status() {
-            name="$1"
+          probe() {
+            key_name="$1"
             key="$2"
+            endpoint_name="$3"
+            endpoint_path="$4"
             body_file="$(mktemp)"
-            trap 'rm -f "$body_file"' RETURN
-
-            status="$(curl --silent --show-error --max-time 20 --output "$body_file" --write-out "%{http_code}" --header "x-api-key: $key" "$status_url")"
-            echo "$name: HTTP $status"
+            status="$(curl --silent --show-error --max-time 20 --output "$body_file" --write-out "%{http_code}" --header "x-api-key: $key" "$base_url/$endpoint_path")"
+            echo "$key_name $endpoint_name: HTTP $status"
 
             if test "$status" = "402" -o "$status" = "429"; then
-              echo "HALTED: $name returned HTTP $status; no further probes will run."
+              rm -f "$body_file"
+              echo "HALTED: $key_name $endpoint_name returned HTTP $status; no further probes will run."
               exit 0
             fi
 
             if test "$status" -ge 200 -a "$status" -lt 300; then
-              python3 - "$name" "$body_file" <<'PY'
+              if ! python3 - "$key_name" "$endpoint_name" "$body_file" <<'PY'
           import json
           import sys
 
-          name, path = sys.argv[1:]
+          key_name, endpoint_name, path = sys.argv[1:]
           with open(path, encoding="utf-8") as handle:
               payload = json.load(handle)
-          root = payload.get("data", payload) if isinstance(payload, dict) else {}
-          account = root.get("account", {}) if isinstance(root, dict) else {}
-          usage = root.get("usage", {}) if isinstance(root, dict) else {}
-          print(
-              f"{name}: plan={account.get('plan')} "
-              f"daily_limit={usage.get('daily_limit')} "
-              f"remaining={usage.get('remaining')} "
-              f"requests_today={usage.get('requests_today')} "
-              f"reset_at={usage.get('reset_at')}"
-          )
+          if isinstance(payload, dict):
+              print(f"{key_name} {endpoint_name}: root_keys={','.join(sorted(payload)) or '-'}")
+              data = payload.get("data")
+              if isinstance(data, dict):
+                  print(f"{key_name} {endpoint_name}: data_keys={','.join(sorted(data)) or '-'}")
+              elif data is not None:
+                  print(f"{key_name} {endpoint_name}: data_type={type(data).__name__}")
+          else:
+              print(f"{key_name} {endpoint_name}: root_type={type(payload).__name__}")
           PY
+              then
+                echo "$key_name $endpoint_name: response was not logged after structure parsing failed."
+                failed=1
+              fi
             else
-              echo "$name: status unavailable; response body intentionally not logged."
+              echo "$key_name $endpoint_name: response body intentionally not logged."
               failed=1
             fi
 
             rm -f "$body_file"
-            trap - RETURN
+          }
+
+          probe_key() {
+            key_name="$1"
+            key="$2"
+            probe "$key_name" "$key" "season-statistics" "players/$player_id/tournament/$tournament_id/season/$season_id/statistics?type=overall"
+            probe "$key_name" "$key" "season-ratings" "players/$player_id/tournament/$tournament_id/season/$season_id/ratings?type=overall"
+            probe "$key_name" "$key" "season-summary" "players/$player_id/tournament/$tournament_id/season/$season_id/summary"
+            probe "$key_name" "$key" "statistics-seasons" "players/$player_id/statistics/seasons"
+            probe "$key_name" "$key" "characteristics" "players/$player_id/characteristics"
+            probe "$key_name" "$key" "last-events-page-0" "players/$player_id/events/last/0"
+            probe "$key_name" "$key" "unique-tournaments" "players/$player_id/unique-tournaments"
+            probe "$key_name" "$key" "team-players" "teams/$team_id/players"
           }
 
           failed=0
-          probe_status "all-leagues" "$ALL_LEAGUES_KEY"
-          probe_status "tournament" "$TOURNAMENT_KEY"
-          probe_status "player" "$PLAYER_KEY"
+          probe_key "all-leagues" "$ALL_LEAGUES_KEY"
+          probe_key "tournament" "$TOURNAMENT_KEY"
+          probe_key "player" "$PLAYER_KEY"
           exit "$failed"
