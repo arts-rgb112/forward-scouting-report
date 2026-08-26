@@ -1,6 +1,8 @@
 import type { AgeBand, DatasetRouteState, LeaderboardSearch, LeagueScope, MinutesBand, SortKey } from "./types";
 
 export const PAGE_SIZE = 50;
+/** Query keys owned by the native leaderboard route. Everything else belongs to the caller. */
+export const dashboardQueryKeys = new Set(["season", "mode", "scope", "competition", "page", "pageSize", "q", "role", "position", "ageBand", "minutesBand", "sort", "direction", "taxonomy", "recovery"]);
 export const positionFilterValues = ["Attacking Midfielder", "Center Back", "Central Midfielder", "Defensive Midfielder", "Left Back", "Left Midfielder", "Left Wing-Back", "Left Winger", "Right Back", "Right Midfielder", "Right Wing-Back", "Right Winger", "Striker", "forward"] as const;
 const sortKeys: readonly SortKey[] = ["score", "name", "age", "outsideShot", "boxThreat", "dangerZone", "aerial", "groundDuel", "spaceControl"];
 export const defaultLeaderboardSearch: LeaderboardSearch = { page: 1, pageSize: PAGE_SIZE, q: "", role: "all", position: "ALL", ageBand: "all", minutesBand: "all", sort: "score", direction: "desc" };
@@ -74,4 +76,13 @@ export function leaderboardHref(state: DatasetRouteState, search: LeaderboardSea
   if (search.ageBand !== "all") query.set("ageBand", search.ageBand);
   if (search.minutesBand !== "all") query.set("minutesBand", search.minutesBand);
   return `/?${query.toString()}`;
+}
+
+/** Rewrites native state without dropping attribution, click-id, or debugger query parameters. */
+export function preserveExternalQuery(route: string, currentSearch: string, ownedKeys: ReadonlySet<string> = dashboardQueryKeys): string {
+  const target = new URL(route, "https://messi.invalid");
+  for (const [key, value] of new URLSearchParams(currentSearch)) {
+    if (!ownedKeys.has(key)) target.searchParams.append(key, value);
+  }
+  return `${target.pathname}${target.search}`;
 }

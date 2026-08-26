@@ -5,7 +5,7 @@ import { MessiApiError, isAbortError } from "../api/errors";
 import { leaderboardTaxonomyMode } from "../api/duelPressFeatureGate";
 import { duelPressV2Enabled } from "../api/duelPressV2FeatureGate";
 import { fetchLeaderboard, fetchLeaderboardOptions } from "../api/leaderboardsApi";
-import { datasetFromSearch, datasetKeyOf, leaderboardHref, leaderboardSearchFromSearch } from "./datasetRoute";
+import { datasetFromSearch, datasetKeyOf, leaderboardHref, leaderboardSearchFromSearch, preserveExternalQuery } from "./datasetRoute";
 import { ConfigErrorFallback } from "./components/ConfigErrorFallback";
 import { DashboardDataFallback } from "./components/DashboardDataFallback";
 import { DashboardLoading } from "./components/DashboardLoading";
@@ -53,12 +53,13 @@ function LegacyPlayersResourceContainer() {
   const positionCapabilityRef = useRef(positionCapability); positionCapabilityRef.current = positionCapability;
   const ageCapabilityRef = useRef(ageCapability); ageCapabilityRef.current = ageCapability;
   const minutesCapabilityRef = useRef(minutesCapability); minutesCapabilityRef.current = minutesCapability;
-  const routeKey = leaderboardHref(dataset, search);
+  const routeKey = preserveExternalQuery(leaderboardHref(dataset, search), window.location.search);
   const datasetKey = datasetKeyOf(dataset);
 
   const writeRoute = useCallback((next: DatasetRouteState, nextSearch: LeaderboardSearch, replace = false) => {
-    const nextKey = leaderboardHref(next, nextSearch);
-    if (nextKey === leaderboardHref(datasetRef.current, searchRef.current)) return;
+    const canonicalNextKey = leaderboardHref(next, nextSearch);
+    if (canonicalNextKey === leaderboardHref(datasetRef.current, searchRef.current)) return;
+    const nextKey = preserveExternalQuery(canonicalNextKey, window.location.search);
     if (`${window.location.pathname}${window.location.search}` !== nextKey) {
       window.history[replace ? "replaceState" : "pushState"](null, "", nextKey);
     }
