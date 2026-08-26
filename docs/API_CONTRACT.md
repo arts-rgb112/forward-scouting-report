@@ -2,9 +2,13 @@
 
 ## 진행 중인 작업
 
-- 상태: 로컬 구현·검증 완료 — 외부 URL query 보존 / GA attribution hotfix (PR·배포 승인 대기)
+- 상태: Production 적용·검증 완료 — 외부 URL query 보존 / GA attribution hotfix
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-url-query-preservation
-- 범위/결과: native leaderboard가 URL을 정규화할 때 앱 소유 dashboard 키만 교체하고, UTM·광고 click-id·Tag Assistant 및 미래 caller-owned key는 보존한다. root legacy adapter도 외부 query를 거치게 하되, 앱의 잘못된 legacy alias·중복 context는 계속 fail-closed 한다. `utm_source`·`gclid`·`gtm_debug`·임의 `foo` 보존 회귀와 legacy/v1/v2 dashboard URL 회귀 33건, production build가 통과했다. 로컬 Vite에서도 같은 입력 URL이 변경 없이 남았고 console error/warning은 없었다. API·점수·기능 플래그·공유 계산 모듈은 바꾸지 않았다. PR은 제출하되 main 병합·Production 배포는 별도 승인 후에만 수행한다.
+- 범위/결과: native leaderboard가 URL을 정규화할 때 앱 소유 dashboard 키만 교체하고, UTM·광고 click-id·Tag Assistant 및 미래 caller-owned key는 보존한다. root legacy adapter도 외부 query를 거치게 하되, 앱의 잘못된 legacy alias·중복 context는 계속 fail-closed 한다. `utm_source`·`gclid`·`gtm_debug`·임의 `foo` 보존 회귀와 legacy/v1/v2 dashboard URL 회귀 33건, production build가 통과했다. PR `#291`은 main에 병합됐고 merge SHA는 `6f510f103cfd11fd253daf6803059549b0ae5605`이다. Claude Code Production 실측에서 `utm_source`/`utm_medium`/`utm_campaign`/`gclid`/`gtm_debug`/`foo` 6개가 모두 URL에 보존됐고 GA `page_view`의 `page_location`에도 모두 포함됐으며 `page_path`는 `/`로 유지됐다. API·점수·기능 플래그·공유 계산 모듈은 바꾸지 않았다.
+
+- 상태: main 병합 진행 중 — Dashboard 검색 아이콘 SVG arc hotfix
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-search-icon/messi-2-dashboard
+- 범위/결과: `DashboardToolbar`의 잘못된 search SVG path에서 두 번째 arc 반지름 `8 8` 누락을 고쳤다. 정상 path는 `Icon.tsx`의 `SEARCH_ICON_PATH` 공용 상수로 승격하고 `EmptyState`와 공유해 재발을 방지했다. dashboard component test 24건과 `pnpm build`가 통과했다. 로컬 Vite는 live Render API의 8-league unavailable 응답으로 정상 대시보드까지는 표시하지 못했지만, DOM 회귀 테스트가 input의 SVG `d` attribute와 정상 arc 반지름을 직접 검증했다. 코드·기능 플래그·GA 설정·배포는 변경하지 않았다.
 
 - 상태: 로컬 구현·검증 완료 — V2 Google Analytics 4 fail-closed SPA 계측 (배포 승인 대기)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-ga4-v2/messi-2-dashboard
