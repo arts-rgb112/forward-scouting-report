@@ -2,9 +2,13 @@
 
 ## 진행 중인 작업
 
-- 상태: 로컬 구현·검증 완료 — additive `benchmark-radar-v2` 계약 및 position 비교군 정합성 (커밋 승인 대기)
+- 상태: Preview 기능 QA 완료 — Benchmark Radar v2 프런트엔드 렌더링 (main 병합 승인 대기)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config/messi-2-dashboard
+- 범위/검증: 운영의 additive `benchmark-radar-v2` 계약만 strict하게 소비한다. `VITE_BENCHMARK_RADAR_V2_ENABLED`가 정확히 `true`일 때만 요청·두 레이더(Volume/Ratio)·선수/전체/동일 포지션 기준선을 표시한다. 기존 v1 레이더와 서버 점수·평균·percentile·원시 component 값은 보존하며, 브라우저는 어떤 산술·대체·재계산도 수행하지 않는다. Coach unavailable와 low-sample은 서버 state/reason/population을 그대로 렌더한다. 새 observed/low_sample/unavailable 컴포넌트 회귀 3건과 기존 benchmark integration 3건, `pnpm build`가 통과했다. PR `#288` head `a0928c8`의 CI는 통과했고, Preview branch 재배포 `6mmsajnRVYQcpnPEwdmHExaPYgRJ`(Ready, source `3e5c5b0`, `https://forward-scouting-report-6dn7-git-agent-benchm-0ba5d1-messiflick.vercel.app`)에서 QA를 완료했다. Preview에만 `VITE_BENCHMARK_RADAR_V2_ENABLED=true`를 추가했고 Production 및 다른 플래그는 변경하지 않았다. 194165(2025/26 league scope7)는 Volume/Ratio 두 레이더와 각 선수/전체(N=1057)/포지션(N=300) 3중선을, 179772(2021/22 league scope8 Coach)는 두 포지션선을 숨기고 `position_label_not_player_role` 안내를, 281012(2021/22 league scope8 Wing-Back)는 N=7 저표본 경고와 포지션선을 각각 실측했다. 세 QA 세션의 browser error/warning 로그는 비어 있었다. 공유 계산 모듈·API·점수 공식·Production 플래그는 변경하지 않았다.
+
+- 상태: 완료 — additive `benchmark-radar-v2` 계약 및 position 비교군 정합성
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-agent-config
-- 범위/검증: 기존 Volume/Ratio benchmark v1과 M.E.S.S.I. 점수 공식을 보존한 채, duel-press-v2의 여섯 축(`outsideShot`, `boxThreat`, `dangerZone`, `combinedDuel`, `spaceControl`, `forwardPress`)을 위한 별도 레이더 계약을 로컬 구현·테스트했다. 새 strict suite 6건과 기존 v1 Volume/Ratio·tactical summary·Duel/Press V2 회귀는 프로젝트 내부 base temp로 `70 passed`였다. 기본 Windows `%TEMP%` 실행의 1건은 assertion이 아니라 기존 `tmp_path` ACL PermissionError였다. 사용자 승인 전에는 커밋·PR·배포·기능 플래그 변경을 하지 않는다. `rankings.py`, `tactical_ratio.py`, `spear.py`는 변경하지 않았다.
+- 범위/병합: 기존 Volume/Ratio benchmark v1과 M.E.S.S.I. 점수 공식을 보존한 채, duel-press-v2의 여섯 축(`outsideShot`, `boxThreat`, `dangerZone`, `combinedDuel`, `spaceControl`, `forwardPress`)을 위한 별도 strict 계약을 추가했다. PR `#287` merge SHA는 `ebf31c15d57bae045bdc4286773d3cfd6b07ce4a`이다. 새 strict suite 6건과 기존 v1 Volume/Ratio·tactical summary·Duel/Press V2 회귀는 프로젝트 내부 base temp로 `70 passed`였고, 독립 전체 backend 검증은 `352 passed, 0 failed`였다. `rankings.py`, `tactical_ratio.py`, `spear.py`, 기존 v1 endpoint·점수 공식·기능 플래그는 변경하지 않았다. Render 자동 배포 뒤 운영 Swagger에서 194165/2025/2026/league/scope7/all을 실측했다: 새 `benchmark-radar-v2`는 HTTP 200과 strict `benchmark-radar-v2` 응답을, 기존 `volume-benchmark`와 `ratio-benchmark`는 각각 HTTP 200을 반환했다.
 - 알려진 데이터 품질 이슈(이번 범위 밖): `metrics.py`는 FotMob `base.primaryPosition`의 **현재** label을 모든 과거 season record에 복사한다. 따라서 은퇴 뒤 직책이 Coach로 바뀐 실제 선수 시즌 8행과 `forward`/`midfielder`/`defender` 같은 넓은 현재 label이 historical cohort에 존재한다. 기존 leaderboard·rating cohort는 변경하지 않는다. 새 v2 레이더에서는 텍스트 정규화만 적용하고 의미 병합은 하지 않으며, Coach의 position reference만 `position_label_not_player_role`로 unavailable 처리한다. 글로벌 cohort에는 Coach 행을 그대로 유지한다.
 
 - 상태: 완료 — Render Blueprint 메타데이터 동기화 및 always-on 유휴 검증

@@ -5,8 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 
 const volumeHook = vi.hoisted(() => vi.fn(() => ({ state: { kind: "disabled" as const }, retry: vi.fn() })));
 const ratioHook = vi.hoisted(() => vi.fn(() => ({ state: { kind: "disabled" as const }, retry: vi.fn() })));
+const radarV2Hook = vi.hoisted(() => vi.fn(() => ({ state: { kind: "disabled" as const }, retry: vi.fn() })));
 vi.mock("./useVolumeBenchmark", () => ({ useVolumeBenchmark: volumeHook }));
 vi.mock("./useRatioBenchmark", () => ({ useRatioBenchmark: ratioHook }));
+vi.mock("./useBenchmarkRadarV2", () => ({ useBenchmarkRadarV2: radarV2Hook }));
 import { Benchmark } from "./PlayerDetailRoute";
 import { samplePlayers } from "../test/fixtures/players";
 

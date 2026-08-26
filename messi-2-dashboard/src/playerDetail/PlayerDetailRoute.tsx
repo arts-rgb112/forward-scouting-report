@@ -19,6 +19,8 @@ import { axisDetail, detailMetrics, metricProfile, seasonScoreRows, selectedScor
 import { SpatialPitch } from "./SpatialPitch";
 import { BenchmarkPanel, VolumeBenchmarkRadar as ServerVolumeBenchmarkRadar } from "./VolumeBenchmarkRadar";
 import { useRatioBenchmark } from "./useRatioBenchmark";
+import { BenchmarkRadarV2Panel } from "./BenchmarkRadarV2";
+import { useBenchmarkRadarV2 } from "./useBenchmarkRadarV2";
 import { tacticalSummaryEnabled, useTacticalSummary } from "./useTacticalSummary";
 import { useVolumeBenchmark } from "./useVolumeBenchmark";
 import { DuelPressDetailReadoutBoard, DuelPressDetailReadoutUnavailable } from "./DuelPressDetailReadoutBoard";
@@ -130,7 +132,8 @@ export function VolumeBenchmarkRadar({ player, config, dataset }: { player: Play
 
 export function Benchmark({ player, config, dataset }: { player: Player; config?: MessiApiConfig; dataset: DatasetRouteState }) {
   const volume = useVolumeBenchmark(config, player.id, dataset); const ratio = useRatioBenchmark(config, player.id, dataset);
-  return <BenchmarkPanel volume={volume.state} ratio={ratio.state} playerName={player.name} onVolumeRetry={volume.retry} onRatioRetry={ratio.retry}/>;
+  const v2 = useBenchmarkRadarV2(config, player.id, dataset);
+  return v2.state.kind === "disabled" ? <BenchmarkPanel volume={volume.state} ratio={ratio.state} playerName={player.name} onVolumeRetry={volume.retry} onRatioRetry={ratio.retry}/> : <BenchmarkRadarV2Panel state={v2.state} playerName={player.name} onRetry={v2.retry}/>;
 }
 
 /** Presentation-only composition: all score, spatial and radar values remain server supplied. */

@@ -1,0 +1,8 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchBenchmarkRadarV2 } from "../api/benchmarkRadarV2Api";
+import type { BenchmarkRadarV2 } from "../api/benchmarkRadarV2Contracts";
+import type { MessiApiConfig } from "../api/env";
+import type { DatasetRouteState } from "../dashboard/types";
+export type BenchmarkRadarV2State = { kind:"disabled" } | { kind:"loading" } | { kind:"error" } | { kind:"ready"; data: BenchmarkRadarV2 };
+export const benchmarkRadarV2Enabled = (env: Record<string, string | boolean | undefined> = import.meta.env) => env.VITE_BENCHMARK_RADAR_V2_ENABLED === "true";
+export function useBenchmarkRadarV2(config: MessiApiConfig | undefined, playerId: number, context: DatasetRouteState) { const enabled=benchmarkRadarV2Enabled(); const [state,setState]=useState<BenchmarkRadarV2State>(enabled?{kind:"loading"}:{kind:"disabled"}); const [epoch,setEpoch]=useState(0); const generation=useRef(0); useEffect(()=>{ const current=++generation.current; if(!enabled||!config||!Number.isSafeInteger(playerId)||playerId<=0){setState({kind:"disabled"});return;} const controller=new AbortController(); setState({kind:"loading"}); void fetchBenchmarkRadarV2(config,playerId,context,controller.signal).then(data=>{if(!controller.signal.aborted&&current===generation.current)setState({kind:"ready",data});}).catch(()=>{if(!controller.signal.aborted&&current===generation.current)setState({kind:"error"});}); return()=>controller.abort();},[config,context.competition,context.mode,context.scope,context.season,enabled,epoch,playerId]); return {state,retry:useCallback(()=>setEpoch(v=>v+1),[])}; }
