@@ -105,7 +105,9 @@ def _with_true_core_definition(ratio: dict[str, float]) -> dict[str, float]:
         str(ratio.get("heatmap_key", "")) or None,
     )
     core = true_core_zones_from_points(points) if points else true_core_zones(corrected)
-    continuous = continuous_core_summary(points) if points else None
+    continuous = continuous_core_summary(
+        points, heatmap_key=str(ratio.get("heatmap_key") or "")
+    ) if points else None
     if continuous is not None:
         corrected["cca_area_pct"] = float(continuous["coreAreaPct"])
         corrected["continuous_core"] = continuous

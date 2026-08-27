@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
 from datetime import datetime, timezone
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from functools import cmp_to_key, lru_cache
+import csv
 import hashlib
 import json
 import math
@@ -27,7 +28,7 @@ from shotmap_store_v2 import (
 from positional_grid import POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES
 
 from .schemas import (
-    AgeBand, AssetRef, CompareMeta, ContinuousCoreAnalysis, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, ShotmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
+    AgeBand, AssetRef, CompareMeta, FixedNContinuousCoreAnalysis, DatasetMeta, DuelSpatialAnalysis, HeatmapPoint, ShotmapPoint, LeaderboardAppliedFilters, LeaderboardEnvelope,
     DuelPressAppliedFilters, DuelPressComponents, DuelPressLeaderboardEnvelope,
     DuelPressLeaderboardSort, DuelPressPlayerEnvelope, DuelPressPlayerResponse,
     DuelPressPlayerStats, DuelPressRawMetrics, DuelPressRequestContext,
@@ -53,6 +54,9 @@ from .schemas import (
     WatchlistResolvedPlayer,
     RatioBenchmarkAxis, RatioBenchmarkData,
     TacticalSummaryData, TacticalSummaryLine,
+    TacticalSummaryV2ActivityRange, TacticalSummaryV2CohortKey,
+    TacticalSummaryV2Data, TacticalSummaryV2Envelope, TacticalSummaryV2Provenance,
+    TacticalSummaryV2Readout,
     VolumeBenchmarkAxis, VolumeBenchmarkData,
     VolumeBenchmarkSourceContext,
     BenchmarkRadarV2Axis, BenchmarkRadarV2BenchmarkContext, BenchmarkRadarV2Component,
@@ -2569,6 +2573,306 @@ def build_tactical_summary(
     )
 
 
+TACTICAL_SUMMARY_V2_FORMULA_VERSION = "tactical-summary-v2"
+TACTICAL_SUMMARY_V2_DISCLOSURE = "활동 폭은 위치 분포의 범위이며 이동 거리가 아닙니다."
+TACTICAL_SUMMARY_V2_MINIMUM_POSITION_POPULATION = 20
+TACTICAL_SUMMARY_V2_MINIMUM_ACTIVITY_BASELINE_COORDINATES = 60
+TACTICAL_SUMMARY_V2_RANGE_FORMULA = "coordinate-standard-deviation-v1"
+TACTICAL_SUMMARY_V2_MEDIAN_FORMULA = "same-context-position-median-v1"
+
+
+def _tactical_summary_v2_data_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "data" / "tactical_3zone_ratio.csv"
+
+
+def _tactical_summary_v2_revision() -> tuple[int, int]:
+    path = _tactical_summary_v2_data_path()
+    stat = path.stat()
+    return stat.st_mtime_ns, stat.st_size
+
+
+@lru_cache(maxsize=4)
+def _tactical_summary_v2_static_rows(
+    revision: tuple[int, int],
+) -> dict[str, dict[str, float]]:
+    """Read only ETL-precomputed spatial ranges; never derive them on requests."""
+    del revision
+    rows: dict[str, dict[str, float]] = {}
+    with _tactical_summary_v2_data_path().open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            key = str(row.get("heatmap_key") or "")
+            if not key:
+                continue
+            parsed: dict[str, float] = {}
+            for field in (
+                "activity_spread_x", "activity_spread_y", "in_box_ratio", "cca_area_pct",
+                "activity_valid_point_count",
+                "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio",
+            ):
+                value = _finite_number(row.get(field))
+                if value is not None:
+                    parsed[field] = value
+            rows[key] = parsed
+    return rows
+
+
+def _tactical_summary_v2_static_record(
+    record: dict[str, object], season: str,
+) -> dict[str, float] | None:
+    """Resolve a v2-frame row to its static heatmap session without building a cohort."""
+    try:
+        player_id = _source_player_id(record.get("player_id"))
+    except (TypeError, ValueError):
+        return None
+    session = get_tactical_session_row(
+        player_id, str(record.get("league_name") or ""), season,
+    )
+    if session is None:
+        return None
+    heatmap_key = str(session.get("heatmap_key") or "")
+    return _tactical_summary_v2_static_rows(_tactical_summary_v2_revision()).get(heatmap_key)
+
+
+def _tactical_summary_v2_median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    return (ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2.0)
+
+
+def _tactical_summary_v2_readout(
+    *, identifier: str, label: str, value: float | None, values: list[float],
+    formula_version: str, measure: str, frame_population: int,
+    exclusion_reasons: Counter[str], unavailable_reason: str | None = None,
+    minimum_baseline_coordinate_count: int | None = None,
+    subject_valid_coordinate_count: int | None = None,
+) -> TacticalSummaryV2Readout:
+    """Return one complete server-owned median/tail-percentile readout.
+
+    ``percentileScore`` is the relevant tail percentage (top when above the
+    median, bottom when below), so clients never invert or subtract it.
+    """
+    population = len(values)
+    median = _tactical_summary_v2_median(values)
+    provenance_kwargs = {
+        "framePopulation": frame_population,
+        "eligiblePopulation": population,
+        "excludedPopulation": frame_population - population,
+        "exclusionReasonCounts": dict(sorted(exclusion_reasons.items())),
+        "minimumBaselineCoordinateCount": minimum_baseline_coordinate_count,
+        "subjectValidCoordinateCount": subject_valid_coordinate_count,
+        "subjectLowSample": (
+            subject_valid_coordinate_count < minimum_baseline_coordinate_count
+            if subject_valid_coordinate_count is not None and minimum_baseline_coordinate_count is not None
+            else None
+        ),
+    }
+    if value is None or median is None or unavailable_reason is not None:
+        return TacticalSummaryV2Readout(
+            id=identifier, label=label, value=None, baselineMedian=None, delta=None,
+            percentileScore=None, population=population, cohortState="unavailable",
+            reason=unavailable_reason or "tactical_range_source_unavailable",
+            relativeDirection="unavailable", formulaVersion=formula_version,
+            provenance=TacticalSummaryV2Provenance(
+                source="unavailable", coordinateSystem=None, measure=measure,
+                **provenance_kwargs,
+            ),
+        )
+    rank = 1 + sum(candidate > value for candidate in values)
+    top_percent = 50.0 if population == 1 else (rank - 1) * 100.0 / (population - 1)
+    if value > median:
+        direction, tail_percent = "above_median", top_percent
+    elif value < median:
+        direction, tail_percent = "below_median", 100.0 - top_percent
+    else:
+        direction, tail_percent = "at_median", min(top_percent, 100.0 - top_percent)
+    subject_low_sample = bool(provenance_kwargs["subjectLowSample"])
+    state = "observed" if population >= TACTICAL_SUMMARY_V2_MINIMUM_POSITION_POPULATION and not subject_low_sample else "low_sample"
+    reason = (
+        "subject_valid_coordinates_below_minimum" if subject_low_sample
+        else None if state == "observed" else "position_population_below_minimum"
+    )
+    return TacticalSummaryV2Readout(
+        id=identifier, label=label, value=round(value, 4),
+        baselineMedian=round(median, 4), delta=round(value - median, 4),
+        percentileScore=round(tail_percent, 1), population=population, cohortState=state,
+        reason=reason,
+        relativeDirection=direction, formulaVersion=formula_version,
+        provenance=TacticalSummaryV2Provenance(
+            source="tactical_ratio_static", coordinateSystem="normalized_pitch_0_100",
+            measure=measure, **provenance_kwargs,
+        ),
+    )
+
+
+def _tactical_summary_v2_activity_role(
+    front_back: TacticalSummaryV2Readout, left_right: TacticalSummaryV2Readout,
+) -> str:
+    if front_back.relativeDirection == "unavailable" or left_right.relativeDirection == "unavailable":
+        return "unavailable"
+    x_above = front_back.relativeDirection in {"above_median", "at_median"}
+    y_above = left_right.relativeDirection in {"above_median", "at_median"}
+    return {
+        (True, True): "전방위 활동형",
+        (True, False): "종적 왕복형",
+        (False, True): "횡적 조율형",
+        (False, False): "고정 위치형",
+    }[(x_above, y_above)]
+
+
+@lru_cache(maxsize=128)
+def build_tactical_summary_v2(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> TacticalSummaryV2Data | None:
+    """Build an additive, exact-context position benchmark without v1 changes."""
+    records, players, _snapshot, _ratings = _v2_frame(season, mode, scope, competition)
+    player = next((item for item in players if item.id == player_id), None)
+    selected_record = next(
+        (item for item in records if _source_player_id(item.get("player_id")) == player_id), None,
+    )
+    if player is None or selected_record is None:
+        return None
+    raw_position = str(player.position or "").strip() or "unavailable"
+    position_key = _benchmark_position_key(raw_position)
+    source_context = VolumeBenchmarkSourceContext(
+        mode=mode, scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+    )
+    cohort_key = TacticalSummaryV2CohortKey(
+        season=season, mode=mode, scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+        rawPosition=raw_position, positionKey=position_key or "unavailable",
+    )
+    position_invalid = position_key in {"", "coach", "unavailable"}
+    position_records = [] if position_invalid else [
+        record for record in records
+        if _benchmark_position_key(record.get("position")) == position_key
+    ]
+    static_records = [
+        (record, _tactical_summary_v2_static_record(record, season))
+        for record in position_records
+    ]
+    selected_static = _tactical_summary_v2_static_record(selected_record, season)
+    frame_population = len(position_records)
+
+    def metric_cohort(field: str) -> tuple[list[float], Counter[str]]:
+        """Apply availability only to this metric, never to the whole cohort.
+
+        A static session can legitimately provide coordinate spread while its CCA
+        is absent.  Keep that observation in X/Y and expose the CCA exclusion
+        independently so clients cannot mistake one metric's availability for
+        another's.
+        """
+        values: list[float] = []
+        exclusions: Counter[str] = Counter()
+        for _record, static in static_records:
+            if static is None:
+                exclusions["static_session_unavailable"] += 1
+                continue
+            metric = _finite_number(static.get(field))
+            if metric is None:
+                exclusions["metric_value_missing"] += 1
+                continue
+            if field in {"activity_spread_x", "activity_spread_y"}:
+                coordinate_count = _finite_number(static.get("activity_valid_point_count"))
+                if coordinate_count is None:
+                    exclusions["metric_value_missing"] += 1
+                    continue
+                if coordinate_count < TACTICAL_SUMMARY_V2_MINIMUM_ACTIVITY_BASELINE_COORDINATES:
+                    exclusions["insufficient_valid_coordinates"] += 1
+                    continue
+            values.append(metric)
+        return values, exclusions
+
+    def selected_value(field: str) -> float | None:
+        return _finite_number(selected_static.get(field)) if selected_static is not None else None
+
+    def selected_unavailable_reason(field: str) -> str | None:
+        if position_invalid:
+            return "position_label_not_player_role"
+        return None if selected_value(field) is not None else "tactical_range_source_unavailable"
+
+    def readout(identifier: str, label: str, field: str, formula_version: str, measure: str, *, unavailable_reason: str | None = None) -> TacticalSummaryV2Readout:
+        values, exclusions = metric_cohort(field)
+        is_activity_range = field in {"activity_spread_x", "activity_spread_y"}
+        subject_coordinate_count = (
+            int(_finite_number(selected_static.get("activity_valid_point_count")) or 0)
+            if is_activity_range and selected_static is not None else None
+        )
+        return _tactical_summary_v2_readout(
+            identifier=identifier, label=label, value=selected_value(field), values=values,
+            formula_version=formula_version, measure=measure,
+            frame_population=frame_population, exclusion_reasons=exclusions,
+            unavailable_reason=unavailable_reason if unavailable_reason is not None else selected_unavailable_reason(field),
+            minimum_baseline_coordinate_count=(TACTICAL_SUMMARY_V2_MINIMUM_ACTIVITY_BASELINE_COORDINATES if is_activity_range else None),
+            subject_valid_coordinate_count=subject_coordinate_count,
+        )
+
+    positioning = readout(
+        "inBoxActivity", "Box activity", "in_box_ratio",
+        TACTICAL_SUMMARY_V2_MEDIAN_FORMULA, "spatial_ratio",
+    )
+    lane_labels = {
+        1: "Right wide lane", 2: "Right half-space", 3: "Central lane",
+        4: "Left half-space", 5: "Left wide lane",
+    }
+    all_lanes = [
+        readout(
+            f"lane{lane}", lane_labels[lane], f"lane_{lane}_ratio",
+            TACTICAL_SUMMARY_V2_MEDIAN_FORMULA, "spatial_ratio",
+        )
+        for lane in range(1, 6)
+    ]
+    movement = sorted(
+        [item for item in all_lanes if item.cohortState != "unavailable"],
+        key=lambda item: (-abs(float(item.delta or 0.0)), item.id),
+    )[:2]
+    if not movement:
+        movement = all_lanes[:2]
+    continuous = get_tactical_ratio_for_session(
+        player_id, str(selected_record.get("league_name") or ""), season,
+    )
+    continuous_payload = dict(continuous.get("continuous_core") or {}) if continuous else {}
+    cca_reason = selected_unavailable_reason("cca_area_pct")
+    cca_provenance = None
+    if cca_reason is None and continuous_payload:
+        cca_provenance = FixedNContinuousCoreAnalysis(
+            available=True,
+            **continuous_payload,
+        )
+    elif cca_reason is None:
+        cca_reason = "tactical_range_source_unavailable"
+    activity_core = readout(
+        "coreArea", "Continuous core area", "cca_area_pct", "fixed-n60-r20-v2",
+        "continuous_core_area", unavailable_reason=cca_reason,
+    )
+    front_back = readout(
+        "frontBackActivityRange", "Front-back activity range", "activity_spread_x",
+        TACTICAL_SUMMARY_V2_RANGE_FORMULA, "coordinate_distribution_range",
+    )
+    left_right = readout(
+        "leftRightActivityRange", "Left-right activity range", "activity_spread_y",
+        TACTICAL_SUMMARY_V2_RANGE_FORMULA, "coordinate_distribution_range",
+    )
+    return TacticalSummaryV2Data(
+        playerId=player_id, season=season, sourceContext=source_context,
+        disclosure=TACTICAL_SUMMARY_V2_DISCLOSURE, cohortKey=cohort_key,
+        cohortPopulation=front_back.population,
+        lowSample=(
+            front_back.population < TACTICAL_SUMMARY_V2_MINIMUM_POSITION_POPULATION
+            if front_back.cohortState == "unavailable"
+            else front_back.cohortState == "low_sample"
+        ),
+        positioning=positioning, movement=movement, activityCore=activity_core,
+        continuousCoreProvenance=cca_provenance,
+        activityRange=TacticalSummaryV2ActivityRange(
+            frontBackActivityRange=front_back, leftRightActivityRange=left_right,
+            roleLabel=_tactical_summary_v2_activity_role(front_back, left_right),
+        ),
+    )
+
+
 def _spatial_analysis(
     player_id: int,
     tactical: dict[str, object] | None,
@@ -2615,12 +2919,20 @@ def _spatial_analysis(
         zones=[TrueCoreZone.model_validate(zone) for zone in core_zones],
     )
     continuous_payload = dict(tactical.get("continuous_core") or {}) if tactical else {}
-    continuous_core = ContinuousCoreAnalysis(
+    continuous_core = FixedNContinuousCoreAnalysis(
         available=bool(valid_points and continuous_payload),
+        definitionVersion=str(continuous_payload.get("definitionVersion") or "fixed-n60-r20-v2"),
         achievedDensityPct=round(float(continuous_payload.get("achievedDensityPct") or 0.0), 4),
         coreAreaPct=round(float(continuous_payload.get("coreAreaPct") or 0.0), 4),
         densityThreshold=round(float(continuous_payload.get("densityThreshold") or 0.0), 8),
         thresholdOfPeak=round(float(continuous_payload.get("thresholdOfPeak") or 0.0), 8),
+        formulaVersion=str(continuous_payload.get("formulaVersion") or "fixed-n60-r20-v2"),
+        ccaAreaPct=round(float(continuous_payload.get("ccaAreaPct") or 0.0), 4),
+        standardizedTarget=round(float(continuous_payload.get("standardizedTarget") or 0.0), 4),
+        quantizationDelta=round(float(continuous_payload.get("quantizationDelta") or 0.0), 4),
+        containedMassPct=round(float(continuous_payload.get("containedMassPct") or 0.0), 4),
+        validPointCount=int(continuous_payload.get("validPointCount") or 0),
+        lowSample=bool(continuous_payload.get("lowSample")),
     )
     return SpatialAnalysis(
         available=bool(tactical), heatmapPointCount=len(valid_points), heatmapPoints=valid_points,

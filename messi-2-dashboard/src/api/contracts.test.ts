@@ -28,6 +28,14 @@ describe("detail spatial contract", () => {
     expect(sourceCore).toMatchObject({ zoneIds: ["depth6_lane3"], achievedDensityPct: 52.5, coreAreaPct: 8.33 }); expect(clonedCore.zones).not.toBe(sourceCore.zones); expect(clonedCore.zones[0]).not.toBe(sourceCore.zones[0]); expect(cloned.spatial.shotmapPoints).not.toBe(analysis.spatial.shotmapPoints);
   });
 
+  it("accepts fixed-N CCA provenance while retaining the frozen v1 shape", () => {
+    const fixedNCore = { ...continuousCore, definitionVersion: "fixed-n60-r20-v2", formulaVersion: "fixed-n60-r20-v2", ccaAreaPct: 7.2, standardizedTarget: 7.25, quantizationDelta: 0.05, containedMassPct: 52.5, validPointCount: 180, lowSample: false };
+    expect(playerDetailEnvelopeSchema.safeParse(detail({ ...validSpatial, continuousCore: fixedNCore })).success).toBe(true);
+    const { lowSample: _lowSample, ...missingProvenance } = fixedNCore;
+    expect(playerDetailEnvelopeSchema.safeParse(detail({ ...validSpatial, continuousCore: missingProvenance })).success).toBe(false);
+    expect(playerDetailEnvelopeSchema.safeParse(detail({ ...validSpatial, continuousCore: { ...fixedNCore, ccaAreaPct: 7.1 } })).success).toBe(false);
+  });
+
   it("accepts the live namespaced detail shape without widening shared leaderboard rows", () => {
     const live = detail();
     expect(playerDetailEnvelopeSchema.safeParse(live).success).toBe(true);

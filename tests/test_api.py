@@ -206,9 +206,16 @@ def test_v2_europe_leaderboard_and_contextual_player_detail_contract():
     assert all(zone["densityPct"] > 0 for zone in core["zones"])
     continuous = spatial["continuousCore"]
     assert continuous["available"] is True
-    assert continuous["definitionVersion"] == "continuous-hdr-50-v1"
+    assert continuous["definitionVersion"] == "fixed-n60-r20-v2"
+    assert continuous["formulaVersion"] == "fixed-n60-r20-v2"
+    assert continuous["validPointCount"] == spatial["heatmapPointCount"]
+    assert isinstance(continuous["lowSample"], bool)
     assert continuous["targetDensityPct"] == 50
-    assert continuous["achievedDensityPct"] >= 50
+    assert continuous["ccaAreaPct"] == continuous["coreAreaPct"]
+    assert continuous["quantizationDelta"] == round(
+        abs(continuous["ccaAreaPct"] - continuous["standardizedTarget"]), 4,
+    )
+    assert continuous["containedMassPct"] == continuous["achievedDensityPct"]
     assert continuous["coreAreaPct"] == spatial["ccaAreaPct"]
     assert continuous["coreAreaPct"] <= core["coreAreaPct"]
     assert spatial["shotmapPointCount"] == len(spatial["shotmapPoints"])

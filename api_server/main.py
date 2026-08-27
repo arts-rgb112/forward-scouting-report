@@ -23,7 +23,7 @@ from .schemas import (
     DuelPressDetailReadoutV2Envelope,
     ContextualCompareEnvelope, ContextualCompareRequest,
     MetricRanksEnvelope, MetricRanksRequest,
-    BenchmarkRadarV2Envelope, RatioBenchmarkEnvelope, TacticalSummaryEnvelope, VolumeBenchmarkEnvelope,
+    BenchmarkRadarV2Envelope, RatioBenchmarkEnvelope, TacticalSummaryEnvelope, TacticalSummaryV2Envelope, VolumeBenchmarkEnvelope,
     LeaderboardSort, MinutesBand, SortOrder,
     PlayerComparisonEnvelope, PlayerDataQualityEnvelope, PlayerDetailEnvelope,
     PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
@@ -43,7 +43,7 @@ from .service import (
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
     resolve_metric_rank_entries,
-    build_benchmark_radar_v2, build_ratio_benchmark, build_tactical_summary, build_volume_benchmark,
+    build_benchmark_radar_v2, build_ratio_benchmark, build_tactical_summary, build_tactical_summary_v2, build_volume_benchmark,
     build_final_third_shot_map, build_goal_mouth_baseline,
     ShotmapContractViolation,
 )
@@ -806,6 +806,32 @@ def get_tactical_summary(
     if summary is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     return TacticalSummaryEnvelope(data=summary)
+
+
+@app.get(
+    "/api/v2/players/{playerId}/tactical-summary-v2",
+    response_model=TacticalSummaryV2Envelope,
+    tags=["players"],
+    responses=DUEL_PRESS_ERROR_RESPONSES,
+)
+def get_tactical_summary_v2(
+    request: Request,
+    playerId: int,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+) -> TacticalSummaryV2Envelope:
+    """Return same-context, same-position tactical readouts without v1 changes."""
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    if mode == "europe" and "scope" in request.query_params:
+        raise HTTPException(status_code=422, detail="scope must be null/omitted when mode is 'europe'")
+    validate_duel_press_context(mode, competition)
+    summary = build_tactical_summary_v2(playerId, season, mode, int(scope), competition)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+    return TacticalSummaryV2Envelope(data=summary)
 
 
 @app.get(

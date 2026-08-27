@@ -56,7 +56,15 @@ const shotmapPointSchema = z.object({ x: score, y: score, outcome: z.enum(["goal
   if (!blocked && shot.trajectory.endpointKind !== "goal_mouth") ctx.addIssue({ code: "custom", path: ["trajectory", "endpointKind"], message: "non-blocked shots require a goal_mouth endpoint" });
   if (!blocked && shot.trajectory.endX !== 100) ctx.addIssue({ code: "custom", path: ["trajectory", "endX"], message: "goal_mouth endpoints require endX=100" });
 });
-const continuousCoreSchema = z.object({ available: z.boolean(), definitionVersion: z.literal("continuous-hdr-50-v1"), targetDensityPct: z.literal(50), achievedDensityPct: score, coreAreaPct: score, densityThreshold: z.number().finite().nonnegative(), thresholdOfPeak: z.number().finite().min(0).max(1), gridColumns: z.literal(32), gridRows: z.literal(22) }).strict();
+const continuousCoreBaseSchema = { available: z.boolean(), targetDensityPct: z.literal(50), achievedDensityPct: score, coreAreaPct: score, densityThreshold: z.number().finite().nonnegative(), thresholdOfPeak: z.number().finite().min(0).max(1), gridColumns: z.literal(32), gridRows: z.literal(22) };
+const continuousCoreSchema = z.discriminatedUnion("definitionVersion", [
+  z.object({ ...continuousCoreBaseSchema, definitionVersion: z.literal("continuous-hdr-50-v1") }).strict(),
+  z.object({ ...continuousCoreBaseSchema, definitionVersion: z.literal("fixed-n60-r20-v2"), formulaVersion: z.literal("fixed-n60-r20-v2"), ccaAreaPct: score, standardizedTarget: score, quantizationDelta: score, containedMassPct: score, validPointCount: z.number().int().nonnegative(), lowSample: z.boolean() }).strict().superRefine((core, ctx) => {
+    if (core.ccaAreaPct !== core.coreAreaPct) ctx.addIssue({ code: "custom", path: ["ccaAreaPct"], message: "published CCA must equal the contour area" });
+    if (core.containedMassPct !== core.achievedDensityPct) ctx.addIssue({ code: "custom", path: ["containedMassPct"], message: "contained mass must equal achieved density" });
+    if (core.quantizationDelta !== Math.round(Math.abs(core.ccaAreaPct - core.standardizedTarget) * 10_000) / 10_000) ctx.addIssue({ code: "custom", path: ["quantizationDelta"], message: "quantization delta must match the server provenance" });
+  }),
+]);
 const spatialSchema = z.object({ available: z.boolean(), source: z.literal("messi-static-cohort"), heatmapPointCount: z.number().int().nonnegative(), heatmapPoints: z.array(z.object({ x: score, y: score }).strict()), shotmapPointCount: z.number().int().nonnegative(), shotmapPoints: z.array(shotmapPointSchema), shotmapSnapshotAvailable: z.boolean(), inBoxRatio: score.nullable(), outBoxFinalRatio: score.nullable(), midThirdRatio: score.nullable(), finalThirdRatio: score.nullable(), ccaAreaPct: score.nullable(), laneRatios: z.array(z.number().finite()).max(5), depthRatios: z.array(score).max(6), positionalGrid: z.array(positionalGridCellSchema).max(30), trueCore: trueCoreSchema, continuousCore: continuousCoreSchema, dangerZoneDensity: score.nullable(), deepBoxZoneScore: score.nullable() }).strict().superRefine((spatial, ctx) => {
   if (spatial.shotmapPointCount !== spatial.shotmapPoints.length) ctx.addIssue({ code: "custom", path: ["shotmapPointCount"], message: "shotmapPointCount must equal shotmapPoints length" });
 });

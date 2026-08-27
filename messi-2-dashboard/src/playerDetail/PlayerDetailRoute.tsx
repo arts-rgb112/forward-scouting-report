@@ -22,6 +22,9 @@ import { useRatioBenchmark } from "./useRatioBenchmark";
 import { BenchmarkRadarV2Panel } from "./BenchmarkRadarV2";
 import { useBenchmarkRadarV2 } from "./useBenchmarkRadarV2";
 import { tacticalSummaryEnabled, useTacticalSummary } from "./useTacticalSummary";
+import { tacticalSummaryV2Enabled } from "../api/tacticalSummaryV2FeatureGate";
+import { TacticalSummaryV2Panel } from "./TacticalSummaryV2";
+import { useTacticalSummaryV2 } from "./useTacticalSummaryV2";
 import { useVolumeBenchmark } from "./useVolumeBenchmark";
 import { DuelPressDetailReadoutBoard, DuelPressDetailReadoutUnavailable } from "./DuelPressDetailReadoutBoard";
 import { DuelPressV2DetailReadoutBoard, DuelPressV2DetailReadoutUnavailable } from "./DuelPressV2DetailReadoutBoard";
@@ -107,8 +110,11 @@ export function SeasonScorePanel({ player, analysis, selected, history }: { play
 }
 
 export function TacticalSummary({ player, analysis, quadrant, quality, config, dataset }: { player: Player; analysis?: PlayerAnalysis; quadrant?: TacticalQuadrant; quality: QualityDisplay; config?: MessiApiConfig; dataset?: DatasetRouteState }) {
-  const tactical = useTacticalSummary(config, player.id, dataset ?? { season: "2025/2026", mode: "league", scope: 8, competition: "all" });
+  const context = dataset ?? { season: "2025/2026", mode: "league", scope: 8, competition: "all" } as DatasetRouteState;
+  const tactical = useTacticalSummary(config, player.id, context);
+  const tacticalV2 = useTacticalSummaryV2(config, player.id, context);
   const enabled = tacticalSummaryEnabled();
+  if (tacticalSummaryV2Enabled()) return <TacticalSummaryV2Panel state={tacticalV2.state} onRetry={tacticalV2.retry}/>;
   return <section className={panel} aria-labelledby="tactical-summary-heading"><h2 id="tactical-summary-heading" className="text-sm font-black">Tactical summary</h2>
     {!enabled && <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-zinc-300">{tacticalCopy(player, analysis, quadrant, quality).map((copy) => <li key={copy}>{copy}</li>)}</ul>}
     {enabled && tactical.state.kind === "loading" && <p aria-busy="true" className="mt-3 text-sm text-zinc-400">Loading authoritative tactical summary.</p>}
