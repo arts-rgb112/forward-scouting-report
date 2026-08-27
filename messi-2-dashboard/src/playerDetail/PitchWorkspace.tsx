@@ -5,6 +5,7 @@ import type { FinalThirdRenderableData } from "../api/finalThirdShotMapV2Contrac
 import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contracts";
 import type { DatasetRouteState, PlayerAnalysis } from "../dashboard/types";
 import { GoalMouthView } from "./GoalMouthView";
+import { PitchHexFrequencyPanel } from "./PitchHexFrequencyPanel";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { SpatialPitch } from "./SpatialPitch";
 import { useFinalThirdShotMap } from "./useFinalThirdShotMap";
@@ -66,5 +67,6 @@ export function PitchWorkspace({ analysis, contextIdentity, config, playerId, da
       {activeTab === "twoD" && <SpatialPitch analysis={analysis} contextIdentity={contextIdentity} forcedMode="plan" embedded/>}
       {activeTab === "goalMouth" && (goalData ? <GoalMouthView data={goalData} config={config} baselineResource={baseline.state}/> : <p role="status" aria-live="polite" className="rounded border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">{!current || finalThird.state.kind === "loading" ? WORKSPACE_COPY.loading : WORKSPACE_COPY.unavailable}</p>)}
     </div>
+    <PitchHexFrequencyPanel state={baseline.state}/>
   </section>;
 }
