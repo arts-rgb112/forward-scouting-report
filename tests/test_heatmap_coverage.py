@@ -165,8 +165,13 @@ class CcaOverlayTests(unittest.TestCase):
         core = continuous_core_from_points(points)
         zone_core = true_core_zones_from_points(points)
 
-        self.assertEqual(core["definitionVersion"], "continuous-hdr-50-v1")
-        self.assertGreaterEqual(core["achievedDensityPct"], 50.0)
+        self.assertEqual(core["definitionVersion"], "fixed-n60-r20-v2")
+        self.assertEqual(core["formulaVersion"], "fixed-n60-r20-v2")
+        self.assertGreater(core["standardizedTarget"], 0.0)
+        self.assertEqual(core["ccaAreaPct"], core["coreAreaPct"])
+        self.assertEqual(
+            core["coreAreaPct"], round(float(core["coreMask"].mean() * 100.0), 4),
+        )
         self.assertGreater(core["coreAreaPct"], 0.0)
         self.assertLess(core["coreAreaPct"], zone_core["coreAreaPct"])
         self.assertEqual(core["coreMask"].shape, (22, 32))
@@ -176,6 +181,8 @@ class CcaOverlayTests(unittest.TestCase):
         self.assertEqual(summary["coreAreaPct"], 0.0)
         self.assertEqual(summary["gridColumns"], 32)
         self.assertEqual(summary["gridRows"], 22)
+        self.assertEqual(summary["formulaVersion"], "fixed-n60-r20-v2")
+        self.assertTrue(summary["lowSample"])
         self.assertNotIn("density", summary)
 
     def test_shotmap_snapshot_adds_only_valid_source_trajectory_coordinates(self) -> None:

@@ -33,11 +33,18 @@ def spatial_payload(**shotmap: object) -> dict[str, object]:
             "zones": [],
         },
         "continuousCore": {
+            "definitionVersion": "fixed-n60-r20-v2",
             "available": False,
             "achievedDensityPct": 0,
             "coreAreaPct": 0,
             "densityThreshold": 0,
             "thresholdOfPeak": 0,
+            "ccaAreaPct": 0,
+            "standardizedTarget": 0,
+            "quantizationDelta": 0,
+            "containedMassPct": 0,
+            "validPointCount": 0,
+            "lowSample": True,
         },
     }
     payload.update(shotmap)

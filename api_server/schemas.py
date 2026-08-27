@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import math
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
@@ -1546,13 +1546,12 @@ class TrueCoreAnalysis(BaseModel):
     zones: list[TrueCoreZone] = Field(max_length=30)
 
 
-class ContinuousCoreAnalysis(BaseModel):
-    """Continuous 50% highest-density region used as the CCA area."""
+class _ContinuousCoreAnalysis(BaseModel):
+    """Fields shared by legacy and standardized CCA contour payloads."""
 
     model_config = ConfigDict(extra="forbid")
 
     available: bool
-    definitionVersion: Literal["continuous-hdr-50-v1"] = "continuous-hdr-50-v1"
     targetDensityPct: Literal[50] = 50
     achievedDensityPct: float = Field(ge=0, le=100)
     coreAreaPct: float = Field(ge=0, le=100)
@@ -1560,6 +1559,43 @@ class ContinuousCoreAnalysis(BaseModel):
     thresholdOfPeak: float = Field(ge=0, le=1)
     gridColumns: Literal[32] = 32
     gridRows: Literal[22] = 22
+
+
+class LegacyContinuousCoreAnalysis(_ContinuousCoreAnalysis):
+    """The frozen v1 HDR response shape retained for old fixtures/clients."""
+
+    definitionVersion: Literal["continuous-hdr-50-v1"] = "continuous-hdr-50-v1"
+
+
+class FixedNContinuousCoreAnalysis(_ContinuousCoreAnalysis):
+    """Fixed-N CCA plus provenance for its reconstructed full-density contour."""
+
+    definitionVersion: Literal["fixed-n60-r20-v2"] = "fixed-n60-r20-v2"
+    formulaVersion: Literal["fixed-n60-r20-v2"] = "fixed-n60-r20-v2"
+    ccaAreaPct: float = Field(ge=0, le=100)
+    standardizedTarget: float = Field(ge=0, le=100)
+    quantizationDelta: float = Field(ge=0, le=100)
+    containedMassPct: float = Field(ge=0, le=100)
+    validPointCount: int = Field(ge=0)
+    lowSample: bool
+
+    @model_validator(mode="after")
+    def validate_published_contour_area(self) -> "FixedNContinuousCoreAnalysis":
+        if self.ccaAreaPct != self.coreAreaPct:
+            raise ValueError("ccaAreaPct must equal the reconstructed coreAreaPct")
+        if self.containedMassPct != self.achievedDensityPct:
+            raise ValueError("containedMassPct must equal achievedDensityPct")
+        if self.quantizationDelta != round(
+            abs(self.ccaAreaPct - self.standardizedTarget), 4
+        ):
+            raise ValueError("quantizationDelta must equal |ccaAreaPct-standardizedTarget|")
+        return self
+
+
+ContinuousCoreAnalysis = Annotated[
+    LegacyContinuousCoreAnalysis | FixedNContinuousCoreAnalysis,
+    Field(discriminator="definitionVersion"),
+]
 
 
 class SpatialAnalysis(BaseModel):
@@ -2284,6 +2320,157 @@ class TacticalSummaryEnvelope(BaseModel):
 
     schemaVersion: Literal["1.0.0"] = "1.0.0"
     data: TacticalSummaryData
+
+
+TacticalSummaryV2CohortState = Literal["observed", "low_sample", "unavailable"]
+TacticalSummaryV2RelativeDirection = Literal[
+    "above_median", "below_median", "at_median", "unavailable",
+]
+TacticalSummaryV2Reason = Literal[
+    "position_label_not_player_role", "position_population_below_minimum",
+    "subject_valid_coordinates_below_minimum", "tactical_range_source_unavailable",
+]
+TacticalSummaryV2ExclusionReason = Literal[
+    "static_session_unavailable", "metric_value_missing", "insufficient_valid_coordinates",
+]
+
+
+class TacticalSummaryV2CohortKey(BaseModel):
+    """Exact position cohort; normalization never merges football-role meanings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    mode: LeaderboardMode
+    scope: Literal[3, 5, 7, 8] | None = None
+    competition: CompetitionCode | None = None
+    rawPosition: str = Field(min_length=1)
+    positionKey: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_context(self) -> "TacticalSummaryV2CohortKey":
+        if self.mode == "league" and (self.scope is None or self.competition is not None):
+            raise ValueError("league cohort key requires scope and null competition")
+        if self.mode == "europe" and (self.scope is not None or self.competition is None):
+            raise ValueError("Europe cohort key requires null scope and competition")
+        return self
+
+
+class TacticalSummaryV2Provenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["tactical_ratio_static", "unavailable"]
+    coordinateSystem: Literal["normalized_pitch_0_100"] | None = None
+    measure: Literal["coordinate_distribution_range", "spatial_ratio", "continuous_core_area"]
+    framePopulation: int = Field(ge=0)
+    eligiblePopulation: int = Field(ge=0)
+    excludedPopulation: int = Field(ge=0)
+    exclusionReasonCounts: dict[TacticalSummaryV2ExclusionReason, int] = Field(default_factory=dict)
+    minimumBaselineCoordinateCount: int | None = Field(default=None, ge=1)
+    subjectValidCoordinateCount: int | None = Field(default=None, ge=0)
+    subjectLowSample: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_metric_eligibility(self) -> "TacticalSummaryV2Provenance":
+        if self.eligiblePopulation + self.excludedPopulation != self.framePopulation:
+            raise ValueError("metric eligibility populations must reconcile to the exact position frame")
+        if sum(self.exclusionReasonCounts.values()) != self.excludedPopulation:
+            raise ValueError("metric eligibility exclusion reasons must reconcile to excludedPopulation")
+        if any(count <= 0 for count in self.exclusionReasonCounts.values()):
+            raise ValueError("metric eligibility exclusion reasons must have positive counts")
+        return self
+
+
+class TacticalSummaryV2Readout(BaseModel):
+    """A server-owned value/baseline/delta/tail-percentile display item."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    value: float | None = None
+    baselineMedian: float | None = None
+    delta: float | None = None
+    percentileScore: float | None = Field(default=None, ge=0, le=50)
+    population: int = Field(ge=0)
+    cohortState: TacticalSummaryV2CohortState
+    reason: TacticalSummaryV2Reason | None = None
+    relativeDirection: TacticalSummaryV2RelativeDirection
+    formulaVersion: str = Field(min_length=1)
+    provenance: TacticalSummaryV2Provenance
+
+    @model_validator(mode="after")
+    def validate_state(self) -> "TacticalSummaryV2Readout":
+        numeric = (self.value, self.baselineMedian, self.delta, self.percentileScore)
+        if self.cohortState == "unavailable":
+            if any(value is not None for value in numeric) or self.relativeDirection != "unavailable" or self.reason is None:
+                raise ValueError("unavailable tactical-summary-v2 readouts require null numeric fields and a reason")
+        else:
+            if any(value is None for value in numeric) or self.relativeDirection == "unavailable":
+                raise ValueError("available tactical-summary-v2 readouts require numeric fields and a relative direction")
+            if self.cohortState == "observed" and (self.population < 20 or self.reason is not None):
+                raise ValueError("observed tactical-summary-v2 readouts require population >=20 and no reason")
+            if self.cohortState == "low_sample" and (self.population >= 20 or self.reason != "position_population_below_minimum"):
+                if self.reason != "subject_valid_coordinates_below_minimum":
+                    raise ValueError("low-sample tactical-summary-v2 readouts require a population or subject-coordinate reason")
+        if self.population != self.provenance.eligiblePopulation:
+            raise ValueError("readout population must equal its metric-specific eligible population")
+        return self
+
+
+class TacticalSummaryV2ActivityRange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    frontBackActivityRange: TacticalSummaryV2Readout
+    leftRightActivityRange: TacticalSummaryV2Readout
+    roleLabel: Literal["전방위 활동형", "종적 왕복형", "횡적 조율형", "고정 위치형", "unavailable"]
+    formulaVersion: Literal["coordinate-range-quadrant-v1"] = "coordinate-range-quadrant-v1"
+
+
+class TacticalSummaryV2Data(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    idNamespace: Literal["fotmob"] = "fotmob"
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    sourceContext: VolumeBenchmarkSourceContext
+    formulaVersion: Literal["tactical-summary-v2"] = "tactical-summary-v2"
+    disclosure: Literal["활동 폭은 위치 분포의 범위이며 이동 거리가 아닙니다."]
+    cohortKey: TacticalSummaryV2CohortKey
+    cohortPopulation: int = Field(ge=0)
+    lowSample: bool
+    positioning: TacticalSummaryV2Readout
+    movement: list[TacticalSummaryV2Readout] = Field(max_length=2)
+    activityCore: TacticalSummaryV2Readout
+    continuousCoreProvenance: FixedNContinuousCoreAnalysis | None = None
+    activityRange: TacticalSummaryV2ActivityRange
+
+    @model_validator(mode="after")
+    def validate_summary(self) -> "TacticalSummaryV2Data":
+        if self.season != self.cohortKey.season or self.sourceContext.mode != self.cohortKey.mode:
+            raise ValueError("tactical-summary-v2 cohort must match the selected source context")
+        if self.sourceContext.scope != self.cohortKey.scope or self.sourceContext.competition != self.cohortKey.competition:
+            raise ValueError("tactical-summary-v2 cohort cannot coerce scope or competition")
+        activity_state = self.activityRange.frontBackActivityRange.cohortState
+        expected_low_sample = (
+            self.cohortPopulation < 20 if activity_state == "unavailable"
+            else activity_state == "low_sample"
+        )
+        if self.lowSample != expected_low_sample:
+            raise ValueError("tactical-summary-v2 lowSample must reflect the front-back activity readout")
+        if self.activityCore.cohortState == "unavailable" and self.continuousCoreProvenance is not None:
+            raise ValueError("unavailable CCA readout cannot carry continuous-core provenance")
+        if self.continuousCoreProvenance is not None and self.activityCore.value != self.continuousCoreProvenance.ccaAreaPct:
+            raise ValueError("tactical-summary-v2 CCA readout must equal continuous-core provenance")
+        return self
+
+
+class TacticalSummaryV2Envelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    tacticalSummaryVersion: Literal["tactical-summary-v2"] = "tactical-summary-v2"
+    data: TacticalSummaryV2Data
 
 
 class DuelSpatialAnalysis(BaseModel):

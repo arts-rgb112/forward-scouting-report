@@ -257,8 +257,8 @@ def _cached_percentiles(
     # Streamlit hashes this wrapper rather than the transitive ranking/data
     # dependencies.  Keep the spatial definition here so a CCA migration
     # invalidates persisted Community Cloud results immediately.
-    spatial_score_cache_version = "continuous-hdr-50-v1"
-    if spatial_score_cache_version != "continuous-hdr-50-v1":
+    spatial_score_cache_version = "fixed-n60-r20-v2"
+    if spatial_score_cache_version != "fixed-n60-r20-v2":
         raise RuntimeError("unsupported spatial score cache version")
     return calculate_league_percentiles(
         player_id, season, metrics, minimum_xg=min_xg,
@@ -286,8 +286,8 @@ def cached_percentiles(
 def _cached_spear_leaderboard(
     league_id: int, season: str, comparison_scope: int, scoring_version: object,
 ) -> pd.DataFrame:
-    spatial_score_cache_version = "continuous-hdr-50-v1"
-    if spatial_score_cache_version != "continuous-hdr-50-v1":
+    spatial_score_cache_version = "fixed-n60-r20-v2"
+    if spatial_score_cache_version != "fixed-n60-r20-v2":
         raise RuntimeError("unsupported spatial score cache version")
     season_name = f"20{season[:2]}/20{season[3:]}" if len(season) == 5 and "/" in season else season
     return get_spear_leaderboard(league_id, season_name, comparison_scope)
