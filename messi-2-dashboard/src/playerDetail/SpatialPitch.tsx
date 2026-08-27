@@ -9,6 +9,10 @@ import { excludePenaltyShots, penaltyStateLabel, summarizeShots } from "./pitchP
 import { formatShotMetric, outcomeOrder, outcomePresentation, outcomeSummary, OutcomeControls, shotIntegrity, shotMarkerLabel, type ShotOutcome, useShotOutcomeVisibility } from "./shotOutcomeVisibility";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
+const PITCH_VIEW_COPY = {
+  perspective: "어디서 쏘고 어디로 꽂나",
+  plan: "어떻게 움직이나",
+} as const;
 
 export const POSITIONAL_DEPTH_BOUNDARIES = [0, 16.67, 33.33, 50, 66.67, 83.33, 100] as const;
 export const POSITIONAL_LANE_BOUNDARIES = [0, 21.82, 37, 63, 78.18, 100] as const;
@@ -49,7 +53,7 @@ export const LEGACY_POSITIONAL_SEGMENTS = [
 export type PitchPoint = { x: number; y: number };
 export type ScreenPoint = { x: number; y: number };
 type Projection = (point: PitchPoint) => ScreenPoint;
-type ViewMode = "perspective" | "plan";
+export type ViewMode = "perspective" | "plan";
 type ZoomLevel = 1 | 2 | 3;
 type Viewport = { x: number; y: number };
 type DensityMeshCell = { index: number; row: number; column: number; normalized: number; fill: string; fillOpacity: number; d: string };
@@ -293,11 +297,11 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
   </svg></>;
 }
 
-export function SpatialPitch({ analysis, contextIdentity = "" }: { analysis?: PlayerAnalysis; contextIdentity?: string }) {
+export function SpatialPitch({ analysis, contextIdentity = "", forcedMode, embedded = false }: { analysis?: PlayerAnalysis; contextIdentity?: string; forcedMode?: ViewMode; embedded?: boolean }) {
   const reducedMotion = usePrefersReducedMotion();
   const { includePenalties } = usePitchPenalty();
   const [manualMode, setManualMode] = useState<ViewMode | null>(null);
-  const mode = manualMode ?? (reducedMotion ? "plan" : "perspective");
+  const mode = forcedMode ?? manualMode ?? (reducedMotion ? "plan" : "perspective");
   const spatial = analysis?.spatial;
   const displaySpatial = useMemo(() => {
     if (!spatial || includePenalties) return spatial;
@@ -313,8 +317,8 @@ export function SpatialPitch({ analysis, contextIdentity = "" }: { analysis?: Pl
   const counts = controller.counts;
   const rawId = useId().replace(/:/g, "");
   const markerLayerId = `spatial-shot-markers-${rawId}`;
-  return <section className={panel} aria-labelledby={`spatial-pitch-${rawId}`}>
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id={`spatial-pitch-${rawId}`} className="text-sm font-black">Spatial pitch</h2><p className="mt-1 text-[11px] text-zinc-400">Attack left → right · Lane 1 is the near/right touchline · exact positional-6×5 grid</p></div><div role="group" aria-label="Pitch view" className="flex rounded-lg border border-white/15 bg-black/30 p-1"><button type="button" aria-pressed={mode === "perspective"} onClick={() => setManualMode("perspective")} className="min-h-9 rounded px-3 text-xs font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">Perspective</button><button type="button" aria-pressed={mode === "plan"} onClick={() => setManualMode("plan")} className="min-h-9 rounded px-3 text-xs font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">2D plan</button></div></div>
+  return <section className={embedded ? "min-w-0" : panel} aria-labelledby={embedded ? undefined : `spatial-pitch-${rawId}`} aria-label={embedded ? PITCH_VIEW_COPY[mode] : undefined}>
+    {!embedded && <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id={`spatial-pitch-${rawId}`} className="text-sm font-black">{PITCH_VIEW_COPY[mode]}</h2><p className="mt-1 text-[11px] text-zinc-400">Attack left → right · Lane 1 is the near/right touchline · exact positional-6×5 grid</p></div>{!forcedMode && <div role="group" aria-label="Pitch view" className="flex rounded-lg border border-white/15 bg-black/30 p-1"><button type="button" aria-pressed={mode === "perspective"} onClick={() => setManualMode("perspective")} className="min-h-9 rounded px-3 text-xs font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">{PITCH_VIEW_COPY.perspective}</button><button type="button" aria-pressed={mode === "plan"} onClick={() => setManualMode("plan")} className="min-h-9 rounded px-3 text-xs font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">{PITCH_VIEW_COPY.plan}</button></div>}</div>}
     {reducedMotion && manualMode === null && <p className="mt-2 text-xs text-zinc-400">Reduced-motion preference detected; the 2D plan fallback is active.</p>}
     {controller.integrity && controller.presentOutcomes.length > 0 && <OutcomeControls outcomes={controller.presentOutcomes} counts={controller.counts} visible={controller.visibleOutcomes} markerLayerId={markerLayerId} onClick={controller.onClick} onDoubleClick={controller.onDoubleClick}/>}<p role="status" aria-live="polite" className="sr-only">Visible shot outcomes: {outcomeSummary(controller.presentOutcomes.filter((outcome) => controller.visibleOutcomes.has(outcome)))}.</p>
     <div className="mt-3 min-w-0 overflow-hidden rounded-lg border border-white/10">{mode === "plan" ? <LegacySpatialPitchFigure analysis={displayAnalysis} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} showCounts={false}/> : <figure><PitchSvg spatial={displaySpatial} mode={mode} filterId={`spatial-heat-${rawId}`} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} contextIdentity={contextIdentity}/><figcaption className="border-t border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300">{heatState}. {shotState}. The exact legacy density mesh, the authoritative CCA contour, and shot anchors share the server 0–100 coordinate transform; outcome controls affect markers only.</figcaption></figure>}</div>

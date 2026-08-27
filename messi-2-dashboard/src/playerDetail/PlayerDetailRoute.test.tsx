@@ -34,7 +34,7 @@ describe("native player detail panels", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
   });
   it("uses one responsive perspective pitch with an exact positional grid and no synthetic shots", () => {
-    render(<SpatialPitch analysis={analysis} />); const section = screen.getByRole("region", { name: "Spatial pitch" });
+    render(<SpatialPitch analysis={analysis} />); const section = screen.getByRole("region", { name: "어디서 쏘고 어디로 꽂나" });
     expect(within(section).getByRole("img")).toHaveAttribute("viewBox", "0 0 1000 650"); expect(section.querySelectorAll("svg")).toHaveLength(1); expect(section.querySelectorAll("[data-grid-segment]")).toHaveLength(15); expect(section.querySelectorAll("[data-zone-label]")).toHaveLength(0); expect(section.querySelectorAll("[data-goal]")).toHaveLength(2); expect(section.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
   });
   it("renders a six-sector, server-readout board with accessible non-fabricated score bars", () => {
@@ -52,8 +52,8 @@ describe("native player detail panels", () => {
     const outer = container.querySelector('[data-layout="detail-dossier-layout"]'); const rail = container.querySelector('[data-layout="detail-left-rail"]'); const dossierSeason = container.querySelector('[data-layout="dossier-season"]'); const slot = container.querySelector('[data-layout="detail-board-slot"]'); const benchmarks = container.querySelector('[data-layout="radar-benchmarks"]');
     expect(outer).toHaveClass("min-w-0", "xl:grid-cols-[minmax(528px,596px)_minmax(0,1fr)]", "xl:items-start");
     expect(rail).toHaveClass("min-w-0"); expect(dossierSeason).toHaveClass("min-w-0", "items-start", "md:grid-cols-[minmax(0,300px)_minmax(240px,280px)]"); expect(slot).toHaveClass("mt-4", "min-w-0"); expect(benchmarks).toHaveClass("mt-4", "min-w-0");
-    const workspace = within(outer!).getByRole("region", { name: "Tactical and spatial analysis" }); const tactical = within(workspace).getByRole("region", { name: "Tactical summary" }); const pitch = within(workspace).getByRole("region", { name: "Spatial pitch" });
-    expect(workspace).toHaveClass("min-w-0"); expect(workspace).toContainElement(tactical); expect(workspace).toContainElement(pitch);
+    const workspace = within(outer!).getByRole("region", { name: "Tactical and spatial analysis" }); const tactical = within(workspace).getByRole("region", { name: "Tactical summary" }); const pitch = within(workspace).getByRole("region", { name: "Pitch workspace" });
+    expect(workspace).toHaveClass("min-w-0"); expect(workspace).toContainElement(tactical); expect(workspace).toContainElement(pitch); expect(within(pitch).getAllByRole("tab")).toHaveLength(3);
     expect(tactical.compareDocumentPosition(pitch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(dossierSeason!.compareDocumentPosition(slot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(slot!.compareDocumentPosition(workspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(workspace.compareDocumentPosition(benchmarks!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(slot!).getByRole("region", { name: "Percentile profile" }).querySelector('[data-layout="legacy-percentile-grid"]')).toHaveClass("grid-cols-1", "sm:grid-cols-2");

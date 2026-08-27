@@ -168,7 +168,7 @@ describe("perspective spatial pitch", () => {
     fireEvent.click(screen.getByRole("button", { name: /Goals, 1 shots/ }), { detail: 0 });
     expect(container.querySelector('[data-trajectory-kind="goal_mouth"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-trajectory-kind="blocked"]')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "2D plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "어떻게 움직이나" }));
     expect(container.querySelector("[data-shot-trajectory]")).not.toBeInTheDocument();
   });
 
@@ -266,8 +266,8 @@ describe("perspective spatial pitch", () => {
     fireEvent.keyDown(marker, { key: "Escape" });
     expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-    fireEvent.click(screen.getByRole("button", { name: "2D plan" }));
-    fireEvent.click(screen.getByRole("button", { name: "Perspective" }));
+    fireEvent.click(screen.getByRole("button", { name: "어떻게 움직이나" }));
+    fireEvent.click(screen.getByRole("button", { name: "어디서 쏘고 어디로 꽂나" }));
     expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     rerender(<SpatialPitch analysis={analysis} contextIdentity="two"/>);
@@ -278,9 +278,9 @@ describe("perspective spatial pitch", () => {
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     render(<SpatialPitch analysis={analysisWith({})}/>);
     const group = screen.getByRole("group", { name: "Pitch view" });
-    expect(within(group).getByRole("button", { name: "2D plan" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(group).getByRole("button", { name: "어떻게 움직이나" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("img", { name: /Two-dimensional legacy spatial pitch/ })).toBeInTheDocument();
-    fireEvent.click(within(group).getByRole("button", { name: "Perspective" }));
+    fireEvent.click(within(group).getByRole("button", { name: "어디서 쏘고 어디로 꽂나" }));
     expect(screen.getByRole("img", { name: /attacking pitch/ })).toHaveAccessibleName(/Perspective attacking pitch/);
   });
 
@@ -290,7 +290,7 @@ describe("perspective spatial pitch", () => {
     const goals = screen.getByRole("button", { name: /Goals, 1 shots/ }); fireEvent.click(goals, { detail: 0 });
     expect(container.querySelectorAll('[data-shot-marker][data-shot-outcome="goal"]')).toHaveLength(0); expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(3);
     expect(screen.getByRole("list", { name: "Shot outcome legend" })).toHaveTextContent("Goals 1"); expect(screen.getByRole("list", { name: "Authoritative shot events" }).children).toHaveLength(4);
-    fireEvent.click(screen.getByRole("button", { name: "2D plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "어떻게 움직이나" }));
     expect(screen.getByRole("img", { name: /Two-dimensional legacy spatial pitch/ })).toHaveAccessibleName(/Visible shot outcomes: On target, Off target, Blocked/);
     expect(container.querySelectorAll('[data-layer="legacy-events"] [data-shot-outcome="goal"]')).toHaveLength(0); expect(container.querySelectorAll('[data-layer="legacy-events"] [data-shot-index]')).toHaveLength(3);
     expect(screen.getByText(/Goal ◇ · on target ● · off target × · blocked ■/, { selector: "figcaption" })).toBeInTheDocument();
