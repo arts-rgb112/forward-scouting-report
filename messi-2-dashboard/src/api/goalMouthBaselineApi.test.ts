@@ -15,4 +15,10 @@ describe("goal-mouth baseline API", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...goalMouthBaselineFixture, baselineTaxonomyVersion: "wrong" }))));
     await expect(fetchGoalMouthBaseline(config, new AbortController().signal)).rejects.toMatchObject({ kind: "schema" });
   });
+  it("sends the exact player context and penalty state without league/europe leakage", () => {
+    const league = new URL(buildGoalMouthBaselineUrl(config.baseUrl, { playerId: 194165, season: "2025/2026", mode: "league", scope: 7, competition: "all", includePenalties: false }));
+    expect(Object.fromEntries(league.searchParams)).toEqual({ playerId: "194165", season: "2025/2026", mode: "league", scope: "7", competition: "all", includePenalties: "false" });
+    const europe = new URL(buildGoalMouthBaselineUrl(config.baseUrl, { playerId: 194165, season: "2025/2026", mode: "europe", scope: 8, competition: "ucl", includePenalties: true }));
+    expect(europe.searchParams.has("scope")).toBe(false);
+  });
 });

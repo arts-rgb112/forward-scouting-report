@@ -1,12 +1,14 @@
-import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import type { MessiApiConfig } from "../api/env";
 import type { FinalThirdRenderableData } from "../api/finalThirdShotMapV2Contracts";
 import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contracts";
 import type { DatasetRouteState, PlayerAnalysis } from "../dashboard/types";
 import { GoalMouthView } from "./GoalMouthView";
+import { usePitchPenalty } from "./PitchPenaltyContext";
 import { SpatialPitch } from "./SpatialPitch";
 import { useFinalThirdShotMap } from "./useFinalThirdShotMap";
+import { useGoalMouthBaseline } from "./useGoalMouthBaseline";
 
 const WORKSPACE_COPY = {
   title: "Pitch workspace",
@@ -38,6 +40,9 @@ export function PitchWorkspace({ analysis, contextIdentity, config, playerId, da
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("threeD");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const finalThird = useFinalThirdShotMap(config, playerId, dataset);
+  const { includePenalties } = usePitchPenalty();
+  const baselineContext = useMemo(() => ({ playerId, season: dataset.season, mode: dataset.mode, scope: dataset.scope, competition: dataset.competition, includePenalties }), [dataset.competition, dataset.mode, dataset.scope, dataset.season, includePenalties, playerId]);
+  const baseline = useGoalMouthBaseline(config, baselineContext);
   const current = finalThird.state.key === finalThird.resourceKey;
   const payload = current && "data" in finalThird.state ? finalThird.state.data.data : undefined;
   const goalData = isRenderableData(payload) ? payload : undefined;
@@ -59,7 +64,7 @@ export function PitchWorkspace({ analysis, contextIdentity, config, playerId, da
     <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${activeTab}`} className="mt-3">
       {activeTab === "threeD" && <SpatialPitch analysis={analysis} contextIdentity={contextIdentity} forcedMode="perspective" embedded/>}
       {activeTab === "twoD" && <SpatialPitch analysis={analysis} contextIdentity={contextIdentity} forcedMode="plan" embedded/>}
-      {activeTab === "goalMouth" && (goalData ? <GoalMouthView data={goalData} config={config}/> : <p role="status" aria-live="polite" className="rounded border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">{!current || finalThird.state.kind === "loading" ? WORKSPACE_COPY.loading : WORKSPACE_COPY.unavailable}</p>)}
+      {activeTab === "goalMouth" && (goalData ? <GoalMouthView data={goalData} config={config} baselineResource={baseline.state}/> : <p role="status" aria-live="polite" className="rounded border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">{!current || finalThird.state.kind === "loading" ? WORKSPACE_COPY.loading : WORKSPACE_COPY.unavailable}</p>)}
     </div>
   </section>;
 }

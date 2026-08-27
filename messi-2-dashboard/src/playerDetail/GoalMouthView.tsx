@@ -5,7 +5,7 @@ import type { GoalMouthBaselineCell, GoalMouthBaselineData } from "../api/goalMo
 import type { FinalThirdShot } from "../api/finalThirdShotMapContracts";
 import type { FinalThirdRenderableData } from "../api/finalThirdShotMapV2Contracts";
 import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contracts";
-import { useGoalMouthBaseline } from "./useGoalMouthBaseline";
+import { useGoalMouthBaseline, type GoalMouthBaselineState } from "./useGoalMouthBaseline";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { excludePenaltyShots, penaltyStateLabel, summarizeShots } from "./pitchPenalties";
 import { medianObservedXg, pitchMarkerRadius, PitchShotMarker } from "./PitchShotMarker";
@@ -275,7 +275,16 @@ function ShootingQualityModule({ data }: { data: RenderableData }) {
   </section>;
 }
 
-export function GoalMouthView({ data, config }: { data: RenderableData; config?: MessiApiConfig }) {
+const PLACEMENT_COPY = {
+  title: "배치 기준 기대 득점",
+  expected: "기대 득점",
+  actual: "실제 득점",
+  delta: "차이",
+  sample: "골문 안 슛",
+  stretched: "골문은 가독성을 위해 실제 비율보다 세로로 늘려 표시합니다.",
+} as const;
+
+export function GoalMouthView({ data, config, baselineResource }: { data: RenderableData; config?: MessiApiConfig; baselineResource?: GoalMouthBaselineState }) {
   const { includePenalties, summaryShots } = usePitchPenalty();
   const [visibleStatus, setVisibleStatus] = useState<VisibleStatus>("all");
   const [zoom, setZoom] = useState<ZoomLevel>(1);
@@ -284,7 +293,8 @@ export function GoalMouthView({ data, config }: { data: RenderableData; config?:
   const [baselineVisible, setBaselineVisible] = useState(true);
   const [activeBaselineCellId, setActiveBaselineCellId] = useState<string | null>(null);
   const baselineId = useId().replace(/:/g, "");
-  const baseline = useGoalMouthBaseline(config);
+  const internalBaseline = useGoalMouthBaseline(config, undefined, baselineResource === undefined);
+  const baseline = baselineResource ? { state: baselineResource, retry: internalBaseline.retry } : internalBaseline;
   const pointerPan = useRef<{ pointerId: number; clientX: number; clientY: number; viewport: Viewport } | null>(null);
   const filteredShots = useMemo(() => excludePenaltyShots(data.shots, includePenalties), [data.shots, includePenalties]);
   // The xG scale is stable while the shared penalty toggle changes visibility.
@@ -364,6 +374,6 @@ export function GoalMouthView({ data, config }: { data: RenderableData; config?:
     <svg data-goal-mouth-viewbox={viewBox} viewBox={viewBox} className="block h-auto w-full touch-none cursor-grab active:cursor-grabbing" role="img" tabIndex={0} aria-label={`Three-dimensional goal-mouth plot with ${visibleShots.length} visible authoritative endpoints and ${unplotted.length} unplotted endpoints. Zoom ${zoom}x. Drag to pan when zoomed.`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointerPan} onPointerCancel={endPointerPan} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={onKeyDown}>
       <GoalNet baselineLayer={baselineLayer}/>{visibleShots.map((shot) => { const group = offFrameGroups.get(`${shot.goalMouthY}:${shot.goalMouthZ}`) ?? [shot]; const groupIndex = group.findIndex((candidate) => candidate.shotId === shot.shotId); return <Marker key={shot.shotId} shot={shot} medianXg={medianXg} endpointShots={endpointShots} fanOffset={group.length > 1 ? groupIndex - (group.length - 1) / 2 : 0} fanCount={group.length} active={activeOffFrameShotId === shot.shotId} onActivate={() => setActiveOffFrameShotId(shot.shotId)} onDeactivate={() => setActiveOffFrameShotId((current) => current === shot.shotId ? null : current)} tooltipBounds={tooltipBounds}/>; })}
     </svg>
-    <div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>마커 크기는 xG에 비례합니다. 프레임 도달 슛은 흰 공, 빗나감은 비운 공으로 표시하며 xG 미상은 중앙값 크기입니다.</p><p data-goal-mouth-shot-summary className="mt-2">{penaltyStateLabel(includePenalties)} · 슛 {shotSummary.shots} · 득점 {shotSummary.goals} · xG {shotSummary.xg.toFixed(2)} · 전환율 {shotSummary.conversionRatePct?.toFixed(1) ?? "—"}%</p><ShootingQualityModule data={data}/>{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
+    <div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>마커 크기는 xG에 비례합니다. 프레임 도달 슛은 흰 공, 빗나감은 비운 공으로 표시하며 xG 미상은 중앙값 크기입니다.</p><p data-goal-mouth-shot-summary className="mt-2">{penaltyStateLabel(includePenalties)} · 슛 {shotSummary.shots} · 득점 {shotSummary.goals} · xG {shotSummary.xg.toFixed(2)} · 전환율 {shotSummary.conversionRatePct?.toFixed(1) ?? "—"}%</p>{baseline.state.kind === "ready" && baseline.state.data.data.placementSummary && <section data-placement-summary className="mt-3 rounded-lg border border-cyan-200/20 bg-cyan-300/5 p-3" aria-labelledby="placement-summary-title"><h3 id="placement-summary-title" className="text-sm font-black text-zinc-50">{PLACEMENT_COPY.title}</h3><dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4"><div><dt className="text-zinc-400">{PLACEMENT_COPY.sample}</dt><dd className="mt-1 text-lg font-black tabular-nums text-zinc-50">{baseline.state.data.data.placementSummary.onFrameShots}</dd></div><div><dt className="text-zinc-400">{PLACEMENT_COPY.expected}</dt><dd className="mt-1 text-lg font-black tabular-nums text-cyan-200">{baseline.state.data.data.placementSummary.placementExpectedGoals.toFixed(2)}</dd></div><div><dt className="text-zinc-400">{PLACEMENT_COPY.actual}</dt><dd className="mt-1 text-lg font-black tabular-nums text-zinc-50">{baseline.state.data.data.placementSummary.actualGoals}</dd></div><div><dt className="text-zinc-400">{PLACEMENT_COPY.delta}</dt><dd className={`mt-1 text-lg font-black tabular-nums ${baseline.state.data.data.placementSummary.delta >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{baseline.state.data.data.placementSummary.delta >= 0 ? "+" : ""}{baseline.state.data.data.placementSummary.delta.toFixed(2)}</dd></div></dl><p className="mt-2 text-[10px] text-zinc-400">{PLACEMENT_COPY.stretched}</p></section>}<ShootingQualityModule data={data}/>{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
   </div>;
 }
