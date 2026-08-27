@@ -53,7 +53,9 @@ describe("LegacySpatialPitch", () => {
     expect(within(section).getByText("2 activity points. 4 shots. Goal ◇ · on target ● · off target × · blocked ■.")).toBeInTheDocument();
     expect(section.querySelectorAll("[data-shot-index]")).toHaveLength(4);
     expect(section.querySelectorAll('[data-shot-outcome="goal"]')).toHaveLength(1);
-    expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke", "#C044FF");
+    expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke", "#C084FC");
+    expect(section.querySelector("image")).toBeNull();
+    expect(section.querySelector('[data-layer="guardiola-20-zone-guide"]')).toBeInTheDocument();
     expect(section).toHaveTextContent("Goals 1"); expect(section).toHaveTextContent("On target 1"); expect(section).toHaveTextContent("Off target 1"); expect(section).toHaveTextContent("Blocked 1");
   });
 
@@ -100,6 +102,17 @@ describe("LegacySpatialPitch", () => {
     expect(container.querySelector('[data-shot-outcome="goal"]')).toHaveAttribute("data-marker-symbol", "star");
     expect(container.querySelector('[data-shot-outcome="blocked"]')).toHaveAttribute("data-marker-symbol", "diamond-open");
     fireEvent.focus(container.querySelector('[data-shot-outcome="goal"]')!); expect(screen.getByRole("tooltip")).toHaveTextContent("xG —"); expect(screen.getByRole("tooltip")).toHaveTextContent("xGOT —");
+  });
+
+  it("keeps the six shooting corridors visual-only and opt-in while explaining the permanent PK exclusion", () => {
+    const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
+    expect(screen.getByText("페널티 11발은 분할선 위라 회랑 집계에서 제외")).toBeInTheDocument();
+    expect(container.querySelector('[data-layer="shot-corridors"]')).toBeNull();
+    const toggle = screen.getByRole("button", { name: "6-lane shooting corridors" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(container.querySelectorAll('[data-layer="shot-corridors"] path')).toHaveLength(5);
   });
 
   it("keeps one roving marker tab stop while exact-coordinate groups preserve all source counts", () => {

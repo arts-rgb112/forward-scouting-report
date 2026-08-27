@@ -8,6 +8,10 @@ import { excludePenaltyShots } from "./pitchPenalties";
 import { formatShotMetric, outcomeOrder, outcomePresentation, outcomeSummary, OutcomeControls, shotIntegrity, shotMarkerLabel, type ShotOutcome, useShotOutcomeVisibility } from "./shotOutcomeVisibility";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
+const TWO_D_COPY = {
+  corridorToggle: "6-lane shooting corridors",
+  corridorNote: "페널티 11발은 분할선 위라 회랑 집계에서 제외",
+} as const;
 type Spatial = NonNullable<PlayerAnalysis["spatial"]>;
 type Integrity = { heat: boolean; shots: boolean };
 
@@ -17,7 +21,7 @@ const spatialIntegrity = (spatial: Spatial | undefined): Integrity => ({
   shots: shotIntegrity(spatial),
 });
 
-function HeatmapCanvas({ points, enabled }: { points: readonly ActivityPoint[]; enabled: boolean }) {
+function HeatmapCanvas({ points, enabled, opacity = .62 }: { points: readonly ActivityPoint[]; enabled: boolean; opacity?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const paintedRef = useRef(false);
   const normalized = useMemo(() => normalizeDensity(legacyDensityGrid(points)), [points]);
@@ -38,13 +42,13 @@ function HeatmapCanvas({ points, enabled }: { points: readonly ActivityPoint[]; 
       if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
       const context = canvas.getContext("2d");
       if (!context) return;
-      context.clearRect(0, 0, width, height); renderDisplayHeatmap(context, width, height, displayDensity); paintedRef.current = true;
+      context.clearRect(0, 0, width, height); renderDisplayHeatmap(context, width, height, displayDensity, opacity); paintedRef.current = true;
     };
     draw();
     const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(draw);
     observer?.observe(canvas); window.addEventListener("resize", draw);
     return () => { observer?.disconnect(); window.removeEventListener("resize", draw); };
-  }, [displayDensity, enabled, points.length]);
+  }, [displayDensity, enabled, opacity, points.length]);
   return <canvas ref={canvasRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full blur-[10px]" data-layer="legacy-density" data-density-columns="96" data-density-rows="66" />;
 }
 
@@ -61,6 +65,33 @@ function useMarkerScale() {
     return () => { observer?.disconnect(); window.removeEventListener("resize", measure); };
   }, []);
   return { ref, x: size.width > 0 ? 108 / size.width : 1, y: size.height > 0 ? 100 / size.height : 1 };
+}
+
+const screenY = (sourceY: number) => 100 - sourceY;
+const pitchPath = (points: readonly { x: number; y: number }[]) => points.map((point, index) => `${index ? "L" : "M"}${point.x} ${screenY(point.y)}`).join(" ");
+
+/** Visual-only Guardiola 20-zone guide. It never derives a zone metric client-side. */
+function GuardiolaPitchGuide({ showCorridors }: { showCorridors: boolean }) {
+  const wideDepths = [15.71, 32.5, 50, 67.5, 84.29];
+  const centralDepths = [15.71, 50, 84.29];
+  const laneEdges = [21.82, 78.18];
+  const innerLaneEdges = [37, 63];
+  const boxY = [20.35, 79.65];
+  const sixYardY = [36.53, 63.47];
+  return <g data-layer="guardiola-20-zone-guide" fill="none" vectorEffect="non-scaling-stroke">
+    <rect x="0" y="0" width="100" height="100" stroke="#FFFFFF" strokeOpacity=".45" strokeWidth="1.8"/>
+    <path d={`M50 0V100M0 ${screenY(50)}H100`} stroke="#FFFFFF" strokeOpacity=".45" strokeWidth="1.8"/>
+    <circle cx="50" cy={screenY(50)} r="9.15" stroke="#FFFFFF" strokeOpacity=".45" strokeWidth="1.8"/>
+    {[[0, 15.71], [84.29, 100]].map(([start, end]) => <path key={`box-${start}`} d={pitchPath([{ x: start, y: boxY[0] }, { x: end, y: boxY[0] }, { x: end, y: boxY[1] }, { x: start, y: boxY[1] }])} stroke="#FFFFFF" strokeOpacity=".45" strokeWidth="1.8"/>) }
+    {[[0, 5.24], [94.76, 100]].map(([start, end]) => <path key={`six-${start}`} d={pitchPath([{ x: start, y: sixYardY[0] }, { x: end, y: sixYardY[0] }, { x: end, y: sixYardY[1] }, { x: start, y: sixYardY[1] }])} stroke="#FFFFFF" strokeOpacity=".45" strokeWidth="1.8"/>) }
+    {[11, 89].map((x) => <circle key={`spot-${x}`} cx={x} cy={screenY(50)} r="1.4" fill="#FFFFFF" fillOpacity=".45" stroke="none"/>)}
+    {laneEdges.map((edge) => <path key={`lane-${edge}`} d={`M0 ${screenY(edge)}H100`} stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1"/>)}
+    {innerLaneEdges.map((edge) => <path key={`inner-lane-${edge}`} d={`M15.71 ${screenY(edge)}H84.29`} stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1"/>)}
+    {wideDepths.map((depth) => <g key={`wide-depth-${depth}`}><path d={`M${depth} ${screenY(0)}V${screenY(21.82)}`} stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1"/><path d={`M${depth} ${screenY(78.18)}V${screenY(100)}`} stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1"/></g>)}
+    {centralDepths.map((depth) => <path key={`central-depth-${depth}`} d={`M${depth} ${screenY(21.82)}V${screenY(78.18)}`} stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1"/>)}
+    <path d={`M0 ${screenY(50)}H15.71M84.29 ${screenY(50)}H100`} stroke="#7DD3FC" strokeOpacity=".9" strokeWidth="2" strokeDasharray="4 3"/>
+    {showCorridors && <g data-layer="shot-corridors" stroke="#7DD3FC" strokeOpacity=".6" strokeWidth="1.25" strokeDasharray="3 4">{[21.82, 37, 50, 63, 78.18].map((edge) => <path key={`corridor-${edge}`} d={`M0 ${screenY(edge)}H100`}/>)}</g>}
+  </g>;
 }
 
 export function starPath(outer: number, inner: number) {
@@ -98,6 +129,7 @@ export function LegacySpatialPitchFigure({ analysis, visibleOutcomes, markerLaye
   const markerRefs = useRef(new Map<string, SVGGElement>());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [tooltipIdState, setTooltipIdState] = useState<string | null>(null);
+  const [showCorridors, setShowCorridors] = useState(false);
   const normalized = useMemo(() => integrity.heat ? normalizeDensity(legacyDensityGrid(spatial!.heatmapPoints)) : undefined, [integrity.heat, spatial?.heatmapPoints]);
   const contour = useMemo(() => normalized && spatial?.continuousCore.available && spatial.continuousCore.thresholdOfPeak > 0 ? marchingSquares(normalized, spatial.continuousCore.thresholdOfPeak) : [], [normalized, spatial?.continuousCore.available, spatial?.continuousCore.thresholdOfPeak]);
   const allVisible = visibleOutcomes ?? new Set(outcomeOrder);
@@ -118,13 +150,17 @@ export function LegacySpatialPitchFigure({ analysis, visibleOutcomes, markerLaye
   const visibleOutcomeList = outcomeOrder.filter((outcome) => allVisible.has(outcome) && counts[outcome] > 0);
   const description = `Two-dimensional legacy spatial pitch. ${state.heat}. ${state.shots}. Visible shot outcomes: ${outcomeSummary(visibleOutcomeList)}. Outcome controls change markers only; density and CCA use all activity points.`;
   return <>
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <button type="button" aria-pressed={showCorridors} onClick={() => setShowCorridors((visible) => !visible)} className="rounded border border-sky-300/50 px-2 py-1 text-sky-200 hover:bg-sky-300/10">{TWO_D_COPY.corridorToggle}</button>
+      <p className="text-zinc-400">{TWO_D_COPY.corridorNote}</p>
+    </div>
     <figure aria-describedby={`${descriptionId} ${captionId}`}>
       <p id={descriptionId} className="sr-only">{description}</p>
       <div ref={markerScale.ref} className="relative isolate w-full overflow-hidden rounded bg-[#063525]" style={{ aspectRatio: "108 / 70.9" }}>
-        <svg viewBox="-4 0 108 100" preserveAspectRatio="none" role="img" aria-label={description} className="absolute inset-0 h-full w-full" data-layer="legacy-pitch"><image href="/assets/positional-grid-pitch.webp" x="-10.52" y="-5" width="121.17" height="110" preserveAspectRatio="none" /></svg>
         <HeatmapCanvas points={integrity.heat ? spatial!.heatmapPoints : []} enabled={integrity.heat && spatial!.heatmapPoints.length > 0}/>
         <svg viewBox="-4 0 108 100" preserveAspectRatio="none" role="group" aria-label="Interactive two-dimensional shot markers" className="absolute inset-0 h-full w-full" data-layer="legacy-events">
-          {contour.length > 0 && <path aria-hidden="true" pointerEvents="none" data-layer="cca-contour" d={contour.map(([x1, y1, x2, y2]) => `M${x1.toFixed(4)} ${y1.toFixed(4)}L${x2.toFixed(4)} ${y2.toFixed(4)}`).join("")} fill="none" stroke="#C044FF" strokeWidth="3" vectorEffect="non-scaling-stroke"/>}
+          <GuardiolaPitchGuide showCorridors={showCorridors}/>
+          {contour.length > 0 && <path aria-hidden="true" pointerEvents="none" data-layer="cca-contour" d={contour.map(([x1, y1, x2, y2]) => `M${x1.toFixed(4)} ${y1.toFixed(4)}L${x2.toFixed(4)} ${y2.toFixed(4)}`).join("")} fill="none" stroke="#C084FC" strokeWidth="3" vectorEffect="non-scaling-stroke"/>}
           <g id={markerLayerId}>{markerGroups.map((group, visibleIndex) => { const { shot } = group; const id = `${rawId}-legacy-shot-${group.key}`; const active = id === activeVisibleId; const radius = pitchMarkerRadius(shot.xg, medianXg); const composition = group.count > 1 ? ` Stack: ${group.outcomeCounts.goal} goals, ${group.outcomeCounts.on_target} on target, ${group.outcomeCounts.off_target} off target, ${group.outcomeCounts.blocked} blocked.` : ""; return <g key={id} ref={(element) => { if (element) markerRefs.current.set(id, element); else markerRefs.current.delete(id); }} id={id} role="img" tabIndex={active ? 0 : -1} aria-label={`${shotMarkerLabel(shot)}${group.count > 1 ? ` ${group.count} shots share this exact coordinate.` : ""}${composition}`} aria-describedby={tooltipId} data-shot-marker data-shot-index={group.sourceIndexes[0]} data-shot-indexes={group.sourceIndexes.join(",")} data-shot-outcome={group.outcome} data-marker-symbol={outcomePresentation[group.outcome].symbol} data-marker-size={radius * 2} data-marker-count={group.count} transform={`translate(${shot.x} ${100 - shot.y}) scale(${markerScale.x} ${markerScale.y})`} onFocus={() => { setActiveId(id); setTooltipIdState(id); }} onPointerEnter={() => { setActiveId(id); setTooltipIdState(id); }} onPointerLeave={(event) => { if (document.activeElement !== event.currentTarget) setTooltipIdState(null); }} onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); navigate(visibleIndex, 1); } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); navigate(visibleIndex, -1); } }}><g data-marker-visual><PitchShotMarker outcome={group.outcome} radius={radius} count={group.count} outcomeCounts={group.outcomeCounts} expandedStack={tooltipIdState === id}/></g><circle data-marker-hit r="12" fill="transparent" pointerEvents="all" /></g>; })}</g>
         </svg>
         {tooltipEntry && <div id={tooltipId} role="tooltip" className="pointer-events-none absolute z-10 max-w-36 rounded border border-white/20 bg-[#0b0e0f]/95 px-2 py-1 text-[11px] text-zinc-100 shadow-lg" style={{ left: `${Math.max(4, Math.min(96, ((tooltipEntry.shot.x + 4) / 108) * 100))}%`, top: `${Math.max(4, Math.min(96, 100 - tooltipEntry.shot.y))}%`, transform: "translate(-50%, -110%)" }}><b className="block">{outcomePresentation[tooltipEntry.shot.outcome].label}</b><span className="block">xG {formatShotMetric(tooltipEntry.shot.xg)}</span><span className="block">xGOT {formatShotMetric(tooltipEntry.shot.xgot)}</span></div>}

@@ -138,7 +138,11 @@ export function renderLegacyHeatmap(ctx: CanvasRenderingContext2D, width: number
 }
 
 /** Paint the 96 × 66 display-only interpolation; never use this for contours. */
-export function renderDisplayHeatmap(ctx: CanvasRenderingContext2D, width: number, height: number, display: HeatmapGrid): void {
+/**
+ * Paint a display-only heatmap. Opacity is a view concern: callers must not
+ * feed it back into the native density/CCA path.
+ */
+export function renderDisplayHeatmap(ctx: CanvasRenderingContext2D, width: number, height: number, display: HeatmapGrid, opacity = HEATMAP_OPACITY): void {
   const pixels = ctx.createImageData(width, height);
   const atDisplay = (row: number, column: number) => display[Math.min(DISPLAY_HEATMAP_ROWS - 1, Math.max(0, row)) * DISPLAY_HEATMAP_COLUMNS + Math.min(DISPLAY_HEATMAP_COLUMNS - 1, Math.max(0, column))] ?? 0;
   for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
@@ -152,7 +156,7 @@ export function renderDisplayHeatmap(ctx: CanvasRenderingContext2D, width: numbe
     const lower = atDisplay(top + 1, left) * (1 - tx) + atDisplay(top + 1, left + 1) * tx;
     const [red, green, blue, alpha] = displayHeatmapColor(upper * (1 - ty) + lower * ty);
     const offset = (y * width + x) * 4;
-    pixels.data[offset] = Math.round(red); pixels.data[offset + 1] = Math.round(green); pixels.data[offset + 2] = Math.round(blue); pixels.data[offset + 3] = Math.round(alpha * HEATMAP_OPACITY * 255);
+    pixels.data[offset] = Math.round(red); pixels.data[offset + 1] = Math.round(green); pixels.data[offset + 2] = Math.round(blue); pixels.data[offset + 3] = Math.round(alpha * opacity * 255);
   }
   ctx.putImageData(pixels, 0, 0);
 }
