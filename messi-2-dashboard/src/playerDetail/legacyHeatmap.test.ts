@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { HEATMAP_COLUMNS, HEATMAP_ROWS, bilinearDensity, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
+import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_ROWS, bilinearDensity, displayDensityGrid, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
 
 describe("legacy 32 x 22 spatial raster", () => {
   it("keeps numpy-compatible endpoint values in the final bin", () => {
@@ -25,10 +25,20 @@ describe("legacy 32 x 22 spatial raster", () => {
     expect(bilinearDensity(density, -1, 50)).toBe(0);
   });
 
-  it("interpolates the exact legacy rgba stops", () => {
+  it("quantizes the display palette into 12 green-to-lime-to-amber stages", () => {
     expect(legacyHeatmapColor(0)).toEqual([0, 0, 0, 0]);
-    expect(legacyHeatmapColor(.08)).toEqual([124, 151, 71, .18]);
-    expect(legacyHeatmapColor(1)).toEqual([222, 63, 31, .98]);
+    expect(legacyHeatmapColor(.08)).toEqual(legacyHeatmapColor(.09));
+    expect(legacyHeatmapColor(.58)[1]).toBeGreaterThan(legacyHeatmapColor(.58)[0]);
+    expect(legacyHeatmapColor(1)).toEqual([245, 158, 11, 1]);
+  });
+
+  it("upsamples only the display mesh and leaves the 32 by 22 scoring raster intact", () => {
+    const source = normalizeDensity(legacyDensityGrid([{ x: 50, y: 50 }]));
+    const display = displayDensityGrid(source);
+    expect(display).toHaveLength(DISPLAY_HEATMAP_COLUMNS * DISPLAY_HEATMAP_ROWS);
+    expect(source).toHaveLength(HEATMAP_COLUMNS * HEATMAP_ROWS);
+    expect(Math.max(...display)).toBeLessThanOrEqual(1);
+    expect(source).toEqual(normalizeDensity(legacyDensityGrid([{ x: 50, y: 50 }])));
   });
 
   it("uses deterministic saddle pairing and inverted render-y contour coordinates", () => {

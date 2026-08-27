@@ -17,6 +17,7 @@ import { TierBadge } from "../dashboard/components/TierBadge";
 import type { DatasetRouteState, Player, PlayerAnalysis, TacticalQuadrant } from "../dashboard/types";
 import { axisDetail, detailMetrics, metricProfile, seasonScoreRows, selectedScore, tacticalCopy, wholeScore } from "./playerDetailViewModel";
 import { SpatialPitch } from "./SpatialPitch";
+import { PitchPenaltyProvider, PitchPenaltyToggle } from "./PitchPenaltyContext";
 import { BenchmarkPanel, VolumeBenchmarkRadar as ServerVolumeBenchmarkRadar } from "./VolumeBenchmarkRadar";
 import { useRatioBenchmark } from "./useRatioBenchmark";
 import { BenchmarkRadarV2Panel } from "./BenchmarkRadarV2";
@@ -156,11 +157,12 @@ export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality,
         </div>
         <div data-layout="detail-board-slot" className="mt-4 min-w-0">{readoutSlot}</div>
       </div>
-      <section data-layout="tactical-spatial-workspace" className="min-w-0 rounded-xl border border-white/10 bg-[#0d1112] p-2 shadow-sm" aria-label="Tactical and spatial analysis">
+      <PitchPenaltyProvider summaryShots={analysis?.spatial.shotmapPoints}><section data-layout="tactical-spatial-workspace" className="min-w-0 rounded-xl border border-white/10 bg-[#0d1112] p-2 shadow-sm" aria-label="Tactical and spatial analysis">
         <TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/>
+        <PitchPenaltyToggle/>
         <div className="mt-2 min-w-0"><SpatialPitch analysis={analysis} contextIdentity={spatialContextIdentity}/></div>
         <FinalThirdShootingMap config={config} playerId={player.id} dataset={dataset}/>
-      </section>
+      </section></PitchPenaltyProvider>
     </div>
     </div>
     {!analysis && <p className="mt-4 rounded border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">Server analysis is unavailable; no client-side analysis has been invented.</p>}

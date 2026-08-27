@@ -6,6 +6,8 @@ import type { FinalThirdShot } from "../api/finalThirdShotMapContracts";
 import type { FinalThirdRenderableData } from "../api/finalThirdShotMapV2Contracts";
 import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contracts";
 import { useGoalMouthBaseline } from "./useGoalMouthBaseline";
+import { usePitchPenalty } from "./PitchPenaltyContext";
+import { excludePenaltyShots, penaltyStateLabel, summarizeShots } from "./pitchPenalties";
 
 type RenderableData = FinalThirdRenderableData | FinalThirdShotMapV3Data;
 type ShotStatus = Exclude<FinalThirdShot["status"], "blocked">;
@@ -281,6 +283,7 @@ function ShootingQualityModule({ data }: { data: RenderableData }) {
 }
 
 export function GoalMouthView({ data, config }: { data: RenderableData; config?: MessiApiConfig }) {
+  const { includePenalties, summaryShots } = usePitchPenalty();
   const [visibleStatus, setVisibleStatus] = useState<VisibleStatus>("all");
   const [zoom, setZoom] = useState<ZoomLevel>(1);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0 });
@@ -290,8 +293,9 @@ export function GoalMouthView({ data, config }: { data: RenderableData; config?:
   const baselineId = useId().replace(/:/g, "");
   const baseline = useGoalMouthBaseline(config);
   const pointerPan = useRef<{ pointerId: number; clientX: number; clientY: number; viewport: Viewport } | null>(null);
-  const endpointShots = data.shots.filter((shot) => shot.endpointAvailable && shot.goalMouthY !== null && shot.goalMouthZ !== null && shot.status !== "blocked");
-  const unplotted = data.shots.filter((shot) => !shot.endpointAvailable);
+  const filteredShots = useMemo(() => excludePenaltyShots(data.shots, includePenalties), [data.shots, includePenalties]);
+  const endpointShots = filteredShots.filter((shot) => shot.endpointAvailable && shot.goalMouthY !== null && shot.goalMouthZ !== null && shot.status !== "blocked");
+  const unplotted = filteredShots.filter((shot) => !shot.endpointAvailable);
   // Never fit the viewport to provider endpoint coordinates: valid far-wide
   // misses must not shrink the measured goal opening at 1×.
   const baseViewBox = compactBaseViewBox;
@@ -312,7 +316,13 @@ export function GoalMouthView({ data, config }: { data: RenderableData; config?:
     });
     return groups;
   }, [endpointShots]);
-  const counts = { all: data.shots.length, goal: data.shots.filter((shot) => shot.status === "goal").length, on_target: data.shots.filter((shot) => shot.status === "on_target").length, off_target: data.shots.filter((shot) => shot.status === "off_target").length };
+  const counts = { all: filteredShots.length, goal: filteredShots.filter((shot) => shot.status === "goal").length, on_target: filteredShots.filter((shot) => shot.status === "on_target").length, off_target: filteredShots.filter((shot) => shot.status === "off_target").length };
+  // The shared pitch snapshot is the canonical event total. Goal-Mouth's
+  // endpoint subset intentionally omits unavailable endpoints, so it must not
+  // become a conflicting second total for the same toggle state.
+  const shotSummary = summaryShots
+    ? summarizeShots(excludePenaltyShots(summaryShots, includePenalties))
+    : summarizeShots(filteredShots);
   useEffect(() => { setViewport({ x: 0, y: 0 }); setZoom(1); setActiveOffFrameShotId(null); setActiveBaselineCellId(null); pointerPan.current = null; }, [data]);
   const setZoomLevel = (next: ZoomLevel) => { setViewport((current) => centeredViewport(current, baseViewBox, zoom, next)); setZoom(next); };
   const resetViewport = () => { pointerPan.current = null; setZoom(1); setViewport({ x: 0, y: 0 }); };
@@ -359,6 +369,6 @@ export function GoalMouthView({ data, config }: { data: RenderableData; config?:
     <svg data-goal-mouth-viewbox={viewBox} viewBox={viewBox} className="block h-auto w-full touch-none cursor-grab active:cursor-grabbing" role="img" tabIndex={0} aria-label={`Three-dimensional goal-mouth plot with ${visibleShots.length} visible authoritative endpoints and ${unplotted.length} unplotted endpoints. Zoom ${zoom}x. Drag to pan when zoomed.`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointerPan} onPointerCancel={endPointerPan} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={onKeyDown}>
       <GoalNet baselineLayer={baselineLayer}/>{visibleShots.map((shot) => { const group = offFrameGroups.get(`${shot.goalMouthY}:${shot.goalMouthZ}`) ?? [shot]; const groupIndex = group.findIndex((candidate) => candidate.shotId === shot.shotId); return <Marker key={shot.shotId} shot={shot} data={data} endpointShots={endpointShots} fanOffset={group.length > 1 ? groupIndex - (group.length - 1) / 2 : 0} fanCount={group.length} active={activeOffFrameShotId === shot.shotId} onActivate={() => setActiveOffFrameShotId(shot.shotId)} onDeactivate={() => setActiveOffFrameShotId((current) => current === shot.shotId ? null : current)} tooltipBounds={tooltipBounds}/>; })}
     </svg>
-    <div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>축구공: Goal 초록 · On target 하늘색 · Off target 호박색 + X. Marker size uses the shared source xG scale; gray ? means xG unavailable.</p><ShootingQualityModule data={data}/>{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
+    <div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>축구공: Goal 초록 · On target 하늘색 · Off target 호박색 + X. Marker size uses the shared source xG scale; gray ? means xG unavailable.</p><p data-goal-mouth-shot-summary className="mt-2">{penaltyStateLabel(includePenalties)} · 슛 {shotSummary.shots} · 득점 {shotSummary.goals} · xG {shotSummary.xg.toFixed(2)} · 전환율 {shotSummary.conversionRatePct?.toFixed(1) ?? "—"}%</p><ShootingQualityModule data={data}/>{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
   </div>;
 }

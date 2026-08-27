@@ -5,16 +5,20 @@
  */
 export const HEATMAP_COLUMNS = 32;
 export const HEATMAP_ROWS = 22;
+/** Display-only resolution. The 32 × 22 grid remains the sole scoring/CCA raster. */
+export const DISPLAY_HEATMAP_COLUMNS = 96;
+export const DISPLAY_HEATMAP_ROWS = 66;
+export const DISPLAY_HEATMAP_COLOR_STAGES = 12;
 export const HEATMAP_KERNEL = [1, 4, 6, 4, 1] as const;
 export const HEATMAP_STOPS = [
   [0, [0, 0, 0, 0]],
-  [0.08, [124, 151, 71, 0.18]],
-  [0.24, [188, 185, 65, 0.56]],
-  [0.48, [244, 209, 60, 0.78]],
-  [0.72, [247, 135, 39, 0.9]],
-  [1, [222, 63, 31, 0.98]],
+  [0.09, [22, 101, 52, 0.18]],
+  [0.3, [132, 204, 22, 0.45]],
+  [0.58, [190, 242, 100, 0.72]],
+  [0.8, [251, 191, 36, 0.9]],
+  [1, [245, 158, 11, 1]],
 ] as const;
-export const HEATMAP_OPACITY = 0.94;
+export const HEATMAP_OPACITY = .55;
 
 export type ActivityPoint = { x: number; y: number };
 export type HeatmapGrid = Float64Array;
@@ -78,8 +82,22 @@ export function bilinearDensity(grid: HeatmapGrid, x: number, sourceY: number): 
   return upper * (1 - ty) + lower * ty;
 }
 
+/**
+ * Resamples only the already-smoothed display raster. It deliberately has no
+ * caller in HDR/CCA calculation paths: those stay on the native 32 × 22 grid.
+ */
+export function displayDensityGrid(grid: HeatmapGrid, columns = DISPLAY_HEATMAP_COLUMNS, rows = DISPLAY_HEATMAP_ROWS): HeatmapGrid {
+  const output = new Float64Array(columns * rows);
+  for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) {
+    const x = (column + .5) * 100 / columns;
+    const y = (row + .5) * 100 / rows;
+    output[row * columns + column] = bilinearDensity(grid, x, y);
+  }
+  return output;
+}
+
 export function legacyHeatmapColor(value: number): readonly [number, number, number, number] {
-  const normalized = clamp(value, 0, 1);
+  const normalized = Math.round(clamp(value, 0, 1) * (DISPLAY_HEATMAP_COLOR_STAGES - 1)) / (DISPLAY_HEATMAP_COLOR_STAGES - 1);
   const upperIndex = HEATMAP_STOPS.findIndex(([stop]) => normalized <= stop);
   const upper = HEATMAP_STOPS[upperIndex < 0 ? HEATMAP_STOPS.length - 1 : upperIndex];
   const lower = HEATMAP_STOPS[Math.max(0, (upperIndex < 0 ? HEATMAP_STOPS.length - 1 : upperIndex) - 1)];
@@ -104,6 +122,26 @@ export function renderLegacyHeatmap(ctx: CanvasRenderingContext2D, width: number
     pixels.data[offset + 1] = Math.round(green);
     pixels.data[offset + 2] = Math.round(blue);
     pixels.data[offset + 3] = Math.round(alpha * HEATMAP_OPACITY * 255);
+  }
+  ctx.putImageData(pixels, 0, 0);
+}
+
+/** Paint the 96 × 66 display-only interpolation; never use this for contours. */
+export function renderDisplayHeatmap(ctx: CanvasRenderingContext2D, width: number, height: number, display: HeatmapGrid): void {
+  const pixels = ctx.createImageData(width, height);
+  const atDisplay = (row: number, column: number) => display[Math.min(DISPLAY_HEATMAP_ROWS - 1, Math.max(0, row)) * DISPLAY_HEATMAP_COLUMNS + Math.min(DISPLAY_HEATMAP_COLUMNS - 1, Math.max(0, column))] ?? 0;
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+    const sourceX = -4 + ((x + .5) / width) * 108;
+    const sourceY = 100 - ((y + .5) / height) * 100;
+    const rawColumn = sourceX / (100 / DISPLAY_HEATMAP_COLUMNS) - .5;
+    const rawRow = sourceY / (100 / DISPLAY_HEATMAP_ROWS) - .5;
+    const left = Math.floor(rawColumn), top = Math.floor(rawRow);
+    const tx = clamp(rawColumn - left, 0, 1), ty = clamp(rawRow - top, 0, 1);
+    const upper = atDisplay(top, left) * (1 - tx) + atDisplay(top, left + 1) * tx;
+    const lower = atDisplay(top + 1, left) * (1 - tx) + atDisplay(top + 1, left + 1) * tx;
+    const [red, green, blue, alpha] = legacyHeatmapColor(upper * (1 - ty) + lower * ty);
+    const offset = (y * width + x) * 4;
+    pixels.data[offset] = Math.round(red); pixels.data[offset + 1] = Math.round(green); pixels.data[offset + 2] = Math.round(blue); pixels.data[offset + 3] = Math.round(alpha * HEATMAP_OPACITY * 255);
   }
   ctx.putImageData(pixels, 0, 0);
 }

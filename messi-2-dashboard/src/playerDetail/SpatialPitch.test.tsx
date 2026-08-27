@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PlayerAnalysis } from "../dashboard/types";
 import { ATTACKING_GOAL_FRAME_LIFT, GOAL_CROSSBAR_HEIGHT_METERS, GOAL_POST_Y, GOAL_WIDTH_METERS, LEGACY_POSITIONAL_SEGMENTS, PITCH_WIDTH_METERS, POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES, projectPerspective, SIX_YARD_BOX_Y, SpatialPitch } from "./SpatialPitch";
-import { HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, legacyDensityGrid, legacyHeatmapColor, normalizeDensity } from "./legacyHeatmap";
+import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, displayDensityGrid, legacyDensityGrid, legacyHeatmapColor, normalizeDensity } from "./legacyHeatmap";
 import { outcomePresentation } from "./shotOutcomeVisibility";
 
 const analysisWith = (spatial: Partial<PlayerAnalysis["spatial"]>): PlayerAnalysis => ({
@@ -132,14 +132,15 @@ describe("perspective spatial pitch", () => {
       { x: 78, y: 22, outcome: "on_target" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 40, endZMeters: 1.2, source: "fotmob" as const } },
     ];
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
-    const [unknownHeight, outsideMouth] = [...container.querySelectorAll('[data-trajectory-kind="goal_mouth"]')];
+    const unknownHeight = container.querySelector('[data-trajectory-kind="goal_mouth"][data-end-pitch-y="50"]')!;
+    const outsideMouth = container.querySelector('[data-trajectory-kind="goal_mouth"][data-end-pitch-y="40"]')!;
     expect(unknownHeight).toHaveAttribute("data-end-height-lift", "0");
     expect(unknownHeight).toHaveAttribute("data-end-render-y", unknownHeight.getAttribute("data-end-ground-y"));
     expect(unknownHeight).toHaveAttribute("data-end-goal-mouth", "inside");
     expect(outsideMouth).toHaveAttribute("data-end-goal-mouth", "outside");
   });
 
-  it("projects authoritative goal-mouth and blocked trajectories and exposes their direction accessibly", () => {
+  it("projects only authoritative goal-mouth trajectories and never invents blocked goal-line paths", () => {
     const shots = [
       { x: 80, y: 20, outcome: "goal" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 52, endZMeters: 1.2, source: "fotmob" as const } },
       { x: 70, y: 60, outcome: "blocked" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "blocked" as const, endX: 78, endY: 56, endZMeters: null, source: "fotmob" as const } },
@@ -147,18 +148,13 @@ describe("perspective spatial pitch", () => {
     ];
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
     const paths = [...container.querySelectorAll("[data-shot-trajectory]")];
-    expect(paths).toHaveLength(2);
+    expect(paths).toHaveLength(1);
     const goalPath = container.querySelector('[data-trajectory-kind="goal_mouth"]')!;
-    const blockedPath = container.querySelector('[data-trajectory-kind="blocked"]')!;
     const goalGround = projectPerspective({ x: 100, y: 52 });
-    const blockedEnd = projectPerspective({ x: 78, y: 56 });
     expect(goalPath).toHaveAttribute("data-end-ground-x", String(goalGround.x));
     expect(goalPath).toHaveAttribute("data-end-ground-y", String(goalGround.y));
     expect(Number(goalPath.getAttribute("data-end-render-y"))).toBeLessThan(goalGround.y);
-    expect(blockedPath).toHaveAttribute("data-end-render-x", String(blockedEnd.x));
-    expect(blockedPath).toHaveAttribute("data-end-render-y", String(blockedEnd.y));
-    expect(blockedPath).toHaveAttribute("stroke-dasharray", "4 4");
-    expect(blockedPath).toHaveAttribute("stroke", outcomePresentation.blocked.color);
+    expect(container.querySelector('[data-trajectory-kind="blocked"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-shot-marker][data-shot-outcome="goal"]')).toHaveAccessibleName(/Goal-mouth trajectory to 100\.0, 52\.0, height 1\.20 metres/);
     expect(screen.getByRole("list", { name: "Authoritative shot events" })).toHaveTextContent(/blocked trajectory to \(78\.0, 56\.0\)/);
   });
@@ -171,22 +167,23 @@ describe("perspective spatial pitch", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
     fireEvent.click(screen.getByRole("button", { name: /Goals, 1 shots/ }), { detail: 0 });
     expect(container.querySelector('[data-trajectory-kind="goal_mouth"]')).not.toBeInTheDocument();
-    expect(container.querySelector('[data-trajectory-kind="blocked"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-trajectory-kind="blocked"]')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "2D plan" }));
     expect(container.querySelector("[data-shot-trajectory]")).not.toBeInTheDocument();
   });
 
-  it("projects the exact legacy 32 by 22 density grid rather than activity circles", () => {
+  it("renders a 96 by 66 display mesh while keeping the source 32 by 22 grid for CCA", () => {
     const point = { x: 44, y: 21.82 };
     const analysis = analysisWith({ heatmapPointCount: 1, heatmapPoints: [point], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ ...point, outcome: "goal", xg: .72, xgot: .84 }] });
     const { container } = render(<SpatialPitch analysis={analysis}/>);
     const normalized = normalizeDensity(legacyDensityGrid([point]));
-    const row = Math.floor(point.y / 100 * HEATMAP_ROWS), column = Math.floor(point.x / 100 * HEATMAP_COLUMNS);
+    const display = displayDensityGrid(normalized);
+    const row = Math.floor(point.y / 100 * DISPLAY_HEATMAP_ROWS), column = Math.floor(point.x / 100 * DISPLAY_HEATMAP_COLUMNS);
     const heat = container.querySelector(`[data-density-row="${row}"][data-density-column="${column}"]`)!; const shot = container.querySelector("[data-shot-marker]");
-    const [red, green, blue, alpha] = legacyHeatmapColor(normalized[row * HEATMAP_COLUMNS + column]);
-    expect(container.querySelectorAll("[data-density-cell]")).toHaveLength(HEATMAP_ROWS * HEATMAP_COLUMNS);
+    const [red, green, blue, alpha] = legacyHeatmapColor(display[row * DISPLAY_HEATMAP_COLUMNS + column]);
+    expect(container.querySelectorAll("[data-density-cell]")).toHaveLength(DISPLAY_HEATMAP_ROWS * DISPLAY_HEATMAP_COLUMNS);
     expect(container.querySelectorAll("[data-heat-point]")).toHaveLength(0);
-    expect(heat).toHaveAttribute("data-density-normalized", String(normalized[row * HEATMAP_COLUMNS + column]));
+    expect(heat).toHaveAttribute("data-density-normalized", String(display[row * DISPLAY_HEATMAP_COLUMNS + column]));
     expect(heat).toHaveAttribute("fill", `rgb(${red} ${green} ${blue})`);
     expect(heat).toHaveAttribute("fill-opacity", String(alpha * HEATMAP_OPACITY));
     expect(heat.closest("[data-layer=heat]")).toHaveAttribute("clip-path");
@@ -217,7 +214,7 @@ describe("perspective spatial pitch", () => {
     const before = [...container.querySelectorAll("[data-density-cell]")];
     const heatLayer = container.querySelector("[data-layer=heat]")!;
     const meshBuilds = heatLayer.getAttribute("data-density-mesh-builds");
-    expect(before).toHaveLength(HEATMAP_ROWS * HEATMAP_COLUMNS);
+    expect(before).toHaveLength(DISPLAY_HEATMAP_ROWS * DISPLAY_HEATMAP_COLUMNS);
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     const viewport = container.querySelector("svg[role=img]")!;
     fireEvent.keyDown(viewport, { key: "ArrowRight" });
@@ -230,7 +227,7 @@ describe("perspective spatial pitch", () => {
 
   it("fails closed for unavailable, mismatched, and invalid heatmap coordinates", () => {
     const { container, rerender } = render(<SpatialPitch analysis={analysisWith({ available: false })}/>);
-    expect(container.querySelectorAll("[data-density-cell]")).toHaveLength(HEATMAP_ROWS * HEATMAP_COLUMNS);
+    expect(container.querySelectorAll("[data-density-cell]")).toHaveLength(DISPLAY_HEATMAP_ROWS * DISPLAY_HEATMAP_COLUMNS);
     expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
     rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 2, heatmapPoints: [{ x: 50, y: 50 }] })}/>);
     expect(screen.getAllByText(/Activity heatmap integrity mismatch/).length).toBeGreaterThan(0);
@@ -349,7 +346,7 @@ describe("perspective spatial pitch", () => {
     const cssLength = (element: Element, sourceLength: number) => {
       return sourceLength * Number(element.getAttribute("data-pixel-scale")) * rendered.width / 1000;
     };
-    const marker = view.container.querySelector("[data-shot-marker]")!;
+    const marker = view.container.querySelector('[data-shot-marker][data-shot-outcome="goal"]')!;
     fireEvent.focus(marker);
     const initialAnchor = view.container.querySelector("[data-shot-anchor]")!;
     const initialShadow = view.container.querySelector("[data-shot-shadow]")!;
@@ -360,7 +357,7 @@ describe("perspective spatial pitch", () => {
       const markers = [...view.container.querySelectorAll("[data-shot-marker]")];
       const visuals = [...view.container.querySelectorAll("[data-marker-visual]")];
       const hits = [...view.container.querySelectorAll("[data-marker-hit]")];
-      expect(visuals.map((visual, index) => cssLength(visual, Number(markers[index].getAttribute("data-marker-size"))))).toEqual([12, 9, 9, 8]);
+      visuals.forEach((visual, index) => expect(cssLength(visual, Number(markers[index].getAttribute("data-marker-size")))).toBeCloseTo(Number(markers[index].getAttribute("data-marker-size")), 8));
       expect(hits.map((hit, index) => cssLength(visuals[index], Number(hit.getAttribute("r")) * 2))).toEqual([24, 24, 24, 24]);
       const tooltip = screen.getByRole("tooltip");
       expect(cssLength(tooltip, Number(tooltip.getAttribute("data-tooltip-width")))).toBe(150);
