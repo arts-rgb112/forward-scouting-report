@@ -267,19 +267,56 @@ def health() -> HealthResponse:
     response_model=GoalMouthBaselineEnvelope,
     tags=["players"],
     responses={
-        422: {"description": "Goal-mouth baseline accepts no query parameters."},
+        404: {"description": "The selected player is not available in the exact static context."},
+        422: {"description": "Player context parameters must be supplied together and be internally valid."},
         500: {
             "model": ShotmapServiceErrorEnvelope,
             "description": "A required static goal-mouth baseline snapshot violates the strict contract.",
         },
     },
 )
-def get_goal_mouth_baseline(request: Request, response: Response) -> GoalMouthBaselineEnvelope:
-    """Return the closed five-season global goal-mouth baseline without player scoring."""
-    if request.query_params:
-        raise HTTPException(status_code=422, detail="goal-mouth-baseline accepts no query parameters")
+def get_goal_mouth_baseline(
+    request: Request,
+    response: Response,
+    playerId: int | None = Query(default=None, ge=1),
+    season: str | None = Query(default=None, pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] | None = Query(default=None),
+    scope: Literal["3", "5", "7", "8"] | None = Query(default=None),
+    competition: Literal["all", "ucl", "uel", "uecl"] | None = Query(default=None),
+    includePenalties: bool | None = Query(default=None),
+) -> GoalMouthBaselineEnvelope:
+    """Return the global grid, optionally enriched with one exact player context."""
+    allowed_query_keys = {
+        "playerId", "season", "mode", "scope", "competition", "includePenalties",
+    }
+    unknown_query_keys = set(request.query_params) - allowed_query_keys
+    if unknown_query_keys:
+        raise HTTPException(
+            status_code=422,
+            detail="unknown goal-mouth-baseline query parameter(s): " + ",".join(sorted(unknown_query_keys)),
+        )
+    core_context = (playerId, season, mode, competition)
+    supplied = [value is not None for value in core_context]
+    if any(supplied) and not all(supplied):
+        raise HTTPException(status_code=422, detail="playerId, season, mode, and competition must be supplied together")
+    if not any(supplied) and (scope is not None or includePenalties is not None):
+        raise HTTPException(status_code=422, detail="includePenalties requires a complete player context")
+    if mode == "league" and scope is None:
+        raise HTTPException(status_code=422, detail="league context requires scope")
+    if mode == "europe" and "scope" in request.query_params:
+        raise HTTPException(status_code=422, detail="scope must be omitted for europe context")
+    if mode is not None and competition is not None:
+        validate_duel_press_context(mode, competition)
     response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
-    return build_goal_mouth_baseline()
+    if playerId is None:
+        return build_goal_mouth_baseline()
+    envelope = build_goal_mouth_baseline(
+        playerId, season, mode, int(scope or "8"), competition,
+        include_penalties=True if includePenalties is None else includePenalties,
+    )
+    if envelope is None:
+        raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+    return envelope
 
 
 @app.get("/api/v1/players", response_model=PlayersEnvelope, tags=["players"])

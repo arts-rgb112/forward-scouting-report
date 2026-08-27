@@ -45,17 +45,24 @@ def _baseline_from_rows(rows: list[object]):
 def test_endpoint_contract_openapi_query_rejection_cache_and_cors() -> None:
     response = CLIENT.get("/api/v2/goal-mouth-baseline")
     assert response.status_code == 200
+    assert response.json()["data"]["placementSummary"] is None
+    assert response.json()["data"]["hexFrequency"] is None
     assert response.headers["cache-control"] == "public, max-age=300, stale-while-revalidate=3600"
     assert CLIENT.get("/api/v2/goal-mouth-baseline?unexpected=1").status_code == 422
     schema = CLIENT.get("/openapi.json").json()
     operation = schema["paths"]["/api/v2/goal-mouth-baseline"]["get"]
-    assert "parameters" not in operation
+    assert {item["name"] for item in operation["parameters"]} == {
+        "playerId", "season", "mode", "scope", "competition", "includePenalties",
+    }
     assert schema["components"]["schemas"]["GoalMouthBaselineEnvelope"]["additionalProperties"] is False
     assert schema["components"]["schemas"]["GoalMouthBaselineCell"]["additionalProperties"] is False
     assert schema["components"]["schemas"]["GoalMouthBaselineData"]["additionalProperties"] is False
     assert schema["components"]["schemas"]["GoalMouthBaselineGrid"]["additionalProperties"] is False
     assert schema["components"]["schemas"]["GoalMouthBaselineProvenance"]["additionalProperties"] is False
     assert schema["components"]["schemas"]["GoalMouthBaselineConfidenceInterval"]["additionalProperties"] is False
+    assert schema["components"]["schemas"]["GoalMouthPlacementSummary"]["additionalProperties"] is False
+    assert schema["components"]["schemas"]["PitchHexFrequency"]["additionalProperties"] is False
+    assert schema["components"]["schemas"]["PitchHexFrequencyCell"]["additionalProperties"] is False
     preview = "https://forward-scouting-report-6dn7-pr-299-messiflick.vercel.app"
     allowed = CLIENT.options("/api/v2/goal-mouth-baseline", headers={
         "Origin": preview, "Access-Control-Request-Method": "GET",
@@ -69,6 +76,50 @@ def test_endpoint_contract_openapi_query_rejection_cache_and_cors() -> None:
     })
     assert hostile_preflight.status_code == 400
     assert "access-control-allow-origin" not in hostile_preflight.headers
+
+
+def test_player_context_additive_summary_hex_frequency_and_penalty_toggle() -> None:
+    query = (
+        "playerId=194165&season=2025%2F2026&mode=league&scope=7"
+        "&competition=all&includePenalties=true"
+    )
+    included = CLIENT.get(f"/api/v2/goal-mouth-baseline?{query}")
+    assert included.status_code == 200
+    included_data = included.json()["data"]
+    assert included_data["placementSummary"] == {
+        "onFrameShots": 67,
+        "placementExpectedGoals": 23.5508,
+        "actualGoals": 36,
+        "delta": 12.4492,
+        "excludesPenalties": False,
+    }
+    frequency = included_data["hexFrequency"]
+    assert frequency["definitionVersion"] == "hex-r2-crop-v2"
+    assert frequency["excludesPenalties"] is True
+    assert frequency["outOfCropShots"] == 1
+    assert sum(cell["shots"] for cell in frequency["cells"]) == 107
+    assert all(cell["shots"] > 0 for cell in frequency["cells"])
+
+    excluded = CLIENT.get(f"/api/v2/goal-mouth-baseline?{query[:-4]}false")
+    assert excluded.status_code == 200
+    excluded_data = excluded.json()["data"]
+    assert excluded_data["placementSummary"] == {
+        "onFrameShots": 57,
+        "placementExpectedGoals": 18.797,
+        "actualGoals": 26,
+        "delta": 7.203,
+        "excludesPenalties": True,
+    }
+    assert excluded_data["hexFrequency"] == frequency
+
+
+def test_player_context_query_is_complete_and_strict() -> None:
+    assert CLIENT.get("/api/v2/goal-mouth-baseline?playerId=194165").status_code == 422
+    assert CLIENT.get("/api/v2/goal-mouth-baseline?includePenalties=false").status_code == 422
+    assert CLIENT.get(
+        "/api/v2/goal-mouth-baseline?playerId=194165&season=2025%2F2026"
+        "&mode=league&competition=all"
+    ).status_code == 422
 
 
 def test_fixed_grid_row_major_bounds_and_strict_model() -> None:
