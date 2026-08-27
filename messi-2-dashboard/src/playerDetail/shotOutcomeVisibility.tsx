@@ -27,7 +27,7 @@ export const validShot = (shot: ShotmapPoint) => validCoordinate(shot.x) && vali
 export const shotIntegrity = (spatial: Spatial | undefined) => Boolean(spatial?.shotmapSnapshotAvailable && spatial.shotmapPointCount === spatial.shotmapPoints.length && spatial.shotmapPoints.every(validShot));
 export const formatShotMetric = (value: number | null | undefined) => Number.isFinite(value) ? Number(value).toFixed(2) : "—";
 const trajectorySummary = (shot: ShotmapPoint) => !shot.trajectory ? "No trajectory available." : shot.trajectory.endpointKind === "blocked" ? `Blocked trajectory to ${shot.trajectory.endX.toFixed(1)}, ${shot.trajectory.endY.toFixed(1)}.` : `Goal-mouth trajectory to ${shot.trajectory.endX.toFixed(1)}, ${shot.trajectory.endY.toFixed(1)}, height ${shot.trajectory.endZMeters == null ? "unavailable" : `${shot.trajectory.endZMeters.toFixed(2)} metres`}.`;
-export const shotMarkerLabel = (shot: ShotmapPoint) => `${outcomePresentation[shot.outcome].label}. xG ${formatShotMetric(shot.xg)}. xGOT ${formatShotMetric(shot.xgot)}. ${trajectorySummary(shot)}`;
+export const shotMarkerLabel = (shot: ShotmapPoint) => `${outcomePresentation[shot.outcome].label}. ${shot.xg == null ? "xG 미상; 중앙값 크기" : `xG ${formatShotMetric(shot.xg)}`}. xGOT ${formatShotMetric(shot.xgot)}. ${trajectorySummary(shot)}`;
 export const outcomeSummary = (outcomes: readonly ShotOutcome[]) => outcomes.length ? outcomes.map((outcome) => outcomePresentation[outcome].plural).join(", ") : "none";
 
 function snapshotIdentity(contextIdentity: string, spatial: Spatial | undefined) {

@@ -102,10 +102,11 @@ describe("LegacySpatialPitch", () => {
     fireEvent.focus(container.querySelector('[data-shot-outcome="goal"]')!); expect(screen.getByRole("tooltip")).toHaveTextContent("xG —"); expect(screen.getByRole("tooltip")).toHaveTextContent("xGOT —");
   });
 
-  it("keeps one roving marker tab stop and 44px wrapping controls", () => {
+  it("keeps one roving marker tab stop while exact-coordinate groups preserve all source counts", () => {
     const many = Array.from({ length: 119 }, (_, index) => ({ x: index % 100, y: index % 100, outcome: "goal" as const }));
     const { container } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, shotmapPointCount: 119, shotmapPoints: many })} />);
-    expect(container.querySelectorAll('[data-shot-index][tabindex="0"]')).toHaveLength(1); expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(119);
+    expect(container.querySelectorAll('[data-shot-index][tabindex="0"]')).toHaveLength(1); expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(100);
+    expect([...container.querySelectorAll("[data-shot-index]")].reduce((sum, marker) => sum + Number(marker.getAttribute("data-marker-count")), 0)).toBe(119);
     const controls = screen.getByRole("group", { name: "Shot outcome visibility" }); expect(controls).toHaveClass("grid-cols-2"); expect(screen.getByRole("button", { name: /Goals, 119 shots/ })).toHaveClass("min-h-11", "min-w-11");
   });
 });
