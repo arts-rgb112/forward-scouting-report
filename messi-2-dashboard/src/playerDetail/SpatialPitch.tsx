@@ -12,6 +12,14 @@ const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow
 const PITCH_VIEW_COPY = {
   perspective: "어디서 쏘고 어디로 꽂나",
   plan: "어떻게 움직이나",
+  cameraFrames: {
+    full: "Full field",
+    attacking: "Attacking half",
+    box: "Box",
+  },
+  cameraFrameGroup: "Perspective camera frames",
+  cameraZoomGroup: "Perspective zoom controls",
+  resetCamera: "Reset camera",
 } as const;
 
 export const POSITIONAL_DEPTH_BOUNDARIES = [0, 16.67, 33.33, 50, 66.67, 83.33, 100] as const;
@@ -56,6 +64,8 @@ type Projection = (point: PitchPoint) => ScreenPoint;
 export type ViewMode = "perspective" | "plan";
 type ZoomLevel = 1 | 2 | 3;
 type Viewport = { x: number; y: number };
+type OrbitCamera = { azimuth: number; elevation: number; distance: number };
+type CameraFrame = "full" | "attacking" | "box";
 type DensityMeshCell = { index: number; row: number; column: number; normalized: number; fill: string; fillOpacity: number; d: string };
 
 /** Shared native SVG plan dimensions for player-detail companion charts. */
@@ -70,6 +80,13 @@ export const finalThirdPlanCrop = () => {
 };
 const BASE_VIEWPORT = SPATIAL_PITCH_VIEWBOX;
 const EMPTY_HEAT: PitchPoint[] = [];
+const DEFAULT_ORBIT_CAMERA: OrbitCamera = { azimuth: -48, elevation: 30, distance: 84 };
+const ORBIT_PIVOT = { x: 80, y: 34, z: 0 };
+const ORBIT_FRAME: Record<CameraFrame, { x0: number; x1: number; y0: number; y1: number }> = {
+  full: { x0: 0, x1: 100, y0: 0, y1: 100 },
+  attacking: { x0: 50, x1: 100, y0: 0, y1: 100 },
+  box: { x0: 80, x1: 100, y0: 20.35, y1: 79.65 },
+};
 
 const clamp = (value: number) => Math.min(100, Math.max(0, value));
 
@@ -238,18 +255,59 @@ function ShotGlyph({ group, medianXg, projection, perspective, pixelScale, id, a
     ? ATTACKING_GOAL_FRAME_LIFT * trajectory.endZMeters / GOAL_CROSSBAR_HEIGHT_METERS
     : 0;
   const endpoint = endpointGround ? { x: endpointGround.x, y: endpointGround.y - heightLift } : null;
-  const control = endpoint && trajectory ? { x: (anchor.x + endpoint.x) / 2, y: Math.min(anchor.y, endpoint.y) - (trajectory.endpointKind === "goal_mouth" ? Math.max(10 * pixelScale, heightLift * .55) : 4 * pixelScale) } : null;
+  const groundDistance = trajectory ? Math.hypot((trajectory.endX - shot.x) * 1.05, (trajectory.endY - shot.y) * .68) : 0;
+  // The parabolic term peaks at A / 4, not A. endpoint height remains source data.
+  const arcAmplitude = trajectory?.endZMeters != null ? 4 * (.4 + .08 * groundDistance + .5 * trajectory.endZMeters) : 0;
+  const arcLift = ATTACKING_GOAL_FRAME_LIFT * (arcAmplitude / 4) / GOAL_CROSSBAR_HEIGHT_METERS;
+  const control = endpoint && trajectory ? { x: (anchor.x + endpoint.x) / 2, y: Math.min(anchor.y, endpoint.y) - Math.max(10 * pixelScale, heightLift * .55 + arcLift) } : null;
+  const shadowControl = endpointGround ? { x: (anchor.x + endpointGround.x) / 2, y: (anchor.y + endpointGround.y) / 2 } : null;
   return <g ref={registerRef} id={id} role="img" tabIndex={active ? 0 : -1} aria-label={`${shotMarkerLabel(shot)}${group.count > 1 ? ` ${group.count} shots share this exact coordinate. Stack: ${group.outcomeCounts.goal} goals, ${group.outcomeCounts.on_target} on target, ${group.outcomeCounts.off_target} off target, ${group.outcomeCounts.blocked} blocked.` : ""}`} aria-describedby={tooltipId} data-shot-marker data-shot-index={group.sourceIndexes[0]} data-shot-indexes={group.sourceIndexes.join(",")} data-shot-outcome={group.outcome} data-marker-symbol={outcomePresentation[group.outcome].symbol} data-marker-size={markerRadius * 2} data-marker-count={group.count} data-pitch-x={shot.x} data-pitch-y={shot.y} data-screen-x={anchor.x} data-screen-y={anchor.y} className="cursor-help" onFocus={() => onActivate(id)} onPointerEnter={() => onActivate(id)} onPointerLeave={(event) => { if (document.activeElement !== event.currentTarget) onDeactivate(id); }} onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); onNavigate(1); } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); onNavigate(-1); } }}>
     <title>{shotMarkerLabel(shot)}</title>
-    {trajectory && endpointGround && endpoint && control && <path data-shot-trajectory data-trajectory-kind={trajectory.endpointKind} data-end-pitch-x={trajectory.endX} data-end-pitch-y={trajectory.endY} data-end-goal-mouth={trajectory.endY >= GOAL_POST_Y[0] && trajectory.endY <= GOAL_POST_Y[1] ? "inside" : "outside"} data-end-height-meters={trajectory.endZMeters ?? undefined} data-end-height-lift={heightLift} data-end-ground-x={endpointGround.x} data-end-ground-y={endpointGround.y} data-end-render-x={endpoint.x} data-end-render-y={endpoint.y} d={`M ${anchor.x} ${anchor.y} Q ${control.x} ${control.y} ${endpoint.x} ${endpoint.y}`} fill="none" stroke="#E2E8F0" strokeOpacity=".82" strokeWidth="1.8" vectorEffect="non-scaling-stroke" pointerEvents="none"/>}
+    {trajectory && endpointGround && endpoint && control && shadowControl && <><path data-shot-trajectory-shadow d={`M ${anchor.x} ${anchor.y} Q ${shadowControl.x} ${shadowControl.y} ${endpointGround.x} ${endpointGround.y}`} fill="none" stroke="#020617" strokeOpacity=".7" strokeWidth="1.4" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" pointerEvents="none"/><path data-shot-trajectory data-trajectory-kind={trajectory.endpointKind} data-end-pitch-x={trajectory.endX} data-end-pitch-y={trajectory.endY} data-end-goal-mouth={trajectory.endY >= GOAL_POST_Y[0] && trajectory.endY <= GOAL_POST_Y[1] ? "inside" : "outside"} data-end-height-meters={trajectory.endZMeters ?? undefined} data-end-height-lift={heightLift} data-trajectory-amplitude={arcAmplitude} data-end-ground-x={endpointGround.x} data-end-ground-y={endpointGround.y} data-end-render-x={endpoint.x} data-end-render-y={endpoint.y} d={`M ${anchor.x} ${anchor.y} Q ${control.x} ${control.y} ${endpoint.x} ${endpoint.y}`} fill="none" stroke="#E2E8F0" strokeOpacity=".82" strokeWidth="1.8" vectorEffect="non-scaling-stroke" pointerEvents="none"/>{([.22, .42, .62, .82] as const).map((t) => { const x = (1 - t) * (1 - t) * anchor.x + 2 * (1 - t) * t * control.x + t * t * endpoint.x; const y = (1 - t) * (1 - t) * anchor.y + 2 * (1 - t) * t * control.y + t * t * endpoint.y; const groundX = (1 - t) * anchor.x + t * endpointGround.x; const groundY = (1 - t) * anchor.y + t * endpointGround.y; return <path key={t} data-shot-trajectory-tie data-trajectory-t={t} d={`M ${groundX} ${groundY} L ${x} ${y}`} stroke="#CBD5E1" strokeOpacity=".38" strokeWidth=".85" vectorEffect="non-scaling-stroke" pointerEvents="none"/>; })}</>}
     {perspective && <><line data-shot-anchor x1={anchor.x} y1={anchor.y} x2={anchor.x} y2={markerY} stroke="#E2E8F0" strokeOpacity=".5" strokeWidth="1.2" strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/><ellipse data-shot-shadow cx={anchor.x} cy={anchor.y} rx={markerRadius * .9 * pixelScale} ry={markerRadius * .28 * pixelScale} fill="#020617" fillOpacity=".55"/></>}
     <g data-marker-visual data-pixel-scale={pixelScale} transform={`translate(${anchor.x} ${markerY}) scale(${pixelScale})`}><PitchShotMarker outcome={group.outcome} radius={markerRadius} count={group.count} outcomeCounts={group.outcomeCounts} expandedStack={tooltipId === id}/><circle data-marker-hit r="12" fill="transparent" pointerEvents="all" /></g>
   </g>;
 }
 
+type Vector3 = { x: number; y: number; z: number };
+const vector = (x: number, y: number, z: number): Vector3 => ({ x, y, z });
+const subtract = (from: Vector3, other: Vector3): Vector3 => vector(from.x - other.x, from.y - other.y, from.z - other.z);
+const dot = (left: Vector3, right: Vector3) => left.x * right.x + left.y * right.y + left.z * right.z;
+const cross = (left: Vector3, right: Vector3): Vector3 => vector(left.y * right.z - left.z * right.y, left.z * right.x - left.x * right.z, left.x * right.y - left.y * right.x);
+const normalizeVector = (value: Vector3): Vector3 => { const length = Math.hypot(value.x, value.y, value.z) || 1; return vector(value.x / length, value.y / length, value.z / length); };
+const orbitWorldPoint = ({ x, y }: PitchPoint, z = 0): Vector3 => vector(clamp(x) * 1.05, clamp(y) * .68, z);
+
+/**
+ * Perspective projection from the specified orbit camera. The frame scale uses
+ * cover (max), deliberately allowing the other pitch area to overflow.
+ */
+export function createOrbitProjection(camera: OrbitCamera, frame: CameraFrame): Projection {
+  const azimuth = camera.azimuth * Math.PI / 180;
+  const elevation = camera.elevation * Math.PI / 180;
+  const pivot = vector(ORBIT_PIVOT.x, ORBIT_PIVOT.y, ORBIT_PIVOT.z);
+  const cameraPoint = vector(pivot.x + camera.distance * Math.cos(elevation) * Math.cos(azimuth), pivot.y + camera.distance * Math.cos(elevation) * Math.sin(azimuth), pivot.z + camera.distance * Math.sin(elevation));
+  const forward = normalizeVector(subtract(pivot, cameraPoint));
+  const right = normalizeVector(cross(forward, vector(0, 0, 1)));
+  const up = cross(right, forward);
+  const projectRaw = (point: PitchPoint, z = 0) => {
+    const delta = subtract(orbitWorldPoint(point, z), cameraPoint);
+    const depth = Math.max(.001, dot(delta, forward));
+    return { x: dot(delta, right) / depth, y: dot(delta, up) / depth };
+  };
+  const bounds = ORBIT_FRAME[frame];
+  const corners = [projectRaw({ x: bounds.x0, y: bounds.y0 }), projectRaw({ x: bounds.x0, y: bounds.y1 }), projectRaw({ x: bounds.x1, y: bounds.y0 }), projectRaw({ x: bounds.x1, y: bounds.y1 })];
+  const minX = Math.min(...corners.map((point) => point.x)), maxX = Math.max(...corners.map((point) => point.x));
+  const minY = Math.min(...corners.map((point) => point.y)), maxY = Math.max(...corners.map((point) => point.y));
+  const scale = Math.max(900 / Math.max(.001, maxX - minX), 540 / Math.max(.001, maxY - minY));
+  const centreX = (minX + maxX) / 2, centreY = (minY + maxY) / 2;
+  return (point) => { const raw = projectRaw(point); return { x: 500 + (raw.x - centreX) * scale, y: 325 - (raw.y - centreY) * scale }; };
+}
+
 function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, contextIdentity }: { spatial: PlayerAnalysis["spatial"] | undefined; mode: ViewMode; filterId: string; visibleOutcomes: ReadonlySet<ShotOutcome>; markerLayerId: string; contextIdentity: string }) {
   const perspective = mode === "perspective";
-  const projection = perspective ? projectPerspective : projectPlan;
+  const [camera, setCamera] = useState<OrbitCamera>(DEFAULT_ORBIT_CAMERA);
+  const [cameraFrame, setCameraFrame] = useState<CameraFrame>("attacking");
+  const projection = useMemo(() => perspective ? createOrbitProjection(camera, cameraFrame) : projectPlan, [camera, cameraFrame, perspective]);
   const heatValid = Boolean(spatial?.available && spatial.heatmapPointCount === spatial.heatmapPoints.length && spatial.heatmapPoints.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= 100 && y >= 0 && y <= 100));
   const heat = heatValid ? spatial!.heatmapPoints : EMPTY_HEAT;
   const shotsValid = shotIntegrity(spatial);
@@ -268,7 +326,8 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
   const rendered = usePerspectivePixelScale();
   const [zoom, setZoom] = useState<ZoomLevel>(1), [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0 });
   const pointerPan = useRef<{ pointerId: number; clientX: number; clientY: number; viewport: Viewport } | null>(null);
-  const resetViewport = () => { pointerPan.current = null; setZoom(1); setViewport({ x: 0, y: 0 }); };
+  const pointerOrbit = useRef<{ pointerId: number; clientX: number; clientY: number; camera: OrbitCamera } | null>(null);
+  const resetViewport = () => { pointerPan.current = null; pointerOrbit.current = null; setZoom(1); setViewport({ x: 0, y: 0 }); setCamera(DEFAULT_ORBIT_CAMERA); setCameraFrame("attacking"); };
   useEffect(() => { resetViewport(); }, [contextIdentity]);
   const visibleViewport = zoomViewport(zoom);
   const viewBox = `${viewport.x} ${viewport.y} ${visibleViewport.width} ${visibleViewport.height}`;
@@ -283,14 +342,14 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
   const tooltipEntry = markerGroups.find((group) => `${filterId}-shot-${group.key}` === tooltipIdState);
   const navigate = (visibleIndex: number, direction: 1 | -1) => { if (!markerGroups.length) return; const next = markerGroups[(visibleIndex + direction + markerGroups.length) % markerGroups.length]; const id = `${filterId}-shot-${next.key}`; setActiveId(id); setTooltipIdState(id); markerRefs.current.get(id)?.focus(); };
   const visibleGroups = outcomeOrder.filter((outcome) => visibleOutcomes.has(outcome) && spatial?.shotmapPoints.some((shot) => shot.outcome === outcome));
-  return <><div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/25 px-2 py-2"><div role="group" aria-label="Perspective zoom controls" className="flex flex-wrap items-center gap-1"><button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-11 min-w-11 rounded border border-white/15 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-orange-200">−</button><button type="button" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-11 min-w-11 rounded border border-white/15 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-orange-200">+</button><button type="button" aria-label="Reset zoom and pan" disabled={zoom === 1 && viewport.x === 0 && viewport.y === 0} onClick={resetViewport} className="min-h-11 min-w-11 rounded border border-white/15 px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-orange-200">Reset</button></div><p aria-live="polite" className="text-xs text-zinc-300">Perspective zoom {zoom}×</p></div><svg ref={rendered.ref} viewBox={viewBox} preserveAspectRatio="xMidYMid meet" className="block h-auto w-full rounded-b-lg bg-[#070b0d] touch-pan-y" role="img" tabIndex={0} aria-label={`${perspective ? "Perspective" : "Two-dimensional"} attacking pitch with exact 6-depth by 5-lane positional grid. ${heatState}. ${shotState}. Visible shot outcomes: ${outcomeSummary(visibleGroups)}. Outcome controls change markers only.`} onPointerDown={(event) => { if (zoom === 1 || event.defaultPrevented || isInteractivePitchTarget(event.target)) return; pointerPan.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport }; event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { const start = pointerPan.current; if (!start || start.pointerId !== event.pointerId) return; const bounds = event.currentTarget.getBoundingClientRect(); if (!bounds.width || !bounds.height) return; setViewport(clampViewport({ x: start.viewport.x - (event.clientX - start.clientX) * visibleViewport.width / bounds.width, y: start.viewport.y - (event.clientY - start.clientY) * visibleViewport.height / bounds.height }, zoom)); }} onPointerUp={(event) => { if (pointerPan.current?.pointerId !== event.pointerId) return; pointerPan.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onPointerCancel={(event) => { if (pointerPan.current?.pointerId !== event.pointerId) return; pointerPan.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); resetViewport(); return; } if (event.defaultPrevented || event.target !== event.currentTarget) return; if (zoom === 1) return; const step = Math.min(48, visibleViewport.width / 5); if (event.key === "ArrowLeft") { event.preventDefault(); panBy(-step, 0); } else if (event.key === "ArrowRight") { event.preventDefault(); panBy(step, 0); } else if (event.key === "ArrowUp") { event.preventDefault(); panBy(0, -step); } else if (event.key === "ArrowDown") { event.preventDefault(); panBy(0, step); } }}>
+  return <><div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/25 px-2 py-2"><div role="group" aria-label={PITCH_VIEW_COPY.cameraFrameGroup} className="flex flex-wrap items-center gap-1">{(["full", "attacking", "box"] as const).map((frame) => <button key={frame} type="button" aria-pressed={cameraFrame === frame} onClick={() => setCameraFrame(frame)} className="min-h-9 rounded border border-white/15 px-2 text-xs font-bold aria-pressed:bg-sky-200 aria-pressed:text-slate-950">{PITCH_VIEW_COPY.cameraFrames[frame]}</button>)}</div><div role="group" aria-label={PITCH_VIEW_COPY.cameraZoomGroup} className="flex items-center gap-1"><button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40">−</button><button type="button" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40">+</button><button type="button" aria-label={PITCH_VIEW_COPY.resetCamera} onClick={resetViewport} className="min-h-9 rounded border border-white/15 px-3 text-xs font-bold">Reset</button></div><p aria-live="polite" className="text-xs text-zinc-300">{perspective ? `Orbit ${camera.azimuth.toFixed(0)}° / ${camera.elevation.toFixed(0)}° / ${camera.distance.toFixed(0)}m` : `Perspective zoom ${zoom}×`}</p></div><svg ref={rendered.ref} viewBox={viewBox} preserveAspectRatio="xMidYMid meet" className="block h-auto w-full rounded-b-lg bg-[#070b0d] touch-pan-y" role="img" tabIndex={0} aria-label={`${perspective ? "Perspective" : "Two-dimensional"} attacking pitch with exact 6-depth by 5-lane positional grid. ${heatState}. ${shotState}. Visible shot outcomes: ${outcomeSummary(visibleGroups)}. Outcome controls change markers only.`} data-camera-azimuth={perspective ? camera.azimuth : undefined} data-camera-elevation={perspective ? camera.elevation : undefined} data-camera-distance={perspective ? camera.distance : undefined} data-camera-frame={perspective ? cameraFrame : undefined} onWheel={(event) => { if (!perspective) return; event.preventDefault(); setCamera((current) => ({ ...current, distance: Math.max(48, Math.min(132, current.distance + event.deltaY * .04)) })); }} onPointerDown={(event) => { if (event.defaultPrevented || isInteractivePitchTarget(event.target)) return; if (perspective) { pointerOrbit.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, camera }; event.currentTarget.setPointerCapture?.(event.pointerId); return; } if (zoom === 1) return; pointerPan.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport }; event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { const orbit = pointerOrbit.current; if (orbit?.pointerId === event.pointerId) { setCamera({ azimuth: orbit.camera.azimuth - (event.clientX - orbit.clientX) * .22, elevation: Math.max(12, Math.min(65, orbit.camera.elevation + (event.clientY - orbit.clientY) * .18)), distance: orbit.camera.distance }); return; } const start = pointerPan.current; if (!start || start.pointerId !== event.pointerId) return; const bounds = event.currentTarget.getBoundingClientRect(); if (!bounds.width || !bounds.height) return; setViewport(clampViewport({ x: start.viewport.x - (event.clientX - start.clientX) * visibleViewport.width / bounds.width, y: start.viewport.y - (event.clientY - start.clientY) * visibleViewport.height / bounds.height }, zoom)); }} onPointerUp={(event) => { if (pointerOrbit.current?.pointerId === event.pointerId) pointerOrbit.current = null; if (pointerPan.current?.pointerId === event.pointerId) pointerPan.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onPointerCancel={(event) => { if (pointerOrbit.current?.pointerId === event.pointerId) pointerOrbit.current = null; if (pointerPan.current?.pointerId === event.pointerId) pointerPan.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onLostPointerCapture={() => { pointerPan.current = null; pointerOrbit.current = null; }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); resetViewport(); return; } if (event.defaultPrevented || event.target !== event.currentTarget || perspective || zoom === 1) return; const step = Math.min(48, visibleViewport.width / 5); if (event.key === "ArrowLeft") { event.preventDefault(); panBy(-step, 0); } else if (event.key === "ArrowRight") { event.preventDefault(); panBy(step, 0); } else if (event.key === "ArrowUp") { event.preventDefault(); panBy(0, -step); } else if (event.key === "ArrowDown") { event.preventDefault(); panBy(0, step); } }}>
     <defs><clipPath id={`${filterId}-pitch-clip`}><path d={pitchShape}/></clipPath><linearGradient id={`${filterId}-grass`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#0f6f42"/><stop offset="1" stopColor="#06432e"/></linearGradient></defs>
     <path d={pitchShape} fill={`url(#${filterId}-grass)`} stroke="#143d2f" strokeWidth="9" />
     <GoalFrames projection={projection}/>
     <HeatLayer mesh={densityMesh} clipId={`${filterId}-pitch-clip`} buildCount={meshBuildCount.current}/>
     <PitchMarkings projection={projection}/>
     <PositionalGrid projection={projection}/>
-    {contour.length > 0 && <g data-layer="cca-contour" fill="none" stroke="#c044ff" strokeWidth="3" vectorEffect="non-scaling-stroke">{contour.map(([x1, y1, x2, y2], index) => <path key={index} d={pathBetween(projection, { x: x1, y: 100 - y1 }, { x: x2, y: 100 - y2 })}/>)}</g>}
+    {contour.length > 0 && <g data-layer="cca-contour" fill="none" stroke="#C084FC" strokeWidth="3" vectorEffect="non-scaling-stroke">{contour.map(([x1, y1, x2, y2], index) => <path key={index} d={pathBetween(projection, { x: x1, y: 100 - y1 }, { x: x2, y: 100 - y2 })}/>)}</g>}
     <g id={markerLayerId} data-layer="shots">{markerGroups.map((group, visibleIndex) => { const id = `${filterId}-shot-${group.key}`; return <ShotGlyph key={id} group={group} medianXg={medianXg} projection={projection} perspective={perspective} pixelScale={pixelScale} id={id} active={id === activeVisibleId} tooltipId={tooltipId} registerRef={(element) => { if (element) markerRefs.current.set(id, element); else markerRefs.current.delete(id); }} onActivate={(markerId) => { setActiveId(markerId); setTooltipIdState(markerId); }} onDeactivate={(markerId) => { if (tooltipIdState === markerId) setTooltipIdState(null); }} onNavigate={(direction) => navigate(visibleIndex, direction)}/>; })}</g>
     {tooltipEntry && (() => { const anchor = projection(tooltipEntry.shot), tooltipWidth = 150, tooltipHeight = 62; const maxX = Math.max(0, BASE_VIEWPORT.width - tooltipWidth * pixelScale), maxY = Math.max(0, BASE_VIEWPORT.height - tooltipHeight * pixelScale); const x = Math.min(maxX, Math.max(0, anchor.x - 70 * pixelScale)), y = Math.min(maxY, Math.max(0, anchor.y - 82 * pixelScale)); return <g id={tooltipId} role="tooltip" pointerEvents="none" data-tooltip-width={tooltipWidth} data-tooltip-height={tooltipHeight} data-pixel-scale={pixelScale} transform={`translate(${x} ${y}) scale(${pixelScale})`}><rect width={tooltipWidth} height={tooltipHeight} rx="7" fill="#0b0e0f" fillOpacity=".96" stroke="#ffffff" strokeOpacity=".25"/><text x="10" y="18" fill="#f4f4f5" fontSize="12" fontWeight="700">{outcomePresentation[tooltipEntry.shot.outcome].label}</text><text x="10" y="37" fill="#e4e4e7" fontSize="11">xG {formatShotMetric(tooltipEntry.shot.xg)}</text><text x="10" y="53" fill="#e4e4e7" fontSize="11">xGOT {formatShotMetric(tooltipEntry.shot.xgot)}</text></g>; })()}
     <g fill="#e4e4e7" fontSize="13" fontWeight="700" aria-hidden="true"><text x="36" y="630">Attack direction 0 → 100</text><text x="835" y="584">Lane 1 · right</text><text x="194" y="73">Lane 5 · left</text></g>
