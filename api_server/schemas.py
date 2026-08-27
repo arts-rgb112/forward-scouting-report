@@ -2736,6 +2736,55 @@ class GoalMouthBaselineCell(BaseModel):
         return self
 
 
+class GoalMouthPlacementSummary(BaseModel):
+    """Player-context placement value, authored from the published 10x5 grid."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    onFrameShots: int = Field(ge=0)
+    placementExpectedGoals: float = Field(ge=0)
+    actualGoals: int = Field(ge=0)
+    delta: float
+    excludesPenalties: bool
+
+    @model_validator(mode="after")
+    def validate_summary(self) -> "GoalMouthPlacementSummary":
+        if self.actualGoals > self.onFrameShots:
+            raise ValueError("placement goals cannot exceed on-frame shots")
+        if self.placementExpectedGoals > self.onFrameShots:
+            raise ValueError("placement expected goals cannot exceed on-frame shots")
+        if self.delta != round(self.actualGoals - self.placementExpectedGoals, 4):
+            raise ValueError("placement delta must equal goals minus placement expected goals")
+        return self
+
+
+class PitchHexFrequencyCell(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    hexId: str = Field(pattern=r"^hex_[mp]\d+_[mp]\d+$")
+    cx: float = Field(ge=66.7, le=100)
+    cy: float = Field(ge=10, le=90)
+    shots: int = Field(ge=1)
+
+
+class PitchHexFrequency(BaseModel):
+    """Server-binned player frequency only; league color baseline is not published yet."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    definitionVersion: Literal["hex-r2-crop-v2"] = "hex-r2-crop-v2"
+    excludesPenalties: Literal[True] = True
+    cells: list[PitchHexFrequencyCell]
+    outOfCropShots: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_cells(self) -> "PitchHexFrequency":
+        ids = [cell.hexId for cell in self.cells]
+        if ids != sorted(ids) or len(ids) != len(set(ids)):
+            raise ValueError("pitch hex cells must be unique and sorted by hexId")
+        return self
+
+
 class GoalMouthBaselineData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -2745,6 +2794,8 @@ class GoalMouthBaselineData(BaseModel):
     minimumCellSample: Literal[150] = 150
     provenance: GoalMouthBaselineProvenance
     cells: list[GoalMouthBaselineCell] = Field(min_length=50, max_length=50)
+    placementSummary: GoalMouthPlacementSummary | None = None
+    hexFrequency: PitchHexFrequency | None = None
 
     @model_validator(mode="after")
     def validate_baseline(self) -> "GoalMouthBaselineData":
@@ -2779,6 +2830,10 @@ class GoalMouthBaselineData(BaseModel):
                 raise ValueError("unavailable goal-mouth baseline provenance totals must be null")
             if any(cell.state != "unavailable" or cell.reason != self.reason for cell in self.cells):
                 raise ValueError("unavailable goal-mouth baseline cells must match the root reason")
+            if self.placementSummary is not None or self.hexFrequency is not None:
+                raise ValueError("unavailable goal-mouth baseline cannot contain player-context summaries")
+        if (self.placementSummary is None) != (self.hexFrequency is None):
+            raise ValueError("player-context placement and hex frequency fields must be published together")
         return self
 
 

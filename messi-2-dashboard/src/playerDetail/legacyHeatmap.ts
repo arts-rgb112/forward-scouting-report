@@ -9,6 +9,8 @@ export const HEATMAP_ROWS = 22;
 export const DISPLAY_HEATMAP_COLUMNS = 96;
 export const DISPLAY_HEATMAP_ROWS = 66;
 export const DISPLAY_HEATMAP_COLOR_STAGES = 12;
+/** Display-only tone mapping. Native density stays unchanged for CCA/HDR. */
+export const HEATMAP_DISPLAY_GAMMA = .6;
 export const HEATMAP_KERNEL = [1, 4, 6, 4, 1] as const;
 export const HEATMAP_STOPS = [
   [0, [0, 0, 0, 0]],
@@ -110,13 +112,22 @@ export function legacyHeatmapColor(value: number): readonly [number, number, num
   ];
 }
 
+/**
+ * Maps native normalized density to the visual ramp only. Do not feed this
+ * value to contour/HDR calculations: their threshold contract uses native
+ * normalized density from the 32 × 22 grid.
+ */
+export function displayHeatmapColor(nativeNormalizedDensity: number): readonly [number, number, number, number] {
+  return legacyHeatmapColor(Math.pow(clamp(nativeNormalizedDensity, 0, 1), HEATMAP_DISPLAY_GAMMA));
+}
+
 /** Paint to the same logical coordinate plane as the SVG: x=-4..104, y=0..100. */
 export function renderLegacyHeatmap(ctx: CanvasRenderingContext2D, width: number, height: number, normalized: HeatmapGrid): void {
   const pixels = ctx.createImageData(width, height);
   for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
     const sourceX = -4 + ((x + .5) / width) * 108;
     const sourceY = 100 - ((y + .5) / height) * 100;
-    const [red, green, blue, alpha] = legacyHeatmapColor(bilinearDensity(normalized, sourceX, sourceY));
+    const [red, green, blue, alpha] = displayHeatmapColor(bilinearDensity(normalized, sourceX, sourceY));
     const offset = (y * width + x) * 4;
     pixels.data[offset] = Math.round(red);
     pixels.data[offset + 1] = Math.round(green);
@@ -127,7 +138,11 @@ export function renderLegacyHeatmap(ctx: CanvasRenderingContext2D, width: number
 }
 
 /** Paint the 96 × 66 display-only interpolation; never use this for contours. */
-export function renderDisplayHeatmap(ctx: CanvasRenderingContext2D, width: number, height: number, display: HeatmapGrid): void {
+/**
+ * Paint a display-only heatmap. Opacity is a view concern: callers must not
+ * feed it back into the native density/CCA path.
+ */
+export function renderDisplayHeatmap(ctx: CanvasRenderingContext2D, width: number, height: number, display: HeatmapGrid, opacity = HEATMAP_OPACITY): void {
   const pixels = ctx.createImageData(width, height);
   const atDisplay = (row: number, column: number) => display[Math.min(DISPLAY_HEATMAP_ROWS - 1, Math.max(0, row)) * DISPLAY_HEATMAP_COLUMNS + Math.min(DISPLAY_HEATMAP_COLUMNS - 1, Math.max(0, column))] ?? 0;
   for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
@@ -139,9 +154,9 @@ export function renderDisplayHeatmap(ctx: CanvasRenderingContext2D, width: numbe
     const tx = clamp(rawColumn - left, 0, 1), ty = clamp(rawRow - top, 0, 1);
     const upper = atDisplay(top, left) * (1 - tx) + atDisplay(top, left + 1) * tx;
     const lower = atDisplay(top + 1, left) * (1 - tx) + atDisplay(top + 1, left + 1) * tx;
-    const [red, green, blue, alpha] = legacyHeatmapColor(upper * (1 - ty) + lower * ty);
+    const [red, green, blue, alpha] = displayHeatmapColor(upper * (1 - ty) + lower * ty);
     const offset = (y * width + x) * 4;
-    pixels.data[offset] = Math.round(red); pixels.data[offset + 1] = Math.round(green); pixels.data[offset + 2] = Math.round(blue); pixels.data[offset + 3] = Math.round(alpha * HEATMAP_OPACITY * 255);
+    pixels.data[offset] = Math.round(red); pixels.data[offset + 1] = Math.round(green); pixels.data[offset + 2] = Math.round(blue); pixels.data[offset + 3] = Math.round(alpha * opacity * 255);
   }
   ctx.putImageData(pixels, 0, 0);
 }

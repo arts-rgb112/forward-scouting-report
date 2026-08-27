@@ -16,8 +16,8 @@ import { getScoreBand, resolveTierPresentation } from "../dashboard/scoutingConf
 import { TierBadge } from "../dashboard/components/TierBadge";
 import type { DatasetRouteState, Player, PlayerAnalysis, TacticalQuadrant } from "../dashboard/types";
 import { axisDetail, detailMetrics, metricProfile, seasonScoreRows, selectedScore, tacticalCopy, wholeScore } from "./playerDetailViewModel";
-import { SpatialPitch } from "./SpatialPitch";
 import { PitchPenaltyProvider, PitchPenaltyToggle } from "./PitchPenaltyContext";
+import { PitchWorkspace } from "./PitchWorkspace";
 import { BenchmarkPanel, VolumeBenchmarkRadar as ServerVolumeBenchmarkRadar } from "./VolumeBenchmarkRadar";
 import { useRatioBenchmark } from "./useRatioBenchmark";
 import { BenchmarkRadarV2Panel } from "./BenchmarkRadarV2";
@@ -29,7 +29,6 @@ import { useTacticalSummaryV2 } from "./useTacticalSummaryV2";
 import { useVolumeBenchmark } from "./useVolumeBenchmark";
 import { DuelPressDetailReadoutBoard, DuelPressDetailReadoutUnavailable } from "./DuelPressDetailReadoutBoard";
 import { DuelPressV2DetailReadoutBoard, DuelPressV2DetailReadoutUnavailable } from "./DuelPressV2DetailReadoutBoard";
-import { FinalThirdShootingMap } from "./FinalThirdShootingMap";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
 const contextLabel = (context: DatasetRouteState) => context.mode === "league" ? `League · ${context.scope} leagues` : `Europe · ${context.competition.toUpperCase()}`;
@@ -160,8 +159,7 @@ export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality,
       <PitchPenaltyProvider summaryShots={analysis?.spatial.shotmapPoints}><section data-layout="tactical-spatial-workspace" className="min-w-0 rounded-xl border border-white/10 bg-[#0d1112] p-2 shadow-sm" aria-label="Tactical and spatial analysis">
         <TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/>
         <PitchPenaltyToggle/>
-        <div className="mt-2 min-w-0"><SpatialPitch analysis={analysis} contextIdentity={spatialContextIdentity}/></div>
-        <FinalThirdShootingMap config={config} playerId={player.id} dataset={dataset}/>
+        <div className="mt-2 min-w-0"><PitchWorkspace analysis={analysis} contextIdentity={spatialContextIdentity} config={config} playerId={player.id} dataset={dataset}/></div>
       </section></PitchPenaltyProvider>
     </div>
     </div>

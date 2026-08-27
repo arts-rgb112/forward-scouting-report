@@ -71,7 +71,8 @@ from .schemas import (
     FinalThirdQualityScale, FinalThirdShotData, FinalThirdShotEnvelope, FinalThirdShotZone,
     FinalThirdZoneFieldStates,
     GoalMouthBaselineCell, GoalMouthBaselineConfidenceInterval, GoalMouthBaselineData, GoalMouthBaselineEnvelope,
-    GoalMouthBaselineProvenance,
+    GoalMouthBaselineProvenance, GoalMouthPlacementSummary,
+    PitchHexFrequency, PitchHexFrequencyCell,
 )
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
 from .search import canonical_search_key
@@ -3093,6 +3094,13 @@ GOAL_MOUTH_BASELINE_SEASONS = (
 )
 GOAL_MOUTH_BASELINE_MINIMUM_CELL_SAMPLE = 150
 GOAL_MOUTH_BASELINE_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+PITCH_PENALTY_X = 89.524
+PITCH_PENALTY_Y = 50.0
+PITCH_HEX_RADIUS_METERS = 2.0
+PITCH_HEX_CROP_X_MIN = 66.7
+PITCH_HEX_CROP_Y_MIN = 10.0
+PITCH_HEX_CROP_Y_MAX = 90.0
+PITCH_HEX_AXIS_OFFSET_METERS = 1.5
 
 
 def _goal_mouth_baseline_shards() -> tuple[Path, ...]:
@@ -3249,9 +3257,159 @@ def _build_goal_mouth_baseline_cached(
     ))
 
 
-def build_goal_mouth_baseline() -> GoalMouthBaselineEnvelope:
-    """Return the cached global 10×5 baseline, invalidating only on its five inputs."""
-    return _build_goal_mouth_baseline_cached(goal_mouth_baseline_snapshot_revision())
+def _pitch_is_penalty(point: ShotmapPoint) -> bool:
+    """Use the provider's exact persisted penalty spot; never round a coordinate."""
+    return point.x == PITCH_PENALTY_X and point.y == PITCH_PENALTY_Y
+
+
+def _player_context_shot_points(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> list[ShotmapPoint] | None:
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    snapshots, _, _ = _final_third_source_snapshots(
+        player_id, player, season, mode, competition,
+    )
+    points: list[ShotmapPoint] = []
+    for heatmap_key, source_rows in snapshots:
+        for source_index, raw in enumerate(source_rows):
+            raw_point, _ = _shotmap_point_without_internal_identity(raw)
+            try:
+                points.append(ShotmapPoint.model_validate(raw_point))
+            except (TypeError, ValueError, ValidationError) as exc:
+                raise ShotmapContractViolation(
+                    "Pitch workspace snapshot contains an invalid record "
+                    f"at {heatmap_key} index {source_index}."
+                ) from exc
+    return points
+
+
+def _goal_mouth_placement_summary(
+    points: list[ShotmapPoint], cells: list[GoalMouthBaselineCell], *, include_penalties: bool,
+) -> GoalMouthPlacementSummary:
+    rates = {(cell.row - 1, cell.column - 1): cell.goalRatePct for cell in cells}
+    expected = 0.0
+    goals = 0
+    shots = 0
+    for point in points:
+        if not include_penalties and _pitch_is_penalty(point):
+            continue
+        available, mouth_y, mouth_z, _, _ = _final_third_endpoint(point)
+        if not (
+            available and mouth_y is not None and mouth_z is not None
+            and math.isfinite(mouth_y) and math.isfinite(mouth_z)
+            and 0 <= mouth_y <= 1 and 0 <= mouth_z <= 1
+        ):
+            continue
+        column = min(9, math.floor(mouth_y * 10))
+        row = min(4, math.floor(mouth_z * 5))
+        rate = rates.get((row, column))
+        if rate is None:
+            raise ShotmapContractViolation(
+                "Placement summary requires a numeric rate for every assigned baseline cell."
+            )
+        shots += 1
+        goals += int(point.outcome == "goal")
+        expected += rate / 100.0
+    expected = round(expected, 4)
+    return GoalMouthPlacementSummary(
+        onFrameShots=shots, placementExpectedGoals=expected, actualGoals=goals,
+        delta=round(goals - expected, 4), excludesPenalties=not include_penalties,
+    )
+
+
+def _pitch_hex_centers() -> tuple[tuple[str, float, float], ...]:
+    """Return deterministic player-frequency bin centers in pitch meters.
+
+    The source coordinates are transformed to a 105x68 metre pitch.  Rows are
+    mirrored from the penalty axis and begin at the product-specified 1.5 m
+    offset; only centers inside the published crop are candidates.
+    """
+    crop_x_m = PITCH_HEX_CROP_X_MIN / 100.0 * 105.0
+    crop_y_m = (PITCH_HEX_CROP_Y_MIN / 100.0 * 68.0) - 34.0
+    crop_y_max_m = (PITCH_HEX_CROP_Y_MAX / 100.0 * 68.0) - 34.0
+    horizontal_step = 1.5 * PITCH_HEX_RADIUS_METERS
+    vertical_step = math.sqrt(3.0) * PITCH_HEX_RADIUS_METERS
+    centers: list[tuple[str, float, float]] = []
+    column = 0
+    center_x = crop_x_m + PITCH_HEX_RADIUS_METERS
+    while center_x <= 105.0:
+        row = 0
+        while True:
+            magnitude = PITCH_HEX_AXIS_OFFSET_METERS + row * vertical_step
+            if magnitude > max(abs(crop_y_m), abs(crop_y_max_m)):
+                break
+            for sign, side in ((-1.0, "m"), (1.0, "p")):
+                center_y = sign * magnitude
+                if crop_y_m <= center_y <= crop_y_max_m:
+                    hex_id = f"hex_p{column:02d}_{side}{row:02d}"
+                    centers.append((hex_id, center_x, center_y))
+            row += 1
+        column += 1
+        center_x = crop_x_m + PITCH_HEX_RADIUS_METERS + column * horizontal_step
+    return tuple(centers)
+
+
+PITCH_HEX_CENTERS = _pitch_hex_centers()
+
+
+def _pitch_hex_frequency(points: list[ShotmapPoint]) -> PitchHexFrequency:
+    counts: dict[str, int] = {}
+    centers_by_id = {hex_id: (mx, my) for hex_id, mx, my in PITCH_HEX_CENTERS}
+    out_of_crop = 0
+    for point in points:
+        if _pitch_is_penalty(point):
+            continue
+        if not (
+            point.x >= PITCH_HEX_CROP_X_MIN
+            and PITCH_HEX_CROP_Y_MIN <= point.y <= PITCH_HEX_CROP_Y_MAX
+        ):
+            out_of_crop += 1
+            continue
+        mx = point.x / 100.0 * 105.0
+        my = point.y / 100.0 * 68.0 - 34.0
+        hex_id, _, _ = min(
+            PITCH_HEX_CENTERS,
+            key=lambda center: ((center[1] - mx) ** 2 + (center[2] - my) ** 2, center[0]),
+        )
+        counts[hex_id] = counts.get(hex_id, 0) + 1
+    cells = []
+    for hex_id in sorted(counts):
+        mx, my = centers_by_id[hex_id]
+        cells.append(PitchHexFrequencyCell(
+            hexId=hex_id,
+            cx=round(mx / 105.0 * 100.0, 4),
+            cy=round((my + 34.0) / 68.0 * 100.0, 4),
+            shots=counts[hex_id],
+        ))
+    return PitchHexFrequency(cells=cells, outOfCropShots=out_of_crop)
+
+
+def build_goal_mouth_baseline(
+    player_id: int | None = None, season: str | None = None, mode: str | None = None,
+    scope: int | None = None, competition: str | None = None, include_penalties: bool = True,
+) -> GoalMouthBaselineEnvelope | None:
+    """Return the global grid, optionally enriched by one exact player context."""
+    baseline = _build_goal_mouth_baseline_cached(goal_mouth_baseline_snapshot_revision())
+    if player_id is None:
+        return baseline
+    if None in (season, mode, scope, competition):
+        raise ValueError("player-context goal-mouth baseline arguments must be complete")
+    if not baseline.data.available:
+        return baseline
+    points = _player_context_shot_points(
+        player_id, str(season), str(mode), int(scope), str(competition),
+    )
+    if points is None:
+        return None
+    data = baseline.data.model_copy(update={
+        "placementSummary": _goal_mouth_placement_summary(
+            points, baseline.data.cells, include_penalties=include_penalties,
+        ),
+        "hexFrequency": _pitch_hex_frequency(points),
+    })
+    return GoalMouthBaselineEnvelope(data=data)
 
 
 def _final_third_segment(value: float, boundaries: tuple[float, ...]) -> int:

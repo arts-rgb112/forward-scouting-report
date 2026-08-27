@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { goalMouthBaselineEnvelopeSchema } from "./goalMouthBaselineContracts";
-import { goalMouthBaselineFixture, goalMouthBaselineLowSampleFixture } from "../test/fixtures/goalMouthBaseline";
+import { goalMouthBaselineFixture, goalMouthBaselineLowSampleFixture, goalMouthBaselinePlayerFixture } from "../test/fixtures/goalMouthBaseline";
 
 describe("goal-mouth baseline v1 contract", () => {
   it("requires the exact fifty server cells and preserves their reported values", () => {
@@ -16,5 +16,12 @@ describe("goal-mouth baseline v1 contract", () => {
     const invalid = structuredClone(goalMouthBaselineFixture); invalid.data.cells[40].zMin = 0;
     expect(goalMouthBaselineEnvelopeSchema.safeParse(invalid).success).toBe(false);
     expect(goalMouthBaselineEnvelopeSchema.safeParse({ ...goalMouthBaselineFixture, extra: true }).success).toBe(false);
+  });
+  it("accepts strict additive player summaries and rejects mismatched publication", () => {
+    expect(goalMouthBaselineEnvelopeSchema.parse(goalMouthBaselinePlayerFixture).data.placementSummary?.actualGoals).toBe(36);
+    const mismatched = structuredClone(goalMouthBaselinePlayerFixture); mismatched.data.hexFrequency = null;
+    expect(goalMouthBaselineEnvelopeSchema.safeParse(mismatched).success).toBe(false);
+    const wrongDelta = structuredClone(goalMouthBaselinePlayerFixture); wrongDelta.data.placementSummary!.delta = 1;
+    expect(goalMouthBaselineEnvelopeSchema.safeParse(wrongDelta).success).toBe(false);
   });
 });
