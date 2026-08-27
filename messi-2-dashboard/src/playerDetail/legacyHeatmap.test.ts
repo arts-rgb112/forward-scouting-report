@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_ROWS, HEATMAP_STOPS, bilinearDensity, displayDensityGrid, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
+import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_DISPLAY_GAMMA, HEATMAP_ROWS, HEATMAP_STOPS, bilinearDensity, displayDensityGrid, displayHeatmapColor, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
 
 describe("legacy 32 x 22 spatial raster", () => {
   it("keeps numpy-compatible endpoint values in the final bin", () => {
@@ -30,6 +30,13 @@ describe("legacy 32 x 22 spatial raster", () => {
     expect(HEATMAP_STOPS[1]).toEqual([.08, [124, 151, 71, .18]]);
     expect(HEATMAP_STOPS[4]).toEqual([.72, [247, 135, 39, .9]]);
     expect(legacyHeatmapColor(1)).toEqual([222, 63, 31, .98]);
+  });
+
+  it("applies gamma only when selecting display colours", () => {
+    const native = .24;
+    expect(HEATMAP_DISPLAY_GAMMA).toBe(.6);
+    expect(displayHeatmapColor(native)).toEqual(legacyHeatmapColor(native ** .6));
+    expect(native).toBe(.24);
   });
 
   it("upsamples only the display mesh and leaves the 32 by 22 scoring raster intact", () => {

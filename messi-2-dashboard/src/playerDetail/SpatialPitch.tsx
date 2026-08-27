@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
 import { LegacySpatialPitchFigure } from "./LegacySpatialPitch";
-import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, displayDensityGrid, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity } from "./legacyHeatmap";
+import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, displayDensityGrid, displayHeatmapColor, legacyDensityGrid, marchingSquares, normalizeDensity } from "./legacyHeatmap";
 import { groupPitchShots, medianObservedXg, pitchMarkerRadius, PitchShotMarker, type PitchShotGroup } from "./PitchShotMarker";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { excludePenaltyShots, penaltyStateLabel, summarizeShots } from "./pitchPenalties";
@@ -166,7 +166,7 @@ function prepareDensityMesh(displayDensity: Float64Array, projection: Projection
   return Array.from({ length: DISPLAY_HEATMAP_ROWS * DISPLAY_HEATMAP_COLUMNS }, (_, index) => {
       const row = Math.floor(index / DISPLAY_HEATMAP_COLUMNS), column = index % DISPLAY_HEATMAP_COLUMNS;
       const value = displayDensity[index] ?? 0;
-      const [red, green, blue, alpha] = legacyHeatmapColor(value);
+      const [red, green, blue, alpha] = displayHeatmapColor(value);
       const x0 = column * 100 / DISPLAY_HEATMAP_COLUMNS, x1 = (column + 1) * 100 / DISPLAY_HEATMAP_COLUMNS;
       const y0 = row * 100 / DISPLAY_HEATMAP_ROWS, y1 = (row + 1) * 100 / DISPLAY_HEATMAP_ROWS;
       return { index, row, column, normalized: value, fill: `rgb(${red} ${green} ${blue})`, fillOpacity: alpha * HEATMAP_OPACITY, d: polygonPath(projection, [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]) };

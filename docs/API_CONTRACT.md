@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 구현 진행 중 — 피치 워크스페이스 4탭 시안 적용 (2026-08-28 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-pitch-workspace
+- 범위/순서: `CODEX_PITCH_TABS_WORK_ORDER.md` §8에 따라 하나의 새 브랜치/PR에서 표시용 히트맵 감마, 질문형 4탭, 2D 활동 격자, 3D 슛-엔드포인트, Goal-Mouth 배치 기준선, Hex 골격과 잔존 영문 한국어화를 탭별 커밋으로 적용한다. Figma, API·점수·CCA/HDR 산식, feature flag, SportsAPI Tier 3 수집, 배포는 변경하지 않는다. 첫 커밋의 gamma `0.6`은 색 선택에만 적용하며 32×22 native normalized density와 contour/HDR threshold/발행 CCA 면적은 그대로 유지한다. 커밋별 로컬 테스트 및 스크린샷을 시도하고, 브라우저 자동 제어 실패 시 이를 명시한다.
+
 - 상태: 로컬 구현·검증 완료 — PR #295 공용 피치 마커 시각 정정 6건, 병합 전 CI 확인 대기
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-pitch-workspace
 - 범위/결과: 2026-08-28 갱신된 `CODEX_PITCH_TABS_WORK_ORDER.md` §1-3/§1-4/§1-4a/§1-4b에 맞춰, 공용 마커 반지름을 결과별 고정값이 아닌 `r = 3 + 7 × √xG`로 교체했다. xG가 없으면 payload의 관측 xG 중앙값 크기를 쓰고 aria-label/title에 `xG 미상; 중앙값 크기`를 남긴다. 패턴은 r<7 원 또는 r>=7 오각형+5 spoke의 두 단계뿐이다. 골문 탭도 같은 `PitchShotMarker`를 사용하여 흰 몸통/결과색 테두리/필수 다크 헤일로로 통일했고 빗나감·블록은 `#0B1220` 35%의 비움과 결과색 선 패턴을 사용한다. 혼합 스택 배지는 기본 `×n`, hover/focus 때만 구성으로 확장하며 기본에서도 점선 amber 테두리·표시점으로 혼합 사실을 드러내고 aria-label에는 항상 구성을 포함한다. `legacyHeatmap.ts`의 stop만 라이브 올리브→황록→노랑→주황→빨강 ramp로 교체했으며 32×22 산식/CCA/업샘플/불투명도 상한은 변경하지 않았다. focused 58 tests와 production build가 통과했다. Figma·Tier 3 수집·feature flag·배포는 변경하지 않았고, 실제 local dev QA와 remote strict CI 확인 뒤 PR #295 병합만 수행한다.
