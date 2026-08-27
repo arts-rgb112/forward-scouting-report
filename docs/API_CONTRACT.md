@@ -2,9 +2,10 @@
 
 ## 진행 중인 작업
 
-- 상태: 구현 진행 중 — 피치 워크스페이스 4탭 시안 적용 (2026-08-28 KST)
+- 상태: 로컬 구현·실데이터 QA 완료 — 피치 워크스페이스 3개 1층 탭 + 접힌 헥스 원자료 (2026-08-28 KST), PR 준비 중
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-pitch-workspace
-- 범위/순서: `CODEX_PITCH_TABS_WORK_ORDER.md` §8에 따라 하나의 새 브랜치/PR에서 표시용 히트맵 감마, 질문형 4탭, 2D 활동 격자, 3D 슛-엔드포인트, Goal-Mouth 배치 기준선, Hex 골격과 잔존 영문 한국어화를 탭별 커밋으로 적용한다. Figma, API·점수·CCA/HDR 산식, feature flag, SportsAPI Tier 3 수집, 배포는 변경하지 않는다. 첫 커밋의 gamma `0.6`은 색 선택에만 적용하며 32×22 native normalized density와 contour/HDR threshold/발행 CCA 면적은 그대로 유지한다. 커밋별 로컬 테스트 및 스크린샷을 시도하고, 브라우저 자동 제어 실패 시 이를 명시한다.
+- 범위/결과: `CODEX_PITCH_TABS_WORK_ORDER.md` §8/§7-1에 따라 하나의 브랜치에서 표시 전용 heat gamma `0.6`, 질문형 3개 1층 탭, Guardiola 20-zone/선택 6-lane guide, orbit 3D shot trajectory, Goal-Mouth placement summary, 접힌 3층 hex frequency 골격을 순서별 커밋으로 구현했다. 기존 무쿼리 `GET /api/v2/goal-mouth-baseline`의 50셀/provenance/cache는 그대로이고, 완전한 player context query에만 strict additive `placementSummary`와 `hexFrequency`를 함께 반환한다. placement는 서버가 원본 goal-mouth endpoint를 10x5 baseline cell에 배정해 cell goal rate를 합산하며 shared penalty toggle과 같은 include/exclude 상태를 쓴다. hex는 서버가 원좌표를 105x68m로 변환하고 PK를 항상 제외해 crop `x>=66.7,y=10..90`의 표본 있는 cell/shots 및 `outOfCropShots`만 발행한다; 색 baseline은 아직 없으므로 프론트는 빈 outline/준비 중 상태만 표시한다. 브라우저는 집계·평균·백분위를 만들지 않는다. native 32x22 CCA/HDR, 점수·CSV·flags, SportsAPI Tier3, Figma, 기존 잔존 영문은 변경하지 않았다.
+- 실데이터/검증: 현재 static source의 Kane 194165/2025-26/league/scope7은 문서 예시 `16/5.23/6`과 달리 PK 포함 `onFrameShots=67, placementExpectedGoals=23.5508, actualGoals=36, delta=12.4492`, PK 제외 `57/18.7970/26/7.2030`이며, hex는 PK 제외 108발 중 crop 안 107/밖 1(점유 cell 55)이다. 기존 observed summary `119/36/xG26.65/30.3%`와 제외 `108/26/xG17.98/24.1%`까지 합계가 일치한다. 예시 숫자에 맞춘 임의 필터는 추가하지 않았다. backend mapped regression `118 passed, 3 subtests`, frontend C/D focused `33 passed`, production build가 통과했다. 로컬 dev에서 Goal-Mouth/hex 실화면과 toggle 재요청을 확인했고 browser console error/warning은 실제 0건이었다. 로컬 API 로그에는 이번 C/D 요청이 모두 200인 것과 별개로 기존 season-history background 요청의 504 timeout 4건 및 2021/22 Europe 부재 404 1건이 실제 관측됐다. QA 종료 뒤 8001/5176/5177 포트 해제를 확인했다. 병합·배포는 별도 승인 전 금지한다.
 
 - 상태: 로컬 구현·검증 완료 — PR #295 공용 피치 마커 시각 정정 6건, 병합 전 CI 확인 대기
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-pitch-workspace
