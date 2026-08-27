@@ -3,11 +3,11 @@ import type { ShotmapPoint } from "../dashboard/types";
 import type { ShotOutcome } from "./shotOutcomeVisibility";
 
 /** The only pitch-shot marker vocabulary used by the four-tab workspace. */
-const presentation: Record<ShotOutcome, { fill: string; stroke: string; strokeOpacity: number; strokeWidth: number }> = {
-  goal: { fill: "#BEF264", stroke: "#0A1F10", strokeOpacity: 1, strokeWidth: 1.4 },
-  on_target: { fill: "#38BDF8", stroke: "#0A1F10", strokeOpacity: 1, strokeWidth: 1.1 },
-  off_target: { fill: "none", stroke: "#E2E8F0", strokeOpacity: .65, strokeWidth: 1.2 },
-  blocked: { fill: "none", stroke: "#94A3B8", strokeOpacity: .6, strokeWidth: 1.2 },
+const presentation: Record<ShotOutcome, { resultColor: string; strokeOpacity: number; strokeWidth: number; reachesFrame: boolean }> = {
+  goal: { resultColor: "#BEF264", strokeOpacity: 1, strokeWidth: 1.6, reachesFrame: true },
+  on_target: { resultColor: "#38BDF8", strokeOpacity: 1, strokeWidth: 1.45, reachesFrame: true },
+  off_target: { resultColor: "#E2E8F0", strokeOpacity: .75, strokeWidth: 1.3, reachesFrame: false },
+  blocked: { resultColor: "#94A3B8", strokeOpacity: .7, strokeWidth: 1.3, reachesFrame: false },
 };
 
 /** Paint order is intentionally independent of the API/source order. */
@@ -64,21 +64,35 @@ const pentagonPath = (radius: number) => Array.from({ length: 5 }, (_, index) =>
   return `${index ? "L" : "M"}${x.toFixed(3)} ${y.toFixed(3)}`;
 }).join(" ") + " Z";
 
-export function PitchShotMarker({ outcome, radius, count = 1, outcomeCounts }: { outcome: ShotOutcome; radius: number; count?: number; outcomeCounts?: Readonly<Record<ShotOutcome, number>> }) {
+export function PitchShotMarker({ outcome, radius, count = 1, outcomeCounts, expandedStack = false }: { outcome: ShotOutcome; radius: number; count?: number; outcomeCounts?: Readonly<Record<ShotOutcome, number>>; expandedStack?: boolean }) {
   const style = presentation[outcome];
-  const hasPentagon = radius >= 5;
-  const hasSpokes = radius >= 9;
-  return <g data-pitch-shot-marker data-marker-radius={radius} data-marker-pattern={hasSpokes ? "full" : hasPentagon ? "pentagon" : "circle"} data-marker-outcome={outcome}>
-    <circle data-pitch-shot-glyph r={radius} fill={style.fill} stroke={style.stroke} strokeOpacity={style.strokeOpacity} strokeWidth={style.strokeWidth} vectorEffect="non-scaling-stroke" />
-    {hasPentagon && <path data-marker-pentagon d={pentagonPath(radius)} fill={outcome === "off_target" ? "none" : "#0A1F10"} fillOpacity={outcome === "on_target" ? .75 : 1} stroke={outcome === "off_target" ? style.stroke : "#0A1F10"} strokeOpacity={outcome === "off_target" ? style.strokeOpacity : 1} strokeWidth={Math.max(.7, radius * .1)} vectorEffect="non-scaling-stroke" />}
-    {hasSpokes && Array.from({ length: 5 }, (_, index) => {
+  const hasPattern = radius >= 7;
+  const patternColor = style.reachesFrame ? "#111827" : style.resultColor;
+  return <g data-pitch-shot-marker data-marker-radius={radius} data-marker-pattern={hasPattern ? "full" : "circle"} data-marker-outcome={outcome}>
+    <circle data-marker-halo r={radius + Math.max(1.1, radius * .16)} fill="none" stroke="#0A1F10" strokeWidth={Math.max(2.2, radius * .34)} vectorEffect="non-scaling-stroke" />
+    <circle data-pitch-shot-glyph data-marker-result-color={style.resultColor} r={radius} fill={style.reachesFrame ? "#F8FAFC" : "#0B1220"} fillOpacity={style.reachesFrame ? 1 : .35} stroke={style.resultColor} strokeOpacity={style.strokeOpacity} strokeWidth={Math.max(style.strokeWidth, outcome === "goal" ? radius * .3 : radius * .16)} vectorEffect="non-scaling-stroke" />
+    {hasPattern && <path data-marker-pentagon d={pentagonPath(radius)} fill={style.reachesFrame ? "#111827" : "none"} stroke={patternColor} strokeOpacity={style.reachesFrame ? 1 : style.strokeOpacity} strokeWidth={Math.max(.75, radius * .1)} vectorEffect="non-scaling-stroke" />}
+    {hasPattern && Array.from({ length: 5 }, (_, index) => {
       const angle = -Math.PI / 2 + index * Math.PI * 2 / 5;
       const inner = radius * .42, outer = radius * .95;
-      return <line key={index} data-marker-spoke x1={Math.cos(angle) * inner} y1={Math.sin(angle) * inner} x2={Math.cos(angle) * outer} y2={Math.sin(angle) * outer} stroke={outcome === "off_target" ? style.stroke : "#0A1F10"} strokeOpacity={outcome === "off_target" ? style.strokeOpacity : .9} strokeWidth={Math.max(.65, radius * .08)} vectorEffect="non-scaling-stroke" />;
+      return <line key={index} data-marker-spoke x1={Math.cos(angle) * inner} y1={Math.sin(angle) * inner} x2={Math.cos(angle) * outer} y2={Math.sin(angle) * outer} stroke={patternColor} strokeOpacity={style.reachesFrame ? .9 : style.strokeOpacity} strokeWidth={Math.max(.65, radius * .08)} vectorEffect="non-scaling-stroke" />;
     })}
-    {outcome === "blocked" && <line data-marker-block-bar x1={-radius * .7} y1="0" x2={radius * .7} y2="0" stroke={style.stroke} strokeOpacity={style.strokeOpacity} strokeWidth={Math.max(1, radius * .28)} strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
-    {count > 1 && (() => { const composition = outcomeCounts ? stackCompositionLabel(outcomeCounts) : ""; const mixed = outcomeCounts && Object.values(outcomeCounts).filter((value) => value > 0).length > 1; const label = mixed ? `×${count} · ${composition}` : `×${count}`; const width = mixed ? Math.max(radius * 3.8, label.length * Math.max(3.4, radius * .38)) : Math.max(7.4, radius * 1.1); return <g data-marker-count-badge data-marker-stack-composition={mixed ? composition : undefined} transform={`translate(${radius * .72} ${-radius * .72})`}><rect x={-width / 2} y={-Math.max(3.7, radius * .55)} width={width} height={Math.max(7.4, radius * 1.1)} rx={Math.max(3.7, radius * .55)} fill="#0A1F10" stroke="#F8FAFC" strokeOpacity=".8" strokeWidth=".7" vectorEffect="non-scaling-stroke" /><text textAnchor="middle" dominantBaseline="central" fill="#F8FAFC" fontSize={Math.max(5.5, radius * .7)} fontWeight="900">{label}</text></g>; })()}
+    {outcome === "blocked" && <line data-marker-block-bar x1={-radius * .7} y1="0" x2={radius * .7} y2="0" stroke={style.resultColor} strokeOpacity={style.strokeOpacity} strokeWidth={Math.max(1, radius * .28)} strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
+    {count > 1 && (() => { const composition = outcomeCounts ? stackCompositionLabel(outcomeCounts) : ""; const mixed = outcomeCounts && Object.values(outcomeCounts).filter((value) => value > 0).length > 1; const label = expandedStack && mixed ? `×${count} · ${composition}` : `×${count}`; const width = expandedStack && mixed ? Math.max(radius * 3.8, label.length * Math.max(3.4, radius * .38)) : Math.max(7.4, radius * 1.1); return <g data-marker-count-badge data-marker-stack-composition={mixed ? composition : undefined} data-marker-stack-expanded={expandedStack && mixed ? "true" : "false"} transform={`translate(${radius * .72} ${-radius * .72})`}><rect x={-width / 2} y={-Math.max(3.7, radius * .55)} width={width} height={Math.max(7.4, radius * 1.1)} rx={Math.max(3.7, radius * .55)} fill="#0A1F10" stroke={mixed ? "#FBBF24" : "#F8FAFC"} strokeOpacity=".9" strokeWidth={mixed ? "1.2" : ".7"} strokeDasharray={mixed ? "2 1" : undefined} vectorEffect="non-scaling-stroke" />{mixed && !expandedStack && <circle data-marker-mixed-stack-indicator cx={width / 2 - 1.7} cy={-Math.max(3.7, radius * .55) + 1.7} r="1.35" fill="#FBBF24" />}<text textAnchor="middle" dominantBaseline="central" fill="#F8FAFC" fontSize={Math.max(5.5, radius * .7)} fontWeight="900">{label}</text></g>; })()}
   </g>;
 }
 
-export const pitchMarkerRadius = (outcome: ShotOutcome) => ({ goal: 4.5, on_target: 4.1, off_target: 3.9, blocked: 3.7 })[outcome];
+export function medianObservedXg(shots: readonly Pick<ShotmapPoint, "xg">[]) {
+  const values = shots.map((shot) => shot.xg).filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0).sort((left, right) => left - right);
+  if (!values.length) return null;
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+}
+
+/** xG controls marker footprint; result is encoded only by the marker treatment. */
+export function pitchMarkerRadius(xg: number | null | undefined, medianXg: number | null = null) {
+  const sourceXg = typeof xg === "number" && Number.isFinite(xg) && xg >= 0 ? xg : medianXg;
+  // If an entire payload has no xG, the visual centre remains neutral while its label says xG 미상.
+  const visualXg = typeof sourceXg === "number" && Number.isFinite(sourceXg) && sourceXg >= 0 ? sourceXg : .25;
+  return 3 + 7 * Math.sqrt(visualXg);
+}

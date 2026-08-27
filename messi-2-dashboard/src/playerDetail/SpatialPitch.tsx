@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
 import { LegacySpatialPitchFigure } from "./LegacySpatialPitch";
 import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, displayDensityGrid, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity } from "./legacyHeatmap";
-import { groupPitchShots, pitchMarkerRadius, PitchShotMarker, type PitchShotGroup } from "./PitchShotMarker";
+import { groupPitchShots, medianObservedXg, pitchMarkerRadius, PitchShotMarker, type PitchShotGroup } from "./PitchShotMarker";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { excludePenaltyShots, penaltyStateLabel, summarizeShots } from "./pitchPenalties";
 import { formatShotMetric, outcomeOrder, outcomePresentation, outcomeSummary, OutcomeControls, shotIntegrity, shotMarkerLabel, type ShotOutcome, useShotOutcomeVisibility } from "./shotOutcomeVisibility";
@@ -217,13 +217,13 @@ function isInteractivePitchTarget(target: EventTarget | null) {
   return Boolean(target.closest("[data-shot-marker], [data-marker-hit], [role=tooltip], button, a, input, select, textarea"));
 }
 
-function ShotGlyph({ group, projection, perspective, pixelScale, id, active, tooltipId, registerRef, onActivate, onDeactivate, onNavigate }: {
-  group: PitchShotGroup; projection: Projection; perspective: boolean; pixelScale: number; id: string; active: boolean; tooltipId: string;
+function ShotGlyph({ group, medianXg, projection, perspective, pixelScale, id, active, tooltipId, registerRef, onActivate, onDeactivate, onNavigate }: {
+  group: PitchShotGroup; medianXg: number | null; projection: Projection; perspective: boolean; pixelScale: number; id: string; active: boolean; tooltipId: string;
   registerRef(element: SVGGElement | null): void; onActivate(id: string): void; onDeactivate(id: string): void; onNavigate(direction: 1 | -1): void;
 }) {
   const { shot } = group;
   const anchor = projection(shot);
-  const markerRadius = pitchMarkerRadius(group.outcome);
+  const markerRadius = pitchMarkerRadius(shot.xg, medianXg);
   const markerY = perspective ? anchor.y - (8 + markerRadius * .55) * pixelScale : anchor.y;
   // A blocked endpoint is not a goal-line trajectory and must never be drawn.
   const trajectory = perspective && shot.trajectory?.endpointKind === "goal_mouth" ? shot.trajectory : null;
@@ -239,7 +239,7 @@ function ShotGlyph({ group, projection, perspective, pixelScale, id, active, too
     <title>{shotMarkerLabel(shot)}</title>
     {trajectory && endpointGround && endpoint && control && <path data-shot-trajectory data-trajectory-kind={trajectory.endpointKind} data-end-pitch-x={trajectory.endX} data-end-pitch-y={trajectory.endY} data-end-goal-mouth={trajectory.endY >= GOAL_POST_Y[0] && trajectory.endY <= GOAL_POST_Y[1] ? "inside" : "outside"} data-end-height-meters={trajectory.endZMeters ?? undefined} data-end-height-lift={heightLift} data-end-ground-x={endpointGround.x} data-end-ground-y={endpointGround.y} data-end-render-x={endpoint.x} data-end-render-y={endpoint.y} d={`M ${anchor.x} ${anchor.y} Q ${control.x} ${control.y} ${endpoint.x} ${endpoint.y}`} fill="none" stroke="#E2E8F0" strokeOpacity=".82" strokeWidth="1.8" vectorEffect="non-scaling-stroke" pointerEvents="none"/>}
     {perspective && <><line data-shot-anchor x1={anchor.x} y1={anchor.y} x2={anchor.x} y2={markerY} stroke="#E2E8F0" strokeOpacity=".5" strokeWidth="1.2" strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/><ellipse data-shot-shadow cx={anchor.x} cy={anchor.y} rx={markerRadius * .9 * pixelScale} ry={markerRadius * .28 * pixelScale} fill="#020617" fillOpacity=".55"/></>}
-    <g data-marker-visual data-pixel-scale={pixelScale} transform={`translate(${anchor.x} ${markerY}) scale(${pixelScale})`}><PitchShotMarker outcome={group.outcome} radius={markerRadius} count={group.count} outcomeCounts={group.outcomeCounts}/><circle data-marker-hit r="12" fill="transparent" pointerEvents="all" /></g>
+    <g data-marker-visual data-pixel-scale={pixelScale} transform={`translate(${anchor.x} ${markerY}) scale(${pixelScale})`}><PitchShotMarker outcome={group.outcome} radius={markerRadius} count={group.count} outcomeCounts={group.outcomeCounts} expandedStack={tooltipId === id}/><circle data-marker-hit r="12" fill="transparent" pointerEvents="all" /></g>
   </g>;
 }
 
@@ -250,6 +250,7 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
   const heat = heatValid ? spatial!.heatmapPoints : EMPTY_HEAT;
   const shotsValid = shotIntegrity(spatial);
   const shots = shotsValid ? spatial!.shotmapPoints.map((shot, sourceIndex) => ({ shot, sourceIndex })).filter(({ shot }) => visibleOutcomes.has(shot.outcome)) : [];
+  const medianXg = shotsValid ? medianObservedXg(spatial!.shotmapPoints) : null;
   const markerGroups = groupPitchShots(shots);
   const heatState = !spatial?.available ? "Activity heatmap unavailable" : !heatValid ? "Activity heatmap integrity mismatch" : heat.length ? `${heat.length} activity points` : "Verified zero activity points";
   const shotState = !spatial?.shotmapSnapshotAvailable ? "Shot snapshot unavailable" : !shotsValid ? "Shot snapshot integrity mismatch" : spatial.shotmapPoints.length ? `${spatial.shotmapPoints.length} shots` : "Verified zero shots";
@@ -286,7 +287,7 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
     <PitchMarkings projection={projection}/>
     <PositionalGrid projection={projection}/>
     {contour.length > 0 && <g data-layer="cca-contour" fill="none" stroke="#c044ff" strokeWidth="3" vectorEffect="non-scaling-stroke">{contour.map(([x1, y1, x2, y2], index) => <path key={index} d={pathBetween(projection, { x: x1, y: 100 - y1 }, { x: x2, y: 100 - y2 })}/>)}</g>}
-    <g id={markerLayerId} data-layer="shots">{markerGroups.map((group, visibleIndex) => { const id = `${filterId}-shot-${group.key}`; return <ShotGlyph key={id} group={group} projection={projection} perspective={perspective} pixelScale={pixelScale} id={id} active={id === activeVisibleId} tooltipId={tooltipId} registerRef={(element) => { if (element) markerRefs.current.set(id, element); else markerRefs.current.delete(id); }} onActivate={(markerId) => { setActiveId(markerId); setTooltipIdState(markerId); }} onDeactivate={(markerId) => { if (tooltipIdState === markerId) setTooltipIdState(null); }} onNavigate={(direction) => navigate(visibleIndex, direction)}/>; })}</g>
+    <g id={markerLayerId} data-layer="shots">{markerGroups.map((group, visibleIndex) => { const id = `${filterId}-shot-${group.key}`; return <ShotGlyph key={id} group={group} medianXg={medianXg} projection={projection} perspective={perspective} pixelScale={pixelScale} id={id} active={id === activeVisibleId} tooltipId={tooltipId} registerRef={(element) => { if (element) markerRefs.current.set(id, element); else markerRefs.current.delete(id); }} onActivate={(markerId) => { setActiveId(markerId); setTooltipIdState(markerId); }} onDeactivate={(markerId) => { if (tooltipIdState === markerId) setTooltipIdState(null); }} onNavigate={(direction) => navigate(visibleIndex, direction)}/>; })}</g>
     {tooltipEntry && (() => { const anchor = projection(tooltipEntry.shot), tooltipWidth = 150, tooltipHeight = 62; const maxX = Math.max(0, BASE_VIEWPORT.width - tooltipWidth * pixelScale), maxY = Math.max(0, BASE_VIEWPORT.height - tooltipHeight * pixelScale); const x = Math.min(maxX, Math.max(0, anchor.x - 70 * pixelScale)), y = Math.min(maxY, Math.max(0, anchor.y - 82 * pixelScale)); return <g id={tooltipId} role="tooltip" pointerEvents="none" data-tooltip-width={tooltipWidth} data-tooltip-height={tooltipHeight} data-pixel-scale={pixelScale} transform={`translate(${x} ${y}) scale(${pixelScale})`}><rect width={tooltipWidth} height={tooltipHeight} rx="7" fill="#0b0e0f" fillOpacity=".96" stroke="#ffffff" strokeOpacity=".25"/><text x="10" y="18" fill="#f4f4f5" fontSize="12" fontWeight="700">{outcomePresentation[tooltipEntry.shot.outcome].label}</text><text x="10" y="37" fill="#e4e4e7" fontSize="11">xG {formatShotMetric(tooltipEntry.shot.xg)}</text><text x="10" y="53" fill="#e4e4e7" fontSize="11">xGOT {formatShotMetric(tooltipEntry.shot.xgot)}</text></g>; })()}
     <g fill="#e4e4e7" fontSize="13" fontWeight="700" aria-hidden="true"><text x="36" y="630">Attack direction 0 → 100</text><text x="835" y="584">Lane 1 · right</text><text x="194" y="73">Lane 5 · left</text></g>
   </svg></>;

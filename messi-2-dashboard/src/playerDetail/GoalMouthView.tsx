@@ -8,6 +8,7 @@ import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contract
 import { useGoalMouthBaseline } from "./useGoalMouthBaseline";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { excludePenaltyShots, penaltyStateLabel, summarizeShots } from "./pitchPenalties";
+import { medianObservedXg, pitchMarkerRadius, PitchShotMarker } from "./PitchShotMarker";
 
 type RenderableData = FinalThirdRenderableData | FinalThirdShotMapV3Data;
 type ShotStatus = Exclude<FinalThirdShot["status"], "blocked">;
@@ -79,22 +80,14 @@ function zoomedViewBox(base: { minX: number; minY: number; width: number; height
   return `${centerX - width / 2} ${centerY - height / 2} ${width} ${height}`;
 }
 
-function Shape({ shot, size, color }: { shot: FinalThirdShot; size: number; color: string }) {
-  const faded = shot.status === "on_target";
-  return <g data-marker-shape="football" data-shot-status={shot.status} opacity={faded ? .72 : 1}>
-    <circle data-ball-color={color} r={size} fill={color} stroke="#111827" strokeWidth="2"/>
-    <circle r={size * .76} fill="#f8fafc"/>
-    <path d={`M 0 ${-size * .47} L ${size * .44} ${-size * .16} L ${size * .27} ${size * .37} H ${-size * .27} L ${-size * .44} ${-size * .16} Z`} fill="#111827" opacity=".94"/>
-    {size >= 10 && <path d={`M ${-size * .72} ${-size * .22} L ${-size * .42} ${-size * .16} M ${size * .72} ${-size * .22} L ${size * .42} ${-size * .16} M ${-size * .53} ${size * .55} L ${-size * .27} ${size * .37} M ${size * .53} ${size * .55} L ${size * .27} ${size * .37}`} fill="none" stroke="#111827" strokeWidth={Math.max(1.2, size * .12)} strokeLinecap="round"/>}
-    {shot.status === "off_target" && <path data-off-target-x d={`M ${-size * .63} ${-size * .63} L ${size * .63} ${size * .63} M ${size * .63} ${-size * .63} L ${-size * .63} ${size * .63}`} fill="none" stroke="#0f172a" strokeWidth={Math.max(2, size * .2)} strokeLinecap="round"/>}
+function Shape({ shot, size }: { shot: FinalThirdShot; size: number }) {
+  return <g data-marker-shape="football" data-shot-status={shot.status}>
+    <PitchShotMarker outcome={shot.status} radius={size}/>
   </g>;
 }
 
-function markerSize(shot: FinalThirdShot, data: RenderableData) {
-  if (shot.xg === null) return 8;
-  const range = data.markerSizeScale.max - data.markerSizeScale.min;
-  const normalized = range > 0 ? Math.max(0, Math.min(1, (shot.xg - data.markerSizeScale.min) / range)) : 0;
-  return 7 + normalized * 13;
+function markerSize(shot: FinalThirdShot, medianXg: number | null) {
+  return pitchMarkerRadius(shot.xg, medianXg);
 }
 
 function endpointPoint(shot: FinalThirdShot) {
@@ -169,26 +162,26 @@ function edgeTooltipLayout(point: { x: number; y: number }, size: number, lines:
   } as const;
 }
 
-function EdgeMarker({ shot, data, endpointShots, fanOffset, fanCount, active, onActivate, onDeactivate, tooltipBounds }: { shot: FinalThirdShot; data: RenderableData; endpointShots: FinalThirdShot[]; fanOffset: number; fanCount: number; active: boolean; onActivate: () => void; onDeactivate: () => void; tooltipBounds: TooltipBounds }) {
+function EdgeMarker({ shot, medianXg, endpointShots, fanOffset, fanCount, active, onActivate, onDeactivate, tooltipBounds }: { shot: FinalThirdShot; medianXg: number | null; endpointShots: FinalThirdShot[]; fanOffset: number; fanCount: number; active: boolean; onActivate: () => void; onDeactivate: () => void; tooltipBounds: TooltipBounds }) {
   const point = compressedEdgePoint(shot, endpointShots, fanOffset);
   const descriptionLines = offFrameDescription(shot);
   const description = descriptionLines.join(" · ");
   const rawCoordinates = `원본 좌표 Y ${shot.goalMouthY}, Z ${shot.goalMouthZ}`;
-  const style = statusStyle[shot.status], size = Math.max(5, markerSize(shot, data) * .7), xgUnavailable = shot.xg === null;
+  const style = statusStyle[shot.status], size = Math.max(5, markerSize(shot, medianXg) * .7), xgUnavailable = shot.xg === null, xgLabel = shot.xg === null ? "xG 미상; 중앙값 크기" : `xG ${shot.xg.toFixed(2)}`;
   const tooltip = edgeTooltipLayout(point, size, descriptionLines, tooltipBounds);
-  return <g data-goal-mouth-shot={shot.shotId} data-goal-mouth-off-frame-shot={shot.shotId} data-xg-size={xgUnavailable ? "unavailable" : "observed"} data-marker-footprint={size} transform={`translate(${point.x} ${point.y})`} tabIndex={0} role="img" aria-label={`${style.label}, ${description}. ${rawCoordinates}`} onMouseEnter={onActivate} onMouseLeave={onDeactivate} onFocus={onActivate} onBlur={onDeactivate}>
-    <title>{`${description}. ${rawCoordinates}`}</title>
-    <Shape shot={shot} size={size} color={xgUnavailable ? "#a1a1aa" : style.color}/>
+  return <g data-goal-mouth-shot={shot.shotId} data-goal-mouth-off-frame-shot={shot.shotId} data-xg-size={xgUnavailable ? "unavailable" : "observed"} data-marker-footprint={size} transform={`translate(${point.x} ${point.y})`} tabIndex={0} role="img" aria-label={`${style.label}, ${description}. ${xgLabel}. ${rawCoordinates}`} onMouseEnter={onActivate} onMouseLeave={onDeactivate} onFocus={onActivate} onBlur={onDeactivate}>
+    <title>{`${description}. ${xgLabel}. ${rawCoordinates}`}</title>
+    <Shape shot={shot} size={size}/>
     {fanCount > 1 && <g data-off-frame-duplicate-count><circle cx={size * .72} cy={-size * .72} r="8" fill="#111827" stroke="#fbbf24" strokeWidth="1.5"/><text x={size * .72} y={-size * .72 + 3.5} textAnchor="middle" fill="#fde68a" fontSize="8" fontWeight="900">×{fanCount}</text></g>}
     {active && <g data-off-frame-tooltip data-tooltip-side={tooltip.side} data-tooltip-vertical={tooltip.vertical} transform={`translate(${tooltip.x - point.x} ${tooltip.y - point.y})`} pointerEvents="none"><rect data-off-frame-tooltip-background x="0" y="0" width={tooltip.width} height={tooltip.height} rx="6" fill="#111827" stroke="#fbbf24"/>{descriptionLines.map((line, index) => <text key={line} x="10" y={18 + index * 16} fill="#fde68a" fontSize="11" fontWeight="800">{line}</text>)}</g>}
   </g>;
 }
 
-function Marker({ shot, data, endpointShots, fanOffset, fanCount, active, onActivate, onDeactivate, tooltipBounds }: { shot: FinalThirdShot; data: RenderableData; endpointShots: FinalThirdShot[]; fanOffset: number; fanCount: number; active: boolean; onActivate: () => void; onDeactivate: () => void; tooltipBounds: TooltipBounds }) {
+function Marker({ shot, medianXg, endpointShots, fanOffset, fanCount, active, onActivate, onDeactivate, tooltipBounds }: { shot: FinalThirdShot; medianXg: number | null; endpointShots: FinalThirdShot[]; fanOffset: number; fanCount: number; active: boolean; onActivate: () => void; onDeactivate: () => void; tooltipBounds: TooltipBounds }) {
   if (!shot.endpointAvailable || shot.goalMouthY === null || shot.goalMouthZ === null || shot.status === "blocked") return null;
-  if (isOffFrame(shot)) return <EdgeMarker shot={shot} data={data} endpointShots={endpointShots} fanOffset={fanOffset} fanCount={fanCount} active={active} onActivate={onActivate} onDeactivate={onDeactivate} tooltipBounds={tooltipBounds}/>;
-  const style = statusStyle[shot.status], xgUnavailable = shot.xg === null, xgLabel = shot.xg === null ? "unavailable, size unavailable" : shot.xg.toFixed(2), size = markerSize(shot, data), point = endpointPoint(shot);
-  return <g data-goal-mouth-shot={shot.shotId} data-xg-size={xgUnavailable ? "unavailable" : "observed"} data-marker-footprint={size} transform={`translate(${point.x} ${point.y})`} aria-label={`${style.label}; xG ${xgLabel}`}><title>{`${style.label}; xG ${xgLabel}`}</title><rect data-marker-footprint-box x={-size} y={-size} width={size * 2} height={size * 2} fill="none" stroke="none" pointerEvents="none"/><Shape shot={shot} size={size} color={xgUnavailable ? "#a1a1aa" : style.color}/>{xgUnavailable && <text data-size-unavailable y="4" textAnchor="middle" fill="#111827" fontSize="10" fontWeight="900">?</text>}<text y={size + 13} textAnchor="middle" fill="#f4f4f5" fontSize="10" fontWeight="800">{style.text}</text></g>;
+  if (isOffFrame(shot)) return <EdgeMarker shot={shot} medianXg={medianXg} endpointShots={endpointShots} fanOffset={fanOffset} fanCount={fanCount} active={active} onActivate={onActivate} onDeactivate={onDeactivate} tooltipBounds={tooltipBounds}/>;
+  const style = statusStyle[shot.status], xgUnavailable = shot.xg === null, xgLabel = shot.xg === null ? "xG 미상; 중앙값 크기" : shot.xg.toFixed(2), size = markerSize(shot, medianXg), point = endpointPoint(shot);
+  return <g data-goal-mouth-shot={shot.shotId} data-xg-size={xgUnavailable ? "unavailable" : "observed"} data-marker-footprint={size} transform={`translate(${point.x} ${point.y})`} aria-label={`${style.label}; xG ${xgLabel}`}><title>{`${style.label}; xG ${xgLabel}`}</title><rect data-marker-footprint-box x={-size} y={-size} width={size * 2} height={size * 2} fill="none" stroke="none" pointerEvents="none"/><Shape shot={shot} size={size}/>{xgUnavailable && <text data-size-unavailable y="4" textAnchor="middle" fill="#111827" fontSize="10" fontWeight="900">?</text>}<text y={size + 13} textAnchor="middle" fill="#f4f4f5" fontSize="10" fontWeight="800">{style.text}</text></g>;
 }
 
 function baselineFill(rate: number | null) {
@@ -294,6 +287,8 @@ export function GoalMouthView({ data, config }: { data: RenderableData; config?:
   const baseline = useGoalMouthBaseline(config);
   const pointerPan = useRef<{ pointerId: number; clientX: number; clientY: number; viewport: Viewport } | null>(null);
   const filteredShots = useMemo(() => excludePenaltyShots(data.shots, includePenalties), [data.shots, includePenalties]);
+  // The xG scale is stable while the shared penalty toggle changes visibility.
+  const medianXg = useMemo(() => medianObservedXg(data.shots), [data.shots]);
   const endpointShots = filteredShots.filter((shot) => shot.endpointAvailable && shot.goalMouthY !== null && shot.goalMouthZ !== null && shot.status !== "blocked");
   const unplotted = filteredShots.filter((shot) => !shot.endpointAvailable);
   // Never fit the viewport to provider endpoint coordinates: valid far-wide
@@ -367,8 +362,8 @@ export function GoalMouthView({ data, config }: { data: RenderableData; config?:
       <span className="w-full text-xs text-zinc-400 sm:w-auto sm:ml-2">Blocked {unplotted.length} · audit only</span>
     </div>
     <svg data-goal-mouth-viewbox={viewBox} viewBox={viewBox} className="block h-auto w-full touch-none cursor-grab active:cursor-grabbing" role="img" tabIndex={0} aria-label={`Three-dimensional goal-mouth plot with ${visibleShots.length} visible authoritative endpoints and ${unplotted.length} unplotted endpoints. Zoom ${zoom}x. Drag to pan when zoomed.`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointerPan} onPointerCancel={endPointerPan} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={onKeyDown}>
-      <GoalNet baselineLayer={baselineLayer}/>{visibleShots.map((shot) => { const group = offFrameGroups.get(`${shot.goalMouthY}:${shot.goalMouthZ}`) ?? [shot]; const groupIndex = group.findIndex((candidate) => candidate.shotId === shot.shotId); return <Marker key={shot.shotId} shot={shot} data={data} endpointShots={endpointShots} fanOffset={group.length > 1 ? groupIndex - (group.length - 1) / 2 : 0} fanCount={group.length} active={activeOffFrameShotId === shot.shotId} onActivate={() => setActiveOffFrameShotId(shot.shotId)} onDeactivate={() => setActiveOffFrameShotId((current) => current === shot.shotId ? null : current)} tooltipBounds={tooltipBounds}/>; })}
+      <GoalNet baselineLayer={baselineLayer}/>{visibleShots.map((shot) => { const group = offFrameGroups.get(`${shot.goalMouthY}:${shot.goalMouthZ}`) ?? [shot]; const groupIndex = group.findIndex((candidate) => candidate.shotId === shot.shotId); return <Marker key={shot.shotId} shot={shot} medianXg={medianXg} endpointShots={endpointShots} fanOffset={group.length > 1 ? groupIndex - (group.length - 1) / 2 : 0} fanCount={group.length} active={activeOffFrameShotId === shot.shotId} onActivate={() => setActiveOffFrameShotId(shot.shotId)} onDeactivate={() => setActiveOffFrameShotId((current) => current === shot.shotId ? null : current)} tooltipBounds={tooltipBounds}/>; })}
     </svg>
-    <div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>축구공: Goal 초록 · On target 하늘색 · Off target 호박색 + X. Marker size uses the shared source xG scale; gray ? means xG unavailable.</p><p data-goal-mouth-shot-summary className="mt-2">{penaltyStateLabel(includePenalties)} · 슛 {shotSummary.shots} · 득점 {shotSummary.goals} · xG {shotSummary.xg.toFixed(2)} · 전환율 {shotSummary.conversionRatePct?.toFixed(1) ?? "—"}%</p><ShootingQualityModule data={data}/>{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
+    <div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>마커 크기는 xG에 비례합니다. 프레임 도달 슛은 흰 공, 빗나감은 비운 공으로 표시하며 xG 미상은 중앙값 크기입니다.</p><p data-goal-mouth-shot-summary className="mt-2">{penaltyStateLabel(includePenalties)} · 슛 {shotSummary.shots} · 득점 {shotSummary.goals} · xG {shotSummary.xg.toFixed(2)} · 전환율 {shotSummary.conversionRatePct?.toFixed(1) ?? "—"}%</p><ShootingQualityModule data={data}/>{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
   </div>;
 }

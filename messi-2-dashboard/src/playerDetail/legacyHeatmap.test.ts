@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_ROWS, bilinearDensity, displayDensityGrid, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
+import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_ROWS, HEATMAP_STOPS, bilinearDensity, displayDensityGrid, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
 
 describe("legacy 32 x 22 spatial raster", () => {
   it("keeps numpy-compatible endpoint values in the final bin", () => {
@@ -25,11 +25,11 @@ describe("legacy 32 x 22 spatial raster", () => {
     expect(bilinearDensity(density, -1, 50)).toBe(0);
   });
 
-  it("quantizes the display palette into 12 green-to-lime-to-amber stages", () => {
+  it("quantizes the display palette into the live olive-to-red stages", () => {
     expect(legacyHeatmapColor(0)).toEqual([0, 0, 0, 0]);
-    expect(legacyHeatmapColor(.08)).toEqual(legacyHeatmapColor(.09));
-    expect(legacyHeatmapColor(.58)[1]).toBeGreaterThan(legacyHeatmapColor(.58)[0]);
-    expect(legacyHeatmapColor(1)).toEqual([245, 158, 11, 1]);
+    expect(HEATMAP_STOPS[1]).toEqual([.08, [124, 151, 71, .18]]);
+    expect(HEATMAP_STOPS[4]).toEqual([.72, [247, 135, 39, .9]]);
+    expect(legacyHeatmapColor(1)).toEqual([222, 63, 31, .98]);
   });
 
   it("upsamples only the display mesh and leaves the 32 by 22 scoring raster intact", () => {
