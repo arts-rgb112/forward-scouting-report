@@ -5,6 +5,7 @@
 - 상태: PR #297 병합 준비 중 — 라이브 피치 화면 반려 P0
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-live-fix
 - 범위/가드: 최신 `origin/main` 위로 재배치한 P0는 3D 표시 전용 96×66 업샘플, 원본 32×22 CCA/HDR 유지, 흰색 20-zone/PK 축 구분선, 공용 레이어 토글, 3개 피치 탭, 한국어 탐색·접힘·빈 상태를 포함한다. six-lane corridor는 아직 서버 계약을 연결하지 않아 `—`만 표시하며 full Tier 3 `24.13%`를 렌더하지 않는다. 점수·CSV·CCA·30셀·기능 플래그·SportsAPI 원본은 변경하지 않는다. 병합·배포는 발주자 게이트 승인 전 금지한다.
+- DOM 검증 기준: `LegacySpatialPitchFigure`의 `data-layer="positional-grid"`는 `pitchGeometry`의 `zone20Lines()`/`PATH_STYLE`을 사용하며 `stroke=#FFFFFF`, `stroke-opacity=0.13`, `stroke-width=1`이어야 한다.
 
 - 상태: 로컬 구현·실데이터 QA 완료 — 피치 워크스페이스 3개 1층 탭 + 접힌 헥스 원자료 (2026-08-28 KST), PR 준비 중
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-pitch-workspace

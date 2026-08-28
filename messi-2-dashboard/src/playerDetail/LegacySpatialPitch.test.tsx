@@ -117,8 +117,9 @@ describe("LegacySpatialPitch", () => {
 
   it("uses thin white zone guides without bands and confines the sky PK axis to the penalty boxes", () => {
     const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
-    const zoneGrid = container.querySelector('[data-layer="zone-grid"]')!;
+    const zoneGrid = container.querySelector('[data-layer="positional-grid"]')!;
     const pkAxis = container.querySelector('[data-layer="pk-axis"]')!;
+    expect(container.querySelector('[data-layer="zone-grid"]')).toBeNull();
     expect(zoneGrid).toHaveAttribute("stroke", "#FFFFFF");
     expect(zoneGrid).toHaveAttribute("stroke-width", "1");
     expect(zoneGrid).toHaveAttribute("stroke-opacity", "0.13");

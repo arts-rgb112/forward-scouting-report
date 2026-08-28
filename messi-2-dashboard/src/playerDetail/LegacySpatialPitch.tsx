@@ -81,10 +81,10 @@ const planGeometryProjection: GeometryProjection = {
 function GuardiolaPitchGuide({ showCorridors }: { showCorridors: boolean }) {
   const markings = PATH_STYLE.marking, grid = PATH_STYLE["zone-grid"], pk = PATH_STYLE["pk-axis"];
   return <g data-layer="guardiola-20-zone-guide" fill="none" vectorEffect="non-scaling-stroke">
-    <g data-layer="football-markings" stroke={markings.stroke} strokeOpacity={markings.opacity} strokeWidth={markings.width}>
+    <g data-layer="pitch-markings" stroke={markings.stroke} strokeOpacity={markings.opacity} strokeWidth={markings.width}>
       {pitchMarkings(planGeometryProjection).map((path, index) => <path key={index} d={path.d}/>) }
     </g>
-    <g data-layer="zone-grid" stroke={grid.stroke} strokeOpacity={grid.opacity} strokeWidth={grid.width}>
+    <g data-layer="positional-grid" stroke={grid.stroke} strokeOpacity={grid.opacity} strokeWidth={grid.width}>
       {zone20Lines(planGeometryProjection).map((path, index) => <path key={index} d={path.d}/>) }
     </g>
     <g data-layer="pk-axis" stroke={pk.stroke} strokeOpacity={pk.opacity} strokeWidth={pk.width} strokeDasharray={pk.dash}>{pkAxisLines(planGeometryProjection).map((path, index) => <path key={index} d={path.d}/>)}</g>
