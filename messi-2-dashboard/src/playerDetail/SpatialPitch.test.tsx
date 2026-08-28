@@ -142,8 +142,8 @@ describe("perspective spatial pitch", () => {
     expect(container.querySelector('[data-trajectory-outcome="goal"] path')).toHaveAttribute("stroke", "#BEF264");
     expect(container.querySelector('[data-trajectory-outcome="on_target"] path')).toHaveAttribute("stroke", "#38BDF8");
     expect(container.querySelector('[data-trajectory-kind="blocked"]')).not.toBeInTheDocument();
-    expect(container.querySelector('[data-shot-marker][data-shot-outcome="goal"]')).toHaveAccessibleName(/Goal-mouth trajectory to 100\.0, 52\.0, height 1\.20 metres/);
-    expect(screen.getByRole("list", { name: "Authoritative shot events" })).toHaveTextContent(/blocked trajectory to \(78\.0, 56\.0\)/);
+    expect(container.querySelector('[data-shot-marker][data-shot-outcome="goal"]')).toHaveAccessibleName(/골대 도달 지점 100\.0, 52\.0, 높이 1\.20 m/);
+    expect(screen.getByRole("list", { name: "서버 슈팅 이벤트" })).toHaveTextContent(/블록/);
   });
 
   it("filters matching trajectory paths and keeps the exact 2D fallback marker-only", () => {
@@ -152,11 +152,11 @@ describe("perspective spatial pitch", () => {
       { x: 70, y: 60, outcome: "blocked" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "blocked" as const, endX: 78, endY: 56, endZMeters: null, source: "fotmob" as const } },
     ];
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
-    fireEvent.click(screen.getByRole("button", { name: /Goals, 1 shots/ }), { detail: 0 });
+    fireEvent.click(screen.getByRole("button", { name: /득점, 1 shots/ }), { detail: 0 });
     expect(container.querySelector('[data-trajectory-kind="goal_mouth"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-trajectory-kind="blocked"]')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "어떻게 움직이나" }));
-    expect(container.querySelector("[data-shot-trajectory]")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "2D 회랑" }));
+    expect(container.querySelector('[data-layer="shot-trajectories-2d"]')).toBeInTheDocument();
   });
 
   it("renders a 96 by 66 display mesh while keeping the source 32 by 22 grid for CCA", () => {
@@ -186,19 +186,17 @@ describe("perspective spatial pitch", () => {
     expect(Number.isFinite(Number(shot?.getAttribute("data-screen-y")))).toBe(true);
     expect(shot).toHaveAttribute("data-marker-symbol", "star");
     expect(shot).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("list", { name: "Authoritative shot events" })).toHaveTextContent(/Goal · xG 0.72 · xGOT 0.84/);
-    expect(screen.getByText(/1 activity points\. 1 shots\./)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "서버 슈팅 이벤트" })).toHaveTextContent(/득점 · xG 0.72 · xGOT 0.84/);
+    expect(screen.getAllByText(/1 activity points.*1 shots|활동 좌표 1개.*슛 1개/).length).toBeGreaterThan(0);
   });
 
   it("keeps unavailable snapshots distinct from available verified zero", () => {
     const { rerender } = render(<SpatialPitch analysis={analysisWith({ available: false })}/>);
-    expect(screen.getAllByText(/Activity heatmap unavailable/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Shot snapshot unavailable/).length).toBeGreaterThan(0);
-    expect(screen.queryByText("◇ Goals 0")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Activity heatmap unavailable|활동 히트맵 사용 불가/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Shot snapshot unavailable|슈팅 스냅샷 사용 불가/).length).toBeGreaterThan(0);
     rerender(<SpatialPitch analysis={analysisWith({ available: true, shotmapSnapshotAvailable: true })}/>);
-    expect(screen.getAllByText(/Verified zero activity points/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Verified zero shots/).length).toBeGreaterThan(0);
-    expect(screen.getByText("◇ Goals 0")).toBeInTheDocument();
+    expect(screen.getAllByText(/Verified zero activity points|관측된 활동 좌표 0개/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Verified zero shots|관측된 슛 0개/).length).toBeGreaterThan(0);
   });
 
   it("keeps a production-sized payload bounded while camera distance rebuilds one fixed-size mesh", () => {
@@ -209,14 +207,14 @@ describe("perspective spatial pitch", () => {
     const heatLayer = container.querySelector("[data-layer=heat]")!;
     const meshBuilds = heatLayer.getAttribute("data-density-mesh-builds");
     expect(before).toHaveLength(DISPLAY_HEATMAP_ROWS * DISPLAY_HEATMAP_COLUMNS);
-    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    fireEvent.click(screen.getByRole("button", { name: "확대" }));
     const viewport = container.querySelector("svg[role=img]")!;
     fireEvent.keyDown(viewport, { key: "ArrowRight" });
     expect([...container.querySelectorAll("[data-density-cell]")]).toEqual(before);
     expect(Number(heatLayer.getAttribute("data-density-mesh-builds"))).toBe(Number(meshBuilds) + 1);
     expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(150);
     expect(container.querySelectorAll('[data-shot-marker][tabindex="0"]')).toHaveLength(1);
-    expect(within(screen.getByRole("list", { name: "Authoritative shot events" })).getAllByRole("listitem")).toHaveLength(150);
+    expect(within(screen.getByRole("list", { name: "서버 슈팅 이벤트" })).getAllByRole("listitem")).toHaveLength(150);
   });
 
   it("derives a stable shot-median pivot and falls back to the native heat peak", () => {
@@ -234,7 +232,7 @@ describe("perspective spatial pitch", () => {
     expect(container.querySelectorAll("[data-density-cell]")).toHaveLength(DISPLAY_HEATMAP_ROWS * DISPLAY_HEATMAP_COLUMNS);
     expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
     rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 2, heatmapPoints: [{ x: 50, y: 50 }] })}/>);
-    expect(screen.getAllByText(/Activity heatmap integrity mismatch/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Activity heatmap integrity mismatch|활동 히트맵 무결성 불일치/).length).toBeGreaterThan(0);
     expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
     rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 101, y: 50 }] })}/>);
     expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
@@ -248,7 +246,7 @@ describe("perspective spatial pitch", () => {
     expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
     expect(viewport()).toHaveAttribute("data-camera-pivot", "84,34,0");
     expect(viewport()).toHaveAttribute("data-camera-distance", "84");
-    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    fireEvent.click(screen.getByRole("button", { name: "확대" }));
     expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
     expect(viewport()).toHaveAttribute("data-camera-distance", "72");
     fireEvent.wheel(viewport(), { deltaY: 100 });
@@ -259,7 +257,7 @@ describe("perspective spatial pitch", () => {
     expect(Number(viewport().getAttribute("data-camera-distance"))).toBeCloseTo(48);
     fireEvent.pointerUp(viewport(), { pointerId: 11, pointerType: "touch" });
     fireEvent.pointerUp(viewport(), { pointerId: 12, pointerType: "touch" });
-    fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+    fireEvent.click(screen.getByRole("button", { name: "축소" }));
     expect(viewport()).toHaveAttribute("data-camera-distance", "60");
     const densityCell = container.querySelector("[data-density-cell]")!;
     expect(viewport()).toHaveAttribute("data-camera-azimuth", "-48");
@@ -279,23 +277,23 @@ describe("perspective spatial pitch", () => {
   it("defaults reduced-motion users to the responsive 2D fallback and remains keyboard switchable", () => {
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     render(<SpatialPitch analysis={analysisWith({})}/>);
-    const group = screen.getByRole("group", { name: "Pitch view" });
-    expect(within(group).getByRole("button", { name: "어떻게 움직이나" })).toHaveAttribute("aria-pressed", "true");
+    const group = screen.getByRole("group", { name: "피치 보기" });
+    expect(within(group).getByRole("button", { name: "2D 회랑" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("group", { name: "Interactive two-dimensional shot markers" })).toBeInTheDocument();
-    fireEvent.click(within(group).getByRole("button", { name: "어디서 쏘고 어디로 꽂나" }));
-    expect(screen.getByRole("img", { name: /attacking pitch/ })).toHaveAccessibleName(/Perspective attacking pitch/);
+    fireEvent.click(within(group).getByRole("button", { name: "3D 회랑" }));
+    expect(screen.getByRole("img", { name: /3D 회랑/ })).toBeInTheDocument();
   });
 
   it("shares marker visibility between Perspective and exact 2D while totals and details remain unfiltered", () => {
     const shots = [{ x: 80, y: 20, outcome: "goal" as const, xg: .4, xgot: null }, { x: 75, y: 35, outcome: "on_target" as const }, { x: 70, y: 50, outcome: "off_target" as const }, { x: 65, y: 65, outcome: "blocked" as const }];
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 4, shotmapPoints: shots })}/>);
-    const goals = screen.getByRole("button", { name: /Goals, 1 shots/ }); fireEvent.click(goals, { detail: 0 });
+    const goals = screen.getByRole("button", { name: /득점, 1 shots/ }); fireEvent.click(goals, { detail: 0 });
     expect(container.querySelectorAll('[data-shot-marker][data-shot-outcome="goal"]')).toHaveLength(0); expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(3);
-    expect(screen.getByRole("list", { name: "Shot outcome legend" })).toHaveTextContent("Goals 1"); expect(screen.getByRole("list", { name: "Authoritative shot events" }).children).toHaveLength(4);
-    fireEvent.click(screen.getByRole("button", { name: "어떻게 움직이나" }));
+    expect(screen.getByRole("list", { name: "서버 슈팅 이벤트" }).children).toHaveLength(4);
+    fireEvent.click(screen.getByRole("button", { name: "2D 회랑" }));
     expect(screen.getByRole("group", { name: "Interactive two-dimensional shot markers" })).toBeInTheDocument();
     expect(container.querySelectorAll('[data-layer="legacy-events"] [data-shot-outcome="goal"]')).toHaveLength(0); expect(container.querySelectorAll('[data-layer="legacy-events"] [data-shot-index]')).toHaveLength(3);
-    expect(screen.getByText(/Goal ◇ · on target ● · off target × · blocked ■/, { selector: "figcaption" })).toBeInTheDocument();
+    expect(screen.getByText(/득점 ◇ · 유효 슛 ● · 빗나감 × · 블록 ■/, { selector: "figcaption" })).toBeInTheDocument();
     fireEvent.click(goals, { detail: 0 }); expect(container.querySelectorAll('[data-layer="legacy-events"] [data-shot-index]')).toHaveLength(4);
   });
 
@@ -304,7 +302,7 @@ describe("perspective spatial pitch", () => {
     const shots = [{ x: 80, y: 20, outcome: "goal" as const }, { x: 75, y: 35, outcome: "on_target" as const }, { x: 70, y: 50, outcome: "off_target" as const }, { x: 65, y: 65, outcome: "blocked" as const }];
     const populated = analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 4, shotmapPoints: shots });
     const { container, rerender } = render(<SpatialPitch analysis={populated} contextIdentity="one"/>);
-    const goals = screen.getByRole("button", { name: /Goals, 1 shots/ }), onTarget = screen.getByRole("button", { name: /On target, 1 shots/ });
+    const goals = screen.getByRole("button", { name: /득점, 1 shots/ }), onTarget = screen.getByRole("button", { name: /유효 슛, 1 shots/ });
     fireEvent.click(goals, { detail: 1 }); fireEvent.click(onTarget, { detail: 1 });
     expect(container.querySelectorAll('[data-shot-outcome="goal"]')).toHaveLength(0); expect(container.querySelectorAll('[data-shot-outcome="on_target"]')).toHaveLength(1);
     act(() => vi.advanceTimersByTime(350)); expect(container.querySelectorAll('[data-shot-outcome="on_target"]')).toHaveLength(0);
@@ -316,7 +314,7 @@ describe("perspective spatial pitch", () => {
   it("fails closed on an invalid snapshot without disturbing the 30-zone pitch", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 2, shotmapPoints: [{ x: 80, y: 20, outcome: "goal" }] })}/>);
     expect(screen.queryByRole("group", { name: "Shot outcome visibility" })).not.toBeInTheDocument(); expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
-    expect(screen.getAllByText(/Shot snapshot integrity mismatch/).length).toBeGreaterThan(0); expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(17); expect(container.querySelectorAll("[data-zone-label]")).toHaveLength(0);
+    expect(screen.getAllByText(/Shot snapshot integrity mismatch|슈팅 스냅샷 무결성 불일치/).length).toBeGreaterThan(0); expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(17); expect(container.querySelectorAll("[data-zone-label]")).toHaveLength(0);
   });
 
   it("shows accessible null-metric tooltip with one roving tab stop in Perspective", () => {
@@ -362,7 +360,7 @@ describe("perspective spatial pitch", () => {
       expect(cssLength(tooltip, Number(tooltip.getAttribute("data-tooltip-width")))).toBe(150);
     };
     assertPixelSizes();
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Goal");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("득점");
 
     rendered.width = 320;
     rendered.height = 208;

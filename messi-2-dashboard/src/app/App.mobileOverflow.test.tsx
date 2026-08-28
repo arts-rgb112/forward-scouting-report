@@ -15,6 +15,6 @@ describe("global navigation mobile overflow contract", () => {
     expect(wrapper).toHaveClass("flex-wrap");
     expect(navigation).toHaveClass("min-w-0", "flex-1", "flex-wrap", "justify-end");
     expect(screen.getAllByRole("link")).toHaveLength(5);
-    expect(screen.getByRole("link", { name: "MESSI stats" })).toHaveClass("whitespace-nowrap", "px-2", "sm:px-3");
+    expect(screen.getByRole("link", { name: "M.E.S.S.I. 지표" })).toHaveClass("whitespace-nowrap", "px-2", "sm:px-3");
   });
 });

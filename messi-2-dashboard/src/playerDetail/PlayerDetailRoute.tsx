@@ -32,7 +32,8 @@ import { DuelPressV2DetailReadoutBoard, DuelPressV2DetailReadoutUnavailable } fr
 import { PlayerProfileCard } from "./PlayerProfileCard";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
-const contextLabel = (context: DatasetRouteState) => context.mode === "league" ? `League · ${context.scope} leagues` : `Europe · ${context.competition.toUpperCase()}`;
+const ROUTE_COPY = { back: "리더보드로 돌아가기", retry: "다시 시도", loading: "선수 프로필", notFound: "선수를 찾을 수 없습니다", unavailable: "선수 상세를 불러올 수 없습니다", configUnavailable: "대시보드 API 설정을 사용할 수 없습니다.", contextUnavailable: "선택한 문맥에서 이 선수를 불러올 수 없습니다." } as const;
+const contextLabel = (context: DatasetRouteState) => context.mode === "league" ? `리그 · ${context.scope}개 리그` : `유럽대항전 · ${context.competition.toUpperCase()}`;
 const validId = (id: number) => Number.isSafeInteger(id) && id > 0;
 const dossierGradient = (code: string) => ({ diamond: "from-violet-300/25 via-violet-950/25 to-[#101415]", emerald: "from-emerald-300/25 via-emerald-950/25 to-[#101415]", platinum: "from-cyan-300/25 via-cyan-950/25 to-[#101415]", gold: "from-amber-300/25 via-amber-950/25 to-[#101415]", silver: "from-slate-200/20 via-slate-800/30 to-[#101415]", bronze: "from-orange-300/25 via-orange-950/25 to-[#101415]" }[code] ?? "from-zinc-300/15 via-zinc-900/30 to-[#101415]");
 export type PlayerHistoryState = { loading: boolean; entries: PlayerHistoryEntry[]; failed: number; requestedSeasons: number };
@@ -146,24 +147,20 @@ export function Benchmark({ player, config, dataset }: { player: Player; config?
 /** Presentation-only composition: all score, spatial and radar values remain server supplied. */
 export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality, history, config, dataset, afterPanels, detailReadoutBoard, detailReadouts, renewedDetailRequested = false }: { player: Player; analysis?: PlayerAnalysis; quadrant?: TacticalQuadrant; quality: QualityDisplay; history: PlayerHistoryState; config?: MessiApiConfig; dataset: DatasetRouteState; afterPanels?: ReactNode; detailReadoutBoard?: ReactNode; detailReadouts?: DuelPressDetailReadoutEnvelope; renewedDetailRequested?: boolean }) {
   const spatialContextIdentity = `${player.id}|${dataset.season}|${dataset.mode}|${dataset.scope}|${dataset.competition}`;
-  const readoutSlot = detailReadoutBoard ?? <PercentileProfile player={player} analysis={analysis} quality={quality} layout="rail"/>;
+  const readoutSlot = detailReadoutBoard ?? <PercentileProfile player={player} analysis={analysis} quality={quality} layout="page"/>;
   return <>
-    <div data-layout="dossier-season-analysis">
-    <div data-layout="detail-dossier-layout" className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(528px,596px)_minmax(0,1fr)] xl:items-start">
-      <div data-layout="detail-left-rail" className="min-w-0">
-        <div data-layout="dossier-season" className="flex min-w-0 items-start">
-          <PlayerProfileCard player={player} analysis={analysis} selected={dataset} history={history}/>
-        </div>
-        <div data-layout="detail-board-slot" className="mt-4 min-w-0">{readoutSlot}</div>
+    <PitchPenaltyProvider summaryShots={analysis?.spatial.shotmapPoints}>
+      <div data-layout="detail-dossier-layout" className="mt-4 grid min-w-0 gap-4 xl:grid-cols-12 xl:items-start">
+        <div data-layout="dossier-season" className="min-w-0 xl:col-span-3"><PlayerProfileCard player={player} analysis={analysis} selected={dataset} history={history}/></div>
+        <section data-layout="tactical-spatial-workspace" className="min-w-0 rounded-xl border border-white/10 bg-[#0d1112] p-2 shadow-sm xl:col-span-9" aria-label="전술·공간 분석">
+          <PitchPenaltyToggle/>
+          <div data-layout="pitch-workspace-slot" className="mt-2 min-w-0"><PitchWorkspace analysis={analysis} contextIdentity={spatialContextIdentity} config={config} playerId={player.id} dataset={dataset}/></div>
+        </section>
       </div>
-      <PitchPenaltyProvider summaryShots={analysis?.spatial.shotmapPoints}><section data-layout="tactical-spatial-workspace" className="min-w-0 rounded-xl border border-white/10 bg-[#0d1112] p-2 shadow-sm" aria-label="Tactical and spatial analysis">
-        <PitchPenaltyToggle/>
-        <div data-layout="pitch-workspace-slot" className="mt-2 min-w-0"><PitchWorkspace analysis={analysis} contextIdentity={spatialContextIdentity} config={config} playerId={player.id} dataset={dataset}/></div>
-        <div data-layout="tactical-summary-slot" className="mt-2 min-w-0"><TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/></div>
-      </section></PitchPenaltyProvider>
-    </div>
-    </div>
-    {!analysis && <p className="mt-4 rounded border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">Server analysis is unavailable; no client-side analysis has been invented.</p>}
+      <div data-layout="tactical-summary-slot" className="mt-4 min-w-0"><TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/></div>
+    </PitchPenaltyProvider>
+    {!analysis && <p className="mt-4 rounded border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">서버 분석을 제공할 수 없어 브라우저에서 대체 값을 만들지 않았습니다.</p>}
+    <div data-layout="detail-board-slot" className="mt-4 min-w-0">{readoutSlot}</div>
     <div data-layout="sectors-radar"><div data-layout="radar-benchmarks" className="mt-4 min-w-0"><Benchmark player={player} config={config} dataset={dataset}/></div></div>
     {afterPanels}
   </>;
@@ -201,9 +198,9 @@ export function PlayerDetailRoute({ id, dataset, config: providedConfig, afterPa
     return () => { contextController.abort(); };
   }, [config, dataset.competition, dataset.mode, dataset.scope, dataset.season, duelPressV2Requested, id, readoutRetry]);
   useEffect(() => { if (detail) titleRef.current?.focus(); }, [detail]);
-  const detailBoard = duelPressV2Requested ? v2Readouts ? <DuelPressV2DetailReadoutBoard data={v2Readouts} layout="rail"/> : <DuelPressV2DetailReadoutUnavailable loading={!v2ReadoutError} message={v2ReadoutError} onRetry={() => setReadoutRetry((value) => value + 1)}/> : duelPressDetailRequested ? readouts ? <DuelPressDetailReadoutBoard data={readouts} layout="rail"/> : <DuelPressDetailReadoutUnavailable loading={!readoutError} message={readoutError} onRetry={() => setReadoutRetry((value) => value + 1)}/> : undefined;
-  const back = datasetHref("/", dataset); if (scope8 === "unsupported") return <main id="main-content" className="mx-auto max-w-[1580px] p-4 text-zinc-100"><h1 tabIndex={-1}>8-league dataset unavailable</h1><p role="alert">8개 리그 데이터 is unavailable for this context.</p><a href={back}>Back to leaderboard</a></main>;
-  if (error) return <main id="main-content" className="mx-auto max-w-[1580px] p-4 text-zinc-100"><h1 tabIndex={-1} ref={titleRef}>{error === "not-found" ? "Player not found" : "Player details unavailable"}</h1><p role="alert">{error === "config" ? "Dashboard API configuration is unavailable." : "This player could not be loaded in the selected context."}</p>{error !== "not-found" && <button className="mt-4 min-h-11 rounded border px-4" onClick={() => setRetry((value) => value + 1)}>Retry</button>}<p><a href={back}>Back to leaderboard</a></p></main>;
-  if (!detail) return <main id="main-content" className="mx-auto max-w-[1580px] p-4 text-zinc-100"><a href={back}>← Back to leaderboard</a><h1 tabIndex={-1} ref={titleRef} className="mt-4 text-3xl font-black">Player profile</h1><div aria-busy="true" className="mt-4 grid min-w-0 gap-3 md:grid-cols-2 lg:grid-cols-[minmax(272px,300px)_minmax(240px,280px)_minmax(0,1fr)]"><div className="h-72 animate-pulse rounded bg-white/10 motion-reduce:animate-none"/><div className="h-72 animate-pulse rounded bg-white/10 motion-reduce:animate-none"/><div className="h-72 animate-pulse rounded bg-white/10 motion-reduce:animate-none"/></div></main>;
-  return <main id="main-content" className="mx-auto max-w-[1580px] overflow-x-hidden p-3 text-zinc-100 sm:p-6"><a href={back} className="inline-flex min-h-11 items-center text-lime-300 focus-visible:ring-2">← Back to leaderboard</a><h1 ref={titleRef} tabIndex={-1} className="text-3xl font-black outline-none">{detail.player.name}</h1><p className="mt-1 text-xs text-zinc-400">{contextLabel(dataset)} · {dataset.season}</p><PlayerDetailDossierLayout player={detail.player} analysis={detail.analysis} quadrant={quadrant} quality={quality} history={history} config={config} dataset={dataset} afterPanels={afterPanels} detailReadoutBoard={detailBoard} detailReadouts={readouts} renewedDetailRequested={duelPressDetailRequested || duelPressV2Requested}/></main>;
+  const detailBoard = duelPressV2Requested ? v2Readouts ? <DuelPressV2DetailReadoutBoard data={v2Readouts} layout="page"/> : <DuelPressV2DetailReadoutUnavailable loading={!v2ReadoutError} message={v2ReadoutError} onRetry={() => setReadoutRetry((value) => value + 1)}/> : duelPressDetailRequested ? readouts ? <DuelPressDetailReadoutBoard data={readouts} layout="page"/> : <DuelPressDetailReadoutUnavailable loading={!readoutError} message={readoutError} onRetry={() => setReadoutRetry((value) => value + 1)}/> : undefined;
+  const back = datasetHref("/", dataset); if (scope8 === "unsupported") return <main id="main-content" className="mx-auto max-w-[1580px] p-4 text-zinc-100"><h1 tabIndex={-1}>8개 리그 데이터 사용 불가</h1><p role="alert">이 문맥에서는 8개 리그 데이터를 제공하지 않습니다.</p><a href={back}>{ROUTE_COPY.back}</a></main>;
+  if (error) return <main id="main-content" className="mx-auto max-w-[1580px] p-4 text-zinc-100"><h1 tabIndex={-1} ref={titleRef}>{error === "not-found" ? ROUTE_COPY.notFound : ROUTE_COPY.unavailable}</h1><p role="alert">{error === "config" ? ROUTE_COPY.configUnavailable : ROUTE_COPY.contextUnavailable}</p>{error !== "not-found" && <button className="mt-4 min-h-11 rounded border px-4" onClick={() => setRetry((value) => value + 1)}>{ROUTE_COPY.retry}</button>}<p><a href={back}>{ROUTE_COPY.back}</a></p></main>;
+  if (!detail) return <main id="main-content" className="mx-auto max-w-[1580px] p-4 text-zinc-100"><a href={back}>← {ROUTE_COPY.back}</a><h1 tabIndex={-1} ref={titleRef} className="mt-4 text-3xl font-black">{ROUTE_COPY.loading}</h1><div aria-busy="true" className="mt-4 grid min-w-0 gap-3 md:grid-cols-2 lg:grid-cols-[minmax(272px,300px)_minmax(240px,280px)_minmax(0,1fr)]"><div className="h-72 animate-pulse rounded bg-white/10 motion-reduce:animate-none"/><div className="h-72 animate-pulse rounded bg-white/10 motion-reduce:animate-none"/><div className="h-72 animate-pulse rounded bg-white/10 motion-reduce:animate-none"/></div></main>;
+  return <main id="main-content" className="mx-auto max-w-[1580px] overflow-x-hidden p-3 text-zinc-100 sm:p-6"><a href={back} className="inline-flex min-h-11 items-center text-lime-300 focus-visible:ring-2">← {ROUTE_COPY.back}</a><h1 ref={titleRef} tabIndex={-1} className="text-3xl font-black outline-none">{detail.player.name}</h1><p className="mt-1 text-xs text-zinc-400">{contextLabel(dataset)} · {dataset.season}</p><PlayerDetailDossierLayout player={detail.player} analysis={detail.analysis} quadrant={quadrant} quality={quality} history={history} config={config} dataset={dataset} afterPanels={afterPanels} detailReadoutBoard={detailBoard} detailReadouts={readouts} renewedDetailRequested={duelPressDetailRequested || duelPressV2Requested}/></main>;
 }
