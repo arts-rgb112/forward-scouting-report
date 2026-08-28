@@ -29,6 +29,12 @@ describe("native player detail panels", () => {
     expect(view.container.querySelector('[aria-label="박스 밖 슈팅"]')).toBeNull();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
+  it("uses human-readable server category labels for the legacy score-strip ARIA names", () => {
+    const readouts = duelPressDetailReadoutEnvelopeSchema.parse(detailReadoutFixture);
+    const view = render(<PlayerTierCard player={player} analysis={analysis} quality={{ kind: "idle" }} detailReadouts={readouts} />);
+    expect(view.container.querySelector('[aria-label="outsideShot"]')).toBeNull();
+    expect(view.container.querySelector('[aria-label="공간 점유"]')).not.toBeNull();
+  });
   it("keeps tactical summary at exactly three lines even without spatial data", () => {
     render(<TacticalSummary player={player} analysis={analysis} quality={{ kind: "idle" }} />);
     expect(screen.getAllByRole("listitem")).toHaveLength(3);

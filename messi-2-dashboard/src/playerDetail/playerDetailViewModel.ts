@@ -8,7 +8,7 @@ export const detailMetrics = [
   ["dangerZone", "OBP", "On-ball progression", "dribble attempts", "danger progression"],
   ["aerial", "AER", "Aerial duels", "attempts", "margin"],
   ["groundDuel", "GND", "Ground duels", "attempts", "margin"],
-  ["spaceControl", "OTB", "Off-the-ball movement", "radius", "space efficiency"],
+  ["spaceControl", "OTB", "공간 점유", "radius", "space efficiency"],
 ] as const;
 
 export type DetailMetric = (typeof detailMetrics)[number][0];

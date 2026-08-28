@@ -219,14 +219,14 @@ describe("dashboard contract UI", () => {
   it("uses server ranks and all six user-facing metrics", () => {
     render(<MessiScoutingDashboard players={samplePlayers} meta={sampleMeta} refreshing={false} onRefresh={vi.fn()} />);
     expect(screen.getAllByText("02").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("오프 더 볼").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("공간 점유").length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText("Overall M.E.S.S.I. tier: Legacy Diamond, level 2").length).toBeGreaterThan(0);
   });
 
   it("mobile cards expose six metrics without disclosure", () => {
     const { container } = render(<PlayerCardList players={samplePlayers.slice(0, 1)} comparedIds={new Set()} watchedIds={new Set()} onToggleCompare={vi.fn()} onToggleWatch={vi.fn()} />);
     expect(container.querySelectorAll("article [role='tooltip']")).toHaveLength(0);
-    expect(screen.getByText("오프 더 볼")).toBeInTheDocument();
+    expect(screen.getByText("공간 점유")).toBeInTheDocument();
   });
 
   it("keeps one visible, accessible set of table sort controls", () => {

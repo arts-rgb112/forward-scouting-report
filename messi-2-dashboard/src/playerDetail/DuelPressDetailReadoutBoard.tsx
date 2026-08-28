@@ -1,15 +1,7 @@
 import { cloneElement, isValidElement, useId, useState, type ReactNode } from "react";
 import { getScoreBand } from "../dashboard/scoutingConfig";
+import { duelPressAxisLabels } from "../dashboard/duelPressAxisLabels";
 import type { DuelPressDetailReadout, DuelPressDetailReadoutEnvelope } from "../api/duelPressDetailReadoutContracts";
-
-const categoryCopy: Record<DuelPressDetailReadoutEnvelope["categories"][number]["id"], { label: string }> = {
-  outsideShot: { label: "박스 밖 슈팅" },
-  boxThreat: { label: "박스 안 슈팅" },
-  dangerZone: { label: "온볼 전개 영향력" },
-  combinedDuel: { label: "통합 경합" },
-  spaceControl: { label: "오프 더 볼" },
-  forwardPress: { label: "전방 압박 효율" },
-};
 
 const directions = { higher_is_better: "높을수록 좋음", lower_is_better: "낮을수록 좋음", neutral: "중립 맥락" } as const;
 const units = { count: "회", per90: "/90", goals: "골", percent: "%", score: "점" } as const;
@@ -109,7 +101,7 @@ function ReadoutRows({ items }: { items: readonly DuelPressDetailReadout[] }) {
 }
 
 function CategoryCard({ category }: { category: DuelPressDetailReadoutEnvelope["categories"][number] }) {
-  const copy = categoryCopy[category.id];
+  const label = duelPressAxisLabels[category.id];
   const percentile = formatAuthoritativePercentile(category.comparison.percentile);
   const displayValue = percentile === null ? "제공 불가" : String(percentile);
   const groups = category.id === "combinedDuel"
@@ -117,10 +109,10 @@ function CategoryCard({ category }: { category: DuelPressDetailReadoutEnvelope["
     : [[undefined, category.readouts]] as const;
   return <article data-card="category" className="min-w-0 rounded-xl border border-white/10 bg-[#101415] p-3 shadow-sm">
     <div className="flex min-w-0 items-start justify-between gap-3">
-      <h3 className="min-w-0 text-sm font-black text-white">{copy.label}</h3>
-      <DetailsTooltip label={`${copy.label} 카테고리`} displayValue={displayValue} trigger={<b className={`text-2xl font-black tabular-nums ${percentile === null ? "text-zinc-500" : scoreTextToken(percentile)}`}>{displayValue}</b>}><CategoryDetails category={category}/></DetailsTooltip>
+      <h3 className="min-w-0 text-sm font-black text-white">{label}</h3>
+      <DetailsTooltip label={`${label} 카테고리`} displayValue={displayValue} trigger={<b className={`text-2xl font-black tabular-nums ${percentile === null ? "text-zinc-500" : scoreTextToken(percentile)}`}>{displayValue}</b>}><CategoryDetails category={category}/></DetailsTooltip>
     </div>
-    <PercentileBar label={copy.label} percentile={category.comparison.percentile}/>
+    <PercentileBar label={label} percentile={category.comparison.percentile}/>
     {groups.map(([title, items]) => <section key={title ?? "all"} aria-label={title} className={title ? "mt-3 min-w-0" : "min-w-0"}>
       {title && <h4 className="border-b border-white/10 pb-1 text-xs font-bold text-zinc-200">{title}</h4>}
       <ReadoutRows items={items}/>
