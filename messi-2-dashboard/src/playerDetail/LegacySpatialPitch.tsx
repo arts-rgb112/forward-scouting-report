@@ -5,6 +5,7 @@ import { displayDensityGrid, legacyDensityGrid, marchingSquares, normalizeDensit
 import { groupPitchShots, medianObservedXg, pitchMarkerRadius, PitchShotMarker } from "./PitchShotMarker";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { excludePenaltyShots } from "./pitchPenalties";
+import { PATH_STYLE, pkAxisLines, pitchMarkings, zone20Lines, type Projection as GeometryProjection } from "./pitchGeometry";
 import { formatShotMetric, outcomeOrder, outcomePresentation, outcomeSummary, OutcomeControls, shotIntegrity, shotMarkerLabel, type ShotOutcome, useShotOutcomeVisibility } from "./shotOutcomeVisibility";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
@@ -69,28 +70,25 @@ function useMarkerScale() {
 
 const screenY = (sourceY: number) => 100 - sourceY;
 const pitchPath = (points: readonly { x: number; y: number }[]) => points.map((point, index) => `${index ? "L" : "M"}${point.x} ${screenY(point.y)}`).join(" ");
+const planGeometryProjection: GeometryProjection = {
+  project: ([worldX, worldY]) => [worldX / 1.05, 100 - worldY / .68],
+  pp: (yPct, xPct) => [xPct, screenY(yPct)],
+  cameraPosition: [0, 0, 0],
+  scale: 1,
+};
 
 /** Visual-only Guardiola 20-zone guide. It never derives a zone metric client-side. */
 function GuardiolaPitchGuide({ showCorridors }: { showCorridors: boolean }) {
-  const wideDepths = [15.71, 32.5, 50, 67.5, 84.29];
-  const centralDepths = [15.71, 50, 84.29];
-  const laneEdges = [21.82, 78.18];
-  const innerLaneEdges = [37, 63];
-  const boxY = [20.35, 79.65];
-  const sixYardY = [36.53, 63.47];
+  const markings = PATH_STYLE.marking, grid = PATH_STYLE["zone-grid"], pk = PATH_STYLE["pk-axis"];
   return <g data-layer="guardiola-20-zone-guide" fill="none" vectorEffect="non-scaling-stroke">
-    <rect x="0" y="0" width="100" height="100" stroke="#FFFFFF" strokeOpacity=".45" strokeWidth="1.8"/>
-    <path d={`M50 0V100M0 ${screenY(50)}H100`} stroke="#FFFFFF" strokeOpacity=".45" strokeWidth="1.8"/>
-    <circle cx="50" cy={screenY(50)} r="9.15" stroke="#FFFFFF" strokeOpacity=".45" strokeWidth="1.8"/>
-    {[[0, 15.71], [84.29, 100]].map(([start, end]) => <path key={`box-${start}`} d={pitchPath([{ x: start, y: boxY[0] }, { x: end, y: boxY[0] }, { x: end, y: boxY[1] }, { x: start, y: boxY[1] }])} stroke="#FFFFFF" strokeOpacity=".45" strokeWidth="1.8"/>) }
-    {[[0, 5.24], [94.76, 100]].map(([start, end]) => <path key={`six-${start}`} d={pitchPath([{ x: start, y: sixYardY[0] }, { x: end, y: sixYardY[0] }, { x: end, y: sixYardY[1] }, { x: start, y: sixYardY[1] }])} stroke="#FFFFFF" strokeOpacity=".45" strokeWidth="1.8"/>) }
-    {[11, 89].map((x) => <circle key={`spot-${x}`} cx={x} cy={screenY(50)} r="1.4" fill="#FFFFFF" fillOpacity=".45" stroke="none"/>)}
-    {laneEdges.map((edge) => <path key={`lane-${edge}`} d={`M0 ${screenY(edge)}H100`} stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1"/>)}
-    {innerLaneEdges.map((edge) => <path key={`inner-lane-${edge}`} d={`M15.71 ${screenY(edge)}H84.29`} stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1"/>)}
-    {wideDepths.map((depth) => <g key={`wide-depth-${depth}`}><path d={`M${depth} ${screenY(0)}V${screenY(21.82)}`} stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1"/><path d={`M${depth} ${screenY(78.18)}V${screenY(100)}`} stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1"/></g>)}
-    {centralDepths.map((depth) => <path key={`central-depth-${depth}`} d={`M${depth} ${screenY(21.82)}V${screenY(78.18)}`} stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1"/>)}
-    <path d={`M0 ${screenY(50)}H15.71M84.29 ${screenY(50)}H100`} stroke="#7DD3FC" strokeOpacity=".9" strokeWidth="2" strokeDasharray="4 3"/>
-    {showCorridors && <g data-layer="shot-corridors" stroke="#7DD3FC" strokeOpacity=".6" strokeWidth="1.25" strokeDasharray="3 4">{[21.82, 37, 50, 63, 78.18].map((edge) => <path key={`corridor-${edge}`} d={`M0 ${screenY(edge)}H100`}/>)}</g>}
+    <g data-layer="football-markings" stroke={markings.stroke} strokeOpacity={markings.opacity} strokeWidth={markings.width}>
+      {pitchMarkings(planGeometryProjection).map((path, index) => <path key={index} d={path.d}/>) }
+    </g>
+    <g data-layer="zone-grid" stroke={grid.stroke} strokeOpacity={grid.opacity} strokeWidth={grid.width}>
+      {zone20Lines(planGeometryProjection).map((path, index) => <path key={index} d={path.d}/>) }
+    </g>
+    <g data-layer="pk-axis" stroke={pk.stroke} strokeOpacity={pk.opacity} strokeWidth={pk.width} strokeDasharray={pk.dash}>{pkAxisLines(planGeometryProjection).map((path, index) => <path key={index} d={path.d}/>)}</g>
+    {showCorridors && <g data-layer="shot-corridors" stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1" strokeDasharray="3 4">{[21.82, 37, 50, 63, 78.18].map((edge) => <path key={`corridor-${edge}`} d={`M0 ${screenY(edge)}H100`}/>)}</g>}
   </g>;
 }
 

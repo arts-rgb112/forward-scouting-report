@@ -115,6 +115,20 @@ describe("LegacySpatialPitch", () => {
     expect(container.querySelectorAll('[data-layer="shot-corridors"] path')).toHaveLength(5);
   });
 
+  it("uses thin white zone guides without bands and confines the sky PK axis to the penalty boxes", () => {
+    const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
+    const zoneGrid = container.querySelector('[data-layer="zone-grid"]')!;
+    const pkAxis = container.querySelector('[data-layer="pk-axis"]')!;
+    expect(zoneGrid).toHaveAttribute("stroke", "#FFFFFF");
+    expect(zoneGrid).toHaveAttribute("stroke-width", "1");
+    expect(zoneGrid).toHaveAttribute("stroke-opacity", "0.13");
+    expect(zoneGrid.closest('[data-layer="guardiola-20-zone-guide"]')).toHaveAttribute("fill", "none");
+    expect(pkAxis).toHaveAttribute("stroke", "#7DD3FC");
+    expect(pkAxis).toHaveAttribute("stroke-width", "2");
+    expect(pkAxis?.querySelectorAll("path")).toHaveLength(2);
+    expect([...pkAxis!.querySelectorAll("path")].every((path) => !path.getAttribute("d")?.includes("H100"))).toBe(true);
+  });
+
   it("keeps one roving marker tab stop while exact-coordinate groups preserve all source counts", () => {
     const many = Array.from({ length: 119 }, (_, index) => ({ x: index % 100, y: index % 100, outcome: "goal" as const }));
     const { container } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, shotmapPointCount: 119, shotmapPoints: many })} />);
