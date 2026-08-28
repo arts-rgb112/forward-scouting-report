@@ -28,7 +28,7 @@ describe("native detail semantics", () => {
   it("shows imputed quality honestly and removes the marker when quality is complete", async () => {
     const first = render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name });
     await waitFor(() => expect(screen.getAllByText("Conservative substitute").length).toBeGreaterThanOrEqual(1));
-    expect(within(screen.getByRole("region", { name: "Percentile profile" })).getByText("Off-the-ball movement")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Percentile profile" })).getByText("공간 점유")).toBeInTheDocument();
     first.unmount(); transport.quality.mockResolvedValueOnce({ dataQuality: { ...incomplete, spatialAvailable: true, messiScoreComplete: true, reason: "complete", imputedMetrics: [], imputedComponents: [] } }); render(<StaticRoute />);
     await screen.findByRole("heading", { name: samplePlayers[0].name }); await waitFor(() => expect(screen.queryByText("Conservative substitute")).not.toBeInTheDocument());
   });
@@ -38,10 +38,10 @@ describe("native detail semantics", () => {
     expect(within(summary).getAllByRole("listitem")).toHaveLength(3); expect(summary).toHaveTextContent("Complete forward");
   });
   it("renders unavailable, verified-zero, and populated actual shot states with one keyboard-readable SVG", async () => {
-    const unavailable = render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); let pitch = screen.getByRole("region", { name: "Spatial pitch" });
+    const unavailable = render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); let pitch = screen.getByRole("region", { name: "어디서 쏘고 어디로 꽂나" });
     expect(within(pitch).getByRole("img", { name: /attacking pitch/ })).toHaveAccessibleName(/Activity heatmap unavailable.*Shot snapshot unavailable/); expect(pitch).not.toHaveTextContent("Goals 0"); expect(pitch).toHaveTextContent("Outcome totals are unavailable"); unavailable.unmount();
-    transport.detail.mockResolvedValueOnce({ player: samplePlayers[0], analysis: { ...analysis, spatial: { ...analysis.spatial, shotmapSnapshotAvailable: true } } }); const zero = render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); pitch = screen.getByRole("region", { name: "Spatial pitch" }); expect(within(pitch).getByRole("img", { name: /attacking pitch/ })).toHaveAccessibleName(/Verified zero shots/); zero.unmount();
-    transport.detail.mockResolvedValueOnce({ player: samplePlayers[0], analysis: { ...analysis, spatial: { ...analysis.spatial, available: true, heatmapPointCount: 1, heatmapPoints: [{ x: 50, y: 40 }], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 50, y: 40, outcome: "goal" as const, xg: 0.4, xgot: null }] } } }); render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); pitch = screen.getByRole("region", { name: "Spatial pitch" });
+    transport.detail.mockResolvedValueOnce({ player: samplePlayers[0], analysis: { ...analysis, spatial: { ...analysis.spatial, shotmapSnapshotAvailable: true } } }); const zero = render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); pitch = screen.getByRole("region", { name: "어디서 쏘고 어디로 꽂나" }); expect(within(pitch).getByRole("img", { name: /attacking pitch/ })).toHaveAccessibleName(/Verified zero shots/); zero.unmount();
+    transport.detail.mockResolvedValueOnce({ player: samplePlayers[0], analysis: { ...analysis, spatial: { ...analysis.spatial, available: true, heatmapPointCount: 1, heatmapPoints: [{ x: 50, y: 40 }], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 50, y: 40, outcome: "goal" as const, xg: 0.4, xgot: null }] } } }); render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); pitch = screen.getByRole("region", { name: "어디서 쏘고 어디로 꽂나" });
     expect(within(pitch).getByRole("img", { name: /attacking pitch/ })).toHaveAccessibleName(/1 activity points.*1 shots/); expect(pitch).toHaveTextContent("Goals 1"); expect(pitch.querySelectorAll("svg")).toHaveLength(1); expect(within(pitch).getByRole("list", { name: "Authoritative shot events" })).toHaveTextContent("Goal · xG 0.40");
   });
 });

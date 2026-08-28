@@ -1,4 +1,5 @@
 import type { MetricKey, Tier } from "./types";
+import { duelPressAxisLabels } from "./duelPressAxisLabels";
 
 export { metricKeys } from "./types";
 
@@ -18,12 +19,12 @@ export function getScoreBand(score: number) {
 }
 
 export const metricConfig: Record<MetricKey, { label: string; short: string; detail: string; formula: string }> = {
-  outsideShot: { label: "박스 밖 슈팅", short: "중거리", detail: "박스 밖에서의 슈팅 영향력을 평가합니다.", formula: "박스 밖 슈팅 시도량 50%와 슈팅 품질 50%를 동일 문맥 코호트 백분위로 결합합니다." },
-  boxThreat: { label: "박스 안 슈팅", short: "박스 안", detail: "박스 안에서의 득점 위협을 평가합니다.", formula: "박스 안 슈팅 시도량 50%와 인박스 피니싱/90 70%·딥박스 존 활동 30%의 결합 점수 50%를 동일 문맥 코호트 백분위로 결합합니다." },
-  dangerZone: { label: "온볼 전개 영향력", short: "온볼 전개", detail: "공을 소유한 상태에서 전진과 위험 창출에 미친 영향을 평가합니다.", formula: "시즌 드리블 시도량 50%, 드리블 순마진 35%, 위험구역 활동밀도 15%를 결합합니다. 모든 구성요소는 동일 문맥 코호트 백분위입니다." },
+  outsideShot: { label: duelPressAxisLabels.outsideShot, short: "중거리", detail: "박스 밖에서의 슈팅 영향력을 평가합니다.", formula: "박스 밖 슈팅 시도량 50%와 슈팅 품질 50%를 동일 문맥 코호트 백분위로 결합합니다." },
+  boxThreat: { label: duelPressAxisLabels.boxThreat, short: "박스 안", detail: "박스 안에서의 득점 위협을 평가합니다.", formula: "박스 안 슈팅 시도량 50%와 인박스 피니싱/90 70%·딥박스 존 활동 30%의 결합 점수 50%를 동일 문맥 코호트 백분위로 결합합니다." },
+  dangerZone: { label: duelPressAxisLabels.dangerZone, short: "온볼 전개", detail: "공을 소유한 상태에서 전진과 위험 창출에 미친 영향을 평가합니다.", formula: "시즌 드리블 시도량 50%, 드리블 순마진 35%, 위험구역 활동밀도 15%를 결합합니다. 모든 구성요소는 동일 문맥 코호트 백분위입니다." },
   aerial: { label: "공중 경합", short: "공중", detail: "공중 경합 영향력을 평가합니다.", formula: "공중 경합 시도량 50%와 공중 경합 승패 마진/90 50%를 동일 문맥 코호트 백분위로 결합합니다." },
   groundDuel: { label: "지상 경합", short: "지상", detail: "지상 경합 영향력을 평가합니다.", formula: "지상 경합 시도량 50%와 지상 경합 승패 마진/90 50%를 동일 문맥 코호트 백분위로 결합합니다." },
-  spaceControl: { label: "오프 더 볼", short: "오프 더 볼", detail: "공이 없을 때의 공간 점유와 움직임을 평가합니다.", formula: "CCA 면적 50%와 위험구역 활동밀도 50%를 동일 문맥 코호트 백분위로 결합합니다." },
+  spaceControl: { label: duelPressAxisLabels.spaceControl, short: duelPressAxisLabels.spaceControl, detail: "위치 분포와 위험구역 활동 밀도를 평가합니다.", formula: "CCA 면적 50%와 위험구역 활동밀도 50%를 동일 문맥 코호트 백분위로 결합합니다." },
 };
 
 type TierVisual = { label: string; glyph: string; className: string };

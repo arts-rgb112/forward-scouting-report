@@ -35,7 +35,7 @@ describe("duel-press detailed stats board", () => {
   it("keeps exactly six ordered category cards, their combined-duel readouts, and separate context cards", () => {
     const { container } = render(<DuelPressDetailReadoutBoard data={presentationFixture()}/>);
     const section = screen.getByRole("region", { name: "Duel press detailed stats board" });
-    expect(within(section).getAllByRole("heading", { level: 3 }).map((node) => node.textContent)).toEqual(["박스 밖 슈팅", "박스 안 슈팅", "온볼 전개 영향력", "통합 경합", "오프 더 볼", "전방 압박 효율", "순수 전진 기여도", "득점 운·상대 선방"]);
+    expect(within(section).getAllByRole("heading", { level: 3 }).map((node) => node.textContent)).toEqual(["박스 밖 슈팅", "박스 안 슈팅", "온볼 전개", "통합 경합", "공간 점유", "전방 압박", "순수 전진 기여도", "득점 운·상대 선방"]);
     expect(container.querySelectorAll('[data-card="category"]')).toHaveLength(6);
     expect(container.querySelectorAll('[data-card="context"]')).toHaveLength(2);
     expect(within(section).queryByText("AER")).not.toBeInTheDocument();

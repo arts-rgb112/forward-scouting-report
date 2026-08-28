@@ -13,6 +13,7 @@ import { DataQualityBadge } from "../dashboard/components/DataQualityBadge";
 import { metricIsImputed, qualityDisplay, type QualityDisplay } from "../dashboard/dataQualityViewModel";
 import { datasetFromSearch, datasetHref } from "../dashboard/datasetRoute";
 import { metricConfig, metricKeys } from "../dashboard/scoutingConfig";
+import { duelPressAxisLabels } from "../dashboard/duelPressAxisLabels";
 import type { DatasetRouteState, MetricKey, PlayerAnalysis, PlayerComparison, PlayerDetail, RadarAxis, TacticalQuadrant } from "../dashboard/types";
 import { PlayerDetailRoute as NativePlayerDetailRoute } from "../playerDetail/PlayerDetailRoute";
 import { useContextualCompare, type ContextualComparePanelState } from "../api/useContextualCompare";
@@ -38,10 +39,12 @@ function LegacyAnalysisSummary({ analysis, quality }: { analysis?: PlayerAnalysi
   const metrics = Object.entries(analysis.rawMetrics).filter(([, value]) => value !== null).slice(0, 8);
   return <section className="mt-6 rounded border border-white/10 bg-black/20 p-4" aria-label="Server analysis"><h2 className="font-bold">Server analysis</h2><p className="mt-2 flex items-center text-sm text-zinc-300">Score {analysis.score.value} · cohort {analysis.score.population}<DataQualityBadge quality={quality} /></p><div className="mt-4 grid gap-4 md:grid-cols-2"><MetricTable title="Volume profile" axes={analysis.volumeRadar.axes} quality={quality} /><MetricTable title="Ratio profile" axes={analysis.ratioRadar.axes} quality={quality} /></div><p className="mt-4 text-xs text-zinc-400">Spatial data: {analysis.spatial.available ? `${analysis.spatial.heatmapPointCount} server-provided points` : "unavailable for this context"}.</p>{metrics.length > 0 && <dl className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">{metrics.map(([key, value]) => <div key={key} className="rounded bg-white/[.03] p-2"><dt className="truncate text-zinc-500">{key}</dt><dd className="font-bold text-zinc-200">{String(value)}</dd></div>)}</dl>}</section>;
 }
-// `dangerZone` is the M.E.S.S.I. composite sector.  Its server display label
-// has changed over time, but the consumer-facing name must remain consistent.
-// Do not apply this transformation to raw drill-down metrics with another id.
-export function displayRadarAxisLabel(axis: { id: string; label: string }): string { return axis.id === "dangerZone" ? "온볼 전개 영향력" : axis.label; }
+/** Prefer the canonical axis vocabulary when an older contract lacks it. */
+export function displayRadarAxisLabel(axis: { id: string; label: string }): string {
+  return axis.id in duelPressAxisLabels
+    ? duelPressAxisLabels[axis.id as keyof typeof duelPressAxisLabels]
+    : axis.label;
+}
 function MetricTable({ title, axes, quality }: { title: string; axes: PlayerAnalysis["volumeRadar"]["axes"]; quality?: QualityDisplay }) { return <div><h3 className="text-sm font-bold text-zinc-200">{title}</h3><table className="mt-2 w-full text-left text-xs"><thead className="text-zinc-500"><tr><th>Metric</th><th className="text-right">Score</th><th className="text-right">Percentile</th></tr></thead><tbody>{axes.map((axis) => { const imputed = axisIsImputed(axis, quality); return <tr key={axis.id} className="border-t border-white/10"><th className="py-1 font-medium text-zinc-300">{displayRadarAxisLabel(axis)}</th><td className="py-1 text-right text-lime-300">{axis.score}{imputed && <span title={axisQualityCopy(quality!)} className="ml-1 text-[9px] text-amber-100">대체값</span>}</td><td className="py-1 text-right text-zinc-400">{axis.percentile ?? "—"}</td></tr>; })}</tbody></table></div>; }
 
 function displayPercent(value: number | null | undefined) {
