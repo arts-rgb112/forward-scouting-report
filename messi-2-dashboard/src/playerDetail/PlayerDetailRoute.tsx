@@ -29,6 +29,7 @@ import { useTacticalSummaryV2 } from "./useTacticalSummaryV2";
 import { useVolumeBenchmark } from "./useVolumeBenchmark";
 import { DuelPressDetailReadoutBoard, DuelPressDetailReadoutUnavailable } from "./DuelPressDetailReadoutBoard";
 import { DuelPressV2DetailReadoutBoard, DuelPressV2DetailReadoutUnavailable } from "./DuelPressV2DetailReadoutBoard";
+import { PlayerProfileCard } from "./PlayerProfileCard";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
 const contextLabel = (context: DatasetRouteState) => context.mode === "league" ? `League · ${context.scope} leagues` : `Europe · ${context.competition.toUpperCase()}`;
@@ -150,16 +151,15 @@ export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality,
     <div data-layout="dossier-season-analysis">
     <div data-layout="detail-dossier-layout" className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(528px,596px)_minmax(0,1fr)] xl:items-start">
       <div data-layout="detail-left-rail" className="min-w-0">
-        <div data-layout="dossier-season" className="grid min-w-0 items-start gap-4 md:grid-cols-[minmax(0,300px)_minmax(240px,280px)]">
-          <PlayerTierCard player={player} analysis={analysis} quality={quality} detailReadouts={detailReadouts} renewedDetailRequested={renewedDetailRequested}/>
-          <SeasonScorePanel player={player} analysis={analysis} selected={dataset} history={history}/>
+        <div data-layout="dossier-season" className="flex min-w-0 items-start">
+          <PlayerProfileCard player={player} analysis={analysis} selected={dataset} history={history}/>
         </div>
         <div data-layout="detail-board-slot" className="mt-4 min-w-0">{readoutSlot}</div>
       </div>
       <PitchPenaltyProvider summaryShots={analysis?.spatial.shotmapPoints}><section data-layout="tactical-spatial-workspace" className="min-w-0 rounded-xl border border-white/10 bg-[#0d1112] p-2 shadow-sm" aria-label="Tactical and spatial analysis">
-        <TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/>
         <PitchPenaltyToggle/>
-        <div className="mt-2 min-w-0"><PitchWorkspace analysis={analysis} contextIdentity={spatialContextIdentity} config={config} playerId={player.id} dataset={dataset}/></div>
+        <div data-layout="pitch-workspace-slot" className="mt-2 min-w-0"><PitchWorkspace analysis={analysis} contextIdentity={spatialContextIdentity} config={config} playerId={player.id} dataset={dataset}/></div>
+        <div data-layout="tactical-summary-slot" className="mt-2 min-w-0"><TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/></div>
       </section></PitchPenaltyProvider>
     </div>
     </div>

@@ -69,7 +69,7 @@ export function PitchShotMarker({ outcome, radius, count = 1, outcomeCounts, exp
   const hasPattern = radius >= 7;
   const patternColor = style.reachesFrame ? "#111827" : style.resultColor;
   return <g data-pitch-shot-marker data-marker-radius={radius} data-marker-pattern={hasPattern ? "full" : "circle"} data-marker-outcome={outcome}>
-    <circle data-marker-halo r={radius + Math.max(1.1, radius * .16)} fill="none" stroke="#0A1F10" strokeWidth={Math.max(2.2, radius * .34)} vectorEffect="non-scaling-stroke" />
+    <circle data-marker-halo r={radius + Math.max(.8, radius * .15)} fill="none" stroke="#0A1F10" strokeOpacity=".85" strokeWidth={Math.max(1, radius * .13)} vectorEffect="non-scaling-stroke" />
     <circle data-pitch-shot-glyph data-marker-result-color={style.resultColor} r={radius} fill={style.reachesFrame ? "#F8FAFC" : "#0B1220"} fillOpacity={style.reachesFrame ? 1 : .35} stroke={style.resultColor} strokeOpacity={style.strokeOpacity} strokeWidth={Math.max(style.strokeWidth, outcome === "goal" ? radius * .3 : radius * .16)} vectorEffect="non-scaling-stroke" />
     {hasPattern && <path data-marker-pentagon d={pentagonPath(radius)} fill={style.reachesFrame ? "#111827" : "none"} stroke={patternColor} strokeOpacity={style.reachesFrame ? 1 : style.strokeOpacity} strokeWidth={Math.max(.75, radius * .1)} vectorEffect="non-scaling-stroke" />}
     {hasPattern && Array.from({ length: 5 }, (_, index) => {

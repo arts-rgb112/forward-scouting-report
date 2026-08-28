@@ -28,6 +28,8 @@ describe("PitchShotMarker", () => {
     expect(container.querySelector("[data-pitch-shot-glyph]")).toHaveAttribute("fill", "#0B1220");
     expect(container.querySelector("[data-pitch-shot-glyph]")).toHaveAttribute("fill-opacity", "0.35");
     expect(container.querySelector("[data-marker-halo]")).toHaveAttribute("stroke", "#0A1F10");
+    expect(container.querySelector("[data-marker-halo]")).toHaveAttribute("stroke-opacity", ".85");
+    expect(container.querySelector("[data-marker-halo]")).toHaveAttribute("stroke-width", "1");
     rerender(<svg><PitchShotMarker outcome="goal" radius={8}/></svg>);
     expect(container.querySelector("[data-pitch-shot-glyph]")).toHaveAttribute("fill", "#F8FAFC");
     expect(container.querySelector("[data-pitch-shot-glyph]")).toHaveAttribute("data-marker-result-color", "#BEF264");

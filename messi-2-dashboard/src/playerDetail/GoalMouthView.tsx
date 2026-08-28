@@ -15,6 +15,21 @@ type ShotStatus = Exclude<FinalThirdShot["status"], "blocked">;
 type VisibleStatus = "all" | ShotStatus;
 const statuses = ["goal", "on_target", "off_target"] as const satisfies readonly ShotStatus[];
 const statusStyle = { goal: { color: "#22c55e", text: "G", label: "Goal" }, on_target: { color: "#38bdf8", text: "T", label: "On target" }, off_target: { color: "#fbbf24", text: "X", label: "Off target" }, blocked: { color: "#EAB308", text: "B", label: "Blocked" } } as const;
+const GOAL_MOUTH_COPY = {
+  title: "골문 슈팅맵",
+  baseline: "배경 = 리그 baseline",
+  cellGuide: "각 칸: 득점 확률 · 아래 작은 숫자: 해당 칸 리그 슈팅 수 · 공격수가 바라보는 방향",
+  playerCellGuide: "축구공 = 이 선수의 골문 도달 슛",
+  crossbar: "크로스바",
+  ground: "골라인 (지면)",
+  leftPost: "왼쪽 포스트",
+  rightPost: "오른쪽 포스트",
+  penaltyAxis: "PK 스팟 축",
+  baselineToggle: "골문 득점 확률 기준선",
+  baselineLoading: "5시즌 리그 골문 기준선을 불러오는 중입니다.",
+  baselineUnavailable: "5시즌 리그 골문 기준선을 사용할 수 없습니다.",
+  baselineError: "5시즌 리그 골문 기준선을 불러오지 못했습니다.",
+} as const;
 /** Project normalized provider coordinates onto a regulation 7.32m × 2.44m goal. */
 const GOAL_WIDTH_METERS = 7.32;
 const GOAL_HEIGHT_METERS = 2.44;
@@ -184,13 +199,16 @@ function Marker({ shot, medianXg, endpointShots, fanOffset, fanCount, active, on
   return <g data-goal-mouth-shot={shot.shotId} data-xg-size={xgUnavailable ? "unavailable" : "observed"} data-marker-footprint={size} transform={`translate(${point.x} ${point.y})`} aria-label={`${style.label}; xG ${xgLabel}`}><title>{`${style.label}; xG ${xgLabel}`}</title><rect data-marker-footprint-box x={-size} y={-size} width={size * 2} height={size * 2} fill="none" stroke="none" pointerEvents="none"/><Shape shot={shot} size={size}/>{xgUnavailable && <text data-size-unavailable y="4" textAnchor="middle" fill="#111827" fontSize="10" fontWeight="900">?</text>}<text y={size + 13} textAnchor="middle" fill="#f4f4f5" fontSize="10" fontWeight="800">{style.text}</text></g>;
 }
 
+const BASELINE_COLD = [35, 58, 94] as const;
+const BASELINE_MID = [74, 98, 122] as const;
+const BASELINE_HOT = [186, 74, 66] as const;
+const mixBaselineColor = (from: readonly number[], to: readonly number[], amount: number) => `#${from.map((value, index) => Math.round(value + (to[index] - value) * amount).toString(16).padStart(2, "0")).join("")}`;
 function baselineFill(rate: number | null) {
   if (rate === null) return "#334155";
-  if (rate < 20) return "#1e3a5f";
-  if (rate < 30) return "#0f766e";
-  if (rate < 40) return "#a16207";
-  if (rate < 50) return "#c2410c";
-  return "#dc2626";
+  // These are presentation anchors from the approved Figma ramp, not a
+  // recomputed league average. Every displayed rate still comes from the API.
+  if (rate < 33) return mixBaselineColor(BASELINE_COLD, BASELINE_MID, Math.max(0, Math.min(1, (rate - 12) / 21)));
+  return mixBaselineColor(BASELINE_MID, BASELINE_HOT, Math.max(0, Math.min(1, (rate - 33) / 30)));
 }
 
 function baselineTooltip(cell: GoalMouthBaselineCell) {
@@ -200,23 +218,37 @@ function baselineTooltip(cell: GoalMouthBaselineCell) {
 }
 
 function GoalMouthBaselineLayer({ baseline, activeCellId, onActivate, onDeactivate, patternId }: { baseline: GoalMouthBaselineData; activeCellId: string | null; onActivate: (cellId: string) => void; onDeactivate: (cellId: string) => void; patternId: string }) {
-  return <g data-goal-mouth-baseline data-goal-mouth-baseline-source={baseline.provenance.source} aria-label="Five-season league-wide goal-mouth scoring baseline">
+  return <g data-goal-mouth-baseline data-goal-mouth-baseline-source={baseline.provenance.source} aria-label="5시즌 리그 골문 득점 확률 기준선">
     <defs><pattern id={patternId} width="11" height="11" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="11" stroke="#f8fafc" strokeOpacity=".55" strokeWidth="3"/></pattern></defs>
     {baseline.cells.map((cell) => {
       // Use server-provided intervals directly. SVG y increases downward whereas mouth Z increases upward.
       const x = frame.left + cell.yMin * (frame.right - frame.left), y = frame.bottom - cell.zMax * (frame.bottom - frame.top), width = (cell.yMax - cell.yMin) * (frame.right - frame.left), height = (cell.zMax - cell.zMin) * (frame.bottom - frame.top), active = activeCellId === cell.cellId;
       return <g key={cell.cellId} data-goal-mouth-baseline-cell={cell.cellId} data-baseline-state={cell.state} tabIndex={0} role="img" aria-label={baselineTooltip(cell)} onMouseEnter={() => onActivate(cell.cellId)} onMouseLeave={() => onDeactivate(cell.cellId)} onFocus={() => onActivate(cell.cellId)} onBlur={() => onDeactivate(cell.cellId)}>
-        <title>{baselineTooltip(cell)}</title><rect x={x} y={y} width={width} height={height} fill={baselineFill(cell.goalRatePct)} fillOpacity={cell.state === "low_sample" ? ".20" : ".30"} stroke="#e2e8f0" strokeOpacity=".12" strokeWidth="1"/>
+        <title>{baselineTooltip(cell)}</title><rect data-baseline-cell-fill x={x} y={y} width={width} height={height} fill={baselineFill(cell.goalRatePct)} fillOpacity={cell.state === "low_sample" ? ".48" : ".94"} stroke="#0B1220" strokeOpacity=".92" strokeWidth="1.4"/>
         {cell.state === "low_sample" && <rect data-baseline-low-sample-hatch x={x} y={y} width={width} height={height} fill={`url(#${patternId})`} opacity=".48" pointerEvents="none"/>}
+        <text data-baseline-rate x={x + width / 2} y={y + height * .43} textAnchor="middle" fill="#FFFFFF" fillOpacity=".96" fontSize="15" fontWeight="800" pointerEvents="none">{cell.goalRatePct === null ? "—" : `${Math.round(cell.goalRatePct)}%`}</text>
+        <text data-baseline-sample x={x + width / 2} y={y + height * .68} textAnchor="middle" fill="#FFFFFF" fillOpacity=".6" fontSize="9.5" fontWeight="650" pointerEvents="none">{cell.shots ?? "—"}</text>
         {active && <g data-goal-mouth-baseline-tooltip pointerEvents="none"><rect x={x + 5} y={y + 5} width="176" height="44" rx="5" fill="#020617" fillOpacity=".94" stroke="#cbd5e1" strokeOpacity=".75"/><text x={x + 12} y={y + 21} fill="#f8fafc" fontSize="11" fontWeight="800">{cell.goalRatePct === null ? "Rate unavailable" : `${cell.goalRatePct.toFixed(1)}% · ${cell.shots} shots`}</text><text x={x + 12} y={y + 37} fill="#cbd5e1" fontSize="10">{cell.confidenceIntervalPct === null ? "Confidence unavailable" : `95% CI ${cell.confidenceIntervalPct.lower.toFixed(1)}–${cell.confidenceIntervalPct.upper.toFixed(1)}%`}</text></g>}
       </g>;
     })}
+    <path data-goal-mouth-pk-axis d={`M ${(frame.left + frame.right) / 2} ${frame.top - 28} V ${frame.bottom + 28}`} fill="none" stroke="#7DD3FC" strokeOpacity=".5" strokeWidth="1.4" strokeDasharray="7 5" pointerEvents="none"/>
+    <text x={(frame.left + frame.right) / 2} y={frame.top - 38} textAnchor="middle" fill="#7DD3FC" fillOpacity=".9" fontSize="9" fontWeight="700">{GOAL_MOUTH_COPY.penaltyAxis}</text>
+    <text x={(frame.left + frame.right) / 2} y={frame.top - 58} textAnchor="middle" fill="#A1A1AA" fontSize="11" fontWeight="700">{GOAL_MOUTH_COPY.crossbar}</text>
+    <text x={(frame.left + frame.right) / 2} y={frame.bottom + 48} textAnchor="middle" fill="#A1A1AA" fontSize="11" fontWeight="700">{GOAL_MOUTH_COPY.ground}</text>
+    <text x={frame.left - 62} y={(frame.top + frame.bottom) / 2} textAnchor="middle" fill="#A1A1AA" fontSize="10.5" fontWeight="700">{GOAL_MOUTH_COPY.leftPost}</text>
+    <text x={frame.right + 62} y={(frame.top + frame.bottom) / 2} textAnchor="middle" fill="#A1A1AA" fontSize="10.5" fontWeight="700">{GOAL_MOUTH_COPY.rightPost}</text>
   </g>;
 }
 
 function GoalNet({ baselineLayer }: { baselineLayer?: ReactNode }) {
   const frontWidth = frame.right - frame.left;
   const frontHeight = frame.bottom - frame.top;
+  if (baselineLayer) return <g data-goal-net-3d data-goal-mouth-baseline-flat data-goal-frame-width-meters={GOAL_WIDTH_METERS} data-goal-frame-height-meters={GOAL_HEIGHT_METERS} data-goal-frame-aspect-ratio={GOAL_WIDTH_METERS / GOAL_HEIGHT_METERS} data-goal-depth-meters={GOAL_DEPTH_METERS}>
+    <rect x={frame.left - 12} y={frame.top - 12} width={frontWidth + 24} height={frontHeight + 24} fill="#E8E4DC" fillOpacity=".9"/>
+    <rect x={frame.left} y={frame.top} width={frontWidth} height={frontHeight} fill="#0B1220"/>
+    {baselineLayer}
+    <rect x={frame.left} y={frame.top} width={frontWidth} height={frontHeight} fill="none" stroke="#0B1220" strokeWidth="1.4"/>
+  </g>;
   return <g data-goal-net-3d data-goal-net-vanishing-point={`${vanishingPoint.x} ${vanishingPoint.y}`} data-goal-frame-width-meters={GOAL_WIDTH_METERS} data-goal-frame-height-meters={GOAL_HEIGHT_METERS} data-goal-frame-aspect-ratio={GOAL_WIDTH_METERS / GOAL_HEIGHT_METERS} data-goal-depth-meters={GOAL_DEPTH_METERS} aria-hidden={baselineLayer ? undefined : true}>
     <defs><linearGradient id="goal-pipe" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#ffffff"/><stop offset=".25" stopColor="#f8fafc"/><stop offset=".5" stopColor="#cbd5e1"/><stop offset=".75" stopColor="#64748b"/><stop offset="1" stopColor="#1e293b"/></linearGradient><filter id="goal-shadow"><feGaussianBlur stdDeviation="10"/></filter></defs>
     <ellipse cx={(frame.left + frame.right) / 2} cy={frame.bottom + 18} rx={frontWidth * .46} ry="18" fill="#020617" opacity=".76" filter="url(#goal-shadow)"/>
@@ -364,16 +396,32 @@ export function GoalMouthView({ data, config, baselineResource }: { data: Render
   const baselineLayer = baselineVisible && baseline.state.kind === "ready"
     ? <GoalMouthBaselineLayer baseline={baseline.state.data.data} activeCellId={activeBaselineCellId} onActivate={setActiveBaselineCellId} onDeactivate={(cellId) => setActiveBaselineCellId((current) => current === cellId ? null : current)} patternId={`goal-mouth-baseline-hatch-${baselineId}`}/>
     : undefined;
-  return <div className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#081018]">
+  const baselineData = baseline.state.kind === "ready" ? baseline.state.data.data : null;
+  const baselineStatus = baseline.state.kind === "loading"
+    ? GOAL_MOUTH_COPY.baselineLoading
+    : baseline.state.kind === "error" ? GOAL_MOUTH_COPY.baselineError
+      : baseline.state.kind === "unavailable" ? GOAL_MOUTH_COPY.baselineUnavailable : null;
+  return <section data-goal-mouth-card aria-labelledby="goal-mouth-card-title" className="min-w-0 overflow-hidden rounded-[18px] border border-white/[.08] bg-[#06080b]">
+    <header className="flex flex-col gap-2 border-b border-white/[.08] px-5 pb-3 pt-5 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <h2 id="goal-mouth-card-title" className="text-[17px] font-black text-white">{GOAL_MOUTH_COPY.title}</h2>
+        <p className="mt-1 text-[10px] font-semibold text-zinc-500">{GOAL_MOUTH_COPY.playerCellGuide}</p>
+      </div>
+      {baselineData && <div data-goal-mouth-baseline-header className="max-w-[536px] text-left lg:text-right">
+        <p className="text-[9.5px] font-semibold text-zinc-500">{GOAL_MOUTH_COPY.baseline} · {baselineData.provenance.sourceSeasons.length}개 시즌 ({baselineData.provenance.sourceSeasons[0]}~{baselineData.provenance.sourceSeasons.at(-1)}) · 유효 슈팅 {baselineData.provenance.totalShots?.toLocaleString() ?? "—"} · 득점 {baselineData.provenance.totalGoals?.toLocaleString() ?? "—"}</p>
+        <p className="mt-1 text-[9px] text-zinc-600">{GOAL_MOUTH_COPY.cellGuide}</p>
+      </div>}
+      {baselineStatus && <p data-goal-mouth-baseline-status role="status" className="text-[10px] text-zinc-400">{baselineStatus}</p>}
+    </header>
     <div className="flex flex-wrap items-center gap-2 border-b border-white/10 p-3">
       <div role="group" aria-label="Goal-Mouth shot visibility" className="flex flex-wrap items-center gap-2">{(["all", ...statuses] as const).map((status) => <button key={status} type="button" aria-pressed={visibleStatus === status} onClick={() => setVisibleStatus(status)} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold aria-pressed:border-lime-300 aria-pressed:bg-lime-300 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-lime-300">{status === "all" ? "All" : statusStyle[status].label} {counts[status]}</button>)}</div>
-      {baseline.state.kind === "ready" && <button type="button" aria-pressed={baselineVisible} onClick={() => setBaselineVisible((value) => !value)} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold aria-pressed:border-rose-300 aria-pressed:bg-rose-300/15 focus-visible:ring-2 focus-visible:ring-lime-300">Goal probability baseline</button>}
+      {baseline.state.kind === "ready" && <button type="button" aria-pressed={baselineVisible} onClick={() => setBaselineVisible((value) => !value)} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold aria-pressed:border-rose-300 aria-pressed:bg-rose-300/15 focus-visible:ring-2 focus-visible:ring-lime-300">{GOAL_MOUTH_COPY.baselineToggle}</button>}
       <div role="group" aria-label="Goal-Mouth zoom controls" className="ml-auto flex items-center gap-1"><button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-10 min-w-10 rounded border border-white/20 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">−</button><button type="button" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-10 min-w-10 rounded border border-white/20 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">+</button><button type="button" aria-label="Reset zoom and pan" disabled={zoom === 1 && safeViewport.x === 0 && safeViewport.y === 0} onClick={resetViewport} className="min-h-10 rounded border border-white/20 px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-lime-300">Reset</button><span aria-live="polite" data-goal-mouth-zoom className="ml-1 min-w-20 text-right text-xs text-zinc-400">Zoom {zoom}×</span></div>
       <span className="w-full text-xs text-zinc-400 sm:w-auto sm:ml-2">Blocked {unplotted.length} · audit only</span>
     </div>
     <svg data-goal-mouth-viewbox={viewBox} viewBox={viewBox} className="block h-auto w-full touch-none cursor-grab active:cursor-grabbing" role="img" tabIndex={0} aria-label={`Three-dimensional goal-mouth plot with ${visibleShots.length} visible authoritative endpoints and ${unplotted.length} unplotted endpoints. Zoom ${zoom}x. Drag to pan when zoomed.`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPointerPan} onPointerCancel={endPointerPan} onLostPointerCapture={() => { pointerPan.current = null; }} onKeyDown={onKeyDown}>
       <GoalNet baselineLayer={baselineLayer}/>{visibleShots.map((shot) => { const group = offFrameGroups.get(`${shot.goalMouthY}:${shot.goalMouthZ}`) ?? [shot]; const groupIndex = group.findIndex((candidate) => candidate.shotId === shot.shotId); return <Marker key={shot.shotId} shot={shot} medianXg={medianXg} endpointShots={endpointShots} fanOffset={group.length > 1 ? groupIndex - (group.length - 1) / 2 : 0} fanCount={group.length} active={activeOffFrameShotId === shot.shotId} onActivate={() => setActiveOffFrameShotId(shot.shotId)} onDeactivate={() => setActiveOffFrameShotId((current) => current === shot.shotId ? null : current)} tooltipBounds={tooltipBounds}/>; })}
     </svg>
-    <div className="border-t border-white/10 px-3 py-2 text-xs text-zinc-300"><p>마커 크기는 xG에 비례합니다. 프레임 도달 슛은 흰 공, 빗나감은 비운 공으로 표시하며 xG 미상은 중앙값 크기입니다.</p><p data-goal-mouth-shot-summary className="mt-2">{penaltyStateLabel(includePenalties)} · 슛 {shotSummary.shots} · 득점 {shotSummary.goals} · xG {shotSummary.xg.toFixed(2)} · 전환율 {shotSummary.conversionRatePct?.toFixed(1) ?? "—"}%</p>{baseline.state.kind === "ready" && baseline.state.data.data.placementSummary && <section data-placement-summary className="mt-3 rounded-lg border border-cyan-200/20 bg-cyan-300/5 p-3" aria-labelledby="placement-summary-title"><h3 id="placement-summary-title" className="text-sm font-black text-zinc-50">{PLACEMENT_COPY.title}</h3><dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4"><div><dt className="text-zinc-400">{PLACEMENT_COPY.sample}</dt><dd className="mt-1 text-lg font-black tabular-nums text-zinc-50">{baseline.state.data.data.placementSummary.onFrameShots}</dd></div><div><dt className="text-zinc-400">{PLACEMENT_COPY.expected}</dt><dd className="mt-1 text-lg font-black tabular-nums text-cyan-200">{baseline.state.data.data.placementSummary.placementExpectedGoals.toFixed(2)}</dd></div><div><dt className="text-zinc-400">{PLACEMENT_COPY.actual}</dt><dd className="mt-1 text-lg font-black tabular-nums text-zinc-50">{baseline.state.data.data.placementSummary.actualGoals}</dd></div><div><dt className="text-zinc-400">{PLACEMENT_COPY.delta}</dt><dd className={`mt-1 text-lg font-black tabular-nums ${baseline.state.data.data.placementSummary.delta >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{baseline.state.data.data.placementSummary.delta >= 0 ? "+" : ""}{baseline.state.data.data.placementSummary.delta.toFixed(2)}</dd></div></dl><p className="mt-2 text-[10px] text-zinc-400">{PLACEMENT_COPY.stretched}</p></section>}<ShootingQualityModule data={data}/>{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
-  </div>;
+    <div className="border-t border-white/10 px-5 py-4 text-xs text-zinc-300"><p>마커 크기는 xG에 비례합니다. 프레임 도달 슛은 흰 공, 빗나감은 비운 공으로 표시하며 xG 미상은 중앙값 크기입니다.</p><p data-goal-mouth-shot-summary className="mt-2">{penaltyStateLabel(includePenalties)} · 슛 {shotSummary.shots} · 득점 {shotSummary.goals} · xG {shotSummary.xg.toFixed(2)} · 전환율 {shotSummary.conversionRatePct?.toFixed(1) ?? "—"}%</p>{baseline.state.kind === "ready" && baseline.state.data.data.placementSummary && <section data-placement-summary className="mt-3 flex flex-col gap-3 rounded-[10px] border border-[#27272a] bg-[#0b1220] px-[18px] py-3 lg:flex-row lg:items-center lg:justify-between" aria-labelledby="placement-summary-title"><div><h3 id="placement-summary-title" className="text-sm font-black text-zinc-50">{PLACEMENT_COPY.title}</h3><dl className="mt-2 grid grid-cols-2 gap-x-[26px] gap-y-2 sm:grid-cols-4"><div><dt className="text-[9px] font-semibold text-zinc-500">{PLACEMENT_COPY.sample}</dt><dd className="mt-[3px] text-[15px] font-black tabular-nums text-white">{baseline.state.data.data.placementSummary.onFrameShots}</dd></div><div><dt className="text-[9px] font-semibold text-zinc-500">{PLACEMENT_COPY.expected}</dt><dd className="mt-[3px] text-[15px] font-black tabular-nums text-sky-400">{baseline.state.data.data.placementSummary.placementExpectedGoals.toFixed(2)}골</dd></div><div><dt className="text-[9px] font-semibold text-zinc-500">{PLACEMENT_COPY.actual}</dt><dd className="mt-[3px] text-[15px] font-black tabular-nums text-lime-300">{baseline.state.data.data.placementSummary.actualGoals}골</dd></div><div><dt className="text-[9px] font-semibold text-zinc-500">{PLACEMENT_COPY.delta}</dt><dd className={`mt-[3px] text-[15px] font-black tabular-nums ${baseline.state.data.data.placementSummary.delta >= 0 ? "text-lime-300" : "text-rose-300"}`}>{baseline.state.data.data.placementSummary.delta >= 0 ? "+" : ""}{baseline.state.data.data.placementSummary.delta.toFixed(2)}</dd></div></dl></div><p className="max-w-[430px] text-[9px] leading-4 text-zinc-600">골문 도달 슛이 꽂힌 칸의 리그 득점 확률을 합산한 서버 값입니다. 블록된 슛은 골라인에 도달하지 않아 포함하지 않습니다.<br/>{PLACEMENT_COPY.stretched}</p></section>}<ShootingQualityModule data={data}/>{unplotted.length > 0 && <section aria-labelledby="unplotted-endpoints" className="mt-2"><h3 id="unplotted-endpoints" className="font-semibold">{unplotted.length} endpoint{unplotted.length === 1 ? "" : "s"} not plotted</h3><ul aria-label="Unplotted endpoint audit list" className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">{unplotted.map((shot) => <li key={shot.shotId}><code>{shot.shotId}</code> — {shot.status}, {shot.endpointReason}</li>)}</ul></section>}</div>
+  </section>;
 }
