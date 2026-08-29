@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0.0",
+  "corridorTaxonomyVersion": "six-lane-shooting-corridor-v1",
+  "context": {"playerId": 194165, "idNamespace": "fotmob", "season": "2025/2026", "mode": "league", "scope": 7, "competition": null},
+  "data": {
+    "available": true, "completeness": "complete", "reason": null,
+    "definition": {"definitionVersion": "six-lane-shooting-corridor-v1", "coordinateVersion": "fotmob-normalized-pitch-0-to-100-v1", "attackDirection": "left_to_right", "lateralDirection": "player_right_to_left", "boundaries": [0.0, 21.82, 37.0, 50.0, 63.0, 78.18, 100.0], "boundaryRule": "lower-inclusive-upper-exclusive-final-upper-inclusive-v1", "visualOrder": ["L5", "L4", "L3L", "L3R", "L2", "L1"], "penaltyRule": "exact-persisted-x-89.524-y-50-excluded-v1", "minimumActivityPointSample": 60},
+    "excludesPenalties": true, "penaltyShotsExcluded": 11, "lowSample": false,
+    "lanes": [
+      {"id": "L5", "semanticId": "left_wide", "yMin": 78.18, "yMax": 100.0, "state": "observed", "reason": null, "shots": 0, "goals": 0, "xg": 0.0, "xgEligibleShots": 0, "activityPoints": 220, "activityPct": 15.7031},
+      {"id": "L4", "semanticId": "left_half_space", "yMin": 63.0, "yMax": 78.18, "state": "observed", "reason": null, "shots": 12, "goals": 2, "xg": 0.4606, "xgEligibleShots": 12, "activityPoints": 338, "activityPct": 24.1256},
+      {"id": "L3L", "semanticId": "center_left", "yMin": 50.0, "yMax": 63.0, "state": "observed", "reason": null, "shots": 44, "goals": 9, "xg": 5.8146, "xgEligibleShots": 44, "activityPoints": 288, "activityPct": 20.5567},
+      {"id": "L3R", "semanticId": "center_right", "yMin": 37.0, "yMax": 50.0, "state": "observed", "reason": null, "shots": 39, "goals": 15, "xg": 11.0145, "xgEligibleShots": 39, "activityPoints": 250, "activityPct": 17.8444},
+      {"id": "L2", "semanticId": "right_half_space", "yMin": 21.82, "yMax": 37.0, "state": "observed", "reason": null, "shots": 13, "goals": 0, "xg": 0.6909, "xgEligibleShots": 13, "activityPoints": 206, "activityPct": 14.7038},
+      {"id": "L1", "semanticId": "right_wide", "yMin": 0.0, "yMax": 21.82, "state": "observed", "reason": null, "shots": 0, "goals": 0, "xg": 0.0, "xgEligibleShots": 0, "activityPoints": 99, "activityPct": 7.0664}
+    ],
+    "totals": {"sourceShots": 119, "allocatedShots": 108, "goals": 26, "xg": 17.9806, "xgEligibleShots": 108, "activityPoints": 1401, "activityPct": 100.0},
+    "provenance": {"shotSource": "static_shotmap_snapshots", "activitySource": "full_tier3_activity_aggregate", "shotFormulaVersion": "six-lane-shot-goal-xg-sum-v1", "activityFormulaVersion": "six-lane-count-weighted-share-rounded4-largest-residual-v1", "activitySourceDefinitionVersion": "sportsapi-heatmap-points-count-weighted-full-v1", "countWeighting": "sportsapi-data-points-count-expanded-v1", "shotSnapshotCount": 1, "activitySnapshotCount": 1, "shotSourceRecordCount": 119, "activitySourceRecordCount": 1401, "activityValidPointCount": 1401, "activityInvalidPointCount": 0, "xgMissingShotCount": 0, "nonPenaltyCenterBoundaryShotCount": 1, "centerBoundaryActivityPointCount": 35, "contextRule": "exact-selected-context-no-fallback", "missingActivityKeys": []}
+  }
+}

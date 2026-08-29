@@ -19,6 +19,10 @@ DATA_DIR = Path(__file__).with_name("data")
 THREE_ZONE_DATA_PATH = DATA_DIR / "tactical_3zone_ratio.csv"
 LEGACY_DATA_PATH = DATA_DIR / "tactical_ratio.csv"
 HEATMAP_POINTS_PATH = DATA_DIR / "tactical_heatmap_points.json"
+# A display-only Tier 3 aggregate.  It deliberately does not participate in
+# ``tactical_data_version()``: score caches must remain tied to the released
+# max-180 spatial snapshot until a separately approved scoring release.
+FULL_ACTIVITY_AGGREGATE_PATH = DATA_DIR / "tactical_full_activity_aggregate.json"
 TOURNAMENT_NAMES = {
     "17": "Premier League", "8": "LaLiga", "35": "Bundesliga",
     "23": "Serie A", "34": "Ligue 1", "40": "First Division A",
@@ -503,6 +507,43 @@ def get_heatmap_points(player_id: str | int, heatmap_key: str | None = None) -> 
             return [list(point) for point in points]
     points = load_heatmap_points().get(heatmap_key or str(player_id), [])
     return points if isinstance(points, list) else []
+
+
+@functools.lru_cache(maxsize=4)
+def _load_full_activity_contexts(
+    path_text: str, version: tuple[int, int],
+) -> dict[str, dict[str, object]]:
+    """Load the versioned full-source aggregate without touching score inputs."""
+    try:
+        payload = json.loads(Path(path_text).read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    if payload.get("activitySourceDefinitionVersion") != "sportsapi-heatmap-points-count-weighted-full-v1":
+        return {}
+    contexts = payload.get("contexts")
+    if not isinstance(contexts, dict):
+        return {}
+    return {
+        str(key): value for key, value in contexts.items()
+        if isinstance(value, dict)
+    }
+
+
+def full_activity_aggregate_version() -> tuple[int, int] | None:
+    """A cache input for additive display APIs only, never M.E.S.S.I. scoring."""
+    return _file_version(FULL_ACTIVITY_AGGREGATE_PATH)
+
+
+def get_full_activity_context(heatmap_key: str) -> dict[str, object] | None:
+    """Return one exact full-source context, with no max-180 fallback."""
+    version = full_activity_aggregate_version()
+    if version is None:
+        return None
+    return _load_full_activity_contexts(
+        str(FULL_ACTIVITY_AGGREGATE_PATH), version,
+    ).get(str(heatmap_key))
 
 
 def passes_final_third_filter(

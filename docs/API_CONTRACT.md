@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 단계 1 진행 중 — PR #298 정리 (6레인 corridor + compact aggregate만 유지)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-298-cleanup
+- 범위/가드: `origin/main` 최신화 기준으로 full Tier 3 count-weighted compact artifact와 additive `six-lane-shooting-corridor-v1`만 재적용한다. 선행 SportsAPI 수집기·goal-mouth additive·프런트 변경은 이 PR에서 제외한다. `data/harvest/`는 계속 ignore이고, `data/tactical_3zone_ratio.csv`·`data/tactical_heatmap_points.json`·CCA/30셀/점수 산식은 무변경이다. 게이트 1의 로컬 API/불변 검증 및 PR 상태 확인 전에는 병합·배포하지 않는다.
+
 - 상태: 로컬 구현·실데이터 QA 완료 — 피치 워크스페이스 3개 1층 탭 + 접힌 헥스 원자료 (2026-08-28 KST), PR 준비 중
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-pitch-workspace
 - 범위/결과: `CODEX_PITCH_TABS_WORK_ORDER.md` §8/§7-1에 따라 하나의 브랜치에서 표시 전용 heat gamma `0.6`, 질문형 3개 1층 탭, Guardiola 20-zone/선택 6-lane guide, orbit 3D shot trajectory, Goal-Mouth placement summary, 접힌 3층 hex frequency 골격을 순서별 커밋으로 구현했다. 기존 무쿼리 `GET /api/v2/goal-mouth-baseline`의 50셀/provenance/cache는 그대로이고, 완전한 player context query에만 strict additive `placementSummary`와 `hexFrequency`를 함께 반환한다. placement는 서버가 원본 goal-mouth endpoint를 10x5 baseline cell에 배정해 cell goal rate를 합산하며 shared penalty toggle과 같은 include/exclude 상태를 쓴다. hex는 서버가 원좌표를 105x68m로 변환하고 PK를 항상 제외해 crop `x>=66.7,y=10..90`의 표본 있는 cell/shots 및 `outOfCropShots`만 발행한다; 색 baseline은 아직 없으므로 프론트는 빈 outline/준비 중 상태만 표시한다. 브라우저는 집계·평균·백분위를 만들지 않는다. native 32x22 CCA/HDR, 점수·CSV·flags, SportsAPI Tier3, Figma, 기존 잔존 영문은 변경하지 않았다.

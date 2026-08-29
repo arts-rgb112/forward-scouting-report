@@ -2785,6 +2785,124 @@ class PitchHexFrequency(BaseModel):
         return self
 
 
+class SixLaneShootingCorridorContext(BaseModel):
+    """Exact player context; activity is never selected from a broad fallback."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    playerId: int = Field(gt=0)
+    idNamespace: Literal["fotmob"] = "fotmob"
+    season: str = Field(pattern=r"^20\d{2}/20\d{2}$")
+    mode: Literal["league", "europe"]
+    scope: Literal[3, 5, 7, 8] | None = None
+    competition: CompetitionCode | None = None
+
+    @model_validator(mode="after")
+    def validate_context(self) -> "SixLaneShootingCorridorContext":
+        if self.mode == "league" and (self.scope is None or self.competition is not None):
+            raise ValueError("league corridor context requires scope and null competition")
+        if self.mode == "europe" and (self.scope is not None or self.competition is None):
+            raise ValueError("europe corridor context requires null scope and competition")
+        return self
+
+
+class SixLaneShootingCorridorLane(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: Literal["L5", "L4", "L3L", "L3R", "L2", "L1"]
+    semanticId: Literal["left_wide", "left_half_space", "center_left", "center_right", "right_half_space", "right_wide"]
+    yMin: float = Field(ge=0, le=100)
+    yMax: float = Field(ge=0, le=100)
+    state: Literal["observed", "unavailable"]
+    reason: str | None = None
+    shots: int | None = Field(default=None, ge=0)
+    goals: int | None = Field(default=None, ge=0)
+    xg: float | None = Field(default=None, ge=0)
+    xgEligibleShots: int | None = Field(default=None, ge=0)
+    activityPoints: int | None = Field(default=None, ge=0)
+    activityPct: float | None = Field(default=None, ge=0, le=100)
+
+
+class SixLaneShootingCorridorTotals(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sourceShots: int | None = Field(default=None, ge=0)
+    allocatedShots: int | None = Field(default=None, ge=0)
+    goals: int | None = Field(default=None, ge=0)
+    xg: float | None = Field(default=None, ge=0)
+    xgEligibleShots: int | None = Field(default=None, ge=0)
+    activityPoints: int | None = Field(default=None, ge=0)
+    activityPct: float | None = Field(default=None, ge=0, le=100)
+
+
+class SixLaneShootingCorridorDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    definitionVersion: Literal["six-lane-shooting-corridor-v1"] = "six-lane-shooting-corridor-v1"
+    coordinateVersion: Literal["fotmob-normalized-pitch-0-to-100-v1"] = "fotmob-normalized-pitch-0-to-100-v1"
+    attackDirection: Literal["left_to_right"] = "left_to_right"
+    lateralDirection: Literal["player_right_to_left"] = "player_right_to_left"
+    boundaries: list[float] = Field(default_factory=lambda: [0.0, 21.82, 37.0, 50.0, 63.0, 78.18, 100.0], min_length=7, max_length=7)
+    boundaryRule: Literal["lower-inclusive-upper-exclusive-final-upper-inclusive-v1"] = "lower-inclusive-upper-exclusive-final-upper-inclusive-v1"
+    visualOrder: list[Literal["L5", "L4", "L3L", "L3R", "L2", "L1"]] = Field(default_factory=lambda: ["L5", "L4", "L3L", "L3R", "L2", "L1"], min_length=6, max_length=6)
+    penaltyRule: Literal["exact-persisted-x-89.524-y-50-excluded-v1"] = "exact-persisted-x-89.524-y-50-excluded-v1"
+    minimumActivityPointSample: Literal[60] = 60
+
+
+class SixLaneShootingCorridorProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shotSource: Literal["static_shotmap_snapshots"] = "static_shotmap_snapshots"
+    activitySource: Literal["full_tier3_activity_aggregate"] = "full_tier3_activity_aggregate"
+    shotFormulaVersion: Literal["six-lane-shot-goal-xg-sum-v1"] = "six-lane-shot-goal-xg-sum-v1"
+    activityFormulaVersion: Literal["six-lane-count-weighted-share-rounded4-largest-residual-v1"] = "six-lane-count-weighted-share-rounded4-largest-residual-v1"
+    activitySourceDefinitionVersion: Literal["sportsapi-heatmap-points-count-weighted-full-v1"]
+    countWeighting: Literal["sportsapi-data-points-count-expanded-v1"]
+    shotSnapshotCount: int = Field(ge=0)
+    activitySnapshotCount: int = Field(ge=0)
+    shotSourceRecordCount: int = Field(ge=0)
+    activitySourceRecordCount: int = Field(ge=0)
+    activityValidPointCount: int = Field(ge=0)
+    activityInvalidPointCount: int = Field(ge=0)
+    xgMissingShotCount: int = Field(ge=0)
+    nonPenaltyCenterBoundaryShotCount: int = Field(ge=0)
+    centerBoundaryActivityPointCount: int = Field(ge=0)
+    contextRule: Literal["exact-selected-context-no-fallback"] = "exact-selected-context-no-fallback"
+    missingActivityKeys: list[str] = Field(default_factory=list)
+
+
+class SixLaneShootingCorridorData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    available: bool
+    completeness: Literal["complete", "partial", "unavailable"]
+    reason: str | None = None
+    definition: SixLaneShootingCorridorDefinition = Field(default_factory=SixLaneShootingCorridorDefinition)
+    excludesPenalties: Literal[True] = True
+    penaltyShotsExcluded: int = Field(ge=0)
+    lowSample: bool
+    lanes: list[SixLaneShootingCorridorLane] = Field(min_length=6, max_length=6)
+    totals: SixLaneShootingCorridorTotals
+    provenance: SixLaneShootingCorridorProvenance
+
+    @model_validator(mode="after")
+    def validate_lanes(self) -> "SixLaneShootingCorridorData":
+        if [lane.id for lane in self.lanes] != ["L5", "L4", "L3L", "L3R", "L2", "L1"]:
+            raise ValueError("six-lane corridor must use canonical visual order")
+        if self.available != (self.completeness != "unavailable"):
+            raise ValueError("availability must match corridor completeness")
+        return self
+
+
+class SixLaneShootingCorridorEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    corridorTaxonomyVersion: Literal["six-lane-shooting-corridor-v1"] = "six-lane-shooting-corridor-v1"
+    context: SixLaneShootingCorridorContext
+    data: SixLaneShootingCorridorData
+
+
 class GoalMouthBaselineData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
