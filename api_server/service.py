@@ -20,7 +20,8 @@ from rankings import (
 )
 from spear_cohort import load_spear_cohort
 from tactical_ratio import (
-    get_heatmap_points, get_tactical_ratio_for_session, get_tactical_session_row,
+    full_activity_aggregate_version, get_full_activity_context, get_heatmap_points,
+    get_tactical_ratio_for_session, get_tactical_session_row,
 )
 from shotmap_store_v2 import (
     ShotmapSnapshotError, get_shotmap_snapshot, shotmap_snapshot_revision,
@@ -73,6 +74,9 @@ from .schemas import (
     GoalMouthBaselineCell, GoalMouthBaselineConfidenceInterval, GoalMouthBaselineData, GoalMouthBaselineEnvelope,
     GoalMouthBaselineProvenance, GoalMouthPlacementSummary,
     PitchHexFrequency, PitchHexFrequencyCell,
+    SixLaneShootingCorridorContext, SixLaneShootingCorridorData,
+    SixLaneShootingCorridorEnvelope, SixLaneShootingCorridorLane,
+    SixLaneShootingCorridorProvenance, SixLaneShootingCorridorTotals,
 )
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
 from .search import canonical_search_key
@@ -3873,6 +3877,182 @@ def build_final_third_shot_map(
     """Return only snapshot-backed data and invalidate aggregates on source refresh."""
     return _build_final_third_shot_map_cached(
         player_id, season, mode, scope, competition, shotmap_snapshot_revision(season), conversion_version,
+    )
+
+
+_SIX_LANE_ORDER = ("L5", "L4", "L3L", "L3R", "L2", "L1")
+_SIX_LANE_META = {
+    "L5": ("left_wide", 78.18, 100.0),
+    "L4": ("left_half_space", 63.0, 78.18),
+    "L3L": ("center_left", 50.0, 63.0),
+    "L3R": ("center_right", 37.0, 50.0),
+    "L2": ("right_half_space", 21.82, 37.0),
+    "L1": ("right_wide", 0.0, 21.82),
+}
+
+
+def _six_lane_id(y: float) -> str:
+    """Use the approved half-open y taxonomy; ordinary y=50 belongs to L3L."""
+    if y < 21.82:
+        return "L1"
+    if y < 37.0:
+        return "L2"
+    if y < 50.0:
+        return "L3R"
+    if y < 63.0:
+        return "L3L"
+    if y < 78.18:
+        return "L4"
+    return "L5"
+
+
+def _is_exact_penalty(point: ShotmapPoint) -> bool:
+    """Never discard a normal centre-line shot merely because y equals 50."""
+    return point.x == 89.524 and point.y == 50.0
+
+
+@lru_cache(maxsize=128)
+def _build_six_lane_shooting_corridor_cached(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+    shot_revision: tuple[int, int] | None,
+    activity_revision: tuple[int, int] | None,
+) -> SixLaneShootingCorridorEnvelope | None:
+    del shot_revision, activity_revision  # explicit cache inputs for static artefact refreshes.
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    context = SixLaneShootingCorridorContext(
+        playerId=player_id, season=season, mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+    )
+    snapshots, missing_shot_keys, unavailable_reason = _final_third_source_snapshots(
+        player_id, player, season, mode, competition,
+    )
+    activity_contexts: list[dict[str, object]] = []
+    missing_activity_keys: list[str] = []
+    for heatmap_key, _ in snapshots:
+        aggregate = get_full_activity_context(heatmap_key)
+        if aggregate is None:
+            missing_activity_keys.append(heatmap_key)
+        else:
+            activity_contexts.append(aggregate)
+    if not snapshots or missing_activity_keys:
+        reason = unavailable_reason if not snapshots else "full_activity_aggregate_unavailable"
+        return SixLaneShootingCorridorEnvelope(
+            context=context,
+            data=SixLaneShootingCorridorData(
+                available=False, completeness="unavailable", reason=reason,
+                penaltyShotsExcluded=0, lowSample=True,
+                lanes=[SixLaneShootingCorridorLane(
+                    id=lane, semanticId=_SIX_LANE_META[lane][0],
+                    yMin=_SIX_LANE_META[lane][1], yMax=_SIX_LANE_META[lane][2],
+                    state="unavailable", reason=reason,
+                ) for lane in _SIX_LANE_ORDER],
+                totals=SixLaneShootingCorridorTotals(),
+                provenance=SixLaneShootingCorridorProvenance(
+                    activitySourceDefinitionVersion="sportsapi-heatmap-points-count-weighted-full-v1",
+                    countWeighting="sportsapi-data-points-count-expanded-v1",
+                    shotSnapshotCount=len(snapshots), activitySnapshotCount=0,
+                    shotSourceRecordCount=0, activitySourceRecordCount=0,
+                    activityValidPointCount=0, activityInvalidPointCount=0,
+                    xgMissingShotCount=0, nonPenaltyCenterBoundaryShotCount=0,
+                    centerBoundaryActivityPointCount=0,
+                    missingActivityKeys=missing_activity_keys or missing_shot_keys,
+                ),
+            ),
+        )
+
+    counts = {lane: {"shots": 0, "goals": 0, "xg": 0.0, "activityPoints": 0} for lane in _SIX_LANE_ORDER}
+    penalty_shots = 0
+    source_shots = 0
+    xg_missing = 0
+    center_boundary_shots = 0
+    for _, rows in snapshots:
+        for raw in rows:
+            source_shots += 1
+            raw_point, _ = _shotmap_point_without_internal_identity(raw)
+            try:
+                point = ShotmapPoint.model_validate(raw_point)
+            except (TypeError, ValueError, ValidationError) as exc:
+                raise ShotmapContractViolation("Six-lane shotmap snapshot contains an invalid record.") from exc
+            if _is_exact_penalty(point):
+                penalty_shots += 1
+                continue
+            lane = _six_lane_id(point.y)
+            if point.y == 50.0:
+                center_boundary_shots += 1
+            counts[lane]["shots"] += 1
+            counts[lane]["goals"] += int(point.outcome == "goal")
+            if point.xg is None:
+                xg_missing += 1
+            else:
+                counts[lane]["xg"] += point.xg
+
+    raw_cells = source_records = valid_points = invalid_points = center_boundary_activity = 0
+    for aggregate in activity_contexts:
+        raw_cells += int(aggregate.get("rawCellRecordCount", 0))
+        source_records += int(aggregate.get("activitySourceRecordCount", 0))
+        valid_points += int(aggregate.get("activityValidPointCount", 0))
+        invalid_points += int(aggregate.get("activityInvalidPointCount", 0))
+        raw_lanes = aggregate.get("lanes")
+        if not isinstance(raw_lanes, dict):
+            raise ShotmapContractViolation("Full activity aggregate has no canonical lane data.")
+        for lane in _SIX_LANE_ORDER:
+            item = raw_lanes.get(lane)
+            if not isinstance(item, dict):
+                raise ShotmapContractViolation("Full activity aggregate is missing a lane.")
+            counts[lane]["activityPoints"] += int(item.get("activityPoints", 0))
+        center_boundary_activity += int(aggregate.get("centerBoundaryActivityPointCount", 0))
+    totals = SixLaneShootingCorridorTotals(
+        sourceShots=source_shots,
+        allocatedShots=sum(item["shots"] for item in counts.values()),
+        goals=sum(item["goals"] for item in counts.values()),
+        xg=round(sum(float(item["xg"]) for item in counts.values()), 4),
+        xgEligibleShots=source_shots - penalty_shots - xg_missing,
+        activityPoints=sum(item["activityPoints"] for item in counts.values()),
+        activityPct=100.0 if valid_points else None,
+    )
+    lanes = [SixLaneShootingCorridorLane(
+        id=lane, semanticId=_SIX_LANE_META[lane][0],
+        yMin=_SIX_LANE_META[lane][1], yMax=_SIX_LANE_META[lane][2],
+        state="observed", reason=None,
+        shots=counts[lane]["shots"], goals=counts[lane]["goals"],
+        xg=round(float(counts[lane]["xg"]), 4),
+        xgEligibleShots=counts[lane]["shots"],
+        activityPoints=counts[lane]["activityPoints"],
+        activityPct=round(counts[lane]["activityPoints"] * 100.0 / totals.activityPoints, 4)
+        if totals.activityPoints else None,
+    ) for lane in _SIX_LANE_ORDER]
+    return SixLaneShootingCorridorEnvelope(
+        context=context,
+        data=SixLaneShootingCorridorData(
+            available=True, completeness="partial" if missing_shot_keys else "complete",
+            reason=("competition_snapshot_unavailable:" + ",".join(missing_shot_keys)) if missing_shot_keys else None,
+            penaltyShotsExcluded=penalty_shots,
+            lowSample=valid_points < 60,
+            lanes=lanes, totals=totals,
+            provenance=SixLaneShootingCorridorProvenance(
+                activitySourceDefinitionVersion="sportsapi-heatmap-points-count-weighted-full-v1",
+                countWeighting="sportsapi-data-points-count-expanded-v1",
+                shotSnapshotCount=len(snapshots), activitySnapshotCount=len(activity_contexts),
+                shotSourceRecordCount=source_shots, activitySourceRecordCount=source_records,
+                activityValidPointCount=valid_points, activityInvalidPointCount=invalid_points,
+                xgMissingShotCount=xg_missing, nonPenaltyCenterBoundaryShotCount=center_boundary_shots,
+                centerBoundaryActivityPointCount=center_boundary_activity,
+                missingActivityKeys=missing_shot_keys,
+            ),
+        ),
+    )
+
+
+def build_six_lane_shooting_corridor(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> SixLaneShootingCorridorEnvelope | None:
+    """Additive full-source corridor.  It cannot fall back to legacy max-180 points."""
+    return _build_six_lane_shooting_corridor_cached(
+        player_id, season, mode, scope, competition,
+        shotmap_snapshot_revision(season), full_activity_aggregate_version(),
     )
 
 
