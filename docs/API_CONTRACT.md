@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 긴급 프런트 계약 핫픽스 구현·검증 완료, 병합 승인 대기 — Python/JavaScript 2자리 반올림 경계 정합
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-score-unify-v3-clean
+- 범위/가드: PR #299 배포 직후 프로덕션 API는 `messi-score-unified-v3`와 6개 `scoreBreakdown`을 정상 반환했으나 프런트 Zod가 Python `round(..., 2)`와 다른 JavaScript `Math.round` 규칙으로 93.22/93.13 경계값을 거부했다. 점수·데이터·백엔드 DTO는 변경하지 않고, 프런트는 exact mean과의 오차가 half-cent 이하인 서버 소유 2자리 값을 허용해 언어별 tie-breaking 차이만 흡수한다. Kane의 박스 밖·박스 안 경계값을 회귀 테스트로 고정했다. focused frontend `12 passed`, production build 통과, 현재 Production API 응답을 수정된 Zod로 직접 검증해 HTTP 200/parse success를 확인했다. 병합·프로덕션 배포는 별도 승인 전 금지한다.
+
 - 상태: 긴급 구현·검증 완료, Production 릴리스 진행 — Gabriel Jesus 2024/25 Premier League 검색/공간 세션 핫픽스
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-jesus-hotfix
 - 범위/가드: FotMob `576165`의 정확한 2024/25 기록(603분·xG 2.96)과 SportsAPI Arsenal 선수 `794839`/Premier League tournament `17`/season `61627` 원본 heatmap만 사용해 정적 cohort와 점수용 spatial session을 추가했다. 2025/26은 421분으로 450분 하한 미달이므로 추가하지 않는다. 이번 긴급 배포에서는 점수 산식·CCA 공식·기존 선수 행을 변경하지 않고, 신규 한 행으로 인한 해당 코호트 백분위 이동만 검증했다. 원본은 ignored `data/harvest/`에 보존됐으며 HTTP 200, raw record 404, count-expanded 425, legacy valid/max-180 148, fixed-N 발행 CCA `10.6534%`다. 정적 데이터는 cohort `6,157→6,158`, tactical/heatmap key `10,412→10,413`이며 기존 행·키는 의미상 전부 동일하다. 실제 v2 service에서 Jesus는 2024/25 league scope7 `population=906`, `rank=855`, `score=31.72`, `Silver Lv.5`로 생성되고 검색 query는 200/1건, 상세는 200, 2025/26 상세는 404다. 같은 scope의 Kane은 `population 905→906`, `rank 7→7`, `score 78.66→78.68`, `Diamond Lv.1→Diamond Lv.1`이다. 신규 테스트와 API/shotmap 회귀 `52 passed`, heatmap coverage 포함 별도 `58 passed, 3 subtests passed`다. rollback은 `C:/Users/USER/Downloads/files/messi-rollback-backups/jesus-hotfix-20260830`의 pre-hotfix 네 파일을 사용한다. 병합·Render 배포 후 production 검색/상세를 확인하고 전체 후보 백필을 재개한다.
