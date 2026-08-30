@@ -40,7 +40,11 @@ const scoreSample = z.object({ attempts: finite.nullable(), minutes: z.number().
   if (value.attempts !== null && value.attempts < 0) ctx.addIssue({ code: "custom", message: "score sample attempts must be nonnegative" });
 });
 const scoreBreakdown = z.object({ compositeScore: unifiedScore, volumeScore: unifiedScore, ratioScore: unifiedScore, volumeSample: scoreSample, ratioSample: scoreSample, sampleState: z.enum(["observed", "low_sample", "unavailable"]) }).strict().superRefine((value, ctx) => {
-  if (Math.abs(value.compositeScore - Math.round(((value.volumeScore + value.ratioScore) / 2) * 100) / 100) > 0.005) ctx.addIssue({ code: "custom", message: "score breakdown composite must equal the exact 50:50 pair" });
+  const exactMean = (value.volumeScore + value.ratioScore) / 2;
+  // The backend owns the two-decimal value. Accept either adjacent cent only
+  // at an exact half-cent boundary, where Python and JavaScript round
+  // differently; reject every value outside the nearest-cent interval.
+  if (Math.abs(value.compositeScore - exactMean) > 0.0050000001) ctx.addIssue({ code: "custom", message: "score breakdown composite must equal the exact 50:50 pair" });
 });
 const category = z.object({ id: z.enum(DUEL_PRESS_V2_CATEGORIES), label: z.string().min(1), percentileScore: unifiedScore, scoreState: z.enum(["observed", "imputed", "unavailable"]), imputedComponents: z.array(z.string().min(1)), direction, comparison, formulaId: z.string().min(1), formulaVersion: z.string().min(1), scoreBreakdown: scoreBreakdown.nullable().optional(), groups: z.array(group).min(1) }).strict().superRefine((value, ctx) => {
   if (value.scoreState === "imputed" && value.imputedComponents.length === 0) ctx.addIssue({ code: "custom", message: "imputed category must identify components" });

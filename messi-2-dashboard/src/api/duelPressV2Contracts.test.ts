@@ -59,6 +59,22 @@ describe("duel-press-v2 strict contracts", () => {
     }));
     expect(duelPressV2DetailMetricsSchema.safeParse(legacy).success).toBe(true);
     expect(duelPressV2DetailMetricsSchema.safeParse(unified).success).toBe(true);
+    const pythonRoundingBoundaries = structuredClone(unified);
+    pythonRoundingBoundaries.categories[0].scoreBreakdown = {
+      ...pythonRoundingBoundaries.categories[0].scoreBreakdown,
+      compositeScore: 93.22,
+      volumeScore: 87.8,
+      ratioScore: 98.65,
+    };
+    pythonRoundingBoundaries.categories[0].percentileScore = 93.22;
+    pythonRoundingBoundaries.categories[1].scoreBreakdown = {
+      ...pythonRoundingBoundaries.categories[1].scoreBreakdown,
+      compositeScore: 93.13,
+      volumeScore: 99.5,
+      ratioScore: 86.77,
+    };
+    pythonRoundingBoundaries.categories[1].percentileScore = 93.13;
+    expect(duelPressV2DetailMetricsSchema.safeParse(pythonRoundingBoundaries).success).toBe(true);
     const missingBreakdown = structuredClone(unified);
     delete missingBreakdown.categories[0].scoreBreakdown;
     expect(duelPressV2DetailMetricsSchema.safeParse(missingBreakdown).success).toBe(false);
