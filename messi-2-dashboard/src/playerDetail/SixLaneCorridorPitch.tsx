@@ -34,6 +34,41 @@ const LANES = [
 
 const world = (shot: Pick<ShotmapPoint, "x" | "y">) => ({ x: shot.x * 1.05, y: (100 - shot.y) * .68 });
 const lineY = (sourceY: number) => (100 - sourceY) * .68;
+/** World-space collision distance for the fixed .7-unit 2D marker footprint. */
+export const CORRIDOR_CLUSTER_DISTANCE = 1.6;
+export type CorridorShotCluster = PitchShotGroup & { shots: readonly ShotmapPoint[] };
+
+/**
+ * First preserve exact raw-coordinate stacks, then deterministically merge
+ * visual collisions. The source list remains intact for the accessible detail
+ * panel; no provider event is discarded or browser-aggregated into a metric.
+ */
+export function clusterCorridorShotGroups(groups: readonly PitchShotGroup[], displayedShots: readonly ShotmapPoint[]): CorridorShotCluster[] {
+  const rank = { off_target: 0, blocked: 1, on_target: 2, goal: 3 } as const;
+  const mutable: Array<{ groups: PitchShotGroup[]; anchor: PitchShotGroup }> = [];
+  for (const group of [...groups].sort((left, right) => left.sourceIndexes[0] - right.sourceIndexes[0])) {
+    const point = world(group.shot);
+    const target = mutable.find((candidate) => {
+      const anchor = world(candidate.anchor.shot);
+      return Math.hypot(point.x - anchor.x, point.y - anchor.y) <= CORRIDOR_CLUSTER_DISTANCE;
+    });
+    if (target) target.groups.push(group);
+    else mutable.push({ groups: [group], anchor: group });
+  }
+  return mutable.map(({ groups: clustered }) => {
+    const sourceIndexes = clustered.flatMap((group) => group.sourceIndexes).sort((left, right) => left - right);
+    const outcomeCounts = { goal: 0, on_target: 0, off_target: 0, blocked: 0 };
+    let representative = clustered[0];
+    for (const group of clustered) {
+      outcomeCounts.goal += group.outcomeCounts.goal;
+      outcomeCounts.on_target += group.outcomeCounts.on_target;
+      outcomeCounts.off_target += group.outcomeCounts.off_target;
+      outcomeCounts.blocked += group.outcomeCounts.blocked;
+      if (rank[group.outcome] >= rank[representative.outcome]) representative = group;
+    }
+    return { key: `cluster:${sourceIndexes.join(",")}`, shot: representative.shot, outcome: representative.outcome, sourceIndexes, count: sourceIndexes.length, outcomeCounts, shots: sourceIndexes.map((index) => displayedShots[index]).filter((shot): shot is ShotmapPoint => Boolean(shot)) };
+  }).sort((left, right) => rank[left.outcome] - rank[right.outcome] || left.sourceIndexes[0] - right.sourceIndexes[0]);
+}
 
 function PitchLines() {
   return <g data-layer="six-lane-markings" fill="none" vectorEffect="non-scaling-stroke">
@@ -82,12 +117,12 @@ export function SixLaneCorridorPitch({ analysis, layers }: { analysis?: PlayerAn
   const moved = useRef(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [selectedShot, setSelectedShot] = useState<ShotmapPoint | null>(null);
+  const [selectedCluster, setSelectedCluster] = useState<CorridorShotCluster | null>(null);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const validShots = Boolean(shots && shotIntegrity(analysis?.spatial));
   const validHeat = Boolean(spatial?.available && spatial.heatmapPointCount === spatial.heatmapPoints.length && spatial.heatmapPoints.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y) && point.x >= 0 && point.x <= 100 && point.y >= 0 && point.y <= 100));
   const displayedShots = useMemo(() => validShots ? excludePenaltyShots(shots!, includePenalties) : [], [includePenalties, shots, validShots]);
-  const markerGroups = useMemo(() => groupPitchShots(displayedShots.map((shot, sourceIndex) => ({ shot, sourceIndex }))), [displayedShots]);
+  const markerGroups = useMemo(() => clusterCorridorShotGroups(groupPitchShots(displayedShots.map((shot, sourceIndex) => ({ shot, sourceIndex }))), displayedShots), [displayedShots]);
   const penalties = useMemo(() => validShots ? shots!.filter(isPenaltyShot) : [], [shots, validShots]);
   const normalized = useMemo(() => validHeat ? normalizeDensity(legacyDensityGrid(spatial!.heatmapPoints)) : undefined, [spatial?.heatmapPoints, validHeat]);
   const contour = useMemo(() => normalized && spatial?.continuousCore.available && spatial.continuousCore.thresholdOfPeak > 0 ? marchingSquares(normalized, spatial.continuousCore.thresholdOfPeak) : [], [normalized, spatial?.continuousCore.available, spatial?.continuousCore.thresholdOfPeak]);
@@ -145,7 +180,7 @@ export function SixLaneCorridorPitch({ analysis, layers }: { analysis?: PlayerAn
             {layers.markers && markerGroups.map((group) => {
               const point = world(group.shot);
               const composition = group.count > 1 ? ` · ${stackCompositionLabel(group.outcomeCounts)}` : "";
-              return <g key={group.key} data-corridor-shot-marker data-corridor-shot-count={group.count} transform={`translate(${point.x.toFixed(4)} ${point.y.toFixed(4)})`} role="button" tabIndex={0} aria-label={`${group.shot.outcome} 슛 상세${group.count > 1 ? `, 묶음 ${group.count}발${composition}` : ""}`} onClick={(event) => { event.stopPropagation(); setSelectedShot(group.shot); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedShot(group.shot); } }}><CorridorShotMarker group={group}/></g>;
+              return <g key={group.key} data-corridor-shot-marker data-corridor-shot-count={group.count} data-corridor-cluster={group.count > 1 ? "true" : "false"} transform={`translate(${point.x.toFixed(4)} ${point.y.toFixed(4)})`} role="button" tabIndex={0} aria-label={`${group.shot.outcome} 슛 상세${group.count > 1 ? `, 묶음 ${group.count}발${composition}` : ""}`} onClick={(event) => { event.stopPropagation(); setSelectedCluster(group); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedCluster(group); } }}><CorridorShotMarker group={group}/></g>;
             })}
           </svg>
           </div>
@@ -159,7 +194,7 @@ export function SixLaneCorridorPitch({ analysis, layers }: { analysis?: PlayerAn
         <p role="status" className="mt-3 type-caption text-amber-200">{COPY.pending}</p>
       </aside>
     </div>
-    {(selectedShot || selectedZone) && <aside data-layout="corridor-inspector" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-base text-zinc-300" aria-label={selectedShot ? "슈팅 상세" : COPY.zoneInfo}>{selectedShot ? <>슛 상세 · xG {typeof selectedShot.xg === "number" ? selectedShot.xg.toFixed(2) : "—"} · xGOT {typeof selectedShot.xgot === "number" ? selectedShot.xgot.toFixed(2) : "—"}</> : <>{COPY.zoneInfo} · {selectedZone} · 슛 — · 득점 — · xG — · 히트맵 점유 —</>}</aside>}
+    {(selectedCluster || selectedZone) && <aside data-layout="corridor-inspector" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-base text-zinc-300" aria-label={selectedCluster ? "슈팅 상세" : COPY.zoneInfo}>{selectedCluster ? <><p>슛 상세{selectedCluster.count > 1 ? ` · 묶음 ${selectedCluster.count}발` : ""}</p><ol aria-label="묶음 슈팅 이벤트" className="mt-2 space-y-1">{selectedCluster.shots.map((shot, index) => <li key={`${shot.x}:${shot.y}:${index}`}>#{index + 1} · {shot.outcome} · xG {typeof shot.xg === "number" ? shot.xg.toFixed(2) : "—"} · xGOT {typeof shot.xgot === "number" ? shot.xgot.toFixed(2) : "—"}</li>)}</ol></> : <>{COPY.zoneInfo} · {selectedZone} · 슛 — · 득점 — · xG — · 히트맵 점유 —</>}</aside>}
     <div className="mt-3 border-t border-white/10 pt-3 text-base leading-6 text-zinc-300"><b className="text-zinc-100">판독</b> · {COPY.reading}</div>
   </section>;
 }
