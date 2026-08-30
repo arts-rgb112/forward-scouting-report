@@ -9,6 +9,7 @@ import { usePitchPenalty } from "./PitchPenaltyContext";
 import { DEFAULT_PITCH_LAYERS, PITCH_LAYER_LABELS, type PitchLayerVisibility } from "./pitchLayers";
 import { excludePenaltyShots, summarizeShots } from "./pitchPenalties";
 import { SpatialPitch } from "./SpatialPitch";
+import { SixLaneCorridorPitch } from "./SixLaneCorridorPitch";
 import { shotIntegrity } from "./shotOutcomeVisibility";
 import { useFinalThirdShotMap } from "./useFinalThirdShotMap";
 import { useGoalMouthBaseline } from "./useGoalMouthBaseline";
@@ -77,7 +78,7 @@ export function PitchWorkspace({ analysis, contextIdentity, config, playerId, da
     </div>}
     <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${activeTab}`} className="mt-3">
       {activeTab === "threeD" && <SpatialPitch analysis={analysis} contextIdentity={contextIdentity} forcedMode="perspective" embedded layers={layers}/>}
-      {activeTab === "twoD" && <SpatialPitch analysis={analysis} contextIdentity={contextIdentity} forcedMode="plan" embedded layers={layers}/>}
+      {activeTab === "twoD" && <SixLaneCorridorPitch analysis={analysis} layers={layers}/>}
       {activeTab === "goalMouth" && (goalData ? <GoalMouthView data={goalData} config={config} baselineResource={baseline.state}/> : <p role="status" aria-live="polite" className="rounded border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">{!current || finalThird.state.kind === "loading" ? WORKSPACE_COPY.loading : WORKSPACE_COPY.unavailable}</p>)}
     </div>
   </section>;

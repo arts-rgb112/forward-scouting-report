@@ -64,9 +64,16 @@ describe("native player detail panels", () => {
     expect(outer!.compareDocumentPosition(tacticalSlot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(tacticalSlot!.compareDocumentPosition(slot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(slot!.compareDocumentPosition(benchmarks!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(slot!).getByRole("region", { name: "Percentile profile" }).querySelector('[data-layout="legacy-percentile-grid"]')).toHaveClass("sm:grid-cols-2", "lg:grid-cols-3");
   });
-  it("keeps one four-control layer toolbar shared by the 2D and 3D corridor tabs", () => {
+  it("uses a dedicated data-free six-lane 2D corridor with the shared layer controls", () => {
     const { container } = render(<PlayerDetailDossierLayout player={player} analysis={analysis} quality={{ kind: "idle" }} history={{ loading: false, entries: [], failed: 0, requestedSeasons: 0 }} dataset={{season:"2025/2026",mode:"league",scope:8,competition:"all"}} />);
     const pitch = container.querySelector('[data-layout="pitch-workspace"]')!;
+    const corridor = pitch.querySelector('[data-layout="six-lane-corridor-pitch"]')!;
+    expect(corridor).toBeInTheDocument();
+    expect(corridor.querySelectorAll("[data-lane]")).toHaveLength(6);
+    expect(corridor.querySelector('[data-layer="positional-grid"]')).not.toBeNull();
+    expect(corridor.querySelector('[data-layer="legacy-density"]')).not.toBeNull();
+    expect(corridor.querySelector('[data-layer="pk-axis"]')).toBeNull();
+    expect(within(corridor).getByRole("status")).toHaveTextContent("브라우저에서 값을 만들지 않았습니다");
     const toolbar = within(pitch).getByRole("group", { name: "피치 레이어" });
     const names = ["히트맵", "CCA", "궤적", "슈팅 마커"];
     names.forEach((name) => expect(within(toolbar).getByRole("button", { name })).toHaveAttribute("aria-pressed", "true"));
@@ -74,6 +81,5 @@ describe("native player detail panels", () => {
     expect(within(toolbar).getByRole("button", { name: "히트맵" })).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(within(pitch).getByRole("tab", { name: "3D 회랑" }));
     expect(within(pitch).getByRole("button", { name: "히트맵" })).toHaveAttribute("aria-pressed", "false");
-    expect(within(pitch).getByRole("group", { name: "피치 레이어" })).toBe(toolbar);
   });
 });

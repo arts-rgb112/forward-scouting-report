@@ -25,7 +25,8 @@ const spatialIntegrity = (spatial: Spatial | undefined): Integrity => ({
   shots: shotIntegrity(spatial),
 });
 
-function HeatmapCanvas({ points, enabled, opacity = .62 }: { points: readonly ActivityPoint[]; enabled: boolean; opacity?: number }) {
+/** Shared display-only heatmap canvas. It never supplies CCA/HDR inputs. */
+export function HeatmapCanvas({ points, enabled, opacity = .62 }: { points: readonly ActivityPoint[]; enabled: boolean; opacity?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const paintedRef = useRef(false);
   const normalized = useMemo(() => normalizeDensity(legacyDensityGrid(points)), [points]);
