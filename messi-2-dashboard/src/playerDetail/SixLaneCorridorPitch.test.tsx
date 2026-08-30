@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { PitchPenaltyProvider, PitchPenaltyToggle } from "./PitchPenaltyContext";
-import { clusterCorridorShotGroups, CORRIDOR_CLUSTER_DISTANCE, SixLaneCorridorPitch } from "./SixLaneCorridorPitch";
+import { clusterCorridorShotGroups, CORRIDOR_CLUSTER_DISTANCE, CORRIDOR_MARKER_RADIUS, SixLaneCorridorPitch } from "./SixLaneCorridorPitch";
 import { groupPitchShots } from "./PitchShotMarker";
 import { DEFAULT_PITCH_LAYERS } from "./pitchLayers";
 
@@ -26,6 +26,10 @@ const analysis = {
 } as never;
 
 describe("SixLaneCorridorPitch", () => {
+  it("uses the approved result-specific marker radii without resizing the pitch", () => {
+    expect(CORRIDOR_MARKER_RADIUS).toEqual({ goal: .72, on_target: .56, off_target: .7, blocked: .5 });
+  });
+
   it("clusters near visual collisions deterministically while retaining every constituent shot", () => {
     const shots = [
       { x: 80, y: 40, outcome: "goal" as const, xg: .4 },

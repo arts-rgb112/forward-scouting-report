@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 구현·로컬 검증 완료, PR 준비 — 2D 회랑 결과별 마커 반지름 핫픽스
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-score-unify-v3-clean
+- 범위/가드: 승인 시안의 피치 폭 대비 크기에 맞춰 2D 회랑 마커를 goal `0.72`, on_target `0.56`, blocked `0.50`으로 분리했다. off_target X는 기존 half-extent `0.70`을 유지한다. 피치 viewBox·캔버스·줌·clustering·클릭 상세·3D 마커는 변경하지 않았다. 변경 테스트 `SixLaneCorridorPitch.test.tsx` 3건과 production build가 통과했다. 병합·프로덕션 배포는 별도 승인 전 금지한다.
+
 - 상태: 긴급 프런트 계약 핫픽스 구현·검증 완료, 병합 승인 대기 — Python/JavaScript 2자리 반올림 경계 정합
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-score-unify-v3-clean
 - 범위/가드: PR #299 배포 직후 프로덕션 API는 `messi-score-unified-v3`와 6개 `scoreBreakdown`을 정상 반환했으나 프런트 Zod가 Python `round(..., 2)`와 다른 JavaScript `Math.round` 규칙으로 93.22/93.13 경계값을 거부했다. 점수·데이터·백엔드 DTO는 변경하지 않고, 프런트는 exact mean과의 오차가 half-cent 이하인 서버 소유 2자리 값을 허용해 언어별 tie-breaking 차이만 흡수한다. Kane의 박스 밖·박스 안 경계값을 회귀 테스트로 고정했다. focused frontend `12 passed`, production build 통과, 현재 Production API 응답을 수정된 Zod로 직접 검증해 HTTP 200/parse success를 확인했다. 병합·프로덕션 배포는 별도 승인 전 금지한다.
