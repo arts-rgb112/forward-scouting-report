@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { PitchPenaltyProvider, PitchPenaltyToggle } from "./PitchPenaltyContext";
-import { clusterCorridorShotGroups, CORRIDOR_CLUSTER_DISTANCE, SixLaneCorridorPitch } from "./SixLaneCorridorPitch";
+import { clusterCorridorShotGroups, CORRIDOR_CLUSTER_DISTANCE, CORRIDOR_MARKER_RADIUS, SixLaneCorridorPitch } from "./SixLaneCorridorPitch";
 import { groupPitchShots } from "./PitchShotMarker";
 import { DEFAULT_PITCH_LAYERS } from "./pitchLayers";
 
@@ -26,6 +26,45 @@ const analysis = {
 } as never;
 
 describe("SixLaneCorridorPitch", () => {
+  it("uses the approved result-specific marker radii without resizing the pitch", () => {
+    expect(CORRIDOR_MARKER_RADIUS).toEqual({ goal: .72, on_target: .56, off_target: .5, blocked: .5 });
+  });
+
+  it("matches the approved result colors, opacity, and outline widths", () => {
+    const outcomeAnalysis = {
+      spatial: {
+        available: true,
+        heatmapPointCount: 0,
+        heatmapPoints: [],
+        shotmapSnapshotAvailable: true,
+        shotmapPointCount: 4,
+        shotmapPoints: [
+          { x: 70, y: 20, outcome: "goal", xg: .2, xgot: .3 },
+          { x: 78, y: 35, outcome: "on_target", xg: .2, xgot: .2 },
+          { x: 86, y: 55, outcome: "blocked", xg: .1, xgot: null },
+          { x: 94, y: 75, outcome: "off_target", xg: .1, xgot: null },
+        ],
+        continuousCore: { available: false },
+      },
+    } as never;
+    const { container } = render(<PitchPenaltyProvider><SixLaneCorridorPitch analysis={outcomeAnalysis} layers={DEFAULT_PITCH_LAYERS}/></PitchPenaltyProvider>);
+    const svg = within(container.querySelector('[data-layout="six-lane-corridor-pitch"]')!).getByRole("img");
+    const marker = (outcome: string) => within(svg).getByRole("button", { name: `${outcome} 슛 상세` }).querySelector("[data-marker-radius]")!;
+    expect(marker("goal")).toHaveAttribute("r", "0.72");
+    expect(marker("goal")).toHaveAttribute("fill", "#BEF264");
+    expect(marker("goal")).toHaveAttribute("stroke", "#0A1F10");
+    expect(marker("goal")).toHaveAttribute("stroke-width", "1.2");
+    expect(marker("on_target")).toHaveAttribute("r", "0.56");
+    expect(marker("on_target")).toHaveAttribute("fill", "#38BDF8");
+    expect(marker("on_target")).toHaveAttribute("stroke-width", "1");
+    expect(marker("blocked")).toHaveAttribute("r", "0.5");
+    expect(marker("blocked")).toHaveAttribute("stroke", "#E2E8F0");
+    expect(marker("blocked")).toHaveAttribute("stroke-opacity", ".6");
+    expect(marker("off_target")).toHaveAttribute("data-marker-radius", "0.5");
+    expect(marker("off_target")).toHaveAttribute("stroke", "#94A3B8");
+    expect(marker("off_target")).toHaveAttribute("stroke-opacity", ".55");
+  });
+
   it("clusters near visual collisions deterministically while retaining every constituent shot", () => {
     const shots = [
       { x: 80, y: 40, outcome: "goal" as const, xg: .4 },

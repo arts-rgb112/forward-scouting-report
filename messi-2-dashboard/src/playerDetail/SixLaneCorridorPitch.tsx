@@ -34,8 +34,14 @@ const LANES = [
 
 const world = (shot: Pick<ShotmapPoint, "x" | "y">) => ({ x: shot.x * 1.05, y: (100 - shot.y) * .68 });
 const lineY = (sourceY: number) => (100 - sourceY) * .68;
-/** World-space collision distance for the fixed .7-unit 2D marker footprint. */
+/** World-space collision distance covering the largest .72-unit 2D marker. */
 export const CORRIDOR_CLUSTER_DISTANCE = 1.6;
+export const CORRIDOR_MARKER_RADIUS = {
+  goal: .72,
+  on_target: .56,
+  off_target: .5,
+  blocked: .5,
+} as const;
 export type CorridorShotCluster = PitchShotGroup & { shots: readonly ShotmapPoint[] };
 
 /**
@@ -81,14 +87,14 @@ function PitchLines() {
 
 function CorridorShotMarker({ group }: { group: PitchShotGroup }) {
   const { shot, count, outcomeCounts } = group;
-  const radius = .7; // Half the former footprint; <= 4 CSS px at the approved corridor viewport.
+  const radius = CORRIDOR_MARKER_RADIUS[shot.outcome];
   const marker = shot.outcome === "goal"
-    ? <circle r={radius} fill="#BEF264" fillOpacity=".6" stroke="#365314" strokeWidth=".18" vectorEffect="non-scaling-stroke" />
+    ? <circle data-marker-radius={radius} r={radius} fill="#BEF264" stroke="#0A1F10" strokeWidth="1.2" vectorEffect="non-scaling-stroke" />
     : shot.outcome === "on_target"
-      ? <circle r={radius} fill="#38BDF8" fillOpacity=".6" stroke="#075985" strokeWidth=".18" vectorEffect="non-scaling-stroke" />
+      ? <circle data-marker-radius={radius} r={radius} fill="#38BDF8" stroke="#0A1F10" strokeWidth="1" vectorEffect="non-scaling-stroke" />
       : shot.outcome === "off_target"
-        ? <path d="M-.7 -.7L.7 .7M.7 -.7L-.7 .7" fill="none" stroke="#E2E8F0" strokeOpacity=".86" strokeWidth=".22" vectorEffect="non-scaling-stroke"/>
-        : <circle r={radius} fill="none" stroke="#475569" strokeOpacity=".95" strokeWidth=".22" vectorEffect="non-scaling-stroke"/>;
+        ? <path data-marker-radius={radius} d={`M${-radius} ${-radius}L${radius} ${radius}M${radius} ${-radius}L${-radius} ${radius}`} fill="none" stroke="#94A3B8" strokeOpacity=".55" strokeWidth="1.1" vectorEffect="non-scaling-stroke"/>
+        : <circle data-marker-radius={radius} r={radius} fill="none" stroke="#E2E8F0" strokeOpacity=".6" strokeWidth="1.1" vectorEffect="non-scaling-stroke"/>;
   return <>{marker}{count > 1 && <g data-corridor-shot-stack aria-hidden="true" transform={`translate(${radius * .8} ${-radius * .8})`}><circle r="1.45" fill="#0A1F10" stroke="#F8FAFC" strokeWidth=".32" vectorEffect="non-scaling-stroke"/><text transform="scale(.18)" y="2.3" textAnchor="middle" fill="#F8FAFC" fontSize="12" fontWeight="900">×{count}</text></g>}</>;
 }
 
