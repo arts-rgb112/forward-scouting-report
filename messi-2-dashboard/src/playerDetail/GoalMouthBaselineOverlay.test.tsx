@@ -21,16 +21,20 @@ describe("Goal-Mouth baseline overlay", () => {
     expect(container.querySelectorAll("[data-goal-mouth-baseline-tooltip]")).toHaveLength(0);
     const populated = container.querySelector("[data-goal-mouth-baseline-cell='row5_column1']")!;
     fireEvent.focus(populated);
-    expect(container.querySelector("[data-goal-mouth-baseline-tooltip]")).toHaveTextContent("61.8% · 212 shots");
+    expect(container.querySelector("[data-goal-mouth-baseline-tooltip]")).toHaveAttribute("data-tooltip-placement", "cell");
+    expect(container.querySelector("[data-baseline-rate]")).toHaveTextContent("62%");
+    expect(container.querySelector("[data-baseline-sample]")).toHaveTextContent("212");
+    expect(container.querySelector("[data-baseline-rate]")).toHaveAttribute("fill", "#ffffff");
+    expect(container.querySelector("[data-goal-mouth-shot]")!.compareDocumentPosition(container.querySelector("[data-goal-mouth-baseline-tooltip]")!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(container.querySelector("[data-goal-mouth-baseline-header]")).toHaveTextContent("5개 시즌");
     expect(container.querySelector("[data-goal-mouth-pk-axis]")).toHaveAttribute("stroke", "#7DD3FC");
     expect(screen.getByText("크로스바")).toBeInTheDocument();
     expect(screen.getByText("골라인 (지면)")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "골문 득점 확률 기준선" })); expect(container.querySelector("[data-goal-mouth-baseline]")).toBeNull();
   });
-  it("keeps a low-sample server value visible with hatch and confidence tooltip", () => {
+  it("keeps a low-sample server value visible with hatch and two-line hover text", () => {
     baseline.value = { state: { kind: "ready", key: "goal-mouth-baseline-v1", data: goalMouthBaselineLowSampleFixture }, retry: vi.fn() };
     const { container } = render(<GoalMouthView data={finalThirdShotMapFixture.data as never} config={{ baseUrl: "https://api.example.com", season: "2025/2026", scope: 8, limit: 50 }}/>);
-    const cell = container.querySelector("[data-goal-mouth-baseline-cell='row1_column1']")!; expect(cell).toHaveAttribute("data-baseline-state", "low_sample"); expect(cell.querySelector("[data-baseline-low-sample-hatch]")).toBeInTheDocument(); fireEvent.focus(cell); expect(container.querySelector("[data-goal-mouth-baseline-tooltip]")).toHaveTextContent("95% CI 12.0–65.0%");
+    const cell = container.querySelector("[data-goal-mouth-baseline-cell='row1_column1']")!; expect(cell).toHaveAttribute("data-baseline-state", "low_sample"); expect(cell.querySelector("[data-baseline-low-sample-hatch]")).toBeInTheDocument(); fireEvent.focus(cell); expect(container.querySelector("[data-baseline-rate]")).toHaveTextContent("33%"); expect(container.querySelector("[data-baseline-sample]")).toHaveTextContent("12");
   });
 });
