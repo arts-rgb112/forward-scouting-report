@@ -190,6 +190,36 @@ def _minimum_xg_for_competition(league_id: int | None) -> float:
     return CUP_MINIMUM_XG if league_id in CUP_COMPETITION_IDS else LEAGUE_MINIMUM_XG
 
 
+def cohort_candidate_rows(league_id: int, season_name: str) -> dict[str, dict]:
+    """Return the authoritative candidate-ID union for one cohort slice.
+
+    ``won_contest`` is not a complete player directory for every season: for
+    example, Gabriel Jesus (PL 2024/25) is absent despite a resolved 603-minute
+    / xG 2.96 record.  ``expected_goals`` is also required because cumulative
+    xG is the eligibility gate itself.  Neither source's stat value is an
+    eligibility decision; exact player-season metrics below remain authoritative.
+
+    Both source requests deliberately propagate an error.  Falling back to one
+    table after the other has failed would silently shrink a released cohort.
+    """
+    candidate_rows: dict[str, dict] = {}
+    for rows in (
+        fetch_league_stat_table(league_id, season_name, "won_contest"),
+        fetch_league_stat_table(league_id, season_name, "expected_goals"),
+    ):
+        for row in rows:
+            player_id = row.get("id")
+            if player_id is None:
+                continue
+            key = str(player_id)
+            existing = candidate_rows.get(key)
+            # Preserve the first complete payload but use a later non-empty
+            # name when the original source did not provide one.
+            if existing is None or (not existing.get("name") and row.get("name")):
+                candidate_rows[key] = row
+    return candidate_rows
+
+
 def _value(row: dict) -> Optional[float]:
     value = row.get("statValue", {}).get("value") if isinstance(row.get("statValue"), dict) else None
     return float(value) if isinstance(value, (int, float)) else None
@@ -280,20 +310,8 @@ def _fetch_live_spear_cohort(
     league_id: int, season_name: str, restrict_to_forwards: bool = True,
     minimum_final_third_ratio: int = 0,
 ) -> tuple[dict[str, DecisionMetrics], dict[str, float]]:
-    """Build the same-competition xG>=1 comparison cohort.
-
-    FotMob's minutes leaderboard currently returns an empty list, while its
-    won-contest endpoint returns the complete player directory.  The latter is
-    therefore used only to discover player IDs: contest values do not filter
-    the cohort. Exact player metrics then enforce the shared xG floor only.
-    """
-    rows = fetch_league_stat_table(league_id, season_name, "won_contest")
-    # Some smaller leagues and continental competitions expose no contest
-    # leaderboard even though their player stats are available.  xG is the
-    # cohort's actual eligibility floor, so it is the correct lossless seed
-    # for those sessions rather than treating the whole competition as empty.
-    if not rows:
-        rows = fetch_league_stat_table(league_id, season_name, "expected_goals")
+    """Build the same-competition xG/minutes-eligible comparison cohort."""
+    rows = cohort_candidate_rows(league_id, season_name)
 
     def per90_table(stat: str) -> dict[str, float]:
         """Load one complete provider table without making it an eligibility gate."""
@@ -310,11 +328,10 @@ def _fetch_live_spear_cohort(
     recoveries_per90 = per90_table("ball_recovery")
     final_third_wins_per90 = per90_table("poss_won_att_3rd")
     
-    # Seed with every listed player; no contest-stat cutoff.
+    # Seed from the explicit source union; neither leaderboard stat is a cutoff.
     successes = {
-        str(row.get("id")): 0.0
-        for row in rows
-        if row.get("id") is not None
+        player_id: 0.0
+        for player_id in rows
     }
 
     def fetch_one(player_id: str) -> tuple[str, Optional[DecisionMetrics], str]:
