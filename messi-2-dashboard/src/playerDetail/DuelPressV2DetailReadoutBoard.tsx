@@ -35,7 +35,7 @@ function Tooltip({ label, children, content }: { label: string; children: ReactN
   const id = `duel-v2-${useId().replace(/:/g, "")}`;
   return <span className="relative inline-flex min-w-0" onPointerEnter={() => setOpen(true)} onPointerLeave={() => setOpen(false)}>
     <button type="button" aria-label={`${label} 상세 정보`} aria-describedby={open ? id : undefined} className="rounded outline-none focus-visible:ring-2 focus-visible:ring-lime-300" onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onClick={() => setOpen((value) => !value)}>{children}</button>
-    {open && <span id={id} role="tooltip" className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded border border-white/20 bg-[#101415] p-3 text-[11px] leading-4 text-zinc-200 shadow-xl">{content}</span>}
+    {open && <span id={id} role="tooltip" className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded border border-white/20 bg-[#101415] p-3 type-caption text-zinc-200 shadow-xl">{content}</span>}
   </span>;
 }
 
@@ -65,9 +65,9 @@ function MetricRow({ row }: { row: ReadoutRow }) {
   const displayScore = row.value.comparison.state === "available" ? score : null;
   const tone = scoreTone(displayScore);
   return <div data-metric-id={row.metric.id} data-metric-slot={row.slot} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 border-t border-white/10 py-1.5">
-    <span className="min-w-0 break-words text-[11px] font-normal text-zinc-400">{row.label}</span>
-    <span className="min-w-11 text-right font-mono text-[11px] tabular-nums text-zinc-100">{formatRawValue(row.value)}</span>
-    <Tooltip label={row.label} content={<MetricTooltip metric={row.metric} item={row.value} slot={row.slot}/>}><b className={`inline-flex min-w-8 items-center justify-center rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums ${tone.badge}`}>{displayScore ?? "—"}</b></Tooltip>
+    <span className="min-w-0 break-words type-label font-normal text-zinc-400">{row.label}</span>
+    <span className="min-w-11 text-right font-mono type-body tabular-nums text-zinc-100">{formatRawValue(row.value)}</span>
+    <Tooltip label={row.label} content={<MetricTooltip metric={row.metric} item={row.value} slot={row.slot}/>}><b className={`inline-flex min-w-8 items-center justify-center rounded px-1.5 py-0.5 font-mono type-label font-semibold tabular-nums ${tone.badge}`}>{displayScore ?? "—"}</b></Tooltip>
   </div>;
 }
 
@@ -81,7 +81,7 @@ function CategoryCard({ category, summary = false }: { category: DuelPressV2Cate
   const title = duelPressAxisLabels[category.id];
   const hasMultipleGroups = category.groups.length > 1;
   return <article data-taxonomy="duel-press-v2" className="min-w-0 rounded-xl border border-white/10 bg-[#101415] p-3 shadow-sm">
-    <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate text-sm font-black text-white">{title}</h3><p className="mt-1 text-[10px] text-zinc-500">원시값 · 동일 코호트 백분위</p></div><Tooltip label={title} content={<CategoryTooltip category={category}/>}><b className={`inline-flex min-w-11 items-center justify-center rounded border px-2 py-1 font-mono text-lg font-black ${tone.badge}`}>{score ?? "—"}</b></Tooltip></div>
+    <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate type-title font-black text-white">{title}</h3><p className="mt-1 type-caption text-zinc-500">원시값 · 동일 코호트 백분위</p></div><Tooltip label={title} content={<CategoryTooltip category={category}/>}><b className={`inline-flex min-w-11 items-center justify-center rounded border px-2 py-1 font-mono type-metric font-black ${tone.badge}`}>{score ?? "—"}</b></Tooltip></div>
     <div role="progressbar" aria-label={`${title} 백분위`} aria-valuemin={0} aria-valuemax={99} {...(score === null ? {} : { "aria-valuenow": score })} className="mt-3 h-1.5 overflow-hidden rounded bg-white/10"><span className={`block h-full rounded ${tone.fill}`} style={{ width: `${score ?? 0}%` }} /></div>
     {summary ? <div data-detail-level="core" className="mt-3">{category.groups.flatMap(rowsForGroup).slice(0, 4).map((row) => <MetricRow key={`${row.metric.id}-${row.slot}`} row={row}/>)}</div> : category.groups.map((group) => <section key={group.id} className="mt-3 min-w-0" aria-label={duelPressV2GroupLabel(group.id, group.label)}>{hasMultipleGroups && <h4 className="border-b border-white/10 pb-1 text-xs font-bold text-zinc-200">{duelPressV2GroupLabel(group.id, group.label)}</h4>}{rowsForGroup(group).map((row) => <MetricRow key={`${row.metric.id}-${row.slot}`} row={row}/>)}</section>)}
   </article>;

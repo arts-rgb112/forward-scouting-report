@@ -65,7 +65,7 @@ function ProfileTierBadge({ tier }: { tier: Tier }) {
   const visual = TIER_VISUALS[tierVisualKey(tier)];
   return <span
     aria-label={`Overall M.E.S.S.I. tier: ${presentation.label}, level ${tier.level}`}
-    className="inline-flex shrink-0 items-center rounded-md border px-[10px] py-[5px] text-[10px] font-bold leading-none"
+    className="inline-flex shrink-0 items-center rounded-md border px-[10px] py-[5px] type-caption font-bold leading-none"
     style={{ borderColor: visual.variable, color: visual.variable }}
     title={presentation.tooltip}
   >
@@ -74,10 +74,10 @@ function ProfileTierBadge({ tier }: { tier: Tier }) {
 }
 
 function RankRow({ label, rank, population }: { label: string; rank: number | null; population: number | null }) {
-  return <div className="flex w-full items-baseline justify-between gap-2 text-[10px] leading-normal">
+  return <div className="flex w-full items-baseline justify-between gap-2 type-caption">
     <span className="text-[var(--messi-muted,#949f9f)]">{label}</span>
     <span className="flex items-baseline gap-[5px]">
-      <b className="text-[12px] text-[var(--messi-text,#f5f8f7)]">{rank === null ? "—" : `${rank}위`}</b>
+      <b className="type-label text-[var(--messi-text,#f5f8f7)]">{rank === null ? "—" : `${rank}위`}</b>
       <span className="text-[var(--messi-muted,#949f9f)]">/ {population === null ? "—명" : `${population}명`}</span>
     </span>
   </div>;
@@ -93,15 +93,15 @@ function SeasonRailRow({ row }: { row: SeasonRow }) {
   return <li className="flex w-full flex-col gap-1" data-season={row.context.season} data-selected={row.selected ? "true" : "false"}>
     <div className="flex w-full items-baseline justify-between gap-2">
       <span className="flex min-w-0 items-baseline gap-[6px]">
-        <b className={`${row.selected ? "font-bold text-[var(--messi-text,#f5f8f7)]" : "font-normal text-[var(--messi-muted,#949f9f)]"} text-[11px] leading-normal`}>{row.context.season}</b>
-        {row.selected && <span className="rounded-[3px] border border-[var(--messi-muted,#949f9f)] px-[6px] py-0.5 text-[8px] font-bold leading-none text-[var(--messi-muted,#949f9f)]">{COPY.current}</span>}
+        <b className={`${row.selected ? "font-bold text-[var(--messi-text,#f5f8f7)]" : "font-normal text-[var(--messi-muted,#949f9f)]"} type-label`}>{row.context.season}</b>
+        {row.selected && <span className="rounded-[3px] border border-[var(--messi-muted,#949f9f)] px-[6px] py-0.5 type-caption font-bold leading-none text-[var(--messi-muted,#949f9f)]">{COPY.current}</span>}
       </span>
-      <b className="shrink-0 text-[12px] leading-normal tabular-nums text-[var(--messi-text,#f5f8f7)]">{row.score.toFixed(1)}</b>
+      <b className="shrink-0 type-label tabular-nums text-[var(--messi-text,#f5f8f7)]">{row.score.toFixed(1)}</b>
     </div>
     <div className="h-1 w-full overflow-hidden rounded-sm bg-[var(--messi-border,#252d2e)]" role="progressbar" aria-label={`${row.context.season} ${presentation.label} level ${row.player.tier.level} tier ladder position`} aria-valuemin={0} aria-valuemax={30} aria-valuenow={Math.round(width * 0.3)}>
       <span className="block h-full rounded-sm" data-tier-fill style={{ width: `${width}%`, backgroundColor: visual.variable }} />
     </div>
-    <div className="flex w-full items-center gap-[6px] text-[9px] leading-normal">
+    <div className="flex w-full items-center gap-[6px] type-caption">
       <span aria-hidden="true" className="size-[6px] shrink-0 rounded-full" style={{ backgroundColor: visual.variable }} />
       <b style={{ color: visual.variable }}>{presentation.label} {row.player.tier.level}</b>
       <span className="opacity-60 text-[var(--messi-muted,#949f9f)]">·</span>
@@ -129,12 +129,12 @@ export function PlayerProfileCard({ player, analysis, selected, history }: { pla
   const positionPopulation = analysis?.score.population && analysis.score.population > 0 ? analysis.score.population : null;
 
   return <section
-    className="flex w-full max-w-[300px] flex-col gap-4 overflow-hidden rounded-[var(--radius-card,16px)] border border-[var(--messi-border,#252d2e)] bg-[var(--messi-panel,#101516)] p-[22px]"
+    className="flex w-full flex-col gap-4 overflow-hidden rounded-[var(--radius-card,16px)] border border-[var(--messi-border,#252d2e)] bg-[var(--messi-panel,#101516)] p-[22px]"
     aria-labelledby="player-profile-heading"
     data-layout="approved-profile-card"
   >
     <div className="flex w-full items-baseline justify-between gap-3 overflow-hidden">
-      <h2 id="player-profile-heading" className="text-[56px] font-bold leading-none tabular-nums" style={{ color: currentVisual.variable }}>{wholeScore(player, analysis)}</h2>
+      <h2 id="player-profile-heading" className="type-display font-bold tabular-nums" style={{ color: currentVisual.variable }}>{wholeScore(player, analysis)}</h2>
       <ProfileTierBadge tier={player.tier}/>
     </div>
 
@@ -144,8 +144,8 @@ export function PlayerProfileCard({ player, analysis, selected, history }: { pla
     </div>
 
     <div className="flex w-full items-center gap-[6px] overflow-hidden">
-      <span className="shrink-0 rounded border border-[var(--messi-cyan,#45d6ed)] px-2 py-[3px] text-[9px] font-bold leading-none text-[var(--messi-cyan,#45d6ed)]">{currentContext.chip}</span>
-      <span className="truncate text-[10px] text-[var(--messi-muted,#949f9f)]">{currentContext.detail} · {selected.season}</span>
+      <span className="shrink-0 rounded border border-[var(--messi-cyan,#45d6ed)] px-2 py-[3px] type-caption font-bold leading-none text-[var(--messi-cyan,#45d6ed)]">{currentContext.chip}</span>
+      <span className="truncate type-caption text-[var(--messi-muted,#949f9f)]">{currentContext.detail} · {selected.season}</span>
     </div>
 
     <div className="h-px w-full bg-[var(--messi-border,#252d2e)]"/>
@@ -155,15 +155,16 @@ export function PlayerProfileCard({ player, analysis, selected, history }: { pla
         {player.face ? <img src={player.face} alt={`${player.name} portrait`} className="h-full w-full object-cover"/> : <span className="grid h-full place-items-center text-xl font-bold text-[var(--messi-muted,#949f9f)]" aria-hidden="true">{player.name[0]}</span>}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-bold leading-normal text-[var(--messi-text,#f5f8f7)]">{player.name}</p>
-        <p className="truncate text-[11px] leading-normal text-[var(--messi-muted,#949f9f)]">{player.club.name} · {player.position}</p>
-        <p className="text-[11px] leading-normal text-[var(--messi-muted,#949f9f)]">{player.age === null ? "나이 정보 없음" : `${player.age}세`} · {player.minutes.toLocaleString()}분</p>
+        <p className="truncate type-title font-bold text-[var(--messi-text,#f5f8f7)]">{player.name}</p>
+        <p className="truncate type-label text-[var(--messi-muted,#949f9f)]">{player.club.name} · {player.position}</p>
+        <p className="type-label text-[var(--messi-muted,#949f9f)]">{player.age === null ? "나이 정보 없음" : `${player.age}세`} · {player.minutes.toLocaleString()}분</p>
       </div>
     </div>
 
     <div className="h-px w-full bg-[var(--messi-border,#252d2e)]"/>
 
-    <div className="flex w-full items-baseline justify-between gap-[6px] text-[9px] leading-normal text-[var(--messi-muted,#949f9f)]">
+    <section aria-label="Season score rail" className="flex w-full flex-col gap-4">
+    <div className="flex w-full items-baseline justify-between gap-[6px] type-caption text-[var(--messi-muted,#949f9f)]">
       <h3 className="font-semibold tracking-[0.7px]">{COPY.seasonHighs}</h3>
       <span>{COPY.retrievedRange} {range}{history.entries.length ? "" : ` · ${COPY.selectedOnly}`}</span>
     </div>
@@ -172,7 +173,8 @@ export function PlayerProfileCard({ player, analysis, selected, history }: { pla
       {history.loading ? <><SeasonRailRow row={rows.find((row) => row.selected) ?? rows[0]}/>{Array.from({ length: 4 }, (_, index) => <SeasonSkeleton key={index}/>)}</> : rows.map((row) => <SeasonRailRow key={`${row.context.season}-${row.context.mode}`} row={row}/>)}
     </ol>
 
-    <p className="text-[9px] leading-normal text-[var(--messi-muted,#949f9f)] opacity-70">{COPY.barNote}</p>
-    {history.failed > 0 && <p aria-live="polite" className="text-[9px] leading-normal text-[var(--messi-amber,#f5b247)]">{COPY.partialHistory(history.failed)}</p>}
+    <p className="type-caption text-[var(--messi-muted,#949f9f)] opacity-70">{COPY.barNote}</p>
+    {history.failed > 0 && <p aria-live="polite" className="type-caption text-[var(--messi-amber,#f5b247)]">{COPY.partialHistory(history.failed)}</p>}
+    </section>
   </section>;
 }

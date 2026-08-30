@@ -125,7 +125,7 @@ export function SixLaneCorridorPitch({ analysis, layers }: { analysis?: PlayerAn
             })}
           </svg>
           </div>
-          <span className="pointer-events-none absolute bottom-2 right-3 text-[10px] font-semibold text-zinc-300">{COPY.attack}</span>
+          <span className="pointer-events-none absolute bottom-2 right-3 type-caption font-semibold text-zinc-300">{COPY.attack}</span>
         </div>
         <div role="group" aria-label={COPY.zoom} className="mt-2 flex items-center gap-1"><button type="button" aria-label="축소" onClick={() => setZoom((current) => Math.max(1, current - .2))} disabled={zoom <= 1} className="min-h-8 min-w-8 rounded border border-white/15 font-bold disabled:opacity-40">−</button><button type="button" aria-label="확대" onClick={() => setZoom((current) => Math.min(3, current + .2))} disabled={zoom >= 3} className="min-h-8 min-w-8 rounded border border-white/15 font-bold disabled:opacity-40">+</button><button type="button" onClick={() => setZoom(1)} className="min-h-8 rounded border border-white/15 px-2 text-xs font-bold">{COPY.reset}</button><span aria-live="polite" className="ml-1 text-xs text-zinc-400">{zoom.toFixed(1)}배</span></div>
         <figcaption id="six-lane-corridor-caption" className="mt-2 text-xs text-zinc-400">{markerDescription} · {COPY.penalty}</figcaption>

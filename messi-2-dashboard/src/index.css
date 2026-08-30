@@ -4,6 +4,21 @@
 @source "../MessiScoutingDashboard.tsx";
 @source "./**/*.{ts,tsx}";
 
+/*
+ * Product-wide type scale.  Player detail views previously imported literal
+ * sizes from individual mockups; these semantic utilities are the only text
+ * sizes to use for new UI.  Keeping the tokens here also makes the upcoming
+ * i18n pass less likely to create language-specific typography drift.
+ */
+@layer utilities {
+  .type-display { font-size: 2rem; line-height: 1; }
+  .type-metric { font-size: 1.5rem; line-height: 1.1; }
+  .type-title { font-size: 1.125rem; line-height: 1.3; }
+  .type-body { font-size: 1rem; line-height: 1.5; }
+  .type-label { font-size: 0.875rem; line-height: 1.4; }
+  .type-caption { font-size: 0.75rem; line-height: 1.35; }
+}
+
 :root {
   color-scheme: dark;
   font-family:

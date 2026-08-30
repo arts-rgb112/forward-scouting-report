@@ -79,7 +79,7 @@ describe("approved Figma 7154 detailed stats board", () => {
     const category = container.querySelector('[data-category-id="outsideShot"]')!;
     expect(category).toHaveClass("gap-[7px]");
     expect(within(category as HTMLElement).getByRole("progressbar")).toHaveClass("h-1", "max-w-[288px]", "rounded-[2px]");
-    expect(within(category as HTMLElement).getByRole("heading", { level: 3 })).toHaveClass("text-[14px]");
+    expect(within(category as HTMLElement).getByRole("heading", { level: 3 })).toHaveClass("type-title");
     expect(within(category as HTMLElement).getByRole("heading", { level: 4, name: "참고" })).toHaveStyle({ color: "var(--messi-muted, #949f9f)", opacity: "0.6" });
   });
 

@@ -26,7 +26,8 @@ describe("approved Figma profile card", () => {
   it("renders the exact compact panel geometry, identity, score, tier and selected context", () => {
     const { container } = render(<PlayerProfileCard player={player} analysis={analysis} selected={selected} history={readyHistory}/>);
     const card = container.querySelector('[data-layout="approved-profile-card"]');
-    expect(card).toHaveClass("max-w-[300px]", "gap-4", "p-[22px]");
+    expect(card).toHaveClass("w-full", "gap-4", "p-[22px]");
+    expect(card).not.toHaveClass("max-w-[300px]");
     expect(screen.getByRole("heading", { name: "72" })).toHaveStyle({ color: "var(--messi-violet, #ab8ffa)" });
     expect(screen.getByLabelText("Overall M.E.S.S.I. tier: Diamond, level 2")).toHaveTextContent("◆ Diamond Lv.2");
     expect(card).toHaveTextContent("Kylian Mbappé"); expect(card).toHaveTextContent("Real Madrid · Striker"); expect(card).toHaveTextContent("27세 · 912분");

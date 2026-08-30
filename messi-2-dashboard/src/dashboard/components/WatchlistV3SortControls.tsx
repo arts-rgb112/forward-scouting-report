@@ -13,6 +13,6 @@ export function WatchlistV3SortControls({ sort, direction, onChange }: { sort: W
       </select>
     </label>
     <button type="button" aria-label={`Sort direction ${direction === "asc" ? "ascending" : "descending"}`} onClick={() => onChange(sort, direction === "asc" ? "desc" : "asc")} className="min-h-11 rounded border border-white/10 px-3 text-xs">{direction === "asc" ? "오름차순 ↑" : "내림차순 ↓"}</button>
-    <span className="text-[10px] text-zinc-500">저장 시점 스냅샷 값을 기준으로 정렬합니다. 각 택소노미에 없는 지표는 마지막에 표시됩니다.</span>
+    <span className="type-caption text-zinc-500">저장 시점 스냅샷 값을 기준으로 정렬합니다. 각 택소노미에 없는 지표는 마지막에 표시됩니다.</span>
   </div>;
 }

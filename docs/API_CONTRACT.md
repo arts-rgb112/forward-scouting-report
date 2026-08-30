@@ -6,6 +6,9 @@
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-live-fix
 - 범위/가드: 최신 `origin/main` 위로 재배치한 P0는 3D 표시 전용 96×66 업샘플, 원본 32×22 CCA/HDR 유지, 흰색 20-zone/PK 축 구분선, 공용 레이어 토글, 3개 피치 탭, 한국어 탐색·접힘·빈 상태를 포함한다. 2D는 `SixLaneCorridorPitch` 전용 컴포넌트로 교체해 field-internal lane label을 제거하고, 20-zone depth guide·display-only heatmap·CCA·trajectory·simple outcome marker·click inspector·native passive:false wheel/pinch/button zoom을 제공한다. exact PK 포함/제외는 부모 공용 토글을 그대로 소비하고, 표의 6-lane 수치와 zone inspector 집계는 서버 연결 전까지 `—`로 fail-closed다. 3D zone label은 기존 서버 `positionalGrid` 값만 표시하며 브라우저에서 점유율을 재집계하지 않는다. 점수·CSV·CCA·30셀·기능 플래그·SportsAPI 원본은 변경하지 않는다. 병합·배포는 발주자 게이트 승인 전 금지한다.
 - DOM 검증 기준: `LegacySpatialPitchFigure`의 `data-layer="positional-grid"`는 `pitchGeometry`의 `zone20Lines()`/`PATH_STYLE`을 사용하며 `stroke=#FFFFFF`, `stroke-opacity=0.13`, `stroke-width=1`이어야 한다.
+- 상태: 로컬 구현·검증 완료 — Player page typography unified + 1440 desktop composition (2026-08-30 KST), PR #297 병합 전 유지
+- 범위/가드: `CODEX_PLAYER_PAGE_REBUILD_ORDER.md`의 최종 `타이포그래피 통일 + 레이아웃`에 따라 `index.css`에 display(32)·metric(24)·title(18)·body(16)·label(14)·caption(12) 공용 토큰을 정의했다. `messi-2-dashboard/src`에서 `text-[Npx]`와 특히 12px 미만 임의 텍스트는 0건이며, 전술 요약의 주값은 metric 24로 낮췄고 상세 스탯 raw 값·프로필 rank/season 값은 label/body 이상으로 올렸다. 프로필은 12열 전체 폭을 사용해 우측 공백을 제거하고, desktop xl에서 피치 workspace 8열과 전술 요약 4열을 같은 행에 둔다. 점수·API·CSV·CCA·SportsAPI 수집·feature flag는 변경하지 않는다.
+- 검증: `rg 'text-\\[([0-9]|1[01])px\\]' messi-2-dashboard/src` 및 모든 `text-[Npx]` 검색은 0건이다. 변경/갱신 test 6 files `36 passed`; `pnpm build` 통과(기존 500kB chunk warning만). 로컬 Vite 1440×900 DOM 접근은 API 환경변수 미주입으로 configuration unavailable 상태여서 실데이터 화면 시각 QA는 주장하지 않는다.
 
 - 상태: 로컬 구현·실데이터 QA 완료 — 피치 워크스페이스 3개 1층 탭 + 접힌 헥스 원자료 (2026-08-28 KST), PR 준비 중
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-pitch-workspace
