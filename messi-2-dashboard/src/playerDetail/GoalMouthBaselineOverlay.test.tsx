@@ -16,10 +16,12 @@ describe("Goal-Mouth baseline overlay", () => {
     const bottomLeft = container.querySelector("[data-goal-mouth-baseline-cell='row1_column1'] rect")!;
     expect(Number(topLeft.getAttribute("y"))).toBeLessThan(Number(bottomLeft.getAttribute("y")));
     expect(container.querySelector("[data-goal-mouth-shot]")!.compareDocumentPosition(container.querySelector("[data-goal-mouth-baseline]")!)).toBe(Node.DOCUMENT_POSITION_PRECEDING);
-    expect(container.querySelectorAll("[data-baseline-rate]")).toHaveLength(50);
-    expect(container.querySelectorAll("[data-baseline-sample]")).toHaveLength(50);
-    expect(container.querySelector("[data-goal-mouth-baseline-cell='row5_column1'] [data-baseline-rate]")).toHaveTextContent("62%");
-    expect(container.querySelector("[data-goal-mouth-baseline-cell='row5_column1'] [data-baseline-sample]")).toHaveTextContent("212");
+    expect(container.querySelectorAll("[data-baseline-rate]")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-baseline-sample]")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-goal-mouth-baseline-tooltip]")).toHaveLength(0);
+    const populated = container.querySelector("[data-goal-mouth-baseline-cell='row5_column1']")!;
+    fireEvent.focus(populated);
+    expect(container.querySelector("[data-goal-mouth-baseline-tooltip]")).toHaveTextContent("61.8% · 212 shots");
     expect(container.querySelector("[data-goal-mouth-baseline-header]")).toHaveTextContent("5개 시즌");
     expect(container.querySelector("[data-goal-mouth-pk-axis]")).toHaveAttribute("stroke", "#7DD3FC");
     expect(screen.getByText("크로스바")).toBeInTheDocument();

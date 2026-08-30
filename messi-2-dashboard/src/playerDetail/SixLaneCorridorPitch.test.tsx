@@ -13,9 +13,10 @@ const analysis = {
     heatmapPointCount: 3,
     heatmapPoints: [{ x: 80, y: 40 }, { x: 81, y: 42 }, { x: 82, y: 44 }],
     shotmapSnapshotAvailable: true,
-    shotmapPointCount: 3,
+    shotmapPointCount: 4,
     shotmapPoints: [
       { x: 80, y: 40, outcome: "goal", xg: .4, xgot: .6 },
+      { x: 80, y: 40, outcome: "on_target", xg: .4, xgot: .6 },
       { x: 89.524, y: 50, outcome: "goal", xg: .79, xgot: .8 },
       { x: 71.049, y: 50, outcome: "off_target", xg: .02, xgot: null },
     ],
@@ -28,15 +29,19 @@ describe("SixLaneCorridorPitch", () => {
     const { container } = render(<PitchPenaltyProvider><PitchPenaltyToggle/><SixLaneCorridorPitch analysis={analysis} layers={DEFAULT_PITCH_LAYERS}/></PitchPenaltyProvider>);
     const corridor = container.querySelector('[data-layout="six-lane-corridor-pitch"]')!;
     const svg = within(corridor).getByRole("img");
-    expect(svg.querySelectorAll("text")).toHaveLength(0);
+    expect(svg.querySelectorAll("text")).toHaveLength(1);
+    expect(svg.querySelector("[data-corridor-shot-stack] text")).toHaveTextContent("×2");
     expect(svg.querySelectorAll("[data-lane]")).toHaveLength(6);
     expect(svg.querySelector('[data-layer="positional-grid"]')).not.toBeNull();
     expect(svg.querySelector('[data-layer="pk-axis"]')).toBeNull();
     expect(svg.querySelectorAll('[data-pitch-shot-marker]')).toHaveLength(0);
     expect(within(svg).getAllByRole("button", { name: /슛 상세/ })).toHaveLength(3);
+    const stack = within(svg).getByRole("button", { name: /묶음 2발.*득점 1.*유효 1/ });
+    expect(stack).toHaveAttribute("data-corridor-shot-count", "2");
+    expect(stack.querySelector("[data-corridor-shot-stack]")).toHaveTextContent("×2");
     fireEvent.click(screen.getByRole("button", { name: "페널티 제외" }));
     expect(within(svg).getAllByRole("button", { name: /슛 상세/ })).toHaveLength(2);
-    fireEvent.click(within(svg).getAllByRole("button", { name: "goal 슛 상세" })[0]);
+    fireEvent.click(within(svg).getByRole("button", { name: /goal 슛 상세, 묶음 2발/ }));
     expect(within(corridor).getByLabelText("슈팅 상세")).toHaveTextContent("xG 0.40");
     fireEvent.click(within(corridor).getByRole("button", { name: "확대" }));
     expect(within(corridor).getByText("1.2배")).toBeInTheDocument();

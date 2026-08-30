@@ -2,6 +2,11 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·DOM 검증 완료 — PR #297 4차·5차 피드백 최종 게이트
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-live-fix
+- 범위/결과: 골대 정면·박스 프리셋에서 카메라 평면을 가로지르던 잔디 폴리곤을, 해당 프레임의 전방 terrain만 투영하도록 고쳐 4개 시점×3개 프리셋 12조합의 DOM path가 모두 유한함을 확인했다. CCA는 `1.6 / 0.72`로 조정했고 원본 32×22 HDR 계산은 바꾸지 않았다. 2D 마커는 반경 1.35 world-unit의 반투명·테두리형으로 고정하고 정확히 같은 원본 좌표는 paint-order 묶음/개수 배지로 표시한다. 골대맵은 50개 셀의 상시 숫자를 제거하고 hover/focus tooltip만 남겼다. 3D 구역은 0발 라벨을 숨기고 source shot snapshot에서 계산한 슈팅 비중만 보이며 hover에 슈팅·득점·xG·활동 점유를 함께 보여 준다. 6레인 표와 2D zone inspector 집계는 서버 계약 연결 전까지 `—` fail-closed를 유지하며, 점수·CSV·CCA/HDR 원본 격자·API·기능 플래그·SportsAPI 원본은 변경하지 않았다. 병합·배포는 발주자 승인 전 금지한다.
+- 검증: 수정한 `SpatialPitch.test.tsx`는 4각도×3프리셋의 `data-terrain-frame-from-x`/finite path, shot-share tooltip을 DOM으로 검증했다. `SixLaneCorridorPitch.test.tsx`는 mixed stack/PK/zoom-pan, `GoalMouthBaselineOverlay.test.tsx`는 기본 무수치와 hover tooltip, `LegacySpatialPitch.test.tsx`는 CCA 중간값을 검증한다. focused 10 files 64 passed, production build 통과(기존 chunk-size warning만). 실데이터 시각 QA는 API 환경변수 미주입으로 수행하지 않았고 완료로 주장하지 않는다.
+
 - 상태: 로컬 구현·검증 완료 — Player page 3차 피드백 9건 (PR #297 병합 전 유지)
 - 범위/결과: 접힌 상세 스탯 보드 첫 화면은 6개 카테고리의 이름·점수·막대만 남기고 서버 지표는 기존 펼침 영역에 모두 보존했다. 레이더 축 라벨은 14px로 낮추고 차트 안쪽으로 이동했다. 2D 회랑은 확대 후 버튼·휠·핀치와 동일 배율에서 pointer drag pan(경계 clamp)을 제공하며, 기존 클릭 zone inspector는 서버 집계가 없으므로 슛·득점·xG·점유를 `—`로 fail-closed한다. 3D는 server `positionalGrid` label hover tooltip과 페널티박스 중앙 y=50 시각 분할을 추가했고, 수치 원천이 없는 슛/득점/xG는 `—`로 표시한다. 시즌 레일은 score/99 길이와 티어 색을 사용하고, 전폭 카드 안에 identity/rank와 2열 season history를 재배치했다. 점수·CSV·CCA·30셀·API·flag·SportsAPI 원본은 변경하지 않았다.
 - 타이포 검증: `text-[0..11px]` 0, literal SVG `fontSize` 12 미만 0, `text-xs` 0, `text-base` 156회다. `text-xs`는 전수 제거했으므로 별도 사용처·근거는 없다; 12px 주석은 `.type-caption` 토큰으로만 남긴다.

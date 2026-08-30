@@ -54,8 +54,8 @@ describe("LegacySpatialPitch", () => {
     expect(section.querySelectorAll("[data-shot-index]")).toHaveLength(4);
     expect(section.querySelectorAll('[data-shot-outcome="goal"]')).toHaveLength(1);
     expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke", "#C084FC");
-    expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke-width", "1.15");
-    expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke-opacity", "0.46");
+    expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke-width", "1.6");
+    expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke-opacity", "0.72");
     expect(section.querySelector("image")).toBeNull();
     expect(section.querySelector('[data-layer="guardiola-20-zone-guide"]')).toBeInTheDocument();
     expect(section).toHaveTextContent("득점 1"); expect(section).toHaveTextContent("유효 슛 1"); expect(section).toHaveTextContent("빗나감 1"); expect(section).toHaveTextContent("블록 1");

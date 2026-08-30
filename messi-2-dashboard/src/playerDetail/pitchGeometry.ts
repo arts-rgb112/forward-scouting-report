@@ -227,6 +227,7 @@ export const PATH_STYLE: Record<PathRole, { stroke: string; width: number; opaci
   "goal-net":   { stroke: "#FFFFFF", width: 1.0, opacity: 0.34 },
 };
 /** Background reference only: the CCA must not overpower pitch markings or shot events. */
-export const CCA_STYLE = { stroke: "#C084FC", width: 1.15, opacity: 0.46, dash: "7 7" };
+/** Tuned against the heat ramp: visible as an area boundary without masking shot events. */
+export const CCA_STYLE = { stroke: "#C084FC", width: 1.6, opacity: 0.72, dash: "7 7" };
 export const HEAT_DISPLAY_GAMMA = 0.6;
 export const HEAT_OPACITY_CEILING = { perspective: 0.55, plan: 0.62 };

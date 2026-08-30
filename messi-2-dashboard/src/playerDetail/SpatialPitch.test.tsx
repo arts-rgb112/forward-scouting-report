@@ -46,10 +46,27 @@ describe("perspective spatial pitch", () => {
     expect(screen.queryByText(/D1|L1/)).not.toBeInTheDocument();
   });
 
-  it("renders only server-provided positional occupancy labels in the 3D corridor", () => {
-    const { container } = render(<SpatialPitch analysis={analysisWith({ positionalGrid: [{ depth: 0, lane: 0, occupancyPct: 16.67 }] })}/>);
+  it("renders source-shot shares in the 3D corridor and exposes the full hover breakdown", () => {
+    const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 2, shotmapPoints: [{ x: 8, y: 10, outcome: "goal", xg: .3 }, { x: 80, y: 90, outcome: "on_target", xg: .2 }], positionalGrid: [{ depth: 0, lane: 0, occupancyPct: 16.67 }] })}/>);
     expect(container.querySelector('[data-layer="positional-occupancy-labels"]')).not.toBeNull();
-    expect(screen.getByText("1 · 16.67%")).toBeInTheDocument();
+    const label = screen.getByText("50.00%");
+    expect(label).toHaveAttribute("data-zone-shot-share", "50.00");
+    fireEvent.pointerEnter(label);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("슈팅 비중 50.00% · 활동 16.67%");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("슛 1 · 득점 1 · xG 0.30");
+  });
+
+  it("keeps terrain finite across every approved camera-angle and zoom-preset combination", () => {
+    const { container } = render(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 85, y: 50 }] })}/>);
+    const terrain = () => container.querySelector("[data-terrain-frame-from-x]")!;
+    for (const angle of ["좌측", "우측", "골대 정면", "골대 뒤"]) {
+      fireEvent.click(screen.getByRole("button", { name: angle }));
+      for (const frame of ["전체 필드", "공격 진영", "박스"]) {
+        fireEvent.click(screen.getByRole("button", { name: frame }));
+        expect(terrain().getAttribute("d")).not.toMatch(/NaN|Infinity/);
+        expect(terrain()).toHaveAttribute("data-terrain-frame-from-x", frame === "전체 필드" ? "0" : frame === "공격 진영" ? "50" : "80");
+      }
+    }
   });
 
   it("adds both goal frames and nets but no inferred shot trajectory", () => {

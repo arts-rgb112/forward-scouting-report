@@ -4,6 +4,7 @@ import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
 import { HeatmapCanvas } from "./LegacySpatialPitch";
 import { legacyDensityGrid, marchingSquares, normalizeDensity } from "./legacyHeatmap";
 import { CCA_STYLE, ZONE20 } from "./pitchGeometry";
+import { groupPitchShots, stackCompositionLabel, type PitchShotGroup } from "./PitchShotMarker";
 import type { PitchLayerVisibility } from "./pitchLayers";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { excludePenaltyShots, isPenaltyShot } from "./pitchPenalties";
@@ -43,11 +44,17 @@ function PitchLines() {
   </g>;
 }
 
-function CorridorShotMarker({ shot }: { shot: ShotmapPoint }) {
-  if (shot.outcome === "goal") return <circle r="1.45" fill="#BEF264" stroke="#0A1F10" strokeWidth=".35" />;
-  if (shot.outcome === "on_target") return <circle r="1.45" fill="#38BDF8" stroke="#0A1F10" strokeWidth=".35" />;
-  if (shot.outcome === "off_target") return <path d="M-1.5 -1.5L1.5 1.5M1.5 -1.5L-1.5 1.5" fill="none" stroke="#E2E8F0" strokeOpacity=".85" strokeWidth=".5" vectorEffect="non-scaling-stroke"/>;
-  return <circle r="1.45" fill="none" stroke="#94A3B8" strokeOpacity=".9" strokeWidth=".5" vectorEffect="non-scaling-stroke"/>;
+function CorridorShotMarker({ group }: { group: PitchShotGroup }) {
+  const { shot, count, outcomeCounts } = group;
+  const radius = 1.35; // <= 4 CSS px at the approved corridor viewport.
+  const marker = shot.outcome === "goal"
+    ? <circle r={radius} fill="#BEF264" fillOpacity=".6" stroke="#365314" strokeWidth=".36" vectorEffect="non-scaling-stroke" />
+    : shot.outcome === "on_target"
+      ? <circle r={radius} fill="#38BDF8" fillOpacity=".6" stroke="#075985" strokeWidth=".36" vectorEffect="non-scaling-stroke" />
+      : shot.outcome === "off_target"
+        ? <path d="M-1.35 -1.35L1.35 1.35M1.35 -1.35L-1.35 1.35" fill="none" stroke="#E2E8F0" strokeOpacity=".86" strokeWidth=".5" vectorEffect="non-scaling-stroke"/>
+        : <circle r={radius} fill="none" stroke="#475569" strokeOpacity=".95" strokeWidth=".5" vectorEffect="non-scaling-stroke"/>;
+  return <>{marker}{count > 1 && <g data-corridor-shot-stack aria-hidden="true" transform={`translate(${radius * .8} ${-radius * .8})`}><circle r="1.45" fill="#0A1F10" stroke="#F8FAFC" strokeWidth=".32" vectorEffect="non-scaling-stroke"/><text transform="scale(.18)" y="2.3" textAnchor="middle" fill="#F8FAFC" fontSize="12" fontWeight="900">×{count}</text></g>}</>;
 }
 
 function GuardiolaDepthGrid() {
@@ -80,6 +87,7 @@ export function SixLaneCorridorPitch({ analysis, layers }: { analysis?: PlayerAn
   const validShots = Boolean(shots && shotIntegrity(analysis?.spatial));
   const validHeat = Boolean(spatial?.available && spatial.heatmapPointCount === spatial.heatmapPoints.length && spatial.heatmapPoints.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y) && point.x >= 0 && point.x <= 100 && point.y >= 0 && point.y <= 100));
   const displayedShots = useMemo(() => validShots ? excludePenaltyShots(shots!, includePenalties) : [], [includePenalties, shots, validShots]);
+  const markerGroups = useMemo(() => groupPitchShots(displayedShots.map((shot, sourceIndex) => ({ shot, sourceIndex }))), [displayedShots]);
   const penalties = useMemo(() => validShots ? shots!.filter(isPenaltyShot) : [], [shots, validShots]);
   const normalized = useMemo(() => validHeat ? normalizeDensity(legacyDensityGrid(spatial!.heatmapPoints)) : undefined, [spatial?.heatmapPoints, validHeat]);
   const contour = useMemo(() => normalized && spatial?.continuousCore.available && spatial.continuousCore.thresholdOfPeak > 0 ? marchingSquares(normalized, spatial.continuousCore.thresholdOfPeak) : [], [normalized, spatial?.continuousCore.available, spatial?.continuousCore.thresholdOfPeak]);
@@ -134,9 +142,10 @@ export function SixLaneCorridorPitch({ analysis, layers }: { analysis?: PlayerAn
             <circle cx="93.999" cy="34" r="1.1" fill="#FFFFFF" fillOpacity=".8" />
             <circle cx="93.999" cy="34" r="2.9" fill="none" stroke="#FBBF24" strokeOpacity=".9" strokeWidth=".45" strokeDasharray="1.2 .9" vectorEffect="non-scaling-stroke" />
             {layers.trajectories && <g data-layer="shot-trajectories-2d" fill="none" pointerEvents="none">{displayedShots.map((shot, index) => shot.trajectory ? <path key={index} d={`M${world(shot).x.toFixed(4)} ${world(shot).y.toFixed(4)}L${(shot.trajectory.endX * 1.05).toFixed(4)} ${((100 - shot.trajectory.endY) * .68).toFixed(4)}`} stroke="#E2E8F0" strokeOpacity=".24" strokeWidth=".28" vectorEffect="non-scaling-stroke"/> : null)}</g>}
-            {layers.markers && displayedShots.map((shot, index) => {
-              const point = world(shot);
-              return <g key={index} data-corridor-shot-marker transform={`translate(${point.x.toFixed(4)} ${point.y.toFixed(4)})`} role="button" tabIndex={0} aria-label={`${shot.outcome} 슛 상세`} onClick={(event) => { event.stopPropagation(); setSelectedShot(shot); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedShot(shot); } }}><CorridorShotMarker shot={shot}/></g>;
+            {layers.markers && markerGroups.map((group) => {
+              const point = world(group.shot);
+              const composition = group.count > 1 ? ` · ${stackCompositionLabel(group.outcomeCounts)}` : "";
+              return <g key={group.key} data-corridor-shot-marker data-corridor-shot-count={group.count} transform={`translate(${point.x.toFixed(4)} ${point.y.toFixed(4)})`} role="button" tabIndex={0} aria-label={`${group.shot.outcome} 슛 상세${group.count > 1 ? `, 묶음 ${group.count}발${composition}` : ""}`} onClick={(event) => { event.stopPropagation(); setSelectedShot(group.shot); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedShot(group.shot); } }}><CorridorShotMarker group={group}/></g>;
             })}
           </svg>
           </div>

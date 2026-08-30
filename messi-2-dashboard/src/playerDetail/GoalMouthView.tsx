@@ -226,8 +226,6 @@ function GoalMouthBaselineLayer({ baseline, activeCellId, onActivate, onDeactiva
       return <g key={cell.cellId} data-goal-mouth-baseline-cell={cell.cellId} data-baseline-state={cell.state} tabIndex={0} role="img" aria-label={baselineTooltip(cell)} onMouseEnter={() => onActivate(cell.cellId)} onMouseLeave={() => onDeactivate(cell.cellId)} onFocus={() => onActivate(cell.cellId)} onBlur={() => onDeactivate(cell.cellId)}>
         <title>{baselineTooltip(cell)}</title><rect data-baseline-cell-fill x={x} y={y} width={width} height={height} fill={baselineFill(cell.goalRatePct)} fillOpacity={cell.state === "low_sample" ? ".48" : ".94"} stroke="#0B1220" strokeOpacity=".92" strokeWidth="1.4"/>
         {cell.state === "low_sample" && <rect data-baseline-low-sample-hatch x={x} y={y} width={width} height={height} fill={`url(#${patternId})`} opacity=".48" pointerEvents="none"/>}
-        <text data-baseline-rate x={x + width / 2} y={y + height * .43} textAnchor="middle" fill="#FFFFFF" fillOpacity=".96" fontSize="16" fontWeight="800" pointerEvents="none">{cell.goalRatePct === null ? "—" : `${Math.round(cell.goalRatePct)}%`}</text>
-        <text data-baseline-sample x={x + width / 2} y={y + height * .68} textAnchor="middle" fill="#FFFFFF" fillOpacity=".6" fontSize="12" fontWeight="650" pointerEvents="none">{cell.shots ?? "—"}</text>
         {active && <g data-goal-mouth-baseline-tooltip pointerEvents="none"><rect x={x + 5} y={y + 5} width="176" height="44" rx="5" fill="#020617" fillOpacity=".94" stroke="#cbd5e1" strokeOpacity=".75"/><text x={x + 12} y={y + 21} fill="#f8fafc" fontSize="12" fontWeight="800">{cell.goalRatePct === null ? "Rate unavailable" : `${cell.goalRatePct.toFixed(1)}% · ${cell.shots} shots`}</text><text x={x + 12} y={y + 37} fill="#cbd5e1" fontSize="12">{cell.confidenceIntervalPct === null ? "Confidence unavailable" : `95% CI ${cell.confidenceIntervalPct.lower.toFixed(1)}–${cell.confidenceIntervalPct.upper.toFixed(1)}%`}</text></g>}
       </g>;
     })}
@@ -408,7 +406,7 @@ export function GoalMouthView({ data, config, baselineResource }: { data: Render
         <p className="mt-1 type-caption font-semibold text-zinc-500">{GOAL_MOUTH_COPY.playerCellGuide}</p>
       </div>
       {baselineData && <div data-goal-mouth-baseline-header className="max-w-[536px] text-left lg:text-right">
-        <p className="text-[9.5px] font-semibold text-zinc-500">{GOAL_MOUTH_COPY.baseline} · {baselineData.provenance.sourceSeasons.length}개 시즌 ({baselineData.provenance.sourceSeasons[0]}~{baselineData.provenance.sourceSeasons.at(-1)}) · 유효 슈팅 {baselineData.provenance.totalShots?.toLocaleString() ?? "—"} · 득점 {baselineData.provenance.totalGoals?.toLocaleString() ?? "—"}</p>
+        <p className="type-caption font-semibold text-zinc-500">{GOAL_MOUTH_COPY.baseline} · {baselineData.provenance.sourceSeasons.length}개 시즌 ({baselineData.provenance.sourceSeasons[0]}~{baselineData.provenance.sourceSeasons.at(-1)}) · 유효 슈팅 {baselineData.provenance.totalShots?.toLocaleString() ?? "—"} · 득점 {baselineData.provenance.totalGoals?.toLocaleString() ?? "—"}</p>
         <p className="mt-1 type-caption text-zinc-600">{GOAL_MOUTH_COPY.cellGuide}</p>
       </div>}
       {baselineStatus && <p data-goal-mouth-baseline-status role="status" className="type-caption text-zinc-400">{baselineStatus}</p>}
