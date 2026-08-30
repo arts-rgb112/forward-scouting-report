@@ -65,7 +65,7 @@ describe("SixLaneCorridorPitch", () => {
     expect(marker("off_target")).toHaveAttribute("stroke-opacity", ".55");
   });
 
-  it("clusters near visual collisions deterministically while retaining every constituent shot", () => {
+  it("does not merge nearby but distinct source coordinates", () => {
     const shots = [
       { x: 80, y: 40, outcome: "goal" as const, xg: .4 },
       { x: 80.5, y: 40.2, outcome: "on_target" as const, xg: .3 },
@@ -73,12 +73,10 @@ describe("SixLaneCorridorPitch", () => {
       { x: 90, y: 70, outcome: "blocked" as const, xg: .1 },
     ];
     const clusters = clusterCorridorShotGroups(groupPitchShots(shots.map((shot, sourceIndex) => ({ shot, sourceIndex }))), shots);
-    expect(CORRIDOR_CLUSTER_DISTANCE).toBe(1.6);
-    expect(clusters).toHaveLength(2);
-    expect(clusters[1].count).toBe(3);
-    expect(clusters[1].sourceIndexes).toEqual([0, 1, 2]);
-    expect(clusters[1].shots).toHaveLength(3);
-    expect(clusters[1].outcome).toBe("goal");
+    expect(CORRIDOR_CLUSTER_DISTANCE).toBe(0);
+    expect(clusters).toHaveLength(4);
+    expect(clusters.map((cluster) => cluster.count)).toEqual([1, 1, 1, 1]);
+    expect(clusters.flatMap((cluster) => cluster.sourceIndexes).sort((left, right) => left - right)).toEqual([0, 1, 2, 3]);
   });
 
   it("keeps the field clear, uses simple result markers, and shares the PK state", () => {

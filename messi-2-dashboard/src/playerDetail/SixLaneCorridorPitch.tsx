@@ -34,8 +34,8 @@ const LANES = [
 
 const world = (shot: Pick<ShotmapPoint, "x" | "y">) => ({ x: shot.x * 1.05, y: (100 - shot.y) * .68 });
 const lineY = (sourceY: number) => (100 - sourceY) * .68;
-/** World-space collision distance covering the largest .72-unit 2D marker. */
-export const CORRIDOR_CLUSTER_DISTANCE = 1.6;
+/** Disabled: the approved small marker set remains readable without proximity merging. */
+export const CORRIDOR_CLUSTER_DISTANCE = 0;
 export const CORRIDOR_MARKER_RADIUS = {
   goal: .72,
   on_target: .56,
