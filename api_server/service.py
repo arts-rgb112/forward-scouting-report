@@ -884,7 +884,8 @@ def find_duel_press_detail_readouts(
 # ---------------------------------------------------------------------------
 # stat-pairs-v2: one canonical calculator for the v2 board, player, and detail
 # ---------------------------------------------------------------------------
-DETAIL_V2_FORMULA_VERSION = "stat-pairs-v2"
+DETAIL_V2_FORMULA_VERSION = "messi-score-unified-v3"
+DETAIL_V2_RAW_FORMULA_VERSION = "stat-pairs-v2"
 V2_MISSING_COMPONENT_SCORE = 20
 V2_CATEGORY_ORDER = (
     "outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress",
@@ -1077,16 +1078,26 @@ def _v2_net_progression_per90(record: dict[str, object]) -> float | None:
         _v2_per90(direct("dribbles_succeeded_raw"), record),
         _v2_per90(direct("fouls_won_raw"), record),
         _v2_per90(direct("penalties_awarded_raw"), record),
-        _v2_per90(_v2_ground_wins(record), record),
-        _v2_per90(_v2_aerial_wins(record), record),
-        _v2_per90(_v2_ground_losses(record), record),
-        _v2_per90(_v2_aerial_losses(record), record),
         _v2_per90(_v2_losses(record, "dribbles_succeeded_raw", "dribble_success_rate_raw"), record),
         _v2_per90(direct("dispossessed_raw"), record),
     )
     if any(value is None for value in values):
         return None
-    return sum(values[:5]) - sum(values[5:])
+    return sum(values[:3]) - sum(values[3:])
+
+
+def _v2_forward_press_concentration(record: dict[str, object]) -> float | None:
+    """Return final-third wins / recoveries without fabricating a zero rate."""
+    recoveries = _detail_number(record.get("recoveries"))
+    final_third = _detail_number(record.get("final_third_possessions_won"))
+    if (
+        recoveries is None
+        or final_third is None
+        or recoveries <= 0
+        or final_third < 0
+    ):
+        return None
+    return final_third / recoveries
 
 
 def _v2_progression_observation_total(record: dict[str, object]) -> float | None:
@@ -1099,8 +1110,6 @@ def _v2_progression_observation_total(record: dict[str, object]) -> float | None
     direct = lambda field: _detail_number(record.get(field))
     values = (
         _v2_attempts(record, "dribbles_succeeded_raw", "dribble_success_rate_raw"),
-        _v2_ground_attempts(record),
-        _v2_aerial_attempts(record),
         direct("fouls_won_raw"),
         direct("penalties_awarded_raw"),
         direct("dispossessed_raw"),
@@ -1173,14 +1182,14 @@ def _v2_datum(
             value=round(value, 4), unit=unit, direction=direction, state="observed",
             source=observed_source,
             formulaId=observed_formula,
-            formulaVersion=DETAIL_V2_FORMULA_VERSION if observed_formula else None,
+            formulaVersion=DETAIL_V2_RAW_FORMULA_VERSION if observed_formula else None,
             percentileScore=comparison.percentileScore, comparison=comparison,
         )
     comparison = _v2_zero_attempts_floor_comparison(value, values) if zero_attempts_floor else _v2_display_comparison(value, values, direction)
     return DetailV2Datum(
         value=round(value, 4), unit=unit, direction=direction, state="server_derived",
         source="server_derived", formulaId=formula_id or "derived-v2",
-        formulaVersion=DETAIL_V2_FORMULA_VERSION,
+        formulaVersion=DETAIL_V2_RAW_FORMULA_VERSION,
         percentileScore=comparison.percentileScore, comparison=comparison,
     )
 
@@ -1425,15 +1434,94 @@ def _v2_component_specs():
         ),
         "forwardPress": (
             ("recoveries_per90", "higher_is_better", direct("recoveries_per90"), lambda row: False),
-            ("final_third_possessions_won_per90", "higher_is_better", direct("final_third_possessions_won_per90"), lambda row: False),
+            ("final_third_recovery_share", "higher_is_better", _v2_forward_press_concentration, lambda row: False),
         ),
     }
+
+
+V3_CANONICAL_CATEGORY_COLUMNS = {
+    "outsideShot": "outside_shot_score",
+    "boxThreat": "deep_box_score",
+    "dangerZone": "danger_zone_score",
+    "combinedDuel": "combined_duel_score",
+    "spaceControl": "space_control_score",
+    "forwardPress": "forward_press_score",
+}
+
+
+def _score_unified_rating_snapshot(
+    records: list[dict[str, object]], season: str, mode: str, scope: int, competition: str,
+) -> tuple[str, dict[int, dict[str, object]]]:
+    """Expose the same six unattenuated sector scores as public M.E.S.S.I.
+
+    The v2 raw-stat rows retain their own observed/derived reliability
+    provenance.  This snapshot deliberately does *not* reuse their
+    small-sample attenuation: category headers and the public headline must
+    be exactly reconstructable from one rankings.py formula.
+    """
+    ratings: dict[int, dict[str, object]] = {}
+    for record in records:
+        try:
+            player_id = _source_player_id(record.get("player_id"))
+            categories = {
+                category: round(float(record[column]), 2)
+                for category, column in V3_CANONICAL_CATEGORY_COLUMNS.items()
+            }
+            overall = round(float(record["pressing_score"]), 2)
+        except (KeyError, TypeError, ValueError):
+            # The static leaderboard only emits a row after every score
+            # component is eligible.  A malformed record cannot be assigned
+            # an invented score or a separate missing-value composite.
+            continue
+        ratings[player_id] = {
+            "categories": categories,
+            "missing": {category: [] for category in V2_CATEGORY_ORDER},
+            "overall": overall,
+        }
+
+    def attach_comparisons(key: str, getter) -> None:
+        values = sorted(float(getter(rating)) for rating in ratings.values())
+        for rating in ratings.values():
+            value = float(getter(rating))
+            rank = 1 + len(values) - bisect_right(values, value)
+            median = values[len(values) // 2] if len(values) % 2 else (
+                values[len(values) // 2 - 1] + values[len(values) // 2]
+            ) / 2.0
+            percentile = 99 if len(values) == 1 else int(round(99 * (len(values) - rank) / (len(values) - 1)))
+            comparison = DetailV2Comparison(
+                state="available", median=round(float(median), 4), rank=rank,
+                population=len(values), percentileScore=percentile,
+            )
+            if key == "overall":
+                rating["overallComparison"] = comparison
+                rating["rank"] = rank
+            else:
+                rating.setdefault("categoryComparisons", {})[key] = comparison
+
+    for category in V2_CATEGORY_ORDER:
+        attach_comparisons(category, lambda rating, item=category: rating["categories"][item])
+    attach_comparisons("overall", lambda rating: rating["overall"])
+    material = [{"playerId": player_id, "rating": ratings[player_id]} for player_id in sorted(ratings)]
+    digest = hashlib.sha256(json.dumps(
+        {
+            "season": season, "mode": mode, "scope": scope, "competition": competition,
+            "ratingVersion": DETAIL_V2_FORMULA_VERSION,
+            "scoreColumns": V3_CANONICAL_CATEGORY_COLUMNS,
+            "ratings": material,
+        },
+        sort_keys=True, separators=(",", ":"), default=str,
+    ).encode("utf-8")).hexdigest()[:16]
+    return f"messi-score-unified-v3:{digest}", ratings
 
 
 def _v2_rating_snapshot(
     records: list[dict[str, object]], season: str, mode: str, scope: int, competition: str,
 ) -> tuple[str, dict[int, dict[str, object]]]:
     """Calculate every visible v2 rating once from one raw static frame."""
+    return _score_unified_rating_snapshot(records, season, mode, scope, competition)
+
+    # Historical stat-pairs code remains below temporarily as a migration
+    # reference.  It must not become a second public category-score path.
     specs = _v2_component_specs()
     # ``_v2_display_comparison`` deliberately builds rich comparison objects
     # for one detail response.  The board needs the same strict rank rule for
@@ -1567,7 +1655,7 @@ def _v2_player(
     # needlessly expensive.
     category_models = {
         category: DuelPressV2BoardCategory(
-            percentileScore=int(rating["categories"][category]),
+            percentileScore=float(rating["categories"][category]),
             scoreState="imputed" if rating["missing"][category] else "observed",
             imputedComponents=list(rating["missing"][category]),
         )
@@ -1593,7 +1681,10 @@ def _v2_category_from_rating(category: str, rating: dict[str, object], compariso
     return DuelPressDetailV2Category(
         id=category, label=category, percentileScore=rating["categories"][category],
         scoreState="imputed" if missing else "observed", imputedComponents=missing,
-        comparison=comparison, groups=groups,
+        comparison=comparison,
+        formulaId="pressing-sector-score-v3",
+        formulaVersion=DETAIL_V2_FORMULA_VERSION,
+        groups=groups,
     )
 
 
@@ -1697,7 +1788,24 @@ def _v2_frame_cached(
 ) -> tuple[tuple[dict[str, object], ...], tuple[DuelPressPlayerResponse, ...], str, dict[int, dict[str, object]]]:
     """Bound repeated page/detail work to one immutable static dataset revision."""
     players = build_duel_press_players(season, mode, scope, competition)
-    records = _detail_frame_records(season, mode, scope, competition)
+    player_index = {player.id: player for player in players}
+    # The production detail frame is built from the same leaderboard table and
+    # already carries these fields.  Complete test/in-memory frames from the
+    # canonical player DTO rather than falling back to the retired stat-pairs
+    # category calculator when a raw fixture intentionally omits score columns.
+    score_columns = V3_CANONICAL_CATEGORY_COLUMNS
+    records: list[dict[str, object]] = []
+    for raw_record in _detail_frame_records(season, mode, scope, competition):
+        record = dict(raw_record)
+        try:
+            player = player_index.get(_source_player_id(record.get("player_id")))
+        except (TypeError, ValueError):
+            player = None
+        if player is not None:
+            for category, column in score_columns.items():
+                record.setdefault(column, getattr(player.stats, category))
+            record.setdefault("pressing_score", player.score)
+        records.append(record)
     snapshot_id, ratings = _v2_rating_snapshot(records, season, mode, scope, competition)
     return tuple(records), players, snapshot_id, ratings
 
@@ -2362,7 +2470,7 @@ def _benchmark_radar_v2_component(
         id=identifier, label=str(spec["label"]), value=round(float(value), 4), unit=str(spec["unit"]),
         direction=str(spec["direction"]), source=source, state=state if source_floor is None else source_floor,
         percentileScore=int(score), formulaId=str(formula_id) if formula_id else None,
-        formulaVersion=DETAIL_V2_FORMULA_VERSION if formula_id else None,
+        formulaVersion=DETAIL_V2_RAW_FORMULA_VERSION if formula_id else None,
         zeroAttemptsFloor=zero_floor,
     )
 
@@ -3064,9 +3172,15 @@ def build_player_detail(player_id: int, season: str, mode: str, scope: int, comp
     )
     analysis = PlayerAnalysis(
         score=MessiScoreAnalysis(
-            value=round(float(rank.spear_score if rank.spear_score is not None else player.score), 2),
-            rank=rank.spear_score_rank or player.rank, topPercent=rank.spear_score_top_percent,
-            population=rank.spear_score_eligible, archetype=player.archetype,
+            value=round(float(
+                rank.spear_pressing_score
+                if rank.spear_pressing_score is not None
+                else player.score
+            ), 2),
+            rank=rank.spear_pressing_score_rank or player.rank,
+            topPercent=rank.spear_pressing_score_top_percent,
+            population=rank.spear_pressing_score_eligible,
+            archetype=player.archetype,
         ),
         volumeRadar=_radar("volume", VOLUME_RADAR_AXES, rank, metrics, tactical),
         ratioRadar=_radar("ratio", RATIO_RADAR_AXES, rank, metrics, tactical),

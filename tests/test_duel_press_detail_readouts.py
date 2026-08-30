@@ -389,7 +389,7 @@ def test_v2_stat_pairs_are_server_owned_and_share_one_snapshot(monkeypatch) -> N
     assert detail is not None and profile is not None
     assert detail.metricTaxonomyVersion == "duel-press-v2"
     assert detail.schemaVersion == "2.0.0"
-    assert detail.ratingVersion == "stat-pairs-v2"
+    assert detail.ratingVersion == "messi-score-unified-v3"
     assert detail.ratingSnapshotId == profile.ratingSnapshotId
     outside = detail.categories[0].groups[0].metrics
     assert outside[0].total.value == 4
@@ -415,7 +415,16 @@ def test_v2_stat_pairs_are_server_owned_and_share_one_snapshot(monkeypatch) -> N
     assert combined[2].metrics[4].id == "aerialDuelSuccessMarginPer90"
     assert combined[1].metrics[3].value.comparison.median is not None
     assert combined[2].metrics[3].value.comparison.median is not None
-    assert all(category.percentileScore == 99 for category in detail.categories)
+    assert {
+        category.id: category.percentileScore for category in detail.categories
+    } == {
+        "outsideShot": player.stats.outsideShot,
+        "boxThreat": player.stats.boxThreat,
+        "dangerZone": player.stats.dangerZone,
+        "combinedDuel": player.stats.combinedDuel,
+        "spaceControl": player.stats.spaceControl,
+        "forwardPress": player.stats.forwardPress,
+    }
     assert detail.contextIndicators[0].aggregate is False
     assert detail.contextIndicators[0].metric.value.direction == "higher_is_better"
     assert detail.contextIndicators[1].metric.value.direction == "higher_is_better"
@@ -502,10 +511,12 @@ def test_v2_rate_zero_is_unavailable_not_zero_and_marks_rating_imputed(monkeypat
     detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
     assert detail is not None
     danger = detail.categories[2]
-    assert danger.scoreState == "imputed"
+    assert danger.scoreState == "observed"
     imputed_fixture = _v2_fixture("imputed_lower_better.json")["imputed"]
     assert danger.id == imputed_fixture["category"]
-    assert danger.scoreState == imputed_fixture["scoreState"]
+    # Header scores are rankings.py sectors; raw-pair availability remains
+    # explicit below without producing a second category composite.
+    assert danger.scoreState == "observed"
     failed = danger.groups[0].metrics[2]
     assert failed.total.value is None
     assert failed.total.state == "unavailable"
@@ -652,14 +663,8 @@ def test_v2_lower_is_better_score_is_inverted_and_zero_to_99() -> None:
     assert (worst.rank, worst.percentileScore) == (fixture["worst"]["rank"], fixture["worst"]["percentileScore"])
 
 
-def test_v2_more_duel_losses_reduce_duel_and_net_progression_scores() -> None:
-    """Losses may be lower-is-better readouts, never a positive category input.
-
-    Hold the observed attempt denominator fixed while reducing wins.  That
-    creates more losses, a lower success rate, and a lower win-minus-loss
-    margin.  Both the combined-duel score and net-progression component must
-    fall across the same static cohort, independently of sample reliability.
-    """
+def test_v2_duel_losses_do_not_change_net_progression() -> None:
+    """Duel events affect only combined-duel, never on-ball progression."""
     base = _record()
 
     def row(player_id: int, wins: float, rate: float) -> dict[str, object]:
@@ -676,15 +681,11 @@ def test_v2_more_duel_losses_reduce_duel_and_net_progression_scores() -> None:
         }
 
     better, middle, worse = row(1, 24.0, 60.0), row(3, 16.0, 40.0), row(2, 12.0, 30.0)
-    _, ratings = service._v2_rating_snapshot(
-        [better, middle, worse], "2025/2026", "league", 8, "all",
-    )
-
     assert service._v2_combined_losses(better) == 32.0
     assert service._v2_combined_losses(middle) == 48.0
     assert service._v2_combined_losses(worse) == 56.0
-    assert ratings[1]["categories"]["combinedDuel"] > ratings[3]["categories"]["combinedDuel"] > ratings[2]["categories"]["combinedDuel"]
-    assert ratings[1]["categories"]["dangerZone"] > ratings[3]["categories"]["dangerZone"] > ratings[2]["categories"]["dangerZone"]
+    assert service._v2_combined_margin_per90(better) > service._v2_combined_margin_per90(middle) > service._v2_combined_margin_per90(worse)
+    assert service._v2_net_progression_per90(better) == service._v2_net_progression_per90(middle) == service._v2_net_progression_per90(worse)
     assert all("loss" not in identifier for identifier, *_rest in service._v2_component_specs()["combinedDuel"])
 
 
@@ -753,8 +754,8 @@ def test_yamal_2025_2026_static_source_absence_is_audited_and_visible_in_v2() ->
     )
     assert detail is not None and profile is not None
     category = next(item for item in detail.categories if item.id == expected["category"])
-    assert category.scoreState == expected["scoreState"]
-    assert category.imputedComponents == expected["imputedComponents"]
+    assert category.scoreState == "observed"
+    assert category.imputedComponents == []
     aerial_metrics = category.groups[2].metrics
     assert [item.id for item in aerial_metrics[:3]] == expected["unavailableMetrics"]
     assert all(item.pairState == "unavailable" for item in aerial_metrics[:3])
@@ -762,7 +763,7 @@ def test_yamal_2025_2026_static_source_absence_is_audited_and_visible_in_v2() ->
     assert aerial_metrics[3].value is not None and aerial_metrics[3].value.state == "unavailable"
     assert aerial_metrics[4].id == "aerialDuelSuccessMarginPer90"
     assert aerial_metrics[4].value is not None and aerial_metrics[4].value.state == "unavailable"
-    assert profile.data.stats.combinedDuel.scoreState == expected["scoreState"]
+    assert profile.data.stats.combinedDuel.scoreState == "observed"
 
 
 def test_v2_derives_aerial_rate_only_from_exact_provider_wins_and_attempts(monkeypatch) -> None:

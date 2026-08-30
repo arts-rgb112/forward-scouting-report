@@ -753,13 +753,13 @@ class DuelPressDetailV2Category(BaseModel):
 
     id: Literal["outsideShot", "boxThreat", "dangerZone", "combinedDuel", "spaceControl", "forwardPress"]
     label: str = Field(min_length=1)
-    percentileScore: int | None = Field(default=None, ge=0, le=99)
+    percentileScore: float | None = Field(default=None, ge=0, le=100)
     scoreState: Literal["observed", "imputed", "unavailable"]
     imputedComponents: list[str] = Field(default_factory=list)
     direction: Literal["higher_is_better"] = "higher_is_better"
     comparison: DetailV2Comparison
-    formulaId: Literal["stat-pairs-category-v2"] = "stat-pairs-category-v2"
-    formulaVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
+    formulaId: Literal["stat-pairs-category-v2", "pressing-sector-score-v3"] = "pressing-sector-score-v3"
+    formulaVersion: Literal["stat-pairs-v2", "messi-score-unified-v3"] = "messi-score-unified-v3"
     groups: list[DetailV2Group] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -787,8 +787,8 @@ class DuelPressDetailReadoutV2Envelope(BaseModel):
     schemaVersion: Literal["2.0.0"] = "2.0.0"
     metricTaxonomyVersion: Literal["duel-press-v2"] = "duel-press-v2"
     readoutVersion: DetailReadoutV2Version = "detail-readout-v2"
-    ratingVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
-    ratingSnapshotId: str = Field(pattern=r"^stat-pairs-v2:[a-f0-9]{16}$")
+    ratingVersion: Literal["stat-pairs-v2", "messi-score-unified-v3"] = "messi-score-unified-v3"
+    ratingSnapshotId: str = Field(pattern=r"^(?:stat-pairs-v2|messi-score-unified-v3):[a-f0-9]{16}$")
     context: DuelPressRequestContext
     player: DuelPressDetailPlayerIdentity
     cohortPopulation: int = Field(ge=0)
@@ -813,7 +813,7 @@ class DuelPressV2BoardCategory(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    percentileScore: int = Field(ge=0, le=99)
+    percentileScore: float = Field(ge=0, le=100)
     scoreState: Literal["observed", "imputed"]
     imputedComponents: list[str] = Field(default_factory=list)
     direction: Literal["higher_is_better"] = "higher_is_better"
@@ -850,13 +850,13 @@ class DuelPressV2CohortContext(BaseModel):
 class DuelPressV2OverallRating(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    rawValue: float = Field(ge=0, le=99)
+    rawValue: float = Field(ge=0, le=100)
     percentileScore: int = Field(ge=0, le=99)
     direction: Literal["higher_is_better"] = "higher_is_better"
     state: Literal["observed", "imputed"]
     comparison: DetailV2Comparison
-    formulaId: Literal["stat-pairs-overall-v2"] = "stat-pairs-overall-v2"
-    formulaVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
+    formulaId: Literal["stat-pairs-overall-v2", "pressing-score-v3"] = "pressing-score-v3"
+    formulaVersion: Literal["stat-pairs-v2", "messi-score-unified-v3"] = "messi-score-unified-v3"
 
     @model_validator(mode="after")
     def validate_percentile_score(self) -> "DuelPressV2OverallRating":
@@ -891,8 +891,8 @@ class DuelPressV2LeaderboardEnvelope(BaseModel):
     schemaVersion: Literal["2.0.0"] = "2.0.0"
     metricTaxonomyVersion: Literal["duel-press-v2"] = "duel-press-v2"
     readoutVersion: DetailReadoutV2Version = "detail-readout-v2"
-    ratingVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
-    ratingSnapshotId: str = Field(pattern=r"^stat-pairs-v2:[a-f0-9]{16}$")
+    ratingVersion: Literal["stat-pairs-v2", "messi-score-unified-v3"] = "messi-score-unified-v3"
+    ratingSnapshotId: str = Field(pattern=r"^(?:stat-pairs-v2|messi-score-unified-v3):[a-f0-9]{16}$")
     context: DuelPressV2CohortContext
     cohortPopulation: int = Field(ge=0)
     data: list[DuelPressV2LeaderboardPlayer]
@@ -928,8 +928,8 @@ class DuelPressV2PlayerEnvelope(BaseModel):
     schemaVersion: Literal["2.0.0"] = "2.0.0"
     metricTaxonomyVersion: Literal["duel-press-v2"] = "duel-press-v2"
     readoutVersion: DetailReadoutV2Version = "detail-readout-v2"
-    ratingVersion: Literal["stat-pairs-v2"] = "stat-pairs-v2"
-    ratingSnapshotId: str = Field(pattern=r"^stat-pairs-v2:[a-f0-9]{16}$")
+    ratingVersion: Literal["stat-pairs-v2", "messi-score-unified-v3"] = "messi-score-unified-v3"
+    ratingSnapshotId: str = Field(pattern=r"^(?:stat-pairs-v2|messi-score-unified-v3):[a-f0-9]{16}$")
     context: DuelPressRequestContext
     cohortPopulation: int = Field(ge=0)
     data: DuelPressV2LeaderboardPlayer
@@ -2148,7 +2148,7 @@ class BenchmarkRadarV2Component(BaseModel):
     direction: Literal["higher_is_better", "lower_is_better"]
     source: DetailV2Source
     state: BenchmarkRadarV2DatumState
-    percentileScore: int | None = Field(default=None, ge=0, le=99)
+    percentileScore: float | None = Field(default=None, ge=0, le=100)
     formulaId: str | None = None
     formulaVersion: Literal["stat-pairs-v2"] | None = None
     zeroAttemptsFloor: bool = False
