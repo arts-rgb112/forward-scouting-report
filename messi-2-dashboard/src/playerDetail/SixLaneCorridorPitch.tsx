@@ -46,14 +46,14 @@ function PitchLines() {
 
 function CorridorShotMarker({ group }: { group: PitchShotGroup }) {
   const { shot, count, outcomeCounts } = group;
-  const radius = 1.35; // <= 4 CSS px at the approved corridor viewport.
+  const radius = .7; // Half the former footprint; <= 4 CSS px at the approved corridor viewport.
   const marker = shot.outcome === "goal"
-    ? <circle r={radius} fill="#BEF264" fillOpacity=".6" stroke="#365314" strokeWidth=".36" vectorEffect="non-scaling-stroke" />
+    ? <circle r={radius} fill="#BEF264" fillOpacity=".6" stroke="#365314" strokeWidth=".18" vectorEffect="non-scaling-stroke" />
     : shot.outcome === "on_target"
-      ? <circle r={radius} fill="#38BDF8" fillOpacity=".6" stroke="#075985" strokeWidth=".36" vectorEffect="non-scaling-stroke" />
+      ? <circle r={radius} fill="#38BDF8" fillOpacity=".6" stroke="#075985" strokeWidth=".18" vectorEffect="non-scaling-stroke" />
       : shot.outcome === "off_target"
-        ? <path d="M-1.35 -1.35L1.35 1.35M1.35 -1.35L-1.35 1.35" fill="none" stroke="#E2E8F0" strokeOpacity=".86" strokeWidth=".5" vectorEffect="non-scaling-stroke"/>
-        : <circle r={radius} fill="none" stroke="#475569" strokeOpacity=".95" strokeWidth=".5" vectorEffect="non-scaling-stroke"/>;
+        ? <path d="M-.7 -.7L.7 .7M.7 -.7L-.7 .7" fill="none" stroke="#E2E8F0" strokeOpacity=".86" strokeWidth=".22" vectorEffect="non-scaling-stroke"/>
+        : <circle r={radius} fill="none" stroke="#475569" strokeOpacity=".95" strokeWidth=".22" vectorEffect="non-scaling-stroke"/>;
   return <>{marker}{count > 1 && <g data-corridor-shot-stack aria-hidden="true" transform={`translate(${radius * .8} ${-radius * .8})`}><circle r="1.45" fill="#0A1F10" stroke="#F8FAFC" strokeWidth=".32" vectorEffect="non-scaling-stroke"/><text transform="scale(.18)" y="2.3" textAnchor="middle" fill="#F8FAFC" fontSize="12" fontWeight="900">×{count}</text></g>}</>;
 }
 
