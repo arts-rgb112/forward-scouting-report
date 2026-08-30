@@ -58,13 +58,15 @@ describe("perspective spatial pitch", () => {
 
   it("keeps terrain finite across every approved camera-angle and zoom-preset combination", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 85, y: 50 }] })}/>);
-    const terrain = () => container.querySelector("[data-terrain-frame-from-x]")!;
+    const terrain = () => container.querySelector("[data-terrain-full]")!;
     for (const angle of ["좌측", "우측", "골대 정면", "골대 뒤"]) {
       fireEvent.click(screen.getByRole("button", { name: angle }));
       for (const frame of ["전체 필드", "공격 진영", "박스"]) {
         fireEvent.click(screen.getByRole("button", { name: frame }));
         expect(terrain().getAttribute("d")).not.toMatch(/NaN|Infinity/);
-        expect(terrain()).toHaveAttribute("data-terrain-frame-from-x", frame === "전체 필드" ? "0" : frame === "공격 진영" ? "50" : "80");
+        expect(terrain()).toHaveAttribute("data-terrain-full", "true");
+        expect(container.querySelector("[data-full-turf-matte]")).toBeInTheDocument();
+        expect(container.querySelector("clipPath rect")).toHaveAttribute("width", "1000");
       }
     }
   });
@@ -234,7 +236,7 @@ describe("perspective spatial pitch", () => {
     const viewport = container.querySelector("svg[role=img]")!;
     fireEvent.keyDown(viewport, { key: "ArrowRight" });
     expect([...container.querySelectorAll("[data-density-cell]")]).toEqual(before);
-    expect(Number(heatLayer.getAttribute("data-density-mesh-builds"))).toBe(Number(meshBuilds) + 1);
+    expect(Number(heatLayer.getAttribute("data-density-mesh-builds"))).toBe(Number(meshBuilds));
     expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(150);
     expect(container.querySelectorAll('[data-shot-marker][tabindex="0"]')).toHaveLength(1);
     expect(within(screen.getByRole("list", { name: "서버 슈팅 이벤트" })).getAllByRole("listitem")).toHaveLength(150);
