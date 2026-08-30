@@ -186,23 +186,56 @@ class DecisionMetrics:
 
     @property
     def net_progression_per90(self) -> Optional[float]:
+        """Return on-ball progression without ground/aerial duel credit.
+
+        Duel wins and losses belong exclusively to the combined-duel sector.
+        Keeping them out of this derived metric prevents one provider event
+        family from lifting both the duel and on-ball-progression axes.
+        """
         values = (
             self.dribbles_succeeded_per90,
             self.fouls_won_per90,
             self.penalties_awarded_per90,
-            self.duels_won_per90,
-            self.aerial_duels_won_per90,
-            self.duels_lost_per90,
-            self.aerial_duels_lost_per90,
             self.dribbles_failed_per90,
             self.dispossessed_per90,
         )
         if any(value is None for value in values):
             return None
-        (successful, fouls, penalties, duels_won, aerial_won,
-         duels_lost, aerial_lost, dribble_failed, dispossessed) = values
-        return (successful + fouls + penalties + duels_won + aerial_won
-                - duels_lost - aerial_lost - dribble_failed - dispossessed)
+        successful, fouls, penalties, dribble_failed, dispossessed = values
+        return successful + fouls + penalties - dribble_failed - dispossessed
+
+    @property
+    def forward_press_concentration(self) -> Optional[float]:
+        """Return final-third wins as a strict share of all recoveries.
+
+        A zero recovery denominator is not a zero-rate observation: no
+        concentration can be measured, so callers must retain their explicit
+        missing-component behaviour rather than inventing a neutral rate.
+        """
+        if (
+            self.recoveries is None
+            or self.final_third_possessions_won is None
+            or self.recoveries <= 0
+            or self.final_third_possessions_won < 0
+        ):
+            return None
+        return self.final_third_possessions_won / self.recoveries
+
+    @property
+    def out_box_goal_conversion(self) -> Optional[float]:
+        """Return observed outside-box goals per outside-box shot.
+
+        A player with no outside-box shots has no finishing conversion sample;
+        that differs from an observed 0% conversion over one or more shots.
+        """
+        if (
+            self.out_box_goals is None
+            or self.out_box_shots is None
+            or self.out_box_shots <= 0
+            or self.out_box_goals < 0
+        ):
+            return None
+        return self.out_box_goals / self.out_box_shots
 
 
 def _per90(value: Optional[float], minutes: Optional[float]) -> Optional[float]:

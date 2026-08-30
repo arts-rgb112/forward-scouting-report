@@ -9,6 +9,25 @@ import { DuelPressV2DetailReadoutBoard } from "./DuelPressV2DetailReadoutBoard";
 const readDetail = (name: string) => JSON.parse(readFileSync(`../docs/fixtures/duel_press_v2/${name}.json`, "utf8")).responses.detail;
 const parseDetail = (name: string) => duelPressV2DetailMetricsSchema.parse(readDetail(name));
 const rows = (container: HTMLElement) => Array.from(container.querySelectorAll("[data-metric-id]"));
+function unifiedDetail() {
+  const detail = structuredClone(readDetail("complete_league"));
+  detail.ratingVersion = "messi-score-unified-v3";
+  detail.ratingSnapshotId = "messi-score-unified-v3:0123456789abcdef";
+  detail.categories = detail.categories.map((category: { percentileScore: number }) => ({
+    ...category,
+    formulaId: "pressing-sector-score-v3",
+    formulaVersion: "messi-score-unified-v3",
+    scoreBreakdown: {
+      compositeScore: category.percentileScore,
+      volumeScore: category.percentileScore,
+      ratioScore: category.percentileScore,
+      volumeSample: { attempts: 12, minutes: 1800 },
+      ratioSample: { attempts: 12, minutes: 1800 },
+      sampleState: "low_sample",
+    },
+  }));
+  return duelPressV2DetailMetricsSchema.parse(detail);
+}
 
 describe("DuelPressV2DetailReadoutBoard", () => {
   afterEach(() => cleanup());
@@ -77,5 +96,14 @@ describe("DuelPressV2DetailReadoutBoard", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("중앙값");
     expect(screen.getByRole("tooltip")).toHaveTextContent("순위");
     expect(screen.getByRole("tooltip")).toHaveTextContent("서버 산식");
+  });
+
+  it("renders the exact server-owned score decomposition on all six category cards", () => {
+    const { container } = render(<DuelPressV2DetailReadoutBoard data={unifiedDetail()} layout="page"/>);
+    expect(container.querySelectorAll("[data-score-breakdown]")).toHaveLength(12);
+    expect(screen.getAllByText(/종합 99\.00/)).toHaveLength(12);
+    expect(screen.getAllByText(/볼륨 99\.00/)).toHaveLength(12);
+    expect(screen.getAllByText(/비율 99\.00/)).toHaveLength(12);
+    expect(screen.getAllByText(/저표본 · 점수 감쇠 없음/)).toHaveLength(12);
   });
 });

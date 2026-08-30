@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const volumeHook = vi.hoisted(() => vi.fn(() => ({ state: { kind: "disabled" as const }, retry: vi.fn() })));
@@ -13,9 +13,12 @@ import { Benchmark } from "./PlayerDetailRoute";
 import { samplePlayers } from "../test/fixtures/players";
 
 describe("detail benchmark route integration", () => {
-  it("starts both independent resources from the exact parent identity and mode switching does not restart either", () => {
+  it("does not request or render the misleading volume/ratio benchmark radar on player pages", () => {
     const config = { baseUrl: "https://authoritative.example.test", season: "2024/2025", scope: 7 as const, limit: 1000 }; const dataset = { season: "2024/2025", mode: "europe" as const, scope: 7 as const, competition: "uel" as const };
-    render(<Benchmark player={samplePlayers[0]} config={config} dataset={dataset}/>); expect(volumeHook).toHaveBeenCalledWith(config, samplePlayers[0].id, dataset); expect(ratioHook).toHaveBeenCalledWith(config, samplePlayers[0].id, dataset);
-    fireEvent.click(screen.getByRole("tab", { name: "ratio" })); expect(volumeHook).toHaveBeenCalledTimes(1); expect(ratioHook).toHaveBeenCalledTimes(1);
+    const { container } = render(<Benchmark player={samplePlayers[0]} config={config} dataset={dataset}/>);
+    expect(container).toBeEmptyDOMElement();
+    expect(volumeHook).not.toHaveBeenCalled();
+    expect(ratioHook).not.toHaveBeenCalled();
+    expect(radarV2Hook).not.toHaveBeenCalled();
   });
 });

@@ -37,10 +37,48 @@ describe("duel-press-v2 strict contracts", () => {
     detail.categories[1].groups[0].metrics.splice(3, 0, inBox);
     expect(duelPressV2DetailMetricsSchema.parse(detail).categories[1].groups[0].metrics[3].id).toBe("inBoxXgotMinusXg");
   });
-  it("rejects taxonomy, score and extra-field drift", () => {
+  it("accepts the additive score-unified v3 decimal headers while preserving legacy v2", () => {
+    const legacy = structuredClone(fixture("complete_league").detail);
+    const unified = structuredClone(legacy);
+    unified.ratingVersion = "messi-score-unified-v3";
+    unified.ratingSnapshotId = "messi-score-unified-v3:0123456789abcdef";
+    unified.categories[0].percentileScore = 93.22;
+    unified.categories[0].comparison.percentileScore = 93.22;
+    unified.categories = unified.categories.map((category: { percentileScore: number; formulaId: string; formulaVersion: string }) => ({
+      ...category,
+      formulaId: "pressing-sector-score-v3",
+      formulaVersion: "messi-score-unified-v3",
+      scoreBreakdown: {
+        compositeScore: category.percentileScore,
+        volumeScore: category.percentileScore,
+        ratioScore: category.percentileScore,
+        volumeSample: { attempts: 20, minutes: 1800 },
+        ratioSample: { attempts: 20, minutes: 1800 },
+        sampleState: "observed",
+      },
+    }));
+    expect(duelPressV2DetailMetricsSchema.safeParse(legacy).success).toBe(true);
+    expect(duelPressV2DetailMetricsSchema.safeParse(unified).success).toBe(true);
+    const missingBreakdown = structuredClone(unified);
+    delete missingBreakdown.categories[0].scoreBreakdown;
+    expect(duelPressV2DetailMetricsSchema.safeParse(missingBreakdown).success).toBe(false);
+    const mixedCategoryVersion = structuredClone(unified);
+    mixedCategoryVersion.categories[0] = {
+      ...mixedCategoryVersion.categories[0],
+      formulaId: "stat-pairs-category-v2",
+      formulaVersion: "stat-pairs-v2",
+      scoreBreakdown: null,
+    };
+    expect(duelPressV2DetailMetricsSchema.safeParse(mixedCategoryVersion).success).toBe(false);
+    const drift = structuredClone(unified);
+    drift.categories[0].scoreBreakdown.compositeScore = 12;
+    expect(duelPressV2DetailMetricsSchema.safeParse(drift).success).toBe(false);
+  });
+  it("rejects taxonomy, incompatible score-version and extra-field drift", () => {
     const detail = fixture("complete_league").detail;
     expect(duelPressV2DetailMetricsSchema.safeParse({ ...detail, metricTaxonomyVersion: "duel-press-v1" }).success).toBe(false);
     expect(duelPressV2DetailMetricsSchema.safeParse({ ...detail, unexpected: true }).success).toBe(false);
-    expect(duelPressV2DetailMetricsSchema.safeParse({ ...detail, categories: detail.categories.map((item: unknown, index: number) => index === 0 ? { ...(item as object), percentileScore: 100 } : item) }).success).toBe(false);
+    expect(duelPressV2DetailMetricsSchema.safeParse({ ...detail, ratingVersion: "messi-score-unified-v3" }).success).toBe(false);
+    expect(duelPressV2DetailMetricsSchema.safeParse({ ...detail, categories: detail.categories.map((item: unknown, index: number) => index === 0 ? { ...(item as object), percentileScore: 100.01 } : item) }).success).toBe(false);
   });
 });

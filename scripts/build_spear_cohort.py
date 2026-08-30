@@ -14,8 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from fotmob_client import FotMobError, fetch_league_stat_table, fetch_team_name
-from rankings import _fetch_live_spear_cohort
+from fotmob_client import FotMobError, fetch_team_name
+from rankings import _fetch_live_spear_cohort, cohort_candidate_rows
 from spear_cohort import CSV_FIELDS, DATA_PATH
 
 
@@ -45,7 +45,9 @@ def build(
             metrics_by_player, _ = _fetch_live_spear_cohort(
                 league_id, season_name, True, 0,
             )
-            name_rows = fetch_league_stat_table(league_id, season_name, "won_contest")
+            # Candidate discovery is the same union used by the scorer.  Do
+            # not name expected-goals-only entrants as "Unknown".
+            name_rows = cohort_candidate_rows(league_id, season_name).values()
         except FotMobError as exc:
             print(f"Skipping {competition_name}: {exc}")
             continue

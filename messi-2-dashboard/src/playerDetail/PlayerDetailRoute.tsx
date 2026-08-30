@@ -18,10 +18,7 @@ import type { DatasetRouteState, Player, PlayerAnalysis, TacticalQuadrant } from
 import { axisDetail, detailMetrics, metricProfile, seasonScoreRows, selectedScore, tacticalCopy, wholeScore } from "./playerDetailViewModel";
 import { PitchPenaltyProvider, PitchPenaltyToggle } from "./PitchPenaltyContext";
 import { PitchWorkspace } from "./PitchWorkspace";
-import { BenchmarkPanel, VolumeBenchmarkRadar as ServerVolumeBenchmarkRadar } from "./VolumeBenchmarkRadar";
-import { useRatioBenchmark } from "./useRatioBenchmark";
-import { BenchmarkRadarV2Panel } from "./BenchmarkRadarV2";
-import { useBenchmarkRadarV2 } from "./useBenchmarkRadarV2";
+import { VolumeBenchmarkRadar as ServerVolumeBenchmarkRadar } from "./VolumeBenchmarkRadar";
 import { tacticalSummaryEnabled, useTacticalSummary } from "./useTacticalSummary";
 import { tacticalSummaryV2Enabled } from "../api/tacticalSummaryV2FeatureGate";
 import { TacticalSummaryV2Panel } from "./TacticalSummaryV2";
@@ -145,9 +142,12 @@ export function PercentileProfile({ player, analysis, quality, layout = "page" }
 export function VolumeBenchmarkRadar({ player, config, dataset }: { player: Player; config?: MessiApiConfig; dataset: DatasetRouteState }) { const benchmark = useVolumeBenchmark(config, player.id, dataset); return <ServerVolumeBenchmarkRadar state={benchmark.state} playerName={player.name} onRetry={benchmark.retry} />; }
 
 export function Benchmark({ player, config, dataset }: { player: Player; config?: MessiApiConfig; dataset: DatasetRouteState }) {
-  const volume = useVolumeBenchmark(config, player.id, dataset); const ratio = useRatioBenchmark(config, player.id, dataset);
-  const v2 = useBenchmarkRadarV2(config, player.id, dataset);
-  return v2.state.kind === "disabled" ? <BenchmarkPanel volume={volume.state} ratio={ratio.state} playerName={player.name} onVolumeRetry={volume.retry} onRatioRetry={ratio.retry}/> : <BenchmarkRadarV2Panel state={v2.state} playerName={player.name} onRetry={v2.retry}/>;
+  // Kept as an import-compatible no-op for callers outside the player page.
+  // Existing volume/ratio radars are a benchmark diagnostic, not a
+  // decomposition of the M.E.S.S.I. headline; the exact breakdown lives on
+  // the six detail-category cards instead.
+  void player; void config; void dataset;
+  return null;
 }
 
 /** Presentation-only composition: all score, spatial and radar values remain server supplied. */
@@ -167,7 +167,6 @@ export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality,
     </PitchPenaltyProvider>
     {!analysis && <p className="mt-4 rounded border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">서버 분석을 제공할 수 없어 브라우저에서 대체 값을 만들지 않았습니다.</p>}
     <div data-layout="detail-board-slot" className="mt-4 min-w-0">{readoutSlot}</div>
-    <div data-layout="sectors-radar"><div data-layout="radar-benchmarks" className="mt-4 min-w-0"><Benchmark player={player} config={config} dataset={dataset}/></div></div>
     {afterPanels}
   </>;
 }

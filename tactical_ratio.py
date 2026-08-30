@@ -29,6 +29,10 @@ TOURNAMENT_NAMES = {
 }
 SPATIAL_FIELDS = (
     "cca_area_pct",
+    # This is the existing fixed-N/max-180 source count that qualified the
+    # same static CCA row used by rankings.py.  It is display provenance only;
+    # loading it never switches to the separate full Tier 3 aggregate.
+    "activity_valid_point_count",
     "lane_1_ratio", "lane_2_ratio", "lane_3_ratio", "lane_4_ratio", "lane_5_ratio",
     "danger_zone_density",
     "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio", "deep_box_zone_score",
