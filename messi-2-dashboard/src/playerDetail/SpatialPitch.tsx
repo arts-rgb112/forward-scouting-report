@@ -189,6 +189,21 @@ export function PositionalGrid({ projection }: { projection: GeometryProjection 
   </g>;
 }
 
+/** Server-provided positional-grid values only; this is a label layer, never a browser aggregation. */
+function PositionalOccupancyLabels({ cells, projection }: { cells: readonly { depth: number; lane: number; occupancyPct: number }[]; projection: GeometryProjection }) {
+  const valid = cells.filter((cell) => Number.isInteger(cell.depth) && cell.depth >= 0 && cell.depth < 6 && Number.isInteger(cell.lane) && cell.lane >= 0 && cell.lane < 5 && Number.isFinite(cell.occupancyPct));
+  if (!valid.length) return null;
+  return <g data-layer="positional-occupancy-labels" pointerEvents="none" fill="#F8FAFC" fontSize="10" fontWeight="800" textAnchor="middle">
+    {valid.map((cell) => {
+      const x = (POSITIONAL_DEPTH_BOUNDARIES[cell.depth] + POSITIONAL_DEPTH_BOUNDARIES[cell.depth + 1]) / 2;
+      const y = (POSITIONAL_LANE_BOUNDARIES[cell.lane] + POSITIONAL_LANE_BOUNDARIES[cell.lane + 1]) / 2;
+      const point = projection.pp(y, x);
+      const zone = cell.depth * 5 + cell.lane + 1;
+      return <text key={`${cell.depth}-${cell.lane}`} x={point[0]} y={point[1]} stroke="#0A1F10" strokeWidth="2.6" paintOrder="stroke">{zone} · {cell.occupancyPct.toFixed(2)}%</text>;
+    })}
+  </g>;
+}
+
 export function GoalFrames({ projection }: { projection: GeometryProjection }) {
   return <g data-layer="goals" fill="none" strokeLinejoin="round" vectorEffect="non-scaling-stroke">
     {(["defending", "attacking"] as const).map((end) => {
@@ -357,6 +372,7 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
     {layers.heatmap && <HeatLayer mesh={densityMesh} clipId={`${filterId}-pitch-clip`} filterId={`${filterId}-display-heat-blur`} buildCount={meshBuildCount.current}/>}
     <PitchMarkings projection={geometryProjection}/>
     <PositionalGrid projection={geometryProjection}/>
+    {perspective && <PositionalOccupancyLabels cells={spatial?.positionalGrid ?? []} projection={geometryProjection}/>}
     {layers.cca && contour.length > 0 && <g data-layer="cca-contour" fill="none" stroke={CCA_STYLE.stroke} strokeOpacity={CCA_STYLE.opacity} strokeWidth={CCA_STYLE.width} strokeDasharray={CCA_STYLE.dash} vectorEffect="non-scaling-stroke">{contour.map(([x1, y1, x2, y2], index) => <path key={index} d={pathBetween(projection, { x: x1, y: 100 - y1 }, { x: x2, y: 100 - y2 })}/>)}</g>}
     {(layers.markers || layers.trajectories) && <g id={markerLayerId} data-layer="shots">{markerGroups.map((group, visibleIndex) => { const id = `${filterId}-shot-${group.key}`; return <ShotGlyph key={id} group={group} medianXg={medianXg} projection={projection} geometryProjection={geometryProjection} perspective={perspective} showTrajectory={layers.trajectories} showMarker={layers.markers} pixelScale={pixelScale} id={id} active={id === activeVisibleId} tooltipId={tooltipId} registerRef={(element) => { if (element) markerRefs.current.set(id, element); else markerRefs.current.delete(id); }} onActivate={(markerId) => { setActiveId(markerId); setTooltipIdState(markerId); }} onDeactivate={(markerId) => { if (tooltipIdState === markerId) setTooltipIdState(null); }} onNavigate={(direction) => navigate(visibleIndex, direction)}/>; })}</g>}
     {layers.markers && tooltipEntry && (() => { const anchor = projection(tooltipEntry.shot), tooltipWidth = 150, tooltipHeight = 62; const maxX = Math.max(0, BASE_VIEWPORT.width - tooltipWidth * pixelScale), maxY = Math.max(0, BASE_VIEWPORT.height - tooltipHeight * pixelScale); const x = Math.min(maxX, Math.max(0, anchor.x - 70 * pixelScale)), y = Math.min(maxY, Math.max(0, anchor.y - 82 * pixelScale)); return <g id={tooltipId} role="tooltip" pointerEvents="none" data-tooltip-width={tooltipWidth} data-tooltip-height={tooltipHeight} data-pixel-scale={pixelScale} transform={`translate(${x} ${y}) scale(${pixelScale})`}><rect width={tooltipWidth} height={tooltipHeight} rx="7" fill="#0b0e0f" fillOpacity=".96" stroke="#ffffff" strokeOpacity=".25"/><text x="10" y="18" fill="#f4f4f5" fontSize="12" fontWeight="700">{outcomePresentation[tooltipEntry.shot.outcome].label}</text><text x="10" y="37" fill="#e4e4e7" fontSize="11">xG {formatShotMetric(tooltipEntry.shot.xg)}</text><text x="10" y="53" fill="#e4e4e7" fontSize="11">xGOT {formatShotMetric(tooltipEntry.shot.xgot)}</text></g>; })()}

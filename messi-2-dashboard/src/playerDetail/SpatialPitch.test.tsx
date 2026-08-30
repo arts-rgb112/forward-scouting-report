@@ -46,6 +46,12 @@ describe("perspective spatial pitch", () => {
     expect(screen.queryByText(/D1|L1/)).not.toBeInTheDocument();
   });
 
+  it("renders only server-provided positional occupancy labels in the 3D corridor", () => {
+    const { container } = render(<SpatialPitch analysis={analysisWith({ positionalGrid: [{ depth: 0, lane: 0, occupancyPct: 16.67 }] })}/>);
+    expect(container.querySelector('[data-layer="positional-occupancy-labels"]')).not.toBeNull();
+    expect(screen.getByText("1 · 16.67%")).toBeInTheDocument();
+  });
+
   it("adds both goal frames and nets but no inferred shot trajectory", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 80, y: 50, outcome: "goal" }] })}/>);
     expect(container.querySelectorAll("[data-goal]")).toHaveLength(2);
