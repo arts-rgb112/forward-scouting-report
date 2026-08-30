@@ -33,10 +33,10 @@ export function BenchmarkPresentation({ state, mode, playerName, onRetry }: { st
     {state.kind === "disabled" && <p className="mt-3 text-sm text-zinc-400">{mode === "volume" ? "8-league benchmark is not enabled." : "Ratio benchmark is not enabled."}</p>}
     {state.kind === "error" && <div role="alert" className="mt-3 text-sm text-amber-100">Benchmark could not be loaded.<button type="button" onClick={onRetry} className="ml-2 min-h-11 rounded border px-3 focus-visible:ring-2 focus-visible:ring-lime-300">Retry</button></div>}
     {state.kind === "unavailable" && <p className="mt-3 text-sm text-zinc-400">8-league average benchmark is unavailable for this context.</p>}
-    {ready && <><Radar mode={mode} data={ready} playerName={playerName}/><p className="text-xs"><span className="text-lime-200">Player — solid</span> · <span className="text-violet-200">8-league avg — dashed</span></p><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+    {ready && <><Radar mode={mode} data={ready} playerName={playerName}/><p className="text-base"><span className="text-lime-200">Player — solid</span> · <span className="text-violet-200">8-league avg — dashed</span></p><div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
       {ready.axes.map((axis, index) => <button key={axis.id} type="button" onClick={() => setSelected(index)} onKeyDown={(event) => {
         if (event.key === "ArrowRight" || event.key === "ArrowLeft") { event.preventDefault(); setSelected((index + (event.key === "ArrowRight" ? 1 : ready.axes.length - 1)) % ready.axes.length); }
-      }} aria-pressed={selected === index} className="min-h-11 rounded border border-white/10 p-2 text-left text-xs focus-visible:ring-2 focus-visible:ring-lime-300">
+      }} aria-pressed={selected === index} className="min-h-11 rounded border border-white/10 p-2 text-left text-base focus-visible:ring-2 focus-visible:ring-lime-300">
         <b className="block break-words">{axis.label}</b><span className="block">Player {axis.playerScore}/100 · avg {axis.averageScore}/100</span><span className="block">Raw {raw(axis.playerRawValue)} · avg {raw(axis.averageRawValue)}</span><span className="block">#{axis.playerRank ?? "unavailable"}/{axis.population} · {axis.tier}{axis.imputed ? " · source-imputed (source-incomplete)" : ""}</span>
       </button>)}
     </div></>}
@@ -55,6 +55,6 @@ export function BenchmarkPanel({ volume, ratio, playerName, onVolumeRetry, onRat
   return <section className={panel} aria-label={`${mode === "volume" ? "Volume" : "Ratio"} benchmark radar`}><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-black">Benchmark</h2><div role="tablist" aria-label="Benchmark mode" className="flex rounded border border-white/15">
     {(["volume", "ratio"] as const).map((item) => <button key={item} ref={(node) => { tabs.current[item] = node; }} id={tabId(item)} type="button" role="tab" tabIndex={mode === item ? 0 : -1} aria-selected={mode === item} aria-controls={panelId(item)} onClick={() => activate(item)} onKeyDown={(event) => {
       if (event.key === "ArrowRight" || event.key === "ArrowLeft") { event.preventDefault(); activate(item === "volume" ? "ratio" : "volume", true); }
-    }} className={`min-h-11 px-3 text-xs font-bold capitalize focus-visible:ring-2 focus-visible:ring-lime-300 ${mode === item ? "bg-lime-300 text-zinc-950" : "text-zinc-200"}`}>{item}</button>)}
+    }} className={`min-h-11 px-3 text-base font-bold capitalize focus-visible:ring-2 focus-visible:ring-lime-300 ${mode === item ? "bg-lime-300 text-zinc-950" : "text-zinc-200"}`}>{item}</button>)}
   </div></div><div id={panelId(mode)} role="tabpanel" aria-labelledby={tabId(mode)}><BenchmarkPresentation state={selected} mode={mode} playerName={playerName} onRetry={mode === "volume" ? onVolumeRetry : onRatioRetry}/></div></section>;
 }

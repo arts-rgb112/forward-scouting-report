@@ -40,5 +40,10 @@ describe("SixLaneCorridorPitch", () => {
     expect(within(corridor).getByLabelText("슈팅 상세")).toHaveTextContent("xG 0.40");
     fireEvent.click(within(corridor).getByRole("button", { name: "확대" }));
     expect(within(corridor).getByText("1.2배")).toBeInTheDocument();
+    Object.defineProperty(corridor.querySelector('[data-zoom-pan]')!.parentElement!, "getBoundingClientRect", { value: () => ({ width: 300, height: 190 }) });
+    fireEvent.pointerDown(svg, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 70, clientY: 60 });
+    fireEvent.pointerUp(svg, { pointerId: 1 });
+    expect(corridor.querySelector('[data-zoom-pan]')).toHaveStyle({ transform: "translate(20px, 10px) scale(1.2)" });
   });
 });

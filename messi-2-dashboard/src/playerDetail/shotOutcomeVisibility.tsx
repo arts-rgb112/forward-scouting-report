@@ -84,7 +84,7 @@ export function OutcomeControls({ outcomes, counts, visible, markerLayerId, onCl
   return <div role="group" aria-label="Shot outcome visibility" className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
     {outcomes.map((outcome) => { const item = outcomePresentation[outcome]; const pressed = visible.has(outcome); return <button key={outcome} type="button" aria-pressed={pressed} aria-controls={markerLayerId} aria-label={`${item.plural}, ${counts[outcome]} shots. ${pressed ? "Visible" : "Hidden"}. Click to show or hide; double-click to isolate.`}
       onClick={(event) => onClick(outcome, event.detail)} onDoubleClick={() => onDoubleClick(outcome)}
-      className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded border px-3 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200 ${pressed ? "border-white/30 bg-white/10 text-zinc-100" : "border-white/10 bg-black/20 text-zinc-500"}`}>
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded border px-3 text-base font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200 ${pressed ? "border-white/30 bg-white/10 text-zinc-100" : "border-white/10 bg-black/20 text-zinc-500"}`}>
       <span aria-hidden="true" className="font-mono" style={{ color: item.color }}>{item.summary}</span><span>{item.plural}{showCounts ? ` ${counts[outcome]}` : ""}</span>
     </button>; })}
   </div>;

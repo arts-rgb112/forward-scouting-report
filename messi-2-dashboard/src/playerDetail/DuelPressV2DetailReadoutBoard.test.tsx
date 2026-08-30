@@ -13,11 +13,12 @@ const rows = (container: HTMLElement) => Array.from(container.querySelectorAll("
 describe("DuelPressV2DetailReadoutBoard", () => {
   afterEach(() => cleanup());
 
-  it("shows six summary cards with core metrics and preserves every server metric in one collapsed detail section", () => {
+  it("shows six category-only summary cards and preserves every server metric in one collapsed detail section", () => {
     const { container } = render(<DuelPressV2DetailReadoutBoard data={parseDetail("complete_league")} layout="page"/>);
     const summary = container.querySelector('[data-detail-level="summary"]') as HTMLElement;
     const expanded = container.querySelector('[data-detail-level="expanded"]') as HTMLDetailsElement;
     expect(within(summary).getAllByRole("article")).toHaveLength(6);
+    expect(rows(summary)).toHaveLength(0);
     expect(rows(expanded)).toHaveLength(53);
     expect(expanded.open).toBe(false);
     expect(within(expanded).getByText("박스 밖 슈팅 시도 /90")).toBeInTheDocument();

@@ -152,7 +152,7 @@ export function LegacySpatialPitchFigure({ analysis, visibleOutcomes, markerLaye
   const visibleOutcomeList = outcomeOrder.filter((outcome) => allVisible.has(outcome) && counts[outcome] > 0);
   const description = `2D 회랑. ${state.heat}. ${state.shots}. 표시 결과: ${outcomeSummary(visibleOutcomeList)}. 결과 필터는 마커에만 적용되고 밀도와 CCA는 전체 활동 좌표를 사용합니다.`;
   return <>
-    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-base">
       {!corridors && <button type="button" aria-pressed={showCorridors} onClick={() => setShowCorridors((visible) => !visible)} className="rounded border border-sky-300/50 px-2 py-1 text-sky-200 hover:bg-sky-300/10">{TWO_D_COPY.corridorToggle}</button>}
       <p className="text-zinc-400">{TWO_D_COPY.corridorNote}</p>
     </div>
@@ -168,10 +168,10 @@ export function LegacySpatialPitchFigure({ analysis, visibleOutcomes, markerLaye
         </svg>
         {tooltipEntry && <div id={tooltipId} role="tooltip" className="pointer-events-none absolute z-10 max-w-36 rounded border border-white/20 bg-[#0b0e0f]/95 px-2 py-1 type-caption text-zinc-100 shadow-lg" style={{ left: `${Math.max(4, Math.min(96, ((tooltipEntry.shot.x + 4) / 108) * 100))}%`, top: `${Math.max(4, Math.min(96, 100 - tooltipEntry.shot.y))}%`, transform: "translate(-50%, -110%)" }}><b className="block">{outcomePresentation[tooltipEntry.shot.outcome].label}</b><span className="block">xG {formatShotMetric(tooltipEntry.shot.xg)}</span><span className="block">xGOT {formatShotMetric(tooltipEntry.shot.xgot)}</span></div>}
       </div>
-      <figcaption id={captionId} className="mt-2 text-xs text-zinc-400">{state.heat} · {state.shots} · 득점 ◇ · 유효 슛 ● · 빗나감 × · 블록 ■</figcaption>
+      <figcaption id={captionId} className="mt-2 text-base text-zinc-400">{state.heat} · {state.shots} · 득점 ◇ · 유효 슛 ● · 빗나감 × · 블록 ■</figcaption>
     </figure>
-    {corridors && <section data-layout="six-lane-corridor-summary" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3" aria-label="6레인 회랑 요약"><div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-xs"><thead className="text-zinc-400"><tr><th className="py-2">레인</th><th>슛</th><th>득점</th><th>xG</th><th>활동</th></tr></thead><tbody>{CORRIDOR_LABELS.map((label) => <tr key={label} className="border-t border-white/10"><th className="py-2 font-medium text-zinc-200">{label}</th><td>—</td><td>—</td><td>—</td><td>—</td></tr>)}</tbody></table></div><p role="status" className="mt-3 text-xs text-amber-200">{TWO_D_COPY.unavailable}</p><p className="mt-1 text-xs text-zinc-400">{TWO_D_COPY.corridorNote}</p></section>}
-    {showCounts && integrity.shots && <ul className="mt-2 flex flex-wrap gap-x-3 text-xs text-zinc-400"><li>Goals {counts.goal}</li><li>On target {counts.on_target}</li><li>Off target {counts.off_target}</li><li>Blocked {counts.blocked}</li></ul>}
+    {corridors && <section data-layout="six-lane-corridor-summary" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3" aria-label="6레인 회랑 요약"><div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-base"><thead className="text-zinc-400"><tr><th className="py-2">레인</th><th>슛</th><th>득점</th><th>xG</th><th>활동</th></tr></thead><tbody>{CORRIDOR_LABELS.map((label) => <tr key={label} className="border-t border-white/10"><th className="py-2 font-medium text-zinc-200">{label}</th><td>—</td><td>—</td><td>—</td><td>—</td></tr>)}</tbody></table></div><p role="status" className="mt-3 text-base text-amber-200">{TWO_D_COPY.unavailable}</p><p className="mt-1 text-base text-zinc-400">{TWO_D_COPY.corridorNote}</p></section>}
+    {showCounts && integrity.shots && <ul className="mt-2 flex flex-wrap gap-x-3 text-base text-zinc-400"><li>Goals {counts.goal}</li><li>On target {counts.on_target}</li><li>Off target {counts.off_target}</li><li>Blocked {counts.blocked}</li></ul>}
   </>;
 }
 

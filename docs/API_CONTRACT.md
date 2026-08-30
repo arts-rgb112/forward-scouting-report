@@ -2,6 +2,11 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료 — Player page 3차 피드백 9건 (PR #297 병합 전 유지)
+- 범위/결과: 접힌 상세 스탯 보드 첫 화면은 6개 카테고리의 이름·점수·막대만 남기고 서버 지표는 기존 펼침 영역에 모두 보존했다. 레이더 축 라벨은 14px로 낮추고 차트 안쪽으로 이동했다. 2D 회랑은 확대 후 버튼·휠·핀치와 동일 배율에서 pointer drag pan(경계 clamp)을 제공하며, 기존 클릭 zone inspector는 서버 집계가 없으므로 슛·득점·xG·점유를 `—`로 fail-closed한다. 3D는 server `positionalGrid` label hover tooltip과 페널티박스 중앙 y=50 시각 분할을 추가했고, 수치 원천이 없는 슛/득점/xG는 `—`로 표시한다. 시즌 레일은 score/99 길이와 티어 색을 사용하고, 전폭 카드 안에 identity/rank와 2열 season history를 재배치했다. 점수·CSV·CCA·30셀·API·flag·SportsAPI 원본은 변경하지 않았다.
+- 타이포 검증: `text-[0..11px]` 0, literal SVG `fontSize` 12 미만 0, `text-xs` 0, `text-base` 156회다. `text-xs`는 전수 제거했으므로 별도 사용처·근거는 없다; 12px 주석은 `.type-caption` 토큰으로만 남긴다.
+- 검증: 이번에 수정한 테스트 파일은 `PlayerProfileCard.test.tsx`(6), `SixLaneCorridorPitch.test.tsx`(1), `DuelPressV2DetailReadoutBoard.test.tsx`(5)로 12 passed다. 기존 `BenchmarkRadarV2.test.tsx` regression(3)도 함께 실행해 전체 15 passed; `pnpm build` 통과(기존 500kB chunk warning만). 실데이터 시각 QA는 로컬 API 환경변수 미주입으로 수행하지 않았다.
+
 - 상태: PR #297 병합 준비 중 — 라이브 피치 화면 반려 P0
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-live-fix
 - 범위/가드: 최신 `origin/main` 위로 재배치한 P0는 3D 표시 전용 96×66 업샘플, 원본 32×22 CCA/HDR 유지, 흰색 20-zone/PK 축 구분선, 공용 레이어 토글, 3개 피치 탭, 한국어 탐색·접힘·빈 상태를 포함한다. 2D는 `SixLaneCorridorPitch` 전용 컴포넌트로 교체해 field-internal lane label을 제거하고, 20-zone depth guide·display-only heatmap·CCA·trajectory·simple outcome marker·click inspector·native passive:false wheel/pinch/button zoom을 제공한다. exact PK 포함/제외는 부모 공용 토글을 그대로 소비하고, 표의 6-lane 수치와 zone inspector 집계는 서버 연결 전까지 `—`로 fail-closed다. 3D zone label은 기존 서버 `positionalGrid` 값만 표시하며 브라우저에서 점유율을 재집계하지 않는다. 점수·CSV·CCA·30셀·기능 플래그·SportsAPI 원본은 변경하지 않는다. 병합·배포는 발주자 게이트 승인 전 금지한다.
