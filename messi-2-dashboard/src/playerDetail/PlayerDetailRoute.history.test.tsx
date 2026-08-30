@@ -61,7 +61,7 @@ describe("player detail historical rail transport", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(0); }); expect(vi.getTimerCount()).toBe(0); nextRequests.forEach((request) => request.resolve(resultFor(request, 99.9)));
   });
 
-  it("times out a non-cooperative summary, commits successful siblings, and proceeds to the next batch", async () => {
+  it("does not report a missing season when its alternate context times out", async () => {
     vi.useFakeTimers(); render(<PlayerDetailRoute id={samplePlayers[0].id} dataset={firstDataset} config={config} />);
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(pending).toHaveLength(4); const neverResolving = pending[0];
@@ -70,7 +70,7 @@ describe("player detail historical rail transport", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(HISTORY_SUMMARY_TIMEOUT_MS); });
     expect(neverResolving.signal.aborted).toBe(true); expect(pending).toHaveLength(8); expect(maxInFlight).toBeLessThanOrEqual(4);
     const rail = screen.getByRole("region", { name: "Season score rail" });
-    expect(rail).toHaveTextContent("71.0"); expect(rail).toHaveTextContent("1개 컨텍스트의 시즌 이력을 불러오지 못했습니다."); expect(rail.querySelector(".animate-pulse")).toBeNull();
+    expect(rail).toHaveTextContent("71.0"); expect(rail).not.toHaveTextContent("시즌 이력을 불러오지 못했습니다."); expect(rail.querySelector(".animate-pulse")).toBeNull();
     pending.slice(4).forEach((request, index) => request.resolve(resultFor(request, 81 + index)));
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(rail.querySelector(".animate-pulse")).toBeNull(); expect(rail).toHaveTextContent("2024/2025"); expect(maxInFlight).toBeLessThanOrEqual(4); expect(vi.getTimerCount()).toBe(0);

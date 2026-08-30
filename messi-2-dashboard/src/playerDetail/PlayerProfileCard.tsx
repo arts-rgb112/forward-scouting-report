@@ -1,7 +1,7 @@
 import type { PlayerHistoryEntry } from "../api/playerHistoryApi";
 import { resolveTierPresentation } from "../dashboard/scoutingConfig";
 import type { DatasetRouteState, Player, PlayerAnalysis, Tier } from "../dashboard/types";
-import { seasonScoreRows, selectedScore, wholeScore } from "./playerDetailViewModel";
+import { MAX_HISTORICAL_SEASON_ROWS, seasonScoreRows, selectedScore, wholeScore } from "./playerDetailViewModel";
 
 const COPY = {
   overallRank: "대회 전체",
@@ -103,7 +103,7 @@ export function PlayerProfileCard({ player, analysis, selected, history }: { pla
   const selectedValue = selectedScore(player, analysis);
   const rows = seasonScoreRows(player, analysis, selected, history.entries)
     .sort((a, b) => b.score - a.score || b.context.season.localeCompare(a.context.season))
-    .slice(0, 5);
+    .slice(0, MAX_HISTORICAL_SEASON_ROWS + 1);
   const scores = rows.map((row) => row.score);
   const range = `${Math.min(...scores).toFixed(1)}–${Math.max(...scores).toFixed(1)}`;
   const currentContext = contextLabels(selected);
@@ -155,7 +155,7 @@ export function PlayerProfileCard({ player, analysis, selected, history }: { pla
     </div>
 
     <ol className="grid w-full gap-3 sm:grid-cols-2" aria-label="Season score history">
-      {history.loading ? <><SeasonRailRow row={rows.find((row) => row.selected) ?? rows[0]}/>{Array.from({ length: 4 }, (_, index) => <SeasonSkeleton key={index}/>)}</> : rows.map((row) => <SeasonRailRow key={`${row.context.season}-${row.context.mode}`} row={row}/>)}
+      {history.loading ? <><SeasonRailRow row={rows.find((row) => row.selected) ?? rows[0]}/>{Array.from({ length: MAX_HISTORICAL_SEASON_ROWS }, (_, index) => <SeasonSkeleton key={index}/>)}</> : rows.map((row) => <SeasonRailRow key={`${row.context.season}-${row.context.mode}`} row={row}/>) }
     </ol>
 
     <p className="type-caption text-[var(--messi-muted,#949f9f)] opacity-70">{COPY.barNote}</p>

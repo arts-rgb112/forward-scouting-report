@@ -59,11 +59,18 @@ describe("approved Figma profile card", () => {
     expect(screen.getByText(/막대 길이는 M.E.S.S.I. 점수/)).toBeInTheDocument();
   });
 
-  it("keeps the selected row visible with four skeleton rows while history loads", () => {
+  it("keeps the selected row visible with five skeleton rows while history loads", () => {
     const { container } = render(<PlayerProfileCard player={player} analysis={analysis} selected={selected} history={{ loading: true, entries: [], failed: 0, requestedSeasons: 0 }}/>);
-    expect(screen.getByRole("list", { name: "Season score history" }).querySelectorAll("li")).toHaveLength(5);
-    expect(container.querySelectorAll(".animate-pulse")).toHaveLength(4);
+    expect(screen.getByRole("list", { name: "Season score history" }).querySelectorAll("li")).toHaveLength(6);
+    expect(container.querySelectorAll(".animate-pulse")).toHaveLength(5);
     expect(screen.getByText("조회 범위 72.0–72.0 · 선택 컨텍스트만")).toBeInTheDocument();
+  });
+
+  it("supports five historical seasons when the server exposes a sixth season", () => {
+    const fiveSeasons = [...history, { player: { ...player, score: 68.2, tier: tier("bronze", 5) }, context: { season: "2020/2021", mode: "league" as const, scope: 8 as const, competition: "all" as const } }];
+    render(<PlayerProfileCard player={player} analysis={analysis} selected={selected} history={{ loading: false, entries: fiveSeasons, failed: 0, requestedSeasons: 5 }}/>);
+    expect(screen.getByRole("list", { name: "Season score history" }).querySelectorAll("li")).toHaveLength(6);
+    expect(screen.getByText("2020/2021")).toBeInTheDocument();
   });
 
   it("shows partial-history status without changing the five retrieved server rows", () => {

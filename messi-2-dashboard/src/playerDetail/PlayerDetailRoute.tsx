@@ -77,16 +77,22 @@ function useHistory(config: MessiApiConfig | undefined, id: number, selected: Da
     const controller = new AbortController(); setState({ loading: true, entries: [], failed: 0, requestedSeasons: 0 });
     void fetchHistoryLeaderboardOptions(config, controller.signal).then(async (options) => {
       const seasons = options.seasons.filter((season) => season !== selected.season);
-      const contexts: DatasetRouteState[] = seasons.flatMap((season) => [
-        { season, mode: "league" as const, scope: 8 as const, competition: "all" as const }, { season, mode: "europe" as const, scope: 8 as const, competition: "all" as const },
-      ]);
-      if (!contexts.length) { if (!controller.signal.aborted) setState({ loading: false, entries: [], failed: 0, requestedSeasons: 0 }); return; }
+      if (!seasons.length) { if (!controller.signal.aborted) setState({ loading: false, entries: [], failed: 0, requestedSeasons: 0 }); return; }
       const entries: PlayerHistoryEntry[] = []; let failed = 0;
-      for (let start = 0; start < contexts.length; start += 4) {
-        const batch = await Promise.allSettled(contexts.slice(start, start + 4).map((context) => fetchBoundedPlayerSummary(config, id, context, controller.signal)));
+      // League and Europe are competing contexts for the *same* season.  A
+      // 404 from one does not mean the season history is missing if its sibling
+      // resolves; only an entirely unresolved season increments the warning.
+      for (let start = 0; start < seasons.length; start += 2) {
+        const batch = await Promise.all(seasons.slice(start, start + 2).map(async (season) => {
+          const candidates: DatasetRouteState[] = [
+            { season, mode: "league", scope: 8, competition: "all" },
+            { season, mode: "europe", scope: 8, competition: "all" },
+          ];
+          const results = await Promise.allSettled(candidates.map((context) => fetchBoundedPlayerSummary(config, id, context, controller.signal)));
+          return results.filter((result): result is PromiseFulfilledResult<PlayerHistoryEntry> => result.status === "fulfilled").map((result) => result.value);
+        }));
         if (controller.signal.aborted) return;
-        entries.push(...batch.filter((result): result is PromiseFulfilledResult<PlayerHistoryEntry> => result.status === "fulfilled").map((result) => result.value));
-        failed += batch.filter((result) => result.status === "rejected").length;
+        for (const seasonEntries of batch) { if (seasonEntries.length) entries.push(...seasonEntries); else failed += 1; }
         setState({ loading: false, entries: [...entries], failed, requestedSeasons: seasons.length });
       }
     }).catch(() => { if (!controller.signal.aborted) setState({ loading: false, entries: [], failed: 1, requestedSeasons: 0 }); });

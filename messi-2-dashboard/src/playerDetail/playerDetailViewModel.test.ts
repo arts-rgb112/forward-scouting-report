@@ -28,7 +28,7 @@ describe("player detail view model", () => {
     const rows = seasonScoreRows(player, analysis, selected, history);
     expect(rows[0]).toMatchObject({ selected: true, score: 81.99 }); expect(rows[1]?.score).toBe(99); expect(metricProfile(player, analysis, { kind: "idle" }).find((metric) => metric.id === "spaceControl")?.imputed).toBe(true);
   });
-  it("deduplicates history to the highest server score for each non-selected season before taking four", () => {
+  it("deduplicates history to the highest server score for each non-selected season before taking five", () => {
     const selected = { season: "2025/2026", mode: "league" as const, scope: 8 as const, competition: "all" as const };
     const history = [
       { player: { ...player, score: 81 }, context: { ...selected, season: "2024/2025", mode: "league" as const } },
@@ -40,8 +40,8 @@ describe("player detail view model", () => {
       { player: { ...player, score: 86 }, context: { ...selected, season: "2020/2021" } },
     ];
     const rows = seasonScoreRows(player, undefined, selected, history);
-    expect(rows).toHaveLength(5);
-    expect(rows.map((row) => row.context.season)).toEqual(["2025/2026", "2024/2025", "2023/2024", "2022/2023", "2021/2022"]);
+    expect(rows).toHaveLength(6);
+    expect(rows.map((row) => row.context.season)).toEqual(["2025/2026", "2024/2025", "2023/2024", "2022/2023", "2021/2022", "2020/2021"]);
     expect(rows[1]).toMatchObject({ score: 92, context: { mode: "europe" } });
   });
 });
