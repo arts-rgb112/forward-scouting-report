@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료, 릴리스 진행 중 — 2D 회랑 근접 클러스터링 비활성 핫픽스
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-cluster-off-hotfix
+- 범위/가드: `CORRIDOR_CLUSTER_DISTANCE`만 `1.6→0`으로 바꾸어 서로 다른 원좌표 슛을 하나의 마커로 합치지 않는다. 승인된 결과별 마커 반지름·색·테두리, 정확히 동일한 원좌표 스택의 감사 정보, 슛/점수/API/데이터는 변경하지 않는다. focused `SixLaneCorridorPitch.test.tsx` 4/4와 production build가 통과했다. Kane PK 제외 108발과 Gabriel Jesus 2024/25 55발에서 렌더 그룹 수가 슛 수와 같은지, proximity cluster 배지가 0인지 Production 캐시 우회 DOM으로 확인한다.
+
 - 상태: 구현·로컬 검증 완료, PR #302 갱신·병합 준비 — 2D 회랑 결과별 마커 반지름 핫픽스
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-score-unify-v3-clean
 - 범위/가드: 승인 시안의 피치 폭 대비 크기에 맞춰 2D 회랑 마커를 goal `0.72`, on_target `0.56`, blocked `0.50`, off_target X half-extent `0.50`으로 분리했다. 색·투명도·테두리도 시안의 goal `#BEF264/#0A1F10/1.2`, on_target `#38BDF8/#0A1F10/1.0`, blocked `none/#E2E8F0/.6/1.1`, off_target `#94A3B8/.55/1.1`로 맞췄다. 피치 viewBox·캔버스·줌·clustering·클릭 상세·3D 마커는 변경하지 않았다. 변경 테스트 `4 passed`와 production build가 통과했다. 병합·프로덕션 배포는 이번 #302 승인 범위 안에서 한 번만 수행한다.
