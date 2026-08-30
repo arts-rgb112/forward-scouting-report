@@ -16,6 +16,12 @@ const readout = (id: string, state: State = "observed", direction: Direction = "
   };
 };
 
+const spatialReadout = (id: string, value: number, median: number, percentileScore: number) => readout(id, "observed", "above_median", {
+  value, baselineMedian: median, delta: value - median, percentileScore,
+  formulaVersion: "position-scope-median-v1",
+  provenance: { source: "tactical_ratio_static", coordinateSystem: "normalized_pitch_0_100", measure: "spatial_ratio", framePopulation: 284, eligiblePopulation: 284, excludedPopulation: 0, exclusionReasonCounts: {} },
+});
+
 export function tacticalSummaryV2Fixture(state: State = "observed") {
   const unavailable = state === "unavailable";
   const front = readout("frontBackActivityRange", state);
@@ -25,7 +31,9 @@ export function tacticalSummaryV2Fixture(state: State = "observed") {
     data: {
       playerId: 194165, idNamespace: "fotmob", season: "2025/2026", sourceContext: { mode: "league", scope: 7, competition: null }, formulaVersion: "tactical-summary-v2",
       disclosure: "활동 폭은 위치 분포의 범위이며 이동 거리가 아닙니다.", cohortKey: { season: "2025/2026", mode: "league", scope: 7, competition: null, rawPosition: unavailable ? "Coach" : "Striker", positionKey: unavailable ? "coach" : "striker" }, cohortPopulation: unavailable ? 0 : front.population, lowSample: state === "low_sample" || unavailable,
-      positioning: readout("inBoxActivity", state), movement: [], activityCore: readout("coreArea", state), continuousCoreProvenance: unavailable ? null : { available: true, targetDensityPct: 50, achievedDensityPct: 42.8, coreAreaPct: 14.4886, densityThreshold: .5, thresholdOfPeak: .4, gridColumns: 32, gridRows: 22, definitionVersion: "fixed-n60-r20-v2", formulaVersion: "fixed-n60-r20-v2", ccaAreaPct: 14.4886, standardizedTarget: 14.3, quantizationDelta: .18, containedMassPct: 42.8, validPointCount: 180, lowSample: false },
+      positioning: unavailable ? readout("inBoxActivity", state) : spatialReadout("inBoxActivity", 20, 16, 29),
+      movement: unavailable ? [] : [spatialReadout("lane4", 31, 19, 3), spatialReadout("lane3", 34, 31, 38)],
+      activityCore: readout("coreArea", state), continuousCoreProvenance: unavailable ? null : { available: true, targetDensityPct: 50, achievedDensityPct: 42.8, coreAreaPct: 14.4886, densityThreshold: .5, thresholdOfPeak: .4, gridColumns: 32, gridRows: 22, definitionVersion: "fixed-n60-r20-v2", formulaVersion: "fixed-n60-r20-v2", ccaAreaPct: 14.4886, standardizedTarget: 14.3, quantizationDelta: .18, containedMassPct: 42.8, validPointCount: 180, lowSample: false },
       activityRange: { frontBackActivityRange: front, leftRightActivityRange: side, roleLabel: unavailable ? "unavailable" : "종적 왕복형", formulaVersion: "coordinate-range-quadrant-v1" },
     },
   };

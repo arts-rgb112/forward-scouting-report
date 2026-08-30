@@ -33,7 +33,7 @@ export function PitchHexFrequencyPanel({ state }: { state: GoalMouthBaselineStat
             return <path key={cell.hexId} data-pitch-hex-cell={cell.hexId} data-shots={cell.shots} d={hexPath(cx, cy, radius)} fill="none" stroke="#e5e7eb" strokeWidth="1.5" strokeOpacity=".9"><title>{cell.shots} shots</title></path>;
           })}
         </svg>
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-300"><span>{HEX_COPY.sizeLegend}</span><span>{HEX_COPY.colorPending}</span><span>{HEX_COPY.penalty}</span><span>{HEX_COPY.outOfCrop} {frequency.outOfCropShots} shots</span></div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-base text-zinc-300"><span>{HEX_COPY.sizeLegend}</span><span>{HEX_COPY.colorPending}</span><span>{HEX_COPY.penalty}</span><span>{HEX_COPY.outOfCrop} {frequency.outOfCropShots} shots</span></div>
       </> : <p role="status" className="mt-3 text-sm text-zinc-300">{state.kind === "loading" ? HEX_COPY.loading : HEX_COPY.unavailable}</p>}
     </div>
   </details>;

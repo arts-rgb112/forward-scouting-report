@@ -16,6 +16,8 @@ export const isFiniteNumber = (value: unknown): value is number => typeof value 
 export const selectedScore = (player: Player, analysis?: PlayerAnalysis) => analysis?.score.value ?? player.score;
 export const wholeScore = (player: Player, analysis?: PlayerAnalysis) => Math.floor(selectedScore(player, analysis));
 export type SeasonHistoryRow = { player: Player; context: Pick<import("../dashboard/types").DatasetRouteState, "season" | "mode" | "scope" | "competition"> };
+export const MAX_HISTORICAL_SEASON_ROWS = 5;
+
 export function seasonScoreRows(player: Player, analysis: PlayerAnalysis | undefined, selected: SeasonHistoryRow["context"], history: readonly SeasonHistoryRow[]) {
   const selectedRow = { player: { ...player, score: selectedScore(player, analysis) }, context: selected, score: selectedScore(player, analysis), selected: true };
   // A season can have both league and European summaries.  The rail deliberately
@@ -27,7 +29,7 @@ export function seasonScoreRows(player: Player, analysis: PlayerAnalysis | undef
     const current = bestBySeason.get(row.context.season);
     if (!current || row.player.score > current.player.score || (row.player.score === current.player.score && row.context.mode === "league" && current.context.mode !== "league")) bestBySeason.set(row.context.season, row);
   }
-  const historical = [...bestBySeason.values()].sort((a, b) => b.player.score - a.player.score || b.context.season.localeCompare(a.context.season) || (a.context.mode === "league" ? -1 : 1)).slice(0, 4)
+  const historical = [...bestBySeason.values()].sort((a, b) => b.player.score - a.player.score || b.context.season.localeCompare(a.context.season) || (a.context.mode === "league" ? -1 : 1)).slice(0, MAX_HISTORICAL_SEASON_ROWS)
     .map((row) => ({ ...row, score: row.player.score, selected: false }));
   return [selectedRow, ...historical];
 }

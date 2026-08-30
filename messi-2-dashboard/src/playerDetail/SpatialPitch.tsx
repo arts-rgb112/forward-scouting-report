@@ -1,25 +1,29 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
 import { LegacySpatialPitchFigure } from "./LegacySpatialPitch";
 import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, displayDensityGrid, displayHeatmapColor, legacyDensityGrid, marchingSquares, normalizeDensity } from "./legacyHeatmap";
 import { groupPitchShots, medianObservedXg, pitchMarkerRadius, PitchShotMarker, type PitchShotGroup } from "./PitchShotMarker";
+import { DEFAULT_PITCH_LAYERS, type PitchLayerVisibility } from "./pitchLayers";
 import { usePitchPenalty } from "./PitchPenaltyContext";
-import { excludePenaltyShots, penaltyStateLabel, summarizeShots } from "./pitchPenalties";
+import { excludePenaltyShots } from "./pitchPenalties";
+import { CCA_STYLE, PATH_STYLE, TACTICS_BOARD_CAMERA, goalFrame, orbitCamera, pitchMarkings, shotFlight, zone20Lines, type Projection as GeometryProjection, type Vec3 } from "./pitchGeometry";
 import { formatShotMetric, outcomeOrder, outcomePresentation, outcomeSummary, OutcomeControls, shotIntegrity, shotMarkerLabel, type ShotOutcome, useShotOutcomeVisibility } from "./shotOutcomeVisibility";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
 const PITCH_VIEW_COPY = {
-  perspective: "어디서 쏘고 어디로 꽂나",
-  plan: "어떻게 움직이나",
+  perspective: "3D 회랑",
+  plan: "2D 회랑",
   cameraFrames: {
-    full: "Full field",
-    attacking: "Attacking half",
-    box: "Box",
+    full: "전체 필드",
+    attacking: "공격 진영",
+    box: "박스",
   },
-  cameraFrameGroup: "Perspective camera frames",
-  cameraZoomGroup: "Perspective zoom controls",
-  resetCamera: "Reset camera",
+  cameraFrameGroup: "줌 프리셋",
+  cameraAngleGroup: "카메라 각도 프리셋",
+  cameraZoomGroup: "카메라 거리 조절",
+  resetCamera: "기본 시점",
+  anglePresets: { left: "좌측", right: "우측", goalFront: "골대 정면", goalBack: "골대 뒤" },
 } as const;
 
 export const POSITIONAL_DEPTH_BOUNDARIES = [0, 16.67, 33.33, 50, 66.67, 83.33, 100] as const;
@@ -66,6 +70,7 @@ type ZoomLevel = 1 | 2 | 3;
 type Viewport = { x: number; y: number };
 type OrbitCamera = { azimuth: number; elevation: number; distance: number };
 type CameraFrame = "full" | "attacking" | "box";
+type CameraAngle = "left" | "right" | "goalFront" | "goalBack";
 type DensityMeshCell = { index: number; row: number; column: number; normalized: number; fill: string; fillOpacity: number; d: string };
 
 /** Shared native SVG plan dimensions for player-detail companion charts. */
@@ -80,15 +85,39 @@ export const finalThirdPlanCrop = () => {
 };
 const BASE_VIEWPORT = SPATIAL_PITCH_VIEWBOX;
 const EMPTY_HEAT: PitchPoint[] = [];
-const DEFAULT_ORBIT_CAMERA: OrbitCamera = { azimuth: -48, elevation: 30, distance: 84 };
-const ORBIT_PIVOT = { x: 80, y: 34, z: 0 };
-const ORBIT_FRAME: Record<CameraFrame, { x0: number; x1: number; y0: number; y1: number }> = {
-  full: { x0: 0, x1: 100, y0: 0, y1: 100 },
-  attacking: { x0: 50, x1: 100, y0: 0, y1: 100 },
-  box: { x0: 80, x1: 100, y0: 20.35, y1: 79.65 },
+const DEFAULT_ORBIT_CAMERA: OrbitCamera = { azimuth: TACTICS_BOARD_CAMERA.azimuth, elevation: TACTICS_BOARD_CAMERA.elevation, distance: TACTICS_BOARD_CAMERA.radius };
+const ORBIT_DISTANCE = { minimum: 48, maximum: 132, step: 12 } as const;
+const ORBIT_FRAME_DISTANCE: Record<CameraFrame, number> = { full: 112, attacking: 84, box: 58 };
+const CAMERA_ANGLE_PRESETS: Record<CameraAngle, Pick<OrbitCamera, "azimuth" | "elevation">> = {
+  left: { azimuth: -48, elevation: 30 }, right: { azimuth: 48, elevation: 30 }, goalFront: { azimuth: 180, elevation: 27 }, goalBack: { azimuth: 0, elevation: 27 },
 };
 
 const clamp = (value: number) => Math.min(100, Math.max(0, value));
+const clampDistance = (value: number) => Math.min(ORBIT_DISTANCE.maximum, Math.max(ORBIT_DISTANCE.minimum, value));
+
+const median = (values: readonly number[]) => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
+/** Stable per-context orbit centre: shot median, then heat-density peak, then the approved fallback. */
+export function deriveOrbitPivot(spatial: PlayerAnalysis["spatial"] | undefined, normalized: Float64Array): Vec3 {
+  if (shotIntegrity(spatial)) {
+    const validShots = spatial!.shotmapPoints.filter((shot) => Number.isFinite(shot.x) && Number.isFinite(shot.y) && shot.x >= 0 && shot.x <= 100 && shot.y >= 0 && shot.y <= 100);
+    const x = median(validShots.map((shot) => shot.x));
+    const y = median(validShots.map((shot) => shot.y));
+    if (x != null && y != null) return [x * 1.05, y * .68, 0];
+  }
+  let peak = 0, peakIndex = -1;
+  normalized.forEach((value, index) => { if (value > peak) { peak = value; peakIndex = index; } });
+  if (peakIndex >= 0) {
+    const row = Math.floor(peakIndex / HEATMAP_COLUMNS), column = peakIndex % HEATMAP_COLUMNS;
+    return [((column + .5) / HEATMAP_COLUMNS) * 105, ((row + .5) / HEATMAP_ROWS) * 68, 0];
+  }
+  return TACTICS_BOARD_CAMERA.pivot;
+}
 
 /**
  * Provider coordinates are attack-relative: x grows left-to-right and y=0 is
@@ -105,6 +134,13 @@ export function projectPerspective(point: PitchPoint): ScreenPoint {
 export function projectPlan(point: PitchPoint): ScreenPoint {
   return { x: 30 + clamp(point.x) * 9.4, y: 610 - clamp(point.y) * 5.6 };
 }
+
+const asGeometryProjection = (projectPoint: Projection): GeometryProjection => ({
+  project: ([worldX, worldY]) => { const point = projectPoint({ x: worldX / 1.05, y: worldY / .68 }); return [point.x, point.y]; },
+  pp: (yPct, xPct) => { const point = projectPoint({ x: xPct, y: yPct }); return [point.x, point.y]; },
+  cameraPosition: [0, 0, 0],
+  scale: 1,
+});
 
 function usePrefersReducedMotion() {
   const query = "(prefers-reduced-motion: reduce)";
@@ -139,38 +175,55 @@ function projectedCircle(projection: Projection, center: PitchPoint, radiusX: nu
   return polygonPath(projection, points);
 }
 
-export function PitchMarkings({ projection }: { projection: Projection }) {
-  const sixYardBoxes = [
-    [{ x: 0, y: SIX_YARD_BOX_Y[0] }, { x: 5.5, y: SIX_YARD_BOX_Y[0] }, { x: 5.5, y: SIX_YARD_BOX_Y[1] }, { x: 0, y: SIX_YARD_BOX_Y[1] }],
-    [{ x: 94.5, y: SIX_YARD_BOX_Y[0] }, { x: 100, y: SIX_YARD_BOX_Y[0] }, { x: 100, y: SIX_YARD_BOX_Y[1] }, { x: 94.5, y: SIX_YARD_BOX_Y[1] }],
-  ];
-  return <g data-layer="pitch-markings" fill="none" stroke="#fb923c" strokeWidth="1.5" vectorEffect="non-scaling-stroke">
-    <path d={projectedCircle(projection, { x: 50, y: 50 }, 9.15, 13.45)} />
-    {sixYardBoxes.map((box, index) => <path key={index} d={polygonPath(projection, box)} />)}
-    {[{ x: 11, y: 50 }, { x: 50, y: 50 }, { x: 89, y: 50 }].map((spot, index) => { const point = projection(spot); return <circle key={index} cx={point.x} cy={point.y} r="2" fill="#fb923c" stroke="none"/>; })}
+export function PitchMarkings({ projection }: { projection: GeometryProjection }) {
+  return <g data-layer="pitch-markings" fill="none" vectorEffect="non-scaling-stroke">
+    {pitchMarkings(projection).map((path, index) => { const style = PATH_STYLE[path.role]; return <path key={index} d={path.d} stroke={style.stroke} strokeOpacity={style.opacity} strokeWidth={style.width} strokeDasharray={style.dash} />; })}
   </g>;
 }
 
-export function PositionalGrid({ projection }: { projection: Projection }) {
-  return <g data-layer="positional-grid">
-    <g fill="none" stroke="#fb923c" strokeOpacity=".92" strokeWidth="1.35" vectorEffect="non-scaling-stroke">
-      {LEGACY_POSITIONAL_SEGMENTS.map((segment, index) => <path key={`${segment.axis}-${segment.boundary}-${index}`} data-grid-segment={index} data-grid-axis={segment.axis} data-boundary={segment.boundary} data-start={`${segment.start.x},${segment.start.y}`} data-end={`${segment.end.x},${segment.end.y}`} d={pathBetween(projection, segment.start, segment.end)} />)}
-    </g>
+export function PositionalGrid({ projection }: { projection: GeometryProjection }) {
+  const style = PATH_STYLE["zone-grid"];
+  return <g data-layer="positional-grid" fill="none" stroke={style.stroke} strokeOpacity={style.opacity} strokeWidth={style.width} strokeDasharray={style.dash} vectorEffect="non-scaling-stroke">
+    {zone20Lines(projection).map((path, index) => <path key={index} data-grid-segment={index} d={path.d} />)}
   </g>;
 }
 
-export function GoalFrames({ projection }: { projection: Projection }) {
-  return <g data-layer="goals" fill="none" stroke="#f8fafc" strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke">
-    {([0, 100] as const).map((end) => {
-      const near = projection({ x: end, y: GOAL_POST_Y[0] });
-      const far = projection({ x: end, y: GOAL_POST_Y[1] });
-      const outward = end === 0 ? -24 : 24;
-      const lift = end === 0 ? 24 : ATTACKING_GOAL_FRAME_LIFT;
-      const backNear = { x: near.x + outward, y: near.y + 4 };
-      const backFar = { x: far.x + outward, y: far.y + 4 };
-      return <g key={end} data-goal={end === 0 ? "defending" : "attacking"} data-goal-post-near-y={GOAL_POST_Y[0]} data-goal-post-far-y={GOAL_POST_Y[1]} data-goal-frame-lift={lift} data-goal-crossbar-height-meters={GOAL_CROSSBAR_HEIGHT_METERS}>
-        <path data-goal-frame d={`M ${near.x} ${near.y} L ${near.x} ${near.y - lift} L ${far.x} ${far.y - lift} L ${far.x} ${far.y}`} />
-        <path data-goal-net d={`M ${near.x} ${near.y - lift} L ${backNear.x} ${backNear.y - lift * .75} L ${backFar.x} ${backFar.y - lift * .75} L ${far.x} ${far.y - lift} M ${backNear.x} ${backNear.y - lift * .75} L ${backNear.x} ${backNear.y} L ${backFar.x} ${backFar.y} L ${backFar.x} ${backFar.y - lift * .75} M ${near.x} ${near.y} L ${backNear.x} ${backNear.y} M ${far.x} ${far.y} L ${backFar.x} ${backFar.y}`} strokeOpacity=".72" />
+/** Server-provided positional-grid values only; this is a label layer, never a browser aggregation. */
+type OccupancyCell = { depth: number; lane: number; occupancyPct: number };
+type ZoneShotSummary = { shots: number; goals: number; xg: number; shotSharePct: number };
+type HoveredZone = { cell: OccupancyCell; summary: ZoneShotSummary };
+
+function zoneShotSummary(shots: readonly ShotmapPoint[], cell: OccupancyCell): ZoneShotSummary {
+  const x0 = POSITIONAL_DEPTH_BOUNDARIES[cell.depth], x1 = POSITIONAL_DEPTH_BOUNDARIES[cell.depth + 1];
+  const y0 = POSITIONAL_LANE_BOUNDARIES[cell.lane], y1 = POSITIONAL_LANE_BOUNDARIES[cell.lane + 1];
+  const inCell = shots.filter((shot) => shot.x >= x0 && (cell.depth === POSITIONAL_DEPTH_BOUNDARIES.length - 2 ? shot.x <= x1 : shot.x < x1) && shot.y >= y0 && (cell.lane === POSITIONAL_LANE_BOUNDARIES.length - 2 ? shot.y <= y1 : shot.y < y1));
+  return { shots: inCell.length, goals: inCell.filter((shot) => shot.outcome === "goal").length, xg: inCell.reduce((total, shot) => total + (typeof shot.xg === "number" && Number.isFinite(shot.xg) ? shot.xg : 0), 0), shotSharePct: shots.length ? inCell.length / shots.length * 100 : 0 };
+}
+
+function PositionalOccupancyLabels({ cells, shots, projection, onHover }: { cells: readonly OccupancyCell[]; shots: readonly ShotmapPoint[]; projection: GeometryProjection; onHover(zone: HoveredZone | null): void }) {
+  const valid = cells.filter((cell) => Number.isInteger(cell.depth) && cell.depth >= 0 && cell.depth < 6 && Number.isInteger(cell.lane) && cell.lane >= 0 && cell.lane < 5 && Number.isFinite(cell.occupancyPct));
+  if (!valid.length) return null;
+  return <g data-layer="positional-occupancy-labels" fill="#F8FAFC" fontSize="14" fontWeight="800" textAnchor="middle">
+    {valid.map((cell) => {
+      const x = (POSITIONAL_DEPTH_BOUNDARIES[cell.depth] + POSITIONAL_DEPTH_BOUNDARIES[cell.depth + 1]) / 2;
+      const y = (POSITIONAL_LANE_BOUNDARIES[cell.lane] + POSITIONAL_LANE_BOUNDARIES[cell.lane + 1]) / 2;
+      const point = projection.pp(y, x);
+      const summary = zoneShotSummary(shots, cell);
+      if (summary.shots === 0) return null;
+      return <text key={`${cell.depth}-${cell.lane}`} data-zone-shot-share={summary.shotSharePct.toFixed(2)} x={point[0]} y={point[1]} stroke="#0A1F10" strokeWidth="3" paintOrder="stroke" pointerEvents="all" onPointerEnter={() => onHover({ cell, summary })} onPointerLeave={() => onHover(null)}>{summary.shotSharePct.toFixed(2)}%</text>;
+    })}
+  </g>;
+}
+
+export function GoalFrames({ projection }: { projection: GeometryProjection }) {
+  return <g data-layer="goals" fill="none" strokeLinejoin="round" vectorEffect="non-scaling-stroke">
+    {(["defending", "attacking"] as const).map((end) => {
+      const goal = goalFrame(projection, end);
+      const ground = projection.pp(GOAL_POST_Y[0], end === "attacking" ? 100 : 0);
+      const crossbar = projection.pp(GOAL_POST_Y[0], end === "attacking" ? 100 : 0, GOAL_CROSSBAR_HEIGHT_METERS);
+      return <g key={end} data-goal={end} data-goal-post-near-y={GOAL_POST_Y[0]} data-goal-post-far-y={GOAL_POST_Y[1]} data-goal-frame-lift={Math.abs(ground[1] - crossbar[1])} data-goal-crossbar-height-meters={GOAL_CROSSBAR_HEIGHT_METERS}>
+        <path data-goal-frame d={goal.frame} stroke={PATH_STYLE["goal-frame"].stroke} strokeOpacity={PATH_STYLE["goal-frame"].opacity} strokeWidth={PATH_STYLE["goal-frame"].width}/>
+        {goal.net.map((d, index) => <path key={index} data-goal-net d={d} stroke={PATH_STYLE["goal-net"].stroke} strokeOpacity={PATH_STYLE["goal-net"].opacity} strokeWidth={PATH_STYLE["goal-net"].width}/>) }
       </g>;
     })}
   </g>;
@@ -179,8 +232,9 @@ export function GoalFrames({ projection }: { projection: Projection }) {
 /** Shared, unmodified 1000×650 plan primitives. Companion charts may crop/transform this group only. */
 export function PlanPitchGeometry({ geometryId = "shared-plan-pitch" }: { geometryId?: string }) {
   const projection = projectPlan;
+  const geometryProjection = asGeometryProjection(projection);
   const pitchShape = polygonPath(projection, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
-  return <g data-shared-plan-pitch={geometryId}><defs><linearGradient id={`${geometryId}-grass`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#0f6f42"/><stop offset="1" stopColor="#06432e"/></linearGradient></defs><path data-shared-plan-boundary d={pitchShape} fill={`url(#${geometryId}-grass)`} stroke="#143d2f" strokeWidth="9"/><GoalFrames projection={projection}/><PitchMarkings projection={projection}/><PositionalGrid projection={projection}/></g>;
+  return <g data-shared-plan-pitch={geometryId}><defs><linearGradient id={`${geometryId}-grass`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#0f6f42"/><stop offset="1" stopColor="#06432e"/></linearGradient></defs><path data-shared-plan-boundary d={pitchShape} fill={`url(#${geometryId}-grass)`} stroke="#143d2f" strokeWidth="9"/><GoalFrames projection={geometryProjection}/><PitchMarkings projection={geometryProjection}/><PositionalGrid projection={geometryProjection}/></g>;
 }
 
 function prepareDensityMesh(displayDensity: Float64Array, projection: Projection): DensityMeshCell[] {
@@ -194,13 +248,13 @@ function prepareDensityMesh(displayDensity: Float64Array, projection: Projection
     });
 }
 
-function HeatLayer({ mesh, clipId, buildCount }: { mesh: readonly DensityMeshCell[]; clipId: string; buildCount: number }) {
-  return <g data-layer="heat" data-density-mesh-builds={buildCount} clipPath={`url(#${clipId})`} aria-hidden="true">
+function HeatLayer({ mesh, clipId, filterId, buildCount }: { mesh: readonly DensityMeshCell[]; clipId: string; filterId: string; buildCount: number }) {
+  return <g data-layer="heat" data-density-source="display-96x66" data-density-mesh-builds={buildCount} clipPath={`url(#${clipId})`} filter={`url(#${filterId})`} aria-hidden="true">
     {mesh.map((cell) => <path key={cell.index} data-density-cell={cell.index} data-density-row={cell.row} data-density-column={cell.column} data-density-normalized={cell.normalized} d={cell.d} fill={cell.fill} fillOpacity={cell.fillOpacity} />)}
   </g>;
 }
 
-const outcomeLabel: Record<ShotmapPoint["outcome"], string> = { goal: "Goal", on_target: "On target", off_target: "Off target", blocked: "Blocked" };
+const outcomeLabel: Record<ShotmapPoint["outcome"], string> = { goal: "득점", on_target: "유효 슛", off_target: "빗나감", blocked: "블록" };
 
 function usePerspectivePixelScale() {
   const ref = useRef<SVGSVGElement>(null);
@@ -238,100 +292,74 @@ function isInteractivePitchTarget(target: EventTarget | null) {
   return Boolean(target.closest("[data-shot-marker], [data-marker-hit], [role=tooltip], button, a, input, select, textarea"));
 }
 
-function ShotGlyph({ group, medianXg, projection, perspective, pixelScale, id, active, tooltipId, registerRef, onActivate, onDeactivate, onNavigate }: {
-  group: PitchShotGroup; medianXg: number | null; projection: Projection; perspective: boolean; pixelScale: number; id: string; active: boolean; tooltipId: string;
+function ShotGlyph({ group, medianXg, projection, geometryProjection, perspective, showTrajectory, showMarker, pixelScale, id, active, tooltipId, registerRef, onActivate, onDeactivate, onNavigate }: {
+  group: PitchShotGroup; medianXg: number | null; projection: Projection; geometryProjection: GeometryProjection; perspective: boolean; showTrajectory: boolean; showMarker: boolean; pixelScale: number; id: string; active: boolean; tooltipId: string;
   registerRef(element: SVGGElement | null): void; onActivate(id: string): void; onDeactivate(id: string): void; onNavigate(direction: 1 | -1): void;
 }) {
   const { shot } = group;
   const anchor = projection(shot);
   const markerRadius = pitchMarkerRadius(shot.xg, medianXg);
-  const markerY = perspective ? anchor.y - (8 + markerRadius * .55) * pixelScale : anchor.y;
+  const markerY = anchor.y;
   // A blocked endpoint is not a goal-line trajectory and must never be drawn.
-  const trajectory = perspective && shot.trajectory?.endpointKind === "goal_mouth" ? shot.trajectory : null;
-  const endpointGround = trajectory ? projection({ x: trajectory.endX, y: trajectory.endY }) : null;
-  // Height is source data in metres. It shares the attacking frame's own
-  // viewBox lift, so the crossbar is always exactly 2.44m above the ground.
-  const heightLift = trajectory?.endpointKind === "goal_mouth" && trajectory.endZMeters != null
-    ? ATTACKING_GOAL_FRAME_LIFT * trajectory.endZMeters / GOAL_CROSSBAR_HEIGHT_METERS
-    : 0;
-  const endpoint = endpointGround ? { x: endpointGround.x, y: endpointGround.y - heightLift } : null;
-  const groundDistance = trajectory ? Math.hypot((trajectory.endX - shot.x) * 1.05, (trajectory.endY - shot.y) * .68) : 0;
-  // The parabolic term peaks at A / 4, not A. endpoint height remains source data.
-  const arcAmplitude = trajectory?.endZMeters != null ? 4 * (.4 + .08 * groundDistance + .5 * trajectory.endZMeters) : 0;
-  const arcLift = ATTACKING_GOAL_FRAME_LIFT * (arcAmplitude / 4) / GOAL_CROSSBAR_HEIGHT_METERS;
-  const control = endpoint && trajectory ? { x: (anchor.x + endpoint.x) / 2, y: Math.min(anchor.y, endpoint.y) - Math.max(10 * pixelScale, heightLift * .55 + arcLift) } : null;
-  const shadowControl = endpointGround ? { x: (anchor.x + endpointGround.x) / 2, y: (anchor.y + endpointGround.y) / 2 } : null;
-  return <g ref={registerRef} id={id} role="img" tabIndex={active ? 0 : -1} aria-label={`${shotMarkerLabel(shot)}${group.count > 1 ? ` ${group.count} shots share this exact coordinate. Stack: ${group.outcomeCounts.goal} goals, ${group.outcomeCounts.on_target} on target, ${group.outcomeCounts.off_target} off target, ${group.outcomeCounts.blocked} blocked.` : ""}`} aria-describedby={tooltipId} data-shot-marker data-shot-index={group.sourceIndexes[0]} data-shot-indexes={group.sourceIndexes.join(",")} data-shot-outcome={group.outcome} data-marker-symbol={outcomePresentation[group.outcome].symbol} data-marker-size={markerRadius * 2} data-marker-count={group.count} data-pitch-x={shot.x} data-pitch-y={shot.y} data-screen-x={anchor.x} data-screen-y={anchor.y} className="cursor-help" onFocus={() => onActivate(id)} onPointerEnter={() => onActivate(id)} onPointerLeave={(event) => { if (document.activeElement !== event.currentTarget) onDeactivate(id); }} onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); onNavigate(1); } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); onNavigate(-1); } }}>
+  const trajectory = perspective && showTrajectory && shot.trajectory?.endpointKind === "goal_mouth" ? shot.trajectory : null;
+  const flight = trajectory ? shotFlight(geometryProjection, { x: shot.x, y: shot.y, endY: trajectory.endY, endZMeters: trajectory.endZMeters }) : null;
+  const trajectoryStyle = {
+    goal: { color: "#BEF264", opacity: .9, width: 2.6 },
+    on_target: { color: "#38BDF8", opacity: .6, width: 1.9 },
+    off_target: { color: "#E2E8F0", opacity: .16, width: 1.2 },
+    blocked: { color: "#94A3B8", opacity: 0, width: 0 },
+  }[group.outcome];
+  return <g ref={registerRef} id={id} role={showMarker ? "img" : undefined} tabIndex={showMarker && active ? 0 : -1} aria-label={showMarker ? `${shotMarkerLabel(shot)}${group.count > 1 ? ` ${group.count} shots share this exact coordinate. Stack: ${group.outcomeCounts.goal} goals, ${group.outcomeCounts.on_target} on target, ${group.outcomeCounts.off_target} off target, ${group.outcomeCounts.blocked} blocked.` : ""}` : undefined} aria-describedby={showMarker ? tooltipId : undefined} data-shot-marker={showMarker ? "" : undefined} data-shot-index={showMarker ? group.sourceIndexes[0] : undefined} data-shot-indexes={showMarker ? group.sourceIndexes.join(",") : undefined} data-shot-outcome={group.outcome} data-marker-symbol={showMarker ? outcomePresentation[group.outcome].symbol : undefined} data-marker-size={showMarker ? markerRadius * 2 : undefined} data-marker-count={showMarker ? group.count : undefined} data-pitch-x={shot.x} data-pitch-y={shot.y} data-screen-x={anchor.x} data-screen-y={anchor.y} className={showMarker ? "cursor-help" : undefined} onFocus={() => showMarker && onActivate(id)} onPointerEnter={() => showMarker && onActivate(id)} onPointerLeave={(event) => { if (showMarker && document.activeElement !== event.currentTarget) onDeactivate(id); }} onKeyDown={(event) => { if (!showMarker) return; if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); onNavigate(1); } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); onNavigate(-1); } }}>
     <title>{shotMarkerLabel(shot)}</title>
-    {trajectory && endpointGround && endpoint && control && shadowControl && <><path data-shot-trajectory-shadow d={`M ${anchor.x} ${anchor.y} Q ${shadowControl.x} ${shadowControl.y} ${endpointGround.x} ${endpointGround.y}`} fill="none" stroke="#020617" strokeOpacity=".7" strokeWidth="1.4" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" pointerEvents="none"/><path data-shot-trajectory data-trajectory-kind={trajectory.endpointKind} data-end-pitch-x={trajectory.endX} data-end-pitch-y={trajectory.endY} data-end-goal-mouth={trajectory.endY >= GOAL_POST_Y[0] && trajectory.endY <= GOAL_POST_Y[1] ? "inside" : "outside"} data-end-height-meters={trajectory.endZMeters ?? undefined} data-end-height-lift={heightLift} data-trajectory-amplitude={arcAmplitude} data-end-ground-x={endpointGround.x} data-end-ground-y={endpointGround.y} data-end-render-x={endpoint.x} data-end-render-y={endpoint.y} d={`M ${anchor.x} ${anchor.y} Q ${control.x} ${control.y} ${endpoint.x} ${endpoint.y}`} fill="none" stroke="#E2E8F0" strokeOpacity=".82" strokeWidth="1.8" vectorEffect="non-scaling-stroke" pointerEvents="none"/>{([.22, .42, .62, .82] as const).map((t) => { const x = (1 - t) * (1 - t) * anchor.x + 2 * (1 - t) * t * control.x + t * t * endpoint.x; const y = (1 - t) * (1 - t) * anchor.y + 2 * (1 - t) * t * control.y + t * t * endpoint.y; const groundX = (1 - t) * anchor.x + t * endpointGround.x; const groundY = (1 - t) * anchor.y + t * endpointGround.y; return <path key={t} data-shot-trajectory-tie data-trajectory-t={t} d={`M ${groundX} ${groundY} L ${x} ${y}`} stroke="#CBD5E1" strokeOpacity=".38" strokeWidth=".85" vectorEffect="non-scaling-stroke" pointerEvents="none"/>; })}</>}
-    {perspective && <><line data-shot-anchor x1={anchor.x} y1={anchor.y} x2={anchor.x} y2={markerY} stroke="#E2E8F0" strokeOpacity=".5" strokeWidth="1.2" strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/><ellipse data-shot-shadow cx={anchor.x} cy={anchor.y} rx={markerRadius * .9 * pixelScale} ry={markerRadius * .28 * pixelScale} fill="#020617" fillOpacity=".55"/></>}
-    <g data-marker-visual data-pixel-scale={pixelScale} transform={`translate(${anchor.x} ${markerY}) scale(${pixelScale})`}><PitchShotMarker outcome={group.outcome} radius={markerRadius} count={group.count} outcomeCounts={group.outcomeCounts} expandedStack={tooltipId === id}/><circle data-marker-hit r="12" fill="transparent" pointerEvents="all" /></g>
+    {trajectory && flight && <g data-shot-trajectory data-trajectory-kind={trajectory.endpointKind} data-trajectory-outcome={group.outcome} data-end-pitch-x={trajectory.endX} data-end-pitch-y={trajectory.endY} data-end-goal-mouth={trajectory.endY >= GOAL_POST_Y[0] && trajectory.endY <= GOAL_POST_Y[1] ? "inside" : "outside"} data-end-height-meters={trajectory.endZMeters ?? undefined} data-end-render-x={flight.landing[0]} data-end-render-y={flight.landing[1]} fill="none" pointerEvents="none">{flight.arc.map((d, index) => { const progress = (index + 1) / flight.arc.length; return <path key={index} d={d} stroke={trajectoryStyle.color} strokeOpacity={trajectoryStyle.opacity * (.95 - .5 * progress)} strokeWidth={trajectoryStyle.width * (1 - .5 * progress)} strokeLinecap="round" vectorEffect="non-scaling-stroke"/>; })}</g>}
+    {showMarker && <g data-marker-visual data-pixel-scale={pixelScale} transform={`translate(${anchor.x} ${markerY}) scale(${pixelScale})`}><PitchShotMarker outcome={group.outcome} radius={markerRadius} count={group.count} outcomeCounts={group.outcomeCounts} expandedStack={tooltipId === id}/><circle data-marker-hit r="12" fill="transparent" pointerEvents="all" /></g>}
   </g>;
 }
 
-type Vector3 = { x: number; y: number; z: number };
-const vector = (x: number, y: number, z: number): Vector3 => ({ x, y, z });
-const subtract = (from: Vector3, other: Vector3): Vector3 => vector(from.x - other.x, from.y - other.y, from.z - other.z);
-const dot = (left: Vector3, right: Vector3) => left.x * right.x + left.y * right.y + left.z * right.z;
-const cross = (left: Vector3, right: Vector3): Vector3 => vector(left.y * right.z - left.z * right.y, left.z * right.x - left.x * right.z, left.x * right.y - left.y * right.x);
-const normalizeVector = (value: Vector3): Vector3 => { const length = Math.hypot(value.x, value.y, value.z) || 1; return vector(value.x / length, value.y / length, value.z / length); };
-const orbitWorldPoint = ({ x, y }: PitchPoint, z = 0): Vector3 => vector(clamp(x) * 1.05, clamp(y) * .68, z);
-
-/**
- * Perspective projection from the specified orbit camera. The frame scale uses
- * cover (max), deliberately allowing the other pitch area to overflow.
- */
 export function createOrbitProjection(camera: OrbitCamera, frame: CameraFrame): Projection {
-  const azimuth = camera.azimuth * Math.PI / 180;
-  const elevation = camera.elevation * Math.PI / 180;
-  const pivot = vector(ORBIT_PIVOT.x, ORBIT_PIVOT.y, ORBIT_PIVOT.z);
-  const cameraPoint = vector(pivot.x + camera.distance * Math.cos(elevation) * Math.cos(azimuth), pivot.y + camera.distance * Math.cos(elevation) * Math.sin(azimuth), pivot.z + camera.distance * Math.sin(elevation));
-  const forward = normalizeVector(subtract(pivot, cameraPoint));
-  const right = normalizeVector(cross(forward, vector(0, 0, 1)));
-  const up = cross(right, forward);
-  const projectRaw = (point: PitchPoint, z = 0) => {
-    const delta = subtract(orbitWorldPoint(point, z), cameraPoint);
-    const depth = Math.max(.001, dot(delta, forward));
-    return { x: dot(delta, right) / depth, y: dot(delta, up) / depth };
-  };
-  const bounds = ORBIT_FRAME[frame];
-  const corners = [projectRaw({ x: bounds.x0, y: bounds.y0 }), projectRaw({ x: bounds.x0, y: bounds.y1 }), projectRaw({ x: bounds.x1, y: bounds.y0 }), projectRaw({ x: bounds.x1, y: bounds.y1 })];
-  const minX = Math.min(...corners.map((point) => point.x)), maxX = Math.max(...corners.map((point) => point.x));
-  const minY = Math.min(...corners.map((point) => point.y)), maxY = Math.max(...corners.map((point) => point.y));
-  const scale = Math.max(900 / Math.max(.001, maxX - minX), 540 / Math.max(.001, maxY - minY));
-  const centreX = (minX + maxX) / 2, centreY = (minY + maxY) / 2;
-  return (point) => { const raw = projectRaw(point); return { x: 500 + (raw.x - centreX) * scale, y: 325 - (raw.y - centreY) * scale }; };
+  // Retaining the full geometry avoids camera-plane crops at low goal-front angles.
+  const projection = orbitCamera({ ...TACTICS_BOARD_CAMERA, azimuth: camera.azimuth, elevation: camera.elevation, radius: camera.distance, frameFromX: 0, width: BASE_VIEWPORT.width, height: BASE_VIEWPORT.height });
+  return (point) => { const [x, y] = projection.pp(point.y, point.x); return { x, y }; };
 }
 
-function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, contextIdentity }: { spatial: PlayerAnalysis["spatial"] | undefined; mode: ViewMode; filterId: string; visibleOutcomes: ReadonlySet<ShotOutcome>; markerLayerId: string; contextIdentity: string }) {
+function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, contextIdentity, layers }: { spatial: PlayerAnalysis["spatial"] | undefined; mode: ViewMode; filterId: string; visibleOutcomes: ReadonlySet<ShotOutcome>; markerLayerId: string; contextIdentity: string; layers: PitchLayerVisibility }) {
   const perspective = mode === "perspective";
   const [camera, setCamera] = useState<OrbitCamera>(DEFAULT_ORBIT_CAMERA);
   const [cameraFrame, setCameraFrame] = useState<CameraFrame>("attacking");
-  const projection = useMemo(() => perspective ? createOrbitProjection(camera, cameraFrame) : projectPlan, [camera, cameraFrame, perspective]);
+  const [cameraAngleState, setCameraAngle] = useState<CameraAngle | null>("left");
+  const [hoveredZone, setHoveredZone] = useState<HoveredZone | null>(null);
   const heatValid = Boolean(spatial?.available && spatial.heatmapPointCount === spatial.heatmapPoints.length && spatial.heatmapPoints.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= 100 && y >= 0 && y <= 100));
   const heat = heatValid ? spatial!.heatmapPoints : EMPTY_HEAT;
   const shotsValid = shotIntegrity(spatial);
   const shots = shotsValid ? spatial!.shotmapPoints.map((shot, sourceIndex) => ({ shot, sourceIndex })).filter(({ shot }) => visibleOutcomes.has(shot.outcome)) : [];
   const medianXg = shotsValid ? medianObservedXg(spatial!.shotmapPoints) : null;
   const markerGroups = groupPitchShots(shots);
-  const heatState = !spatial?.available ? "Activity heatmap unavailable" : !heatValid ? "Activity heatmap integrity mismatch" : heat.length ? `${heat.length} activity points` : "Verified zero activity points";
-  const shotState = !spatial?.shotmapSnapshotAvailable ? "Shot snapshot unavailable" : !shotsValid ? "Shot snapshot integrity mismatch" : spatial.shotmapPoints.length ? `${spatial.shotmapPoints.length} shots` : "Verified zero shots";
+  const heatState = !spatial?.available ? "활동 히트맵 사용 불가" : !heatValid ? "활동 히트맵 무결성 불일치" : heat.length ? `활동 좌표 ${heat.length}개` : "관측된 활동 좌표 0개";
+  const shotState = !spatial?.shotmapSnapshotAvailable ? "슈팅 스냅샷 사용 불가" : !shotsValid ? "슈팅 스냅샷 무결성 불일치" : spatial.shotmapPoints.length ? `슛 ${spatial.shotmapPoints.length}개` : "관측된 슛 0개";
   const normalized = useMemo(() => normalizeDensity(legacyDensityGrid(heat)), [heat]);
+  const orbitPivot = useMemo(() => deriveOrbitPivot(spatial, normalized), [normalized, spatial]);
+  const geometryProjection = useMemo(() => orbitCamera({ ...TACTICS_BOARD_CAMERA, pivot: orbitPivot, azimuth: camera.azimuth, elevation: camera.elevation, radius: DEFAULT_ORBIT_CAMERA.distance, frameFromX: 0, width: BASE_VIEWPORT.width, height: BASE_VIEWPORT.height }), [camera.azimuth, camera.elevation, orbitPivot]);
+  const projection = useMemo(() => perspective ? ((point: PitchPoint) => { const [x, y] = geometryProjection.pp(point.y, point.x); return { x, y }; }) : projectPlan, [geometryProjection, perspective]);
   const displayDensity = useMemo(() => displayDensityGrid(normalized), [normalized]);
   const meshBuildCount = useRef(0);
   const densityMesh = useMemo(() => { meshBuildCount.current += 1; return prepareDensityMesh(displayDensity, projection); }, [displayDensity, projection]);
   const contour = heatValid && spatial?.continuousCore.available && spatial.continuousCore.gridColumns === HEATMAP_COLUMNS && spatial.continuousCore.gridRows === HEATMAP_ROWS && Number.isFinite(spatial.continuousCore.thresholdOfPeak) && spatial.continuousCore.thresholdOfPeak > 0 ? marchingSquares(normalized, spatial.continuousCore.thresholdOfPeak) : [];
+  // Never crop terrain before projection: close/low camera views still retain
+  // the whole turf, while the SVG viewport supplies ordinary screen zoom.
   const pitchShape = polygonPath(projection, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
   const markerRefs = useRef(new Map<string, SVGGElement>()), tooltipId = `${filterId}-shot-tooltip`;
   const rendered = usePerspectivePixelScale();
   const [zoom, setZoom] = useState<ZoomLevel>(1), [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0 });
+  const cameraAngle = cameraAngleState && Math.abs(camera.azimuth - CAMERA_ANGLE_PRESETS[cameraAngleState].azimuth) < .01 && Math.abs(camera.elevation - CAMERA_ANGLE_PRESETS[cameraAngleState].elevation) < .01 ? cameraAngleState : null;
   const pointerPan = useRef<{ pointerId: number; clientX: number; clientY: number; viewport: Viewport } | null>(null);
   const pointerOrbit = useRef<{ pointerId: number; clientX: number; clientY: number; camera: OrbitCamera } | null>(null);
-  const resetViewport = () => { pointerPan.current = null; pointerOrbit.current = null; setZoom(1); setViewport({ x: 0, y: 0 }); setCamera(DEFAULT_ORBIT_CAMERA); setCameraFrame("attacking"); };
+  const touchPoints = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ gap: number; distance: number } | null>(null);
+  const resetViewport = () => { pointerPan.current = null; pointerOrbit.current = null; touchPoints.current.clear(); pinch.current = null; setZoom(1); setViewport({ x: 0, y: 0 }); setCamera(DEFAULT_ORBIT_CAMERA); setCameraFrame("attacking"); setCameraAngle("left"); };
   useEffect(() => { resetViewport(); }, [contextIdentity]);
   const visibleViewport = zoomViewport(zoom);
-  const viewBox = `${viewport.x} ${viewport.y} ${visibleViewport.width} ${visibleViewport.height}`;
-  const pixelScale = rendered.scale / zoom;
+  const viewBox = perspective ? `0 0 ${BASE_VIEWPORT.width} ${BASE_VIEWPORT.height}` : `${viewport.x} ${viewport.y} ${visibleViewport.width} ${visibleViewport.height}`;
+  const pixelScale = rendered.scale / (perspective ? 1 : zoom);
   const setZoomLevel = (next: ZoomLevel) => { setViewport((current) => centeredViewport(current, zoom, next)); setZoom(next); };
   const panBy = (x: number, y: number) => setViewport((current) => clampViewport({ x: current.x + x, y: current.y + y }, zoom));
   const [activeId, setActiveId] = useState<string | null>(null), [tooltipIdState, setTooltipIdState] = useState<string | null>(null);
@@ -342,21 +370,35 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
   const tooltipEntry = markerGroups.find((group) => `${filterId}-shot-${group.key}` === tooltipIdState);
   const navigate = (visibleIndex: number, direction: 1 | -1) => { if (!markerGroups.length) return; const next = markerGroups[(visibleIndex + direction + markerGroups.length) % markerGroups.length]; const id = `${filterId}-shot-${next.key}`; setActiveId(id); setTooltipIdState(id); markerRefs.current.get(id)?.focus(); };
   const visibleGroups = outcomeOrder.filter((outcome) => visibleOutcomes.has(outcome) && spatial?.shotmapPoints.some((shot) => shot.outcome === outcome));
-  return <><div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/25 px-2 py-2"><div role="group" aria-label={PITCH_VIEW_COPY.cameraFrameGroup} className="flex flex-wrap items-center gap-1">{(["full", "attacking", "box"] as const).map((frame) => <button key={frame} type="button" aria-pressed={cameraFrame === frame} onClick={() => setCameraFrame(frame)} className="min-h-9 rounded border border-white/15 px-2 text-xs font-bold aria-pressed:bg-sky-200 aria-pressed:text-slate-950">{PITCH_VIEW_COPY.cameraFrames[frame]}</button>)}</div><div role="group" aria-label={PITCH_VIEW_COPY.cameraZoomGroup} className="flex items-center gap-1"><button type="button" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40">−</button><button type="button" aria-label="Zoom in" disabled={zoom === 3} onClick={() => setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40">+</button><button type="button" aria-label={PITCH_VIEW_COPY.resetCamera} onClick={resetViewport} className="min-h-9 rounded border border-white/15 px-3 text-xs font-bold">Reset</button></div><p aria-live="polite" className="text-xs text-zinc-300">{perspective ? `Orbit ${camera.azimuth.toFixed(0)}° / ${camera.elevation.toFixed(0)}° / ${camera.distance.toFixed(0)}m` : `Perspective zoom ${zoom}×`}</p></div><svg ref={rendered.ref} viewBox={viewBox} preserveAspectRatio="xMidYMid meet" className="block h-auto w-full rounded-b-lg bg-[#070b0d] touch-pan-y" role="img" tabIndex={0} aria-label={`${perspective ? "Perspective" : "Two-dimensional"} attacking pitch with exact 6-depth by 5-lane positional grid. ${heatState}. ${shotState}. Visible shot outcomes: ${outcomeSummary(visibleGroups)}. Outcome controls change markers only.`} data-camera-azimuth={perspective ? camera.azimuth : undefined} data-camera-elevation={perspective ? camera.elevation : undefined} data-camera-distance={perspective ? camera.distance : undefined} data-camera-frame={perspective ? cameraFrame : undefined} onWheel={(event) => { if (!perspective) return; event.preventDefault(); setCamera((current) => ({ ...current, distance: Math.max(48, Math.min(132, current.distance + event.deltaY * .04)) })); }} onPointerDown={(event) => { if (event.defaultPrevented || isInteractivePitchTarget(event.target)) return; if (perspective) { pointerOrbit.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, camera }; event.currentTarget.setPointerCapture?.(event.pointerId); return; } if (zoom === 1) return; pointerPan.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport }; event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { const orbit = pointerOrbit.current; if (orbit?.pointerId === event.pointerId) { setCamera({ azimuth: orbit.camera.azimuth - (event.clientX - orbit.clientX) * .22, elevation: Math.max(12, Math.min(65, orbit.camera.elevation + (event.clientY - orbit.clientY) * .18)), distance: orbit.camera.distance }); return; } const start = pointerPan.current; if (!start || start.pointerId !== event.pointerId) return; const bounds = event.currentTarget.getBoundingClientRect(); if (!bounds.width || !bounds.height) return; setViewport(clampViewport({ x: start.viewport.x - (event.clientX - start.clientX) * visibleViewport.width / bounds.width, y: start.viewport.y - (event.clientY - start.clientY) * visibleViewport.height / bounds.height }, zoom)); }} onPointerUp={(event) => { if (pointerOrbit.current?.pointerId === event.pointerId) pointerOrbit.current = null; if (pointerPan.current?.pointerId === event.pointerId) pointerPan.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onPointerCancel={(event) => { if (pointerOrbit.current?.pointerId === event.pointerId) pointerOrbit.current = null; if (pointerPan.current?.pointerId === event.pointerId) pointerPan.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); }} onLostPointerCapture={() => { pointerPan.current = null; pointerOrbit.current = null; }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); resetViewport(); return; } if (event.defaultPrevented || event.target !== event.currentTarget || perspective || zoom === 1) return; const step = Math.min(48, visibleViewport.width / 5); if (event.key === "ArrowLeft") { event.preventDefault(); panBy(-step, 0); } else if (event.key === "ArrowRight") { event.preventDefault(); panBy(step, 0); } else if (event.key === "ArrowUp") { event.preventDefault(); panBy(0, -step); } else if (event.key === "ArrowDown") { event.preventDefault(); panBy(0, step); } }}>
-    <defs><clipPath id={`${filterId}-pitch-clip`}><path d={pitchShape}/></clipPath><linearGradient id={`${filterId}-grass`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#0f6f42"/><stop offset="1" stopColor="#06432e"/></linearGradient></defs>
-    <path d={pitchShape} fill={`url(#${filterId}-grass)`} stroke="#143d2f" strokeWidth="9" />
-    <GoalFrames projection={projection}/>
-    <HeatLayer mesh={densityMesh} clipId={`${filterId}-pitch-clip`} buildCount={meshBuildCount.current}/>
-    <PitchMarkings projection={projection}/>
-    <PositionalGrid projection={projection}/>
-    {contour.length > 0 && <g data-layer="cca-contour" fill="none" stroke="#C084FC" strokeWidth="3" vectorEffect="non-scaling-stroke">{contour.map(([x1, y1, x2, y2], index) => <path key={index} d={pathBetween(projection, { x: x1, y: 100 - y1 }, { x: x2, y: 100 - y2 })}/>)}</g>}
-    <g id={markerLayerId} data-layer="shots">{markerGroups.map((group, visibleIndex) => { const id = `${filterId}-shot-${group.key}`; return <ShotGlyph key={id} group={group} medianXg={medianXg} projection={projection} perspective={perspective} pixelScale={pixelScale} id={id} active={id === activeVisibleId} tooltipId={tooltipId} registerRef={(element) => { if (element) markerRefs.current.set(id, element); else markerRefs.current.delete(id); }} onActivate={(markerId) => { setActiveId(markerId); setTooltipIdState(markerId); }} onDeactivate={(markerId) => { if (tooltipIdState === markerId) setTooltipIdState(null); }} onNavigate={(direction) => navigate(visibleIndex, direction)}/>; })}</g>
-    {tooltipEntry && (() => { const anchor = projection(tooltipEntry.shot), tooltipWidth = 150, tooltipHeight = 62; const maxX = Math.max(0, BASE_VIEWPORT.width - tooltipWidth * pixelScale), maxY = Math.max(0, BASE_VIEWPORT.height - tooltipHeight * pixelScale); const x = Math.min(maxX, Math.max(0, anchor.x - 70 * pixelScale)), y = Math.min(maxY, Math.max(0, anchor.y - 82 * pixelScale)); return <g id={tooltipId} role="tooltip" pointerEvents="none" data-tooltip-width={tooltipWidth} data-tooltip-height={tooltipHeight} data-pixel-scale={pixelScale} transform={`translate(${x} ${y}) scale(${pixelScale})`}><rect width={tooltipWidth} height={tooltipHeight} rx="7" fill="#0b0e0f" fillOpacity=".96" stroke="#ffffff" strokeOpacity=".25"/><text x="10" y="18" fill="#f4f4f5" fontSize="12" fontWeight="700">{outcomePresentation[tooltipEntry.shot.outcome].label}</text><text x="10" y="37" fill="#e4e4e7" fontSize="11">xG {formatShotMetric(tooltipEntry.shot.xg)}</text><text x="10" y="53" fill="#e4e4e7" fontSize="11">xGOT {formatShotMetric(tooltipEntry.shot.xgot)}</text></g>; })()}
-    <g fill="#e4e4e7" fontSize="13" fontWeight="700" aria-hidden="true"><text x="36" y="630">Attack direction 0 → 100</text><text x="835" y="584">Lane 1 · right</text><text x="194" y="73">Lane 5 · left</text></g>
+  const endPointer = (event: ReactPointerEvent<SVGSVGElement>) => { touchPoints.current.delete(event.pointerId); pinch.current = null; if (pointerOrbit.current?.pointerId === event.pointerId) pointerOrbit.current = null; if (pointerPan.current?.pointerId === event.pointerId) pointerPan.current = null; if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId); };
+  useEffect(() => {
+    const element = rendered.ref.current;
+    if (!perspective || !element) return;
+    const handleWheel = (event: WheelEvent) => { event.preventDefault(); setCamera((current) => ({ ...current, distance: clampDistance(current.distance + event.deltaY * .04) })); };
+    element.addEventListener("wheel", handleWheel, { passive: false });
+    return () => element.removeEventListener("wheel", handleWheel);
+  }, [perspective, rendered.ref]);
+  const chooseFrame = (frame: CameraFrame) => { setCameraFrame(frame); if (perspective) setCamera((current) => ({ ...current, distance: ORBIT_FRAME_DISTANCE[frame] })); };
+  const chooseAngle = (angle: CameraAngle) => { const preset = CAMERA_ANGLE_PRESETS[angle]; setCameraAngle(angle); setCamera((current) => ({ ...current, ...preset })); };
+  return <><div className="space-y-2 border-b border-white/10 bg-black/25 px-2 py-2"><div role="group" aria-label={PITCH_VIEW_COPY.cameraAngleGroup} className="flex flex-wrap items-center gap-1">{(Object.keys(CAMERA_ANGLE_PRESETS) as CameraAngle[]).map((angle) => <button key={angle} type="button" data-camera-preset={angle} aria-pressed={cameraAngle === angle} onClick={() => chooseAngle(angle)} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold aria-pressed:bg-lime-300 aria-pressed:text-slate-950">{PITCH_VIEW_COPY.anglePresets[angle]}</button>)}</div><div className="flex flex-wrap items-center gap-2"><div role="group" aria-label={PITCH_VIEW_COPY.cameraFrameGroup} className="grid flex-1 grid-cols-3 gap-2">{(["full", "attacking", "box"] as const).map((frame) => <button key={frame} type="button" data-zoom-preset={frame} aria-pressed={cameraFrame === frame} onClick={() => chooseFrame(frame)} className="min-h-12 rounded border border-white/15 bg-[#101719] px-2 py-1 text-left text-base font-bold aria-pressed:border-sky-200 aria-pressed:bg-sky-200/15"><span className="block h-2 rounded-sm border border-white/20"><span className="block h-full bg-sky-300/35" style={{ width: frame === "full" ? "100%" : frame === "attacking" ? "50%" : "24%", marginLeft: "auto" }}/></span><span className="mt-1 block">{PITCH_VIEW_COPY.cameraFrames[frame]}</span></button>)}</div><div role="group" aria-label={PITCH_VIEW_COPY.cameraZoomGroup} className="flex items-center gap-1"><button type="button" aria-label="축소" disabled={perspective ? camera.distance >= ORBIT_DISTANCE.maximum : zoom === 1} onClick={() => perspective ? setCamera((current) => ({ ...current, distance: clampDistance(current.distance + ORBIT_DISTANCE.step) })) : setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 font-bold disabled:opacity-40">−</button><button type="button" aria-label="확대" disabled={perspective ? camera.distance <= ORBIT_DISTANCE.minimum : zoom === 3} onClick={() => perspective ? setCamera((current) => ({ ...current, distance: clampDistance(current.distance - ORBIT_DISTANCE.step) })) : setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 font-bold disabled:opacity-40">+</button><button type="button" aria-label={PITCH_VIEW_COPY.resetCamera} onClick={resetViewport} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold">초기화</button></div><p aria-live="polite" className="text-base text-zinc-300">{perspective ? `${camera.azimuth.toFixed(0)}° · ${camera.elevation.toFixed(0)}° · ${camera.distance.toFixed(0)}m` : `${zoom}배`}</p></div></div><svg ref={rendered.ref} viewBox={viewBox} preserveAspectRatio="xMidYMid meet" className="block h-auto w-full rounded-b-lg bg-[#050a08] touch-none" role="img" tabIndex={0} aria-label={`${perspective ? "3D" : "2D"} 회랑. ${heatState}. ${shotState}.`} data-camera-azimuth={perspective ? camera.azimuth : undefined} data-camera-elevation={perspective ? camera.elevation : undefined} data-camera-distance={perspective ? camera.distance : undefined} data-camera-pivot={perspective ? orbitPivot.join(",") : undefined} data-camera-frame={perspective ? cameraFrame : undefined} onPointerDown={(event) => { if (event.defaultPrevented || isInteractivePitchTarget(event.target)) return; if (perspective) { if (event.pointerType === "touch") { touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (touchPoints.current.size === 2) { const points = [...touchPoints.current.values()]; pinch.current = { gap: Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y), distance: camera.distance }; pointerOrbit.current = null; } else pointerOrbit.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, camera }; } else pointerOrbit.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, camera }; event.currentTarget.setPointerCapture?.(event.pointerId); return; } if (zoom === 1) return; pointerPan.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport }; event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { if (perspective && event.pointerType === "touch" && touchPoints.current.has(event.pointerId)) { touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (touchPoints.current.size === 2 && pinch.current) { const points = [...touchPoints.current.values()]; const gap = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y); if (gap > 0) setCamera((current) => ({ ...current, distance: clampDistance(pinch.current!.distance * pinch.current!.gap / gap) })); return; } } const orbit = pointerOrbit.current; if (orbit?.pointerId === event.pointerId) { setCameraAngle("left"); setCamera({ azimuth: orbit.camera.azimuth - (event.clientX - orbit.clientX) * .22, elevation: Math.max(12, Math.min(65, orbit.camera.elevation + (event.clientY - orbit.clientY) * .18)), distance: orbit.camera.distance }); return; } const start = pointerPan.current; if (!start || start.pointerId !== event.pointerId) return; const bounds = event.currentTarget.getBoundingClientRect(); if (!bounds.width || !bounds.height) return; setViewport(clampViewport({ x: start.viewport.x - (event.clientX - start.clientX) * visibleViewport.width / bounds.width, y: start.viewport.y - (event.clientY - start.clientY) * visibleViewport.height / bounds.height }, zoom)); }} onPointerUp={endPointer} onPointerCancel={endPointer} onLostPointerCapture={() => { pointerPan.current = null; pointerOrbit.current = null; touchPoints.current.clear(); pinch.current = null; }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); resetViewport(); return; } if (event.defaultPrevented || event.target !== event.currentTarget || perspective || zoom === 1) return; const step = Math.min(48, visibleViewport.width / 5); if (event.key === "ArrowLeft") { event.preventDefault(); panBy(-step, 0); } else if (event.key === "ArrowRight") { event.preventDefault(); panBy(step, 0); } else if (event.key === "ArrowUp") { event.preventDefault(); panBy(0, -step); } else if (event.key === "ArrowDown") { event.preventDefault(); panBy(0, step); } }}>
+    <defs><clipPath id={`${filterId}-pitch-clip`}><rect x="0" y="0" width={BASE_VIEWPORT.width} height={BASE_VIEWPORT.height}/></clipPath><filter id={`${filterId}-display-heat-blur`} x="-12%" y="-18%" width="124%" height="136%" colorInterpolationFilters="sRGB"><feGaussianBlur stdDeviation="9"/></filter><linearGradient id={`${filterId}-grass`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#123A20"/><stop offset="1" stopColor="#081F15"/></linearGradient></defs>
+    <rect data-full-turf-matte x="0" y="0" width={BASE_VIEWPORT.width} height={BASE_VIEWPORT.height} fill={`url(#${filterId}-grass)`} />
+    <path data-terrain-full="true" d={pitchShape} fill={`url(#${filterId}-grass)`} stroke="#143d2f" strokeWidth="9" />
+    <GoalFrames projection={geometryProjection}/>
+    {layers.heatmap && <HeatLayer mesh={densityMesh} clipId={`${filterId}-pitch-clip`} filterId={`${filterId}-display-heat-blur`} buildCount={meshBuildCount.current}/>}
+    <PitchMarkings projection={geometryProjection}/>
+    <PositionalGrid projection={geometryProjection}/>
+    {perspective && (() => { const start = geometryProjection.pp(50, 84.29), end = geometryProjection.pp(50, 100); return <path data-layer="corridor-box-split" d={`M${start[0]} ${start[1]}L${end[0]} ${end[1]}`} fill="none" stroke={PATH_STYLE["zone-grid"].stroke} strokeOpacity={PATH_STYLE["zone-grid"].opacity} strokeWidth={PATH_STYLE["zone-grid"].width} vectorEffect="non-scaling-stroke"/>; })()}
+    {perspective && <PositionalOccupancyLabels cells={spatial?.positionalGrid ?? []} shots={shotsValid ? spatial!.shotmapPoints : []} projection={geometryProjection} onHover={setHoveredZone}/>}
+    {perspective && (() => { const zone = hoveredZone; if (!zone) return null; const { cell, summary } = zone; const x = (POSITIONAL_DEPTH_BOUNDARIES[cell.depth] + POSITIONAL_DEPTH_BOUNDARIES[cell.depth + 1]) / 2, y = (POSITIONAL_LANE_BOUNDARIES[cell.lane] + POSITIONAL_LANE_BOUNDARIES[cell.lane + 1]) / 2; const anchor = geometryProjection.pp(y, x); const label = cell.depth * 5 + cell.lane + 1; return <g data-zone-tooltip role="tooltip" pointerEvents="none" transform={`translate(${Math.max(12, anchor[0] - 78)} ${Math.max(12, anchor[1] - 72)})`}><rect width="178" height="84" rx="7" fill="#0b0e0f" fillOpacity=".96" stroke="#ffffff" strokeOpacity=".25"/><text x="10" y="18" fill="#f8fafc" fontSize="14" fontWeight="800">구역 {label} · 깊이 {cell.depth + 1}, 레인 {cell.lane + 1}</text><text x="10" y="37" fill="#e4e4e7" fontSize="12">슈팅 비중 {summary.shotSharePct.toFixed(2)}% · 활동 {cell.occupancyPct.toFixed(2)}%</text><text x="10" y="56" fill="#e4e4e7" fontSize="12">슛 {summary.shots} · 득점 {summary.goals} · xG {summary.xg.toFixed(2)}</text><text x="10" y="74" fill="#a1a1aa" fontSize="12">숫자는 전체 슛 중 비중</text></g>; })()}
+    {layers.cca && contour.length > 0 && <g data-layer="cca-contour" fill="none" stroke={CCA_STYLE.stroke} strokeOpacity={CCA_STYLE.opacity} strokeWidth={CCA_STYLE.width} strokeDasharray={CCA_STYLE.dash} vectorEffect="non-scaling-stroke">{contour.map(([x1, y1, x2, y2], index) => <path key={index} d={pathBetween(projection, { x: x1, y: 100 - y1 }, { x: x2, y: 100 - y2 })}/>)}</g>}
+    {(layers.markers || layers.trajectories) && <g id={markerLayerId} data-layer="shots">{markerGroups.map((group, visibleIndex) => { const id = `${filterId}-shot-${group.key}`; return <ShotGlyph key={id} group={group} medianXg={medianXg} projection={projection} geometryProjection={geometryProjection} perspective={perspective} showTrajectory={layers.trajectories} showMarker={layers.markers} pixelScale={pixelScale} id={id} active={id === activeVisibleId} tooltipId={tooltipId} registerRef={(element) => { if (element) markerRefs.current.set(id, element); else markerRefs.current.delete(id); }} onActivate={(markerId) => { setActiveId(markerId); setTooltipIdState(markerId); }} onDeactivate={(markerId) => { if (tooltipIdState === markerId) setTooltipIdState(null); }} onNavigate={(direction) => navigate(visibleIndex, direction)}/>; })}</g>}
+    {layers.markers && tooltipEntry && (() => { const anchor = projection(tooltipEntry.shot), tooltipWidth = 150, tooltipHeight = 62; const maxX = Math.max(0, BASE_VIEWPORT.width - tooltipWidth * pixelScale), maxY = Math.max(0, BASE_VIEWPORT.height - tooltipHeight * pixelScale); const x = Math.min(maxX, Math.max(0, anchor.x - 70 * pixelScale)), y = Math.min(maxY, Math.max(0, anchor.y - 82 * pixelScale)); return <g id={tooltipId} role="tooltip" pointerEvents="none" data-tooltip-width={tooltipWidth} data-tooltip-height={tooltipHeight} data-pixel-scale={pixelScale} transform={`translate(${x} ${y}) scale(${pixelScale})`}><rect width={tooltipWidth} height={tooltipHeight} rx="7" fill="#0b0e0f" fillOpacity=".96" stroke="#ffffff" strokeOpacity=".25"/><text x="10" y="18" fill="#f4f4f5" fontSize="12" fontWeight="700">{outcomePresentation[tooltipEntry.shot.outcome].label}</text><text x="10" y="37" fill="#e4e4e7" fontSize="12">xG {formatShotMetric(tooltipEntry.shot.xg)}</text><text x="10" y="53" fill="#e4e4e7" fontSize="12">xGOT {formatShotMetric(tooltipEntry.shot.xgot)}</text></g>; })()}
+    <g fill="#e4e4e7" fontSize="14" fontWeight="700" aria-hidden="true"><text x="36" y="610">숫자는 슈팅 비중</text><text x="36" y="630">공격 방향 0 → 100</text><text x="835" y="584">오른쪽 외곽</text><text x="194" y="73">왼쪽 외곽</text></g>
   </svg></>;
 }
 
-export function SpatialPitch({ analysis, contextIdentity = "", forcedMode, embedded = false }: { analysis?: PlayerAnalysis; contextIdentity?: string; forcedMode?: ViewMode; embedded?: boolean }) {
+export function SpatialPitch({ analysis, contextIdentity = "", forcedMode, embedded = false, layers = DEFAULT_PITCH_LAYERS }: { analysis?: PlayerAnalysis; contextIdentity?: string; forcedMode?: ViewMode; embedded?: boolean; layers?: PitchLayerVisibility }) {
   const reducedMotion = usePrefersReducedMotion();
   const { includePenalties } = usePitchPenalty();
   const [manualMode, setManualMode] = useState<ViewMode | null>(null);
@@ -370,19 +412,16 @@ export function SpatialPitch({ analysis, contextIdentity = "", forcedMode, embed
   const displayAnalysis = useMemo(() => !analysis || !displaySpatial ? analysis : { ...analysis, spatial: displaySpatial }, [analysis, displaySpatial]);
   const controller = useShotOutcomeVisibility(displaySpatial, contextIdentity);
   const heatValid = Boolean(spatial?.available && spatial.heatmapPointCount === spatial.heatmapPoints.length && spatial.heatmapPoints.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= 100 && y >= 0 && y <= 100));
-  const heatState = !spatial?.available ? "Activity heatmap unavailable" : !heatValid ? "Activity heatmap integrity mismatch" : spatial.heatmapPoints.length ? `${spatial.heatmapPoints.length} activity points` : "Verified zero activity points";
-  const shotState = !displaySpatial?.shotmapSnapshotAvailable ? "Shot snapshot unavailable" : !controller.integrity ? "Shot snapshot integrity mismatch" : displaySpatial.shotmapPoints.length ? `${displaySpatial.shotmapPoints.length} shots` : "Verified zero shots";
-  const shotSummary = controller.integrity ? summarizeShots(displaySpatial!.shotmapPoints) : null;
-  const counts = controller.counts;
+  const heatState = !spatial?.available ? "활동 히트맵 사용 불가" : !heatValid ? "활동 히트맵 무결성 불일치" : spatial.heatmapPoints.length ? `활동 좌표 ${spatial.heatmapPoints.length}개` : "관측된 활동 좌표 0개";
+  const shotState = !displaySpatial?.shotmapSnapshotAvailable ? "슈팅 스냅샷 사용 불가" : !controller.integrity ? "슈팅 스냅샷 무결성 불일치" : displaySpatial.shotmapPoints.length ? `슛 ${displaySpatial.shotmapPoints.length}개` : "관측된 슛 0개";
   const rawId = useId().replace(/:/g, "");
   const markerLayerId = `spatial-shot-markers-${rawId}`;
   return <section className={embedded ? "min-w-0" : panel} aria-labelledby={embedded ? undefined : `spatial-pitch-${rawId}`} aria-label={embedded ? PITCH_VIEW_COPY[mode] : undefined}>
-    {!embedded && <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id={`spatial-pitch-${rawId}`} className="text-sm font-black">{PITCH_VIEW_COPY[mode]}</h2><p className="mt-1 text-[11px] text-zinc-400">Attack left → right · Lane 1 is the near/right touchline · exact positional-6×5 grid</p></div>{!forcedMode && <div role="group" aria-label="Pitch view" className="flex rounded-lg border border-white/15 bg-black/30 p-1"><button type="button" aria-pressed={mode === "perspective"} onClick={() => setManualMode("perspective")} className="min-h-9 rounded px-3 text-xs font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">{PITCH_VIEW_COPY.perspective}</button><button type="button" aria-pressed={mode === "plan"} onClick={() => setManualMode("plan")} className="min-h-9 rounded px-3 text-xs font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">{PITCH_VIEW_COPY.plan}</button></div>}</div>}
-    {reducedMotion && manualMode === null && <p className="mt-2 text-xs text-zinc-400">Reduced-motion preference detected; the 2D plan fallback is active.</p>}
-    {controller.integrity && controller.presentOutcomes.length > 0 && <OutcomeControls outcomes={controller.presentOutcomes} counts={controller.counts} visible={controller.visibleOutcomes} markerLayerId={markerLayerId} onClick={controller.onClick} onDoubleClick={controller.onDoubleClick}/>}<p role="status" aria-live="polite" className="sr-only">Visible shot outcomes: {outcomeSummary(controller.presentOutcomes.filter((outcome) => controller.visibleOutcomes.has(outcome)))}.</p>
-    <div className="mt-3 min-w-0 overflow-hidden rounded-lg border border-white/10">{mode === "plan" ? <LegacySpatialPitchFigure analysis={displayAnalysis} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} showCounts={false}/> : <figure><PitchSvg spatial={displaySpatial} mode={mode} filterId={`spatial-heat-${rawId}`} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} contextIdentity={contextIdentity}/><figcaption className="border-t border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300">{heatState}. {shotState}. The exact legacy density mesh, the authoritative CCA contour, and shot anchors share the server 0–100 coordinate transform; outcome controls affect markers only.</figcaption></figure>}</div>
-    <div className="mt-3 grid gap-2 text-xs text-zinc-400 sm:grid-cols-2"><p aria-live="polite">{heatState}. Thirty tactical cells are visual guides; no browser-side score or zone value is calculated.</p><p aria-live="polite">{shotState}. Unavailable and available-with-zero are kept distinct.</p></div>
-    {controller.integrity ? <><p data-pitch-shot-summary className="mt-2 text-xs text-zinc-300">{penaltyStateLabel(includePenalties)} · 슛 {shotSummary!.shots} · 득점 {shotSummary!.goals} · xG {shotSummary!.xg.toFixed(2)} · 전환율 {shotSummary!.conversionRatePct?.toFixed(1) ?? "—"}%</p><ul aria-label="Shot outcome legend" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-300"><li>◇ Goals {counts.goal}</li><li>● On target {counts.on_target}</li><li>× Off target {counts.off_target}</li><li>■ Blocked {counts.blocked}</li></ul></> : <p className="mt-2 text-xs text-zinc-500">Outcome totals are unavailable because no valid shot snapshot exists for this context.</p>}
-    <details className="mt-3 rounded-lg border border-white/10 bg-black/20 text-xs text-zinc-300"><summary className="min-h-11 cursor-pointer px-3 py-3 font-bold focus-visible:ring-2 focus-visible:ring-orange-200">Pitch and shot details</summary><div className="border-t border-white/10 p-3"><p>The perspective view uses the same segmented positional-play grid and source-coordinate direction as the 2D legacy pitch.</p>{!controller.integrity ? <p className="mt-3">Shot event details unavailable.</p> : displaySpatial!.shotmapPoints.length === 0 ? <p className="mt-3">Verified zero shot events.</p> : <ol aria-label="Authoritative shot events" className="mt-3 max-h-48 space-y-1 overflow-y-auto pr-1">{displaySpatial!.shotmapPoints.map((shot, index) => <li key={index} className="rounded bg-white/5 px-2 py-1">{index + 1}. {outcomeLabel[shot.outcome]} · xG {shot.xg == null ? "unavailable" : shot.xg.toFixed(2)} · xGOT {shot.xgot == null ? "unavailable" : shot.xgot.toFixed(2)} · ({shot.x.toFixed(1)}, {shot.y.toFixed(1)}){shot.trajectory ? ` · ${shot.trajectory.endpointKind === "goal_mouth" ? "goal-mouth" : "blocked"} trajectory to (${shot.trajectory.endX.toFixed(1)}, ${shot.trajectory.endY.toFixed(1)})${shot.trajectory.endpointKind === "goal_mouth" ? ` at ${shot.trajectory.endZMeters == null ? "unknown height" : `${shot.trajectory.endZMeters.toFixed(2)} m`}` : ""}` : " · trajectory unavailable"}</li>)}</ol>}</div></details>
+    {!embedded && <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id={`spatial-pitch-${rawId}`} className="text-sm font-black">{PITCH_VIEW_COPY[mode]}</h2><p className="mt-1 type-caption text-zinc-400">공격 방향 왼쪽 → 오른쪽 · 오른쪽 외곽이 가까운 터치라인 · 동일 6레인 좌표계</p></div>{!forcedMode && <div role="group" aria-label="피치 보기" className="flex rounded-lg border border-white/15 bg-black/30 p-1"><button type="button" aria-pressed={mode === "perspective"} onClick={() => setManualMode("perspective")} className="min-h-9 rounded px-3 text-base font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">{PITCH_VIEW_COPY.perspective}</button><button type="button" aria-pressed={mode === "plan"} onClick={() => setManualMode("plan")} className="min-h-9 rounded px-3 text-base font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">{PITCH_VIEW_COPY.plan}</button></div>}</div>}
+    {reducedMotion && manualMode === null && <p className="mt-2 text-base text-zinc-400">Reduced-motion preference detected; the 2D plan fallback is active.</p>}
+    {layers.markers && controller.integrity && controller.presentOutcomes.length > 0 && <OutcomeControls outcomes={controller.presentOutcomes} counts={controller.counts} visible={controller.visibleOutcomes} markerLayerId={markerLayerId} onClick={controller.onClick} onDoubleClick={controller.onDoubleClick} showCounts={false}/>}<p role="status" aria-live="polite" className="sr-only">표시 중인 슈팅 결과: {outcomeSummary(controller.presentOutcomes.filter((outcome) => controller.visibleOutcomes.has(outcome)))}.</p>
+    <div className="mt-3 min-w-0 overflow-hidden rounded-lg border border-white/10">{mode === "plan" ? <LegacySpatialPitchFigure analysis={displayAnalysis} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} showCounts={false} layers={layers} corridors/> : <figure><PitchSvg spatial={displaySpatial} mode={mode} filterId={`spatial-heat-${rawId}`} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} contextIdentity={contextIdentity} layers={layers}/><figcaption className="border-t border-white/10 bg-black/25 px-3 py-2 text-base text-zinc-300">{heatState} · {shotState} · 원본 32×22 밀도에서 계산한 CCA와 96×66 표시 히트맵을 같은 서버 좌표계에 겹쳐 표시합니다.</figcaption></figure>}</div>
+    <p className="mt-3 text-base leading-5 text-zinc-400" aria-live="polite">{heatState} · {shotState} · 전술 구획은 시각 안내선이며 브라우저에서 점수나 구역 값을 새로 계산하지 않습니다. 데이터 없음과 관측된 0은 구분합니다.</p>
+    <details className="mt-3 rounded-lg border border-white/10 bg-black/20 text-base text-zinc-300"><summary className="min-h-11 cursor-pointer px-3 py-3 font-bold focus-visible:ring-2 focus-visible:ring-orange-200">피치와 슈팅 상세</summary><div className="border-t border-white/10 p-3"><p>3D와 2D 회랑은 동일한 서버 좌표계와 레인 경계를 사용합니다.</p>{!controller.integrity ? <p className="mt-3">슈팅 이벤트 상세를 제공할 수 없습니다.</p> : displaySpatial!.shotmapPoints.length === 0 ? <p className="mt-3">관측된 슈팅 이벤트가 0건입니다.</p> : <ol aria-label="서버 슈팅 이벤트" className="mt-3 max-h-48 space-y-1 overflow-y-auto pr-1">{displaySpatial!.shotmapPoints.map((shot, index) => <li key={index} className="rounded bg-white/5 px-2 py-1">{index + 1}. {outcomeLabel[shot.outcome]} · xG {shot.xg == null ? "미상" : shot.xg.toFixed(2)} · xGOT {shot.xgot == null ? "미상" : shot.xgot.toFixed(2)} · ({shot.x.toFixed(1)}, {shot.y.toFixed(1)})</li>)}</ol>}</div></details>
   </section>;
 }

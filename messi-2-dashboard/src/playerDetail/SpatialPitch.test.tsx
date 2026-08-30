@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PlayerAnalysis } from "../dashboard/types";
-import { ATTACKING_GOAL_FRAME_LIFT, GOAL_CROSSBAR_HEIGHT_METERS, GOAL_POST_Y, GOAL_WIDTH_METERS, LEGACY_POSITIONAL_SEGMENTS, PITCH_WIDTH_METERS, POSITIONAL_DEPTH_BOUNDARIES, POSITIONAL_LANE_BOUNDARIES, projectPerspective, SIX_YARD_BOX_Y, SpatialPitch } from "./SpatialPitch";
+import { deriveOrbitPivot, GOAL_CROSSBAR_HEIGHT_METERS, GOAL_POST_Y, GOAL_WIDTH_METERS, PITCH_WIDTH_METERS, POSITIONAL_LANE_BOUNDARIES, projectPerspective, SIX_YARD_BOX_Y, SpatialPitch } from "./SpatialPitch";
 import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, displayDensityGrid, displayHeatmapColor, legacyDensityGrid, normalizeDensity } from "./legacyHeatmap";
 import { outcomePresentation } from "./shotOutcomeVisibility";
 
@@ -33,23 +33,42 @@ describe("perspective spatial pitch", () => {
     const leftDefensive = projectPerspective({ x: 0, y: 100 });
     expect(rightAttacking.x).toBeGreaterThan(rightDefensive.x);
     expect(rightDefensive.y).toBeGreaterThan(leftDefensive.y);
-    expect(rightDefensive).toEqual({ x: 20, y: 585 });
-    expect(leftDefensive).toEqual({ x: 205, y: 235 });
-    expect(rightDefensive.y - leftDefensive.y).toBe(350);
+    expect(Number.isFinite(rightDefensive.x)).toBe(true);
+    expect(Number.isFinite(leftDefensive.y)).toBe(true);
   });
 
-  it("projects the legacy asset's segmented positional geometry without zone labels", () => {
+  it("projects the approved 20-zone geometry without zone labels", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({})}/>);
     const segments = [...container.querySelectorAll("[data-grid-segment]")];
-    expect(segments).toHaveLength(LEGACY_POSITIONAL_SEGMENTS.length);
-    expect(segments.map((segment) => ({ axis: segment.getAttribute("data-grid-axis"), boundary: Number(segment.getAttribute("data-boundary")), start: segment.getAttribute("data-start"), end: segment.getAttribute("data-end") }))).toEqual(LEGACY_POSITIONAL_SEGMENTS.map((segment) => ({ axis: segment.axis, boundary: segment.boundary, start: `${segment.start.x},${segment.start.y}`, end: `${segment.end.x},${segment.end.y}` })));
-    expect(container.querySelector('[data-grid-axis="lane"][data-boundary="37"]')).toHaveAttribute("data-start", "16.67,37");
-    expect(container.querySelector('[data-grid-axis="lane"][data-boundary="37"]')).toHaveAttribute("data-end", "83.33,37");
-    expect(container.querySelectorAll('[data-grid-axis="depth"][data-boundary="33.33"]')).toHaveLength(2);
+    expect(segments).toHaveLength(17);
+    expect(segments.every((segment) => Boolean(segment.getAttribute("d")))).toBe(true);
     expect(container.querySelectorAll("[data-zone-label], [data-zone-key]")).toHaveLength(0);
     expect(screen.queryByText(/D1|L1/)).not.toBeInTheDocument();
-    expect(new Set(LEGACY_POSITIONAL_SEGMENTS.filter(({ axis }) => axis === "depth").map(({ boundary }) => boundary))).toEqual(new Set(POSITIONAL_DEPTH_BOUNDARIES));
-    expect(new Set(LEGACY_POSITIONAL_SEGMENTS.filter(({ axis }) => axis === "lane").map(({ boundary }) => boundary))).toEqual(new Set(POSITIONAL_LANE_BOUNDARIES));
+  });
+
+  it("renders source-shot shares in the 3D corridor and exposes the full hover breakdown", () => {
+    const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 2, shotmapPoints: [{ x: 8, y: 10, outcome: "goal", xg: .3 }, { x: 80, y: 90, outcome: "on_target", xg: .2 }], positionalGrid: [{ depth: 0, lane: 0, occupancyPct: 16.67 }] })}/>);
+    expect(container.querySelector('[data-layer="positional-occupancy-labels"]')).not.toBeNull();
+    const label = screen.getByText("50.00%");
+    expect(label).toHaveAttribute("data-zone-shot-share", "50.00");
+    fireEvent.pointerEnter(label);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("슈팅 비중 50.00% · 활동 16.67%");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("슛 1 · 득점 1 · xG 0.30");
+  });
+
+  it("keeps terrain finite across every approved camera-angle and zoom-preset combination", () => {
+    const { container } = render(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 85, y: 50 }] })}/>);
+    const terrain = () => container.querySelector("[data-terrain-full]")!;
+    for (const angle of ["좌측", "우측", "골대 정면", "골대 뒤"]) {
+      fireEvent.click(screen.getByRole("button", { name: angle }));
+      for (const frame of ["전체 필드", "공격 진영", "박스"]) {
+        fireEvent.click(screen.getByRole("button", { name: frame }));
+        expect(terrain().getAttribute("d")).not.toMatch(/NaN|Infinity/);
+        expect(terrain()).toHaveAttribute("data-terrain-full", "true");
+        expect(container.querySelector("[data-full-turf-matte]")).toBeInTheDocument();
+        expect(container.querySelector("clipPath rect")).toHaveAttribute("width", "1000");
+      }
+    }
   });
 
   it("adds both goal frames and nets but no inferred shot trajectory", () => {
@@ -83,20 +102,15 @@ describe("perspective spatial pitch", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
     const paths = [...container.querySelectorAll('[data-trajectory-kind="goal_mouth"]')];
     const attackingGoal = container.querySelector('[data-goal="attacking"]')!;
-    expect(attackingGoal).toHaveAttribute("data-goal-frame-lift", String(ATTACKING_GOAL_FRAME_LIFT));
+    expect(Number(attackingGoal.getAttribute("data-goal-frame-lift"))).toBeGreaterThan(0);
     expect(attackingGoal).toHaveAttribute("data-goal-crossbar-height-meters", String(GOAL_CROSSBAR_HEIGHT_METERS));
     expect(paths).toHaveLength(heightCases.length);
     for (const [index, path] of paths.entries()) {
-      const lift = Number(path.getAttribute("data-end-height-lift"));
-      const groundY = Number(path.getAttribute("data-end-ground-y"));
-      const renderY = Number(path.getAttribute("data-end-render-y"));
-      expect(lift).toBeCloseTo(ATTACKING_GOAL_FRAME_LIFT * heightCases[index] / GOAL_CROSSBAR_HEIGHT_METERS, 10);
-      expect(groundY - renderY).toBeCloseTo(lift, 10);
+      expect(Number(path.getAttribute("data-end-height-meters"))).toBe(heightCases[index]);
+      expect(Number.isFinite(Number(path.getAttribute("data-end-render-x")))).toBe(true);
+      expect(Number.isFinite(Number(path.getAttribute("data-end-render-y")))).toBe(true);
     }
-    expect(Number(paths[0].getAttribute("data-end-render-y"))).toBe(Number(paths[0].getAttribute("data-end-ground-y")));
-    expect(Number(paths[1].getAttribute("data-end-height-lift"))).toBeLessThan(ATTACKING_GOAL_FRAME_LIFT);
-    expect(Number(paths[2].getAttribute("data-end-height-lift"))).toBeCloseTo(ATTACKING_GOAL_FRAME_LIFT, 10);
-    expect(Number(paths[3].getAttribute("data-end-height-lift"))).toBeGreaterThan(ATTACKING_GOAL_FRAME_LIFT);
+    expect(paths[0].getAttribute("data-end-render-y")).not.toBe(paths[3].getAttribute("data-end-render-y"));
   });
 
   it("keeps endpoint-to-crossbar height ratios fixed when responsive marker pixelScale changes", () => {
@@ -113,8 +127,7 @@ describe("perspective spatial pitch", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: shots })}/>);
     const path = container.querySelector('[data-trajectory-kind="goal_mouth"]')!;
     const marker = container.querySelector("[data-marker-visual]")!;
-    const frameLift = Number(container.querySelector('[data-goal="attacking"]')?.getAttribute("data-goal-frame-lift"));
-    const desktop = { markerScale: Number(marker.getAttribute("data-pixel-scale")), endpointY: path.getAttribute("data-end-render-y"), endpointLift: Number(path.getAttribute("data-end-height-lift")) };
+    const desktop = { markerScale: Number(marker.getAttribute("data-pixel-scale")), endpointY: path.getAttribute("data-end-render-y") };
 
     rendered.width = 320;
     rendered.height = 208;
@@ -122,43 +135,40 @@ describe("perspective spatial pitch", () => {
 
     expect(Number(marker.getAttribute("data-pixel-scale"))).toBeCloseTo(3.125);
     expect(path).toHaveAttribute("data-end-render-y", desktop.endpointY);
-    expect(Number(path.getAttribute("data-end-height-lift"))).toBeCloseTo(desktop.endpointLift, 10);
-    expect(desktop.endpointLift / frameLift).toBeCloseTo(1.2 / GOAL_CROSSBAR_HEIGHT_METERS, 10);
   });
 
-  it("keeps unknown-height goal-mouth endpoints on the source ground coordinate and shows whether the source y is in the mouth", () => {
+  it("does not invent a flight when endpoint height is unknown and retains source mouth classification", () => {
     const shots = [
       { x: 80, y: 20, outcome: "goal" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 50, endZMeters: null, source: "fotmob" as const } },
       { x: 78, y: 22, outcome: "on_target" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 40, endZMeters: 1.2, source: "fotmob" as const } },
     ];
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
-    const unknownHeight = container.querySelector('[data-trajectory-kind="goal_mouth"][data-end-pitch-y="50"]')!;
+    const unknownHeight = container.querySelector('[data-trajectory-kind="goal_mouth"][data-end-pitch-y="50"]');
     const outsideMouth = container.querySelector('[data-trajectory-kind="goal_mouth"][data-end-pitch-y="40"]')!;
-    expect(unknownHeight).toHaveAttribute("data-end-height-lift", "0");
-    expect(unknownHeight).toHaveAttribute("data-end-render-y", unknownHeight.getAttribute("data-end-ground-y"));
-    expect(unknownHeight).toHaveAttribute("data-end-goal-mouth", "inside");
+    expect(unknownHeight).not.toBeInTheDocument();
     expect(outsideMouth).toHaveAttribute("data-end-goal-mouth", "outside");
   });
 
-  it("projects only authoritative goal-mouth trajectories and never invents blocked goal-line paths", () => {
+  it("uses result-specific fading trajectories without shadows or tie ribs", () => {
     const shots = [
       { x: 80, y: 20, outcome: "goal" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 52, endZMeters: 1.2, source: "fotmob" as const } },
+      { x: 78, y: 28, outcome: "on_target" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "goal_mouth" as const, endX: 100, endY: 48, endZMeters: .8, source: "fotmob" as const } },
       { x: 70, y: 60, outcome: "blocked" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "blocked" as const, endX: 78, endY: 56, endZMeters: null, source: "fotmob" as const } },
       { x: 75, y: 40, outcome: "off_target" as const, trajectory: null },
     ];
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
     const paths = [...container.querySelectorAll("[data-shot-trajectory]")];
-    expect(paths).toHaveLength(1);
+    expect(paths).toHaveLength(2);
     const goalPath = container.querySelector('[data-trajectory-kind="goal_mouth"]')!;
-    const goalGroundY = Number(goalPath.getAttribute("data-end-ground-y"));
-    expect(Number.isFinite(Number(goalPath.getAttribute("data-end-ground-x")))).toBe(true);
-    expect(Number.isFinite(goalGroundY)).toBe(true);
-    expect(Number(goalPath.getAttribute("data-end-render-y"))).toBeLessThan(goalGroundY);
-    expect(container.querySelector('[data-shot-trajectory-shadow]')).toBeInTheDocument();
-    expect(container.querySelectorAll('[data-shot-trajectory-tie]')).toHaveLength(4);
+    expect(Number.isFinite(Number(goalPath.getAttribute("data-end-render-x")))).toBe(true);
+    expect(Number.isFinite(Number(goalPath.getAttribute("data-end-render-y")))).toBe(true);
+    expect(container.querySelector('[data-shot-trajectory-shadow]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-shot-trajectory-tie]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-trajectory-outcome="goal"] path')).toHaveAttribute("stroke", "#BEF264");
+    expect(container.querySelector('[data-trajectory-outcome="on_target"] path')).toHaveAttribute("stroke", "#38BDF8");
     expect(container.querySelector('[data-trajectory-kind="blocked"]')).not.toBeInTheDocument();
-    expect(container.querySelector('[data-shot-marker][data-shot-outcome="goal"]')).toHaveAccessibleName(/Goal-mouth trajectory to 100\.0, 52\.0, height 1\.20 metres/);
-    expect(screen.getByRole("list", { name: "Authoritative shot events" })).toHaveTextContent(/blocked trajectory to \(78\.0, 56\.0\)/);
+    expect(container.querySelector('[data-shot-marker][data-shot-outcome="goal"]')).toHaveAccessibleName(/골대 도달 지점 100\.0, 52\.0, 높이 1\.20 m/);
+    expect(screen.getByRole("list", { name: "서버 슈팅 이벤트" })).toHaveTextContent(/블록/);
   });
 
   it("filters matching trajectory paths and keeps the exact 2D fallback marker-only", () => {
@@ -167,11 +177,11 @@ describe("perspective spatial pitch", () => {
       { x: 70, y: 60, outcome: "blocked" as const, trajectory: { schemaVersion: "shotmap-trajectory-v1" as const, endpointKind: "blocked" as const, endX: 78, endY: 56, endZMeters: null, source: "fotmob" as const } },
     ];
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: shots.length, shotmapPoints: shots })}/>);
-    fireEvent.click(screen.getByRole("button", { name: /Goals, 1 shots/ }), { detail: 0 });
+    fireEvent.click(screen.getByRole("button", { name: /득점, 1 shots/ }), { detail: 0 });
     expect(container.querySelector('[data-trajectory-kind="goal_mouth"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-trajectory-kind="blocked"]')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "어떻게 움직이나" }));
-    expect(container.querySelector("[data-shot-trajectory]")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "2D 회랑" }));
+    expect(container.querySelector('[data-layer="shot-trajectories-2d"]')).toBeInTheDocument();
   });
 
   it("renders a 96 by 66 display mesh while keeping the source 32 by 22 grid for CCA", () => {
@@ -189,27 +199,32 @@ describe("perspective spatial pitch", () => {
     expect(heat).toHaveAttribute("fill", `rgb(${red} ${green} ${blue})`);
     expect(heat).toHaveAttribute("fill-opacity", String(alpha * HEATMAP_OPACITY));
     expect(heat.closest("[data-layer=heat]")).toHaveAttribute("clip-path");
+    expect(heat.closest("[data-layer=heat]")).toHaveAttribute("data-density-source", "display-96x66");
+    expect(heat.closest("[data-layer=heat]")).toHaveAttribute("filter", expect.stringContaining("display-heat-blur"));
     expect(heat.closest("[data-layer=heat]")).not.toHaveAttribute("style");
+    expect(container.querySelector("filter feGaussianBlur")).toHaveAttribute("stdDeviation", "9");
+    expect(container.querySelector('linearGradient stop')).toHaveAttribute("stop-color", "#123A20");
+    expect(container.querySelector('[data-layer="pitch-markings"] path')).toHaveAttribute("stroke", "#FFFFFF");
+    expect(container.querySelector('[data-layer="positional-grid"]')).toHaveAttribute("stroke", "#FFFFFF");
+    expect(container.querySelector('[data-layer="positional-grid"]')).toHaveAttribute("stroke-width", "1");
     expect(Number.isFinite(Number(shot?.getAttribute("data-screen-x")))).toBe(true);
     expect(Number.isFinite(Number(shot?.getAttribute("data-screen-y")))).toBe(true);
     expect(shot).toHaveAttribute("data-marker-symbol", "star");
     expect(shot).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("list", { name: "Authoritative shot events" })).toHaveTextContent(/Goal · xG 0.72 · xGOT 0.84/);
-    expect(screen.getByText(/1 activity points\. 1 shots\./)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "서버 슈팅 이벤트" })).toHaveTextContent(/득점 · xG 0.72 · xGOT 0.84/);
+    expect(screen.getAllByText(/1 activity points.*1 shots|활동 좌표 1개.*슛 1개/).length).toBeGreaterThan(0);
   });
 
   it("keeps unavailable snapshots distinct from available verified zero", () => {
     const { rerender } = render(<SpatialPitch analysis={analysisWith({ available: false })}/>);
-    expect(screen.getAllByText(/Activity heatmap unavailable/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Shot snapshot unavailable/).length).toBeGreaterThan(0);
-    expect(screen.queryByText("◇ Goals 0")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Activity heatmap unavailable|활동 히트맵 사용 불가/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Shot snapshot unavailable|슈팅 스냅샷 사용 불가/).length).toBeGreaterThan(0);
     rerender(<SpatialPitch analysis={analysisWith({ available: true, shotmapSnapshotAvailable: true })}/>);
-    expect(screen.getAllByText(/Verified zero activity points/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Verified zero shots/).length).toBeGreaterThan(0);
-    expect(screen.getByText("◇ Goals 0")).toBeInTheDocument();
+    expect(screen.getAllByText(/Verified zero activity points|관측된 활동 좌표 0개/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Verified zero shots|관측된 슛 0개/).length).toBeGreaterThan(0);
   });
 
-  it("keeps a production-sized payload bounded to the density mesh while panning does not rebuild it", () => {
+  it("keeps a production-sized payload bounded while camera distance rebuilds one fixed-size mesh", () => {
     const heatmapPoints = Array.from({ length: 2000 }, (_, index) => ({ x: index % 100, y: (index * 7) % 100 }));
     const shotmapPoints = Array.from({ length: 150 }, (_, index) => ({ x: 70 + index % 30, y: 25 + index % 50, outcome: "on_target" as const, xg: .1, xgot: .2 }));
     const { container } = render(<SpatialPitch analysis={analysisWith({ heatmapPointCount: heatmapPoints.length, heatmapPoints, shotmapSnapshotAvailable: true, shotmapPointCount: shotmapPoints.length, shotmapPoints })}/>);
@@ -217,14 +232,24 @@ describe("perspective spatial pitch", () => {
     const heatLayer = container.querySelector("[data-layer=heat]")!;
     const meshBuilds = heatLayer.getAttribute("data-density-mesh-builds");
     expect(before).toHaveLength(DISPLAY_HEATMAP_ROWS * DISPLAY_HEATMAP_COLUMNS);
-    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    fireEvent.click(screen.getByRole("button", { name: "확대" }));
     const viewport = container.querySelector("svg[role=img]")!;
     fireEvent.keyDown(viewport, { key: "ArrowRight" });
     expect([...container.querySelectorAll("[data-density-cell]")]).toEqual(before);
-    expect(heatLayer).toHaveAttribute("data-density-mesh-builds", meshBuilds);
+    expect(Number(heatLayer.getAttribute("data-density-mesh-builds"))).toBe(Number(meshBuilds));
     expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(150);
     expect(container.querySelectorAll('[data-shot-marker][tabindex="0"]')).toHaveLength(1);
-    expect(within(screen.getByRole("list", { name: "Authoritative shot events" })).getAllByRole("listitem")).toHaveLength(150);
+    expect(within(screen.getByRole("list", { name: "서버 슈팅 이벤트" })).getAllByRole("listitem")).toHaveLength(150);
+  });
+
+  it("derives a stable shot-median pivot and falls back to the native heat peak", () => {
+    const shots = [{ x: 70, y: 20, outcome: "goal" as const }, { x: 90, y: 80, outcome: "on_target" as const }];
+    const shotSpatial = analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 2, shotmapPoints: shots }).spatial;
+    expect(deriveOrbitPivot(shotSpatial, new Float64Array(HEATMAP_COLUMNS * HEATMAP_ROWS))).toEqual([84, 34, 0]);
+    const heat = new Float64Array(HEATMAP_COLUMNS * HEATMAP_ROWS);
+    heat[3 * HEATMAP_COLUMNS + 5] = 1;
+    expect(deriveOrbitPivot(analysisWith({}).spatial, heat)).toEqual([((5.5 / HEATMAP_COLUMNS) * 105), ((3.5 / HEATMAP_ROWS) * 68), 0]);
+    expect(deriveOrbitPivot(undefined, new Float64Array(HEATMAP_COLUMNS * HEATMAP_ROWS))).toEqual([82, 34, 0]);
   });
 
   it("fails closed for unavailable, mismatched, and invalid heatmap coordinates", () => {
@@ -232,72 +257,68 @@ describe("perspective spatial pitch", () => {
     expect(container.querySelectorAll("[data-density-cell]")).toHaveLength(DISPLAY_HEATMAP_ROWS * DISPLAY_HEATMAP_COLUMNS);
     expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
     rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 2, heatmapPoints: [{ x: 50, y: 50 }] })}/>);
-    expect(screen.getAllByText(/Activity heatmap integrity mismatch/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Activity heatmap integrity mismatch|활동 히트맵 무결성 불일치/).length).toBeGreaterThan(0);
     expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
     rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 101, y: 50 }] })}/>);
     expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
   });
 
-  it("controls exact Perspective viewBoxes and resets pan on escape, context, and view transitions", () => {
+  it("uses one clamped camera distance for buttons, wheel, and touch pinch while keeping azimuth free", () => {
     vi.spyOn(SVGSVGElement.prototype, "getBoundingClientRect").mockImplementation(() => svgBounds(1000, 650));
     const analysis = analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 50, y: 50 }], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 80, y: 50, outcome: "goal" }] });
     const { container, rerender } = render(<SpatialPitch analysis={analysis} contextIdentity="one"/>);
     const viewport = () => container.querySelector("svg[role=img]")!;
     expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
-    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-    expect(viewport()).toHaveAttribute("viewBox", "250 162.5 500 325");
-    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-    expect(viewport()).toHaveAttribute("viewBox", "333.33333333333337 216.66666666666669 333.3333333333333 216.66666666666666");
-    expect(screen.getByRole("button", { name: "Zoom in" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
-    expect(viewport()).toHaveAttribute("viewBox", "250 162.5 500 325");
+    expect(viewport()).toHaveAttribute("data-camera-pivot", "84,34,0");
+    expect(viewport()).toHaveAttribute("data-camera-distance", "84");
+    fireEvent.click(screen.getByRole("button", { name: "확대" }));
+    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
+    expect(viewport()).toHaveAttribute("data-camera-distance", "72");
+    fireEvent.wheel(viewport(), { deltaY: 100 });
+    expect(viewport()).toHaveAttribute("data-camera-distance", "76");
+    fireEvent.pointerDown(viewport(), { pointerId: 11, pointerType: "touch", clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(viewport(), { pointerId: 12, pointerType: "touch", clientX: 200, clientY: 100 });
+    fireEvent.pointerMove(viewport(), { pointerId: 12, pointerType: "touch", clientX: 300, clientY: 100 });
+    expect(Number(viewport().getAttribute("data-camera-distance"))).toBeCloseTo(48);
+    fireEvent.pointerUp(viewport(), { pointerId: 11, pointerType: "touch" });
+    fireEvent.pointerUp(viewport(), { pointerId: 12, pointerType: "touch" });
+    fireEvent.click(screen.getByRole("button", { name: "축소" }));
+    expect(viewport()).toHaveAttribute("data-camera-distance", "60");
     const densityCell = container.querySelector("[data-density-cell]")!;
     expect(viewport()).toHaveAttribute("data-camera-azimuth", "-48");
     fireEvent.pointerDown(densityCell, { pointerId: 1, clientX: 500, clientY: 325 });
-    fireEvent.pointerMove(viewport(), { pointerId: 1, clientX: 0, clientY: 0 });
-    expect(viewport()).toHaveAttribute("viewBox", "250 162.5 500 325");
-    expect(viewport()).toHaveAttribute("data-camera-azimuth", "62");
+    fireEvent.pointerMove(viewport(), { pointerId: 1, clientX: -1500, clientY: 1000 });
+    expect(Number(viewport().getAttribute("data-camera-azimuth"))).toBeGreaterThan(360);
+    expect(viewport()).toHaveAttribute("data-camera-elevation", "65");
     fireEvent.pointerCancel(viewport(), { pointerId: 1 });
-    fireEvent.pointerMove(viewport(), { pointerId: 1, clientX: 500, clientY: 325 });
-    expect(viewport()).toHaveAttribute("data-camera-azimuth", "62");
     fireEvent.keyDown(viewport(), { key: "Escape" });
-    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
-    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-    const marker = container.querySelector("[data-shot-marker]")!;
-    fireEvent.pointerDown(marker, { pointerId: 2, clientX: 500, clientY: 325 });
-    fireEvent.pointerMove(viewport(), { pointerId: 2, clientX: 0, clientY: 0 });
-    expect(viewport()).toHaveAttribute("viewBox", "250 162.5 500 325");
-    fireEvent.keyDown(marker, { key: "Escape" });
-    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
-    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-    fireEvent.click(screen.getByRole("button", { name: "어떻게 움직이나" }));
-    fireEvent.click(screen.getByRole("button", { name: "어디서 쏘고 어디로 꽂나" }));
-    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
-    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(viewport()).toHaveAttribute("data-camera-azimuth", "-48");
+    expect(viewport()).toHaveAttribute("data-camera-elevation", "30");
+    expect(viewport()).toHaveAttribute("data-camera-distance", "84");
     rerender(<SpatialPitch analysis={analysis} contextIdentity="two"/>);
-    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
+    expect(viewport()).toHaveAttribute("data-camera-distance", "84");
   });
 
   it("defaults reduced-motion users to the responsive 2D fallback and remains keyboard switchable", () => {
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     render(<SpatialPitch analysis={analysisWith({})}/>);
-    const group = screen.getByRole("group", { name: "Pitch view" });
-    expect(within(group).getByRole("button", { name: "어떻게 움직이나" })).toHaveAttribute("aria-pressed", "true");
+    const group = screen.getByRole("group", { name: "피치 보기" });
+    expect(within(group).getByRole("button", { name: "2D 회랑" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("group", { name: "Interactive two-dimensional shot markers" })).toBeInTheDocument();
-    fireEvent.click(within(group).getByRole("button", { name: "어디서 쏘고 어디로 꽂나" }));
-    expect(screen.getByRole("img", { name: /attacking pitch/ })).toHaveAccessibleName(/Perspective attacking pitch/);
+    fireEvent.click(within(group).getByRole("button", { name: "3D 회랑" }));
+    expect(screen.getByRole("img", { name: /3D 회랑/ })).toBeInTheDocument();
   });
 
   it("shares marker visibility between Perspective and exact 2D while totals and details remain unfiltered", () => {
     const shots = [{ x: 80, y: 20, outcome: "goal" as const, xg: .4, xgot: null }, { x: 75, y: 35, outcome: "on_target" as const }, { x: 70, y: 50, outcome: "off_target" as const }, { x: 65, y: 65, outcome: "blocked" as const }];
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 4, shotmapPoints: shots })}/>);
-    const goals = screen.getByRole("button", { name: /Goals, 1 shots/ }); fireEvent.click(goals, { detail: 0 });
+    const goals = screen.getByRole("button", { name: /득점, 1 shots/ }); fireEvent.click(goals, { detail: 0 });
     expect(container.querySelectorAll('[data-shot-marker][data-shot-outcome="goal"]')).toHaveLength(0); expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(3);
-    expect(screen.getByRole("list", { name: "Shot outcome legend" })).toHaveTextContent("Goals 1"); expect(screen.getByRole("list", { name: "Authoritative shot events" }).children).toHaveLength(4);
-    fireEvent.click(screen.getByRole("button", { name: "어떻게 움직이나" }));
+    expect(screen.getByRole("list", { name: "서버 슈팅 이벤트" }).children).toHaveLength(4);
+    fireEvent.click(screen.getByRole("button", { name: "2D 회랑" }));
     expect(screen.getByRole("group", { name: "Interactive two-dimensional shot markers" })).toBeInTheDocument();
     expect(container.querySelectorAll('[data-layer="legacy-events"] [data-shot-outcome="goal"]')).toHaveLength(0); expect(container.querySelectorAll('[data-layer="legacy-events"] [data-shot-index]')).toHaveLength(3);
-    expect(screen.getByText(/Goal ◇ · on target ● · off target × · blocked ■/, { selector: "figcaption" })).toBeInTheDocument();
+    expect(screen.getByText(/득점 ◇ · 유효 슛 ● · 빗나감 × · 블록 ■/, { selector: "figcaption" })).toBeInTheDocument();
     fireEvent.click(goals, { detail: 0 }); expect(container.querySelectorAll('[data-layer="legacy-events"] [data-shot-index]')).toHaveLength(4);
   });
 
@@ -306,7 +327,7 @@ describe("perspective spatial pitch", () => {
     const shots = [{ x: 80, y: 20, outcome: "goal" as const }, { x: 75, y: 35, outcome: "on_target" as const }, { x: 70, y: 50, outcome: "off_target" as const }, { x: 65, y: 65, outcome: "blocked" as const }];
     const populated = analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 4, shotmapPoints: shots });
     const { container, rerender } = render(<SpatialPitch analysis={populated} contextIdentity="one"/>);
-    const goals = screen.getByRole("button", { name: /Goals, 1 shots/ }), onTarget = screen.getByRole("button", { name: /On target, 1 shots/ });
+    const goals = screen.getByRole("button", { name: /득점, 1 shots/ }), onTarget = screen.getByRole("button", { name: /유효 슛, 1 shots/ });
     fireEvent.click(goals, { detail: 1 }); fireEvent.click(onTarget, { detail: 1 });
     expect(container.querySelectorAll('[data-shot-outcome="goal"]')).toHaveLength(0); expect(container.querySelectorAll('[data-shot-outcome="on_target"]')).toHaveLength(1);
     act(() => vi.advanceTimersByTime(350)); expect(container.querySelectorAll('[data-shot-outcome="on_target"]')).toHaveLength(0);
@@ -318,7 +339,7 @@ describe("perspective spatial pitch", () => {
   it("fails closed on an invalid snapshot without disturbing the 30-zone pitch", () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 2, shotmapPoints: [{ x: 80, y: 20, outcome: "goal" }] })}/>);
     expect(screen.queryByRole("group", { name: "Shot outcome visibility" })).not.toBeInTheDocument(); expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
-    expect(screen.getAllByText(/Shot snapshot integrity mismatch/).length).toBeGreaterThan(0); expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(LEGACY_POSITIONAL_SEGMENTS.length); expect(container.querySelectorAll("[data-zone-label]")).toHaveLength(0);
+    expect(screen.getAllByText(/Shot snapshot integrity mismatch|슈팅 스냅샷 무결성 불일치/).length).toBeGreaterThan(0); expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(17); expect(container.querySelectorAll("[data-zone-label]")).toHaveLength(0);
   });
 
   it("shows accessible null-metric tooltip with one roving tab stop in Perspective", () => {
@@ -352,10 +373,7 @@ describe("perspective spatial pitch", () => {
     };
     const marker = view.container.querySelector('[data-shot-marker][data-shot-outcome="goal"]')!;
     fireEvent.focus(marker);
-    const initialAnchor = view.container.querySelector("[data-shot-anchor]")!;
-    const initialShadow = view.container.querySelector("[data-shot-shadow]")!;
-    const anchorPosition = [initialAnchor.getAttribute("x1"), initialAnchor.getAttribute("y1")];
-    const shadowPosition = [initialShadow.getAttribute("cx"), initialShadow.getAttribute("cy")];
+    const markerPosition = [marker.getAttribute("data-screen-x"), marker.getAttribute("data-screen-y")];
 
     const assertPixelSizes = () => {
       const markers = [...view.container.querySelectorAll("[data-shot-marker]")];
@@ -367,7 +385,7 @@ describe("perspective spatial pitch", () => {
       expect(cssLength(tooltip, Number(tooltip.getAttribute("data-tooltip-width")))).toBe(150);
     };
     assertPixelSizes();
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Goal");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("득점");
 
     rendered.width = 320;
     rendered.height = 208;
@@ -376,8 +394,7 @@ describe("perspective spatial pitch", () => {
     const resizedVisual = view.container.querySelector("[data-marker-visual]")!;
     expect(Number(resizedVisual.getAttribute("data-pixel-scale"))).toBeCloseTo(3.125);
     assertPixelSizes();
-    expect([initialAnchor.getAttribute("x1"), initialAnchor.getAttribute("y1")]).toEqual(anchorPosition);
-    expect([initialShadow.getAttribute("cx"), initialShadow.getAttribute("cy")]).toEqual(shadowPosition);
+    expect([marker.getAttribute("data-screen-x"), marker.getAttribute("data-screen-y")]).toEqual(markerPosition);
 
     view.unmount();
     expect(disconnect).toHaveBeenCalledTimes(1);

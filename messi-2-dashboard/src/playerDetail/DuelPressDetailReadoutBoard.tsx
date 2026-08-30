@@ -1,5 +1,4 @@
-import { cloneElement, isValidElement, useId, useState, type ReactNode } from "react";
-import { getScoreBand } from "../dashboard/scoutingConfig";
+import { useId, useState, type ReactNode } from "react";
 import { duelPressAxisLabels } from "../dashboard/duelPressAxisLabels";
 import type { DuelPressDetailReadout, DuelPressDetailReadoutEnvelope } from "../api/duelPressDetailReadoutContracts";
 
@@ -7,7 +6,63 @@ const directions = { higher_is_better: "높을수록 좋음", lower_is_better: "
 const units = { count: "회", per90: "/90", goals: "골", percent: "%", score: "점" } as const;
 const source = { player_season_total: "선수 시즌 원자료", league_per90_fallback: "리그 /90 대체 원자료", tactical_ratio_static: "전술 비율 정적 자료", server_derived: "서버 산출", unavailable: "제공 불가" } as const;
 const state = { observed: "관측", server_derived: "서버 산출", imputed: "대체", unavailable: "제공 불가", legacy_partial: "부분 제공" } as const;
-const ground = new Set(["groundDuelAttempts", "groundWonPer90", "groundLostPer90", "duelMarginPer90", "groundDuelWinRate"]);
+
+type CategoryId = DuelPressDetailReadoutEnvelope["categories"][number]["id"];
+type GroupKind = "volume" | "ratio" | "reference";
+type RowSpec = { id: string; label: string; signed?: boolean };
+type GroupSpec = { kind: GroupKind; label: string; rows: readonly RowSpec[] };
+
+const CATEGORY_COLUMNS: readonly (readonly CategoryId[])[] = [
+  ["outsideShot", "dangerZone"],
+  ["boxThreat", "spaceControl"],
+  ["combinedDuel", "forwardPress"],
+];
+
+const CATEGORY_GROUPS: Readonly<Record<CategoryId, readonly GroupSpec[]>> = {
+  outsideShot: [
+    { kind: "volume", label: "볼륨 50%", rows: [{ id: "outsideBoxShots", label: "박스 밖 슈팅" }] },
+    { kind: "ratio", label: "비율 50%", rows: [{ id: "outsideBoxShotQualityGoals", label: "슈팅 질 (xGOT−xG)", signed: true }] },
+    { kind: "reference", label: "참고", rows: [{ id: "outsideBoxXg", label: "박스 밖 xG" }, { id: "outsideBoxXgot", label: "박스 밖 xGOT" }] },
+  ],
+  boxThreat: [
+    { kind: "volume", label: "볼륨 50%", rows: [{ id: "inBoxShots", label: "박스 안 슈팅" }] },
+    { kind: "ratio", label: "비율 50%", rows: [{ id: "inBoxFinishingPer90", label: "순수 결정력 /90  70%", signed: true }, { id: "deepBoxZoneScore", label: "딥 박스 존 점유  30%" }] },
+    { kind: "reference", label: "참고", rows: [{ id: "inBoxXg", label: "박스 안 xG" }, { id: "inBoxXgot", label: "박스 안 xGOT" }, { id: "inBoxFinishingGoals", label: "순수 결정력 (xGOT−xG)", signed: true }] },
+  ],
+  dangerZone: [
+    { kind: "volume", label: "볼륨 50%", rows: [{ id: "dribbleAttempts", label: "드리블 시도" }] },
+    { kind: "ratio", label: "비율 50%", rows: [{ id: "dribbleMarginPer90", label: "드리블 마진 /90  35%", signed: true }, { id: "dangerZoneDensity", label: "위험 지역 밀도  15%" }] },
+    { kind: "reference", label: "참고", rows: [{ id: "successfulDribblesPer90", label: "성공 드리블 /90" }, { id: "failedDribblesPer90", label: "실패 드리블 /90" }, { id: "dribbleSuccessRate", label: "드리블 성공률" }] },
+  ],
+  combinedDuel: [
+    { kind: "volume", label: "볼륨 50%", rows: [{ id: "groundDuelAttempts", label: "지상 경합 시도" }, { id: "aerialDuelAttempts", label: "공중 경합 시도" }] },
+    { kind: "ratio", label: "비율 50%", rows: [{ id: "duelMarginPer90", label: "지상 마진 /90", signed: true }, { id: "aerialMarginPer90", label: "공중 마진 /90", signed: true }] },
+    { kind: "reference", label: "참고", rows: [{ id: "groundWonPer90", label: "지상 승리 /90" }, { id: "groundLostPer90", label: "지상 패배 /90" }, { id: "groundDuelWinRate", label: "지상 승률" }, { id: "aerialWonPer90", label: "공중 승리 /90" }, { id: "aerialLostPer90", label: "공중 패배 /90" }, { id: "aerialDuelWinRate", label: "공중 승률" }] },
+  ],
+  spaceControl: [
+    { kind: "volume", label: "볼륨 50%", rows: [{ id: "ccaAreaPct", label: "CCA 면적" }] },
+    { kind: "ratio", label: "비율 50%", rows: [{ id: "dangerZoneDensity", label: "위험 지역 밀도" }] },
+  ],
+  forwardPress: [
+    { kind: "volume", label: "볼륨 50%", rows: [{ id: "recoveriesPer90", label: "회수 /90" }] },
+    { kind: "ratio", label: "비율 50%", rows: [{ id: "finalThirdPossessionsWonPer90", label: "파이널 서드 탈취 /90" }] },
+    { kind: "reference", label: "참고", rows: [{ id: "recoveries", label: "회수" }, { id: "finalThirdPossessionsWon", label: "파이널 서드 탈취" }] },
+  ],
+};
+
+const COLORS = {
+  panel: "var(--messi-panel, #101516)", border: "var(--messi-border, #252d2e)", text: "var(--messi-text, #f5f8f7)", muted: "var(--messi-muted, #949f9f)", accent: "var(--messi-accent, #b5f052)", violet: "var(--messi-violet, #ab8ffa)", cyan: "var(--messi-cyan, #45d6ed)", amber: "var(--messi-amber, #f5b247)", rose: "var(--messi-rose, #fa6e7a)",
+} as const;
+
+function bandColor(score: number | null) {
+  if (score === null) return COLORS.muted;
+  if (score >= 90) return COLORS.violet;
+  if (score >= 80) return COLORS.accent;
+  if (score >= 70) return COLORS.cyan;
+  if (score >= 60) return COLORS.amber;
+  if (score >= 50) return COLORS.muted;
+  return COLORS.rose;
+}
 
 function number(value: number) { return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, ""); }
 
@@ -17,140 +72,49 @@ export function formatAuthoritativePercentile(percentile: number | null): number
   return Math.min(99, Math.max(0, Math.floor(percentile)));
 }
 
-const scoreBadgeGeometry = "inline-flex min-w-10 items-center justify-center rounded-md border px-2 font-mono text-[13px] font-bold h-8";
-const unavailableBadge = "border-zinc-400/30 bg-zinc-400/10 text-zinc-300";
-
-function scoreTextToken(score: number) {
-  return `${scoreBadgeGeometry} ${getScoreBand(score).className}`;
+function displayRawValue(item: DuelPressDetailReadout, signed = false) {
+  if (item.value === null || item.state === "unavailable") return "—";
+  const formatted = item.unit === "percent" ? `${number(item.value)}%` : number(item.value);
+  if (!signed || item.value === 0 || item.unit === "percent") return formatted;
+  return item.value > 0 ? `+${formatted}` : formatted.replace("-", "−");
 }
 
 function comparisonDetails(comparison: DuelPressDetailReadout["comparison"]) {
-  return <>
-    {comparison.percentile !== null && <p>원본 백분위: {number(comparison.percentile)}</p>}
-    {comparison.median !== null && <p>중앙값: {number(comparison.median)}</p>}
-    {comparison.rank !== null && <p>순위/모집단: {comparison.rank}/{comparison.population}</p>}
-    {comparison.rank === null && comparison.population > 0 && <p>비교 모집단: {comparison.population}</p>}
-    {comparison.state !== "available" && <p>비교 상태: {comparison.state === "unavailable" ? "제공 불가" : "비적용"}</p>}
-  </>;
+  return <>{comparison.percentile !== null && <p>원본 백분위: {number(comparison.percentile)}</p>}{comparison.median !== null && <p>중앙값: {number(comparison.median)}</p>}{comparison.rank !== null && <p>순위/모집단: {comparison.rank}/{comparison.population}</p>}{comparison.rank === null && comparison.population > 0 && <p>비교 모집단: {comparison.population}</p>}{comparison.state !== "available" && <p>비교 상태: {comparison.state === "unavailable" ? "제공 불가" : "비적용"}</p>}</>;
 }
 
-function DetailsTooltip({ label, displayValue, children, trigger }: { label: string; displayValue: string; children: ReactNode; trigger: ReactNode }) {
+function DetailsTooltip({ label, children, trigger }: { label: string; children: ReactNode; trigger: ReactNode }) {
   const [open, setOpen] = useState(false);
   const tooltipId = `detail-tooltip-${useId().replace(/:/g, "")}`;
-  const triggerClassName = isValidElement<{ className?: string }>(trigger) ? trigger.props.className ?? "" : "";
-  const renderedTrigger = triggerClassName.includes("text-zinc-") && isValidElement<{ className?: string }>(trigger)
-    ? cloneElement(trigger, { className: `${scoreBadgeGeometry} ${unavailableBadge}` })
-    : trigger;
-  return <span className="relative inline-flex min-w-0" onPointerEnter={() => setOpen(true)} onPointerLeave={() => setOpen(false)}>
-    <button
-      type="button"
-      aria-label={`${label} ${displayValue} 상세 정보`}
-      aria-describedby={open ? tooltipId : undefined}
-      className="min-w-0 rounded text-inherit outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
-      onClick={() => setOpen(true)}
-      onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.currentTarget.blur(); setOpen(false); } }}
-    >{renderedTrigger}</button>
-    {open && <span id={tooltipId} role="tooltip" className="absolute right-0 top-full z-20 mt-2 w-64 rounded border border-white/20 bg-[#101415] p-3 text-left text-[11px] leading-4 text-zinc-200 shadow-lg">{children}</span>}
-  </span>;
+  return <span className="relative inline-flex min-w-0" onPointerEnter={() => setOpen(true)} onPointerLeave={() => setOpen(false)}><button type="button" aria-label={`${label} 상세 정보`} aria-describedby={open ? tooltipId : undefined} className="min-w-0 rounded text-inherit outline-none focus-visible:ring-2 focus-visible:ring-lime-300" onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onClick={() => setOpen((value) => !value)}>{trigger}</button>{open && <span id={tooltipId} role="tooltip" className="absolute right-0 top-full z-20 mt-2 w-64 rounded border border-white/20 bg-[#101415] p-3 text-left type-caption text-zinc-200 shadow-lg">{children}</span>}</span>;
 }
 
 function ReadoutDetails({ item }: { item: DuelPressDetailReadout }) {
-  return <>
-    <p>원본 값: {item.value === null ? "제공 불가" : `${number(item.value)} ${units[item.unit]}`}</p>
-    {comparisonDetails(item.comparison)}
-    <p>상태: {state[item.state]}</p>
-    <p>출처: {source[item.source]}</p>
-    <p>방향: {directions[item.direction]}</p>
-    {item.formulaId !== null && item.formulaVersion !== null && <p>계산식: {item.formulaId} (v{item.formulaVersion})</p>}
-    {item.missingComponents?.length ? <p>누락 구성요소: {item.missingComponents.join(", ")}</p> : null}
-  </>;
+  return <><p>원본 값: {item.value === null ? "제공 불가" : `${number(item.value)} ${units[item.unit]}`}</p>{comparisonDetails(item.comparison)}<p>상태: {state[item.state]}</p><p>출처: {source[item.source]}</p><p>방향: {directions[item.direction]}</p>{item.formulaId !== null && item.formulaVersion !== null && <p>계산식: {item.formulaId} (v{item.formulaVersion})</p>}{item.missingComponents?.length ? <p>누락 구성요소: {item.missingComponents.join(", ")}</p> : null}</>;
 }
 
 function CategoryDetails({ category }: { category: DuelPressDetailReadoutEnvelope["categories"][number] }) {
-  return <>
-    {category.score !== null && <p>서버 점수: {number(category.score)}</p>}
-    {comparisonDetails(category.comparison)}
-    <p>점수 상태: {state[category.scoreState === "observed" ? "observed" : category.scoreState]}</p>
-    {category.imputedComponents.length > 0 && <p>대체 구성요소: {category.imputedComponents.join(", ")}</p>}
-  </>;
+  return <>{category.score !== null && <p>서버 점수: {number(category.score)}</p>}{comparisonDetails(category.comparison)}<p>점수 상태: {state[category.scoreState === "observed" ? "observed" : category.scoreState]}</p>{category.imputedComponents.length > 0 && <p>대체 구성요소: {category.imputedComponents.join(", ")}</p>}</>;
 }
 
-function PercentileBar({ label, percentile }: { label: string; percentile: number | null }) {
-  const display = formatAuthoritativePercentile(percentile);
-  if (display === null) return <p className="mt-2 text-[10px] text-zinc-500">비교 제공 불가</p>;
-  const band = getScoreBand(display);
-  return <div role="progressbar" aria-label={`${label} 비교 백분위`} aria-valuemin={0} aria-valuemax={99} aria-valuenow={display} className="mt-2 h-1 overflow-hidden rounded bg-white/10"><span className={`block h-full rounded ${band.dotClassName}`} style={{ width: `${display}%` }} /></div>;
-}
-
-function ReadoutRows({ items }: { items: readonly DuelPressDetailReadout[] }) {
-  return <dl className="mt-3 divide-y divide-white/10 border-t border-white/10 text-[11px] leading-4">
-    <dt className="sr-only">서버 측정값</dt>
-    {items.map((item) => {
-      const percentile = formatAuthoritativePercentile(item.comparison.percentile);
-      const displayValue = percentile === null ? "제공 불가" : String(percentile);
-      return <div key={item.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-2">
-        <dt className="min-w-0 break-words font-medium text-zinc-300">{item.label}</dt>
-        <dd className="text-right font-mono font-bold tabular-nums">
-          <DetailsTooltip label={item.label} displayValue={displayValue} trigger={<span className={percentile === null ? "text-zinc-500" : scoreTextToken(percentile)}>{displayValue}</span>}><ReadoutDetails item={item}/></DetailsTooltip>
-        </dd>
-      </div>;
-    })}
-  </dl>;
+function MetricRow({ item, spec, reference }: { item: DuelPressDetailReadout; spec: RowSpec; reference: boolean }) {
+  const percentile = item.comparison.state === "available" ? formatAuthoritativePercentile(item.comparison.percentile) : null;
+  const raw = displayRawValue(item, spec.signed);
+  return <div data-readout-id={item.id} className="flex min-w-0 items-baseline justify-between gap-2 type-label"><span className="min-w-0 break-words font-normal" style={{ color: COLORS.muted, opacity: reference ? .75 : 1 }}>{spec.label}</span><DetailsTooltip label={`${spec.label} ${raw} ${percentile ?? "—"}`} trigger={<span className="inline-flex items-baseline gap-[7px] whitespace-nowrap"><span className="type-body font-normal tabular-nums" style={{ color: COLORS.text }}>{raw}</span><span className="type-label font-semibold tabular-nums" style={{ color: bandColor(percentile) }}>{percentile ?? "—"}</span></span>}><ReadoutDetails item={item}/></DetailsTooltip></div>;
 }
 
 function CategoryCard({ category }: { category: DuelPressDetailReadoutEnvelope["categories"][number] }) {
-  const label = duelPressAxisLabels[category.id];
-  const percentile = formatAuthoritativePercentile(category.comparison.percentile);
-  const displayValue = percentile === null ? "제공 불가" : String(percentile);
-  const groups = category.id === "combinedDuel"
-    ? [["지상 경합", category.readouts.filter((item) => ground.has(item.id))], ["공중 경합", category.readouts.filter((item) => !ground.has(item.id))]] as const
-    : [[undefined, category.readouts]] as const;
-  return <article data-card="category" className="min-w-0 rounded-xl border border-white/10 bg-[#101415] p-3 shadow-sm">
-    <div className="flex min-w-0 items-start justify-between gap-3">
-      <h3 className="min-w-0 text-sm font-black text-white">{label}</h3>
-      <DetailsTooltip label={`${label} 카테고리`} displayValue={displayValue} trigger={<b className={`text-2xl font-black tabular-nums ${percentile === null ? "text-zinc-500" : scoreTextToken(percentile)}`}>{displayValue}</b>}><CategoryDetails category={category}/></DetailsTooltip>
-    </div>
-    <PercentileBar label={label} percentile={category.comparison.percentile}/>
-    {groups.map(([title, items]) => <section key={title ?? "all"} aria-label={title} className={title ? "mt-3 min-w-0" : "min-w-0"}>
-      {title && <h4 className="border-b border-white/10 pb-1 text-xs font-bold text-zinc-200">{title}</h4>}
-      <ReadoutRows items={items}/>
-    </section>)}
-  </article>;
-}
-
-function ContextCard({ readout, label }: { readout: DuelPressDetailReadout; label: string }) {
-  const percentile = formatAuthoritativePercentile(readout.comparison.percentile);
-  const displayValue = readout.value === null ? "제공 불가" : `${number(readout.value)} ${units[readout.unit]}`;
-  return <article data-card="context" className="min-w-0 rounded-xl border border-white/10 bg-[#101415] p-3 shadow-sm">
-    <div className="flex min-w-0 items-start justify-between gap-3">
-      <h3 className="min-w-0 text-sm font-black text-white">{label}</h3>
-      <DetailsTooltip label={label} displayValue={displayValue} trigger={<b className={`text-right text-lg font-black tabular-nums ${percentile === null ? "text-zinc-100" : scoreTextToken(percentile)}`}>{displayValue}</b>}><ReadoutDetails item={readout}/></DetailsTooltip>
-    </div>
-    <PercentileBar label={label} percentile={readout.comparison.percentile}/>
-  </article>;
+  const score = formatAuthoritativePercentile(category.score);
+  const readouts = new Map(category.readouts.map((item) => [item.id, item]));
+  const title = duelPressAxisLabels[category.id];
+  return <article data-card="category" data-category-id={category.id} className="flex min-w-0 flex-col gap-[7px]"><div className="flex min-w-0 items-baseline justify-between gap-2 font-bold leading-normal"><h3 className="type-title" style={{ color: COLORS.text }}>{title}</h3><DetailsTooltip label={`${title} 카테고리 ${score ?? "—"}`} trigger={<strong className="type-metric font-bold tabular-nums" style={{ color: bandColor(score) }}>{score ?? "—"}</strong>}><CategoryDetails category={category}/></DetailsTooltip></div><div role="progressbar" aria-label={`${title} 점수`} aria-valuemin={0} aria-valuemax={99} {...(score === null ? {} : { "aria-valuenow": score })} className="h-1 w-full max-w-[288px] overflow-hidden rounded-[2px]" style={{ backgroundColor: COLORS.border }}><span className="block h-full rounded-[2px]" style={{ width: `${score ?? 0}%`, backgroundColor: bandColor(score) }}/></div>{CATEGORY_GROUPS[category.id].map((group) => <section key={group.label} aria-label={`${title} ${group.label}`} className="flex min-w-0 flex-col gap-[3px] pt-[6px]"><h4 className="type-caption font-semibold tracking-[0.7px]" style={{ color: group.kind === "reference" ? COLORS.muted : COLORS.accent, opacity: group.kind === "reference" ? .6 : .9 }}>{group.label}</h4>{group.rows.map((spec) => <MetricRow key={spec.id} item={readouts.get(spec.id)!} spec={spec} reference={group.kind === "reference"}/>)}</section>)}</article>;
 }
 
 export type DetailReadoutBoardLayout = "page" | "rail";
 
 export function DuelPressDetailReadoutBoard({ data, layout = "page" }: { data: DuelPressDetailReadoutEnvelope; layout?: DetailReadoutBoardLayout }) {
-  const categoryGridClass = layout === "rail"
-    ? "mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2"
-    : "mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3";
-  const contextGridClass = layout === "rail"
-    ? "grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2"
-    : "grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2";
-  return <section aria-label="Duel press detailed stats board" className="min-w-0">
-    <h2 className="text-lg font-black">상세 스탯 보드</h2>
-    <div data-layout="detail-readout-grid" className={categoryGridClass}>{data.categories.map((category) => <CategoryCard key={category.id} category={category}/>)}</div>
-    <section aria-label="컨텍스트 지표" className="mt-3 min-w-0">
-      <div data-layout="auxiliary-measurements" className={contextGridClass}>
-        <ContextCard readout={data.contextIndicators[0]} label="순수 전진 기여도"/>
-        <ContextCard readout={data.contextIndicators[1]} label="득점 운·상대 선방"/>
-      </div>
-    </section>
-  </section>;
+  const categories = new Map(data.categories.map((category) => [category.id, category]));
+  return <section aria-label="Duel press detailed stats board" data-layout-density={layout} className="min-w-0 overflow-hidden rounded-[16px] border px-6 py-[22px] lg:min-h-[900px]" style={{ backgroundColor: COLORS.panel, borderColor: COLORS.border }}><header className="flex min-w-0 items-baseline justify-between gap-2"><h2 className="type-title font-bold" style={{ color: COLORS.text }}>상세 스탯 보드</h2><p className="text-right type-caption font-normal" style={{ color: COLORS.muted }}>원시값 · 코호트 백분위 · 각 축 = 볼륨 50% + 비율 50%</p></header><div data-layout="detail-readout-grid" className="mt-4 grid min-w-0 grid-cols-1 items-start gap-[18px] md:grid-cols-3">{CATEGORY_COLUMNS.map((column, index) => <div key={index} data-column={index + 1} className="flex min-w-0 flex-col gap-5">{column.map((id) => <CategoryCard key={id} category={categories.get(id)!}/>)}</div>)}</div><p className="mt-4 type-caption font-normal" style={{ color: COLORS.muted, opacity: .7 }}>왼쪽은 원시값, 오른쪽 색상 숫자는 동일 시즌·모드·스코프 코호트 백분위입니다. 「참고」 항목은 점수 산식에 직접 들어가지 않습니다.</p></section>;
 }
 
 export function DuelPressDetailReadoutUnavailable({ message, onRetry, loading }: { message?: string; onRetry?: () => void; loading?: boolean }) {

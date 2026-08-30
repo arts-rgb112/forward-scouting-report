@@ -30,9 +30,9 @@ function legacyHref(entry: LegacyV3Entry) {
 function contextBadge(entry: WatchlistV3Entry) { return <span className="rounded border border-lime-300/25 bg-lime-300/10 px-1.5 py-0.5 font-bold text-lime-100">{watchlistV3ContextLabel(entry)}</span>; }
 function statusBadge(label: string | null) { return label ? <span className="rounded border border-amber-300/25 bg-amber-300/10 px-1.5 py-0.5 font-bold text-amber-100">{label}</span> : null; }
 function selector(entry: WatchlistV3Entry, name: string, preference: WatchlistPreference | undefined, onPreference: PreferenceProps["onPreference"], mobile: boolean) {
-  return <select aria-label={`${name} saved or current snapshot`} value={preference ?? "current"} onChange={(event) => onPreference(entry.key, event.target.value as WatchlistPreference)} className={`${mobile ? "min-h-11 w-full" : "h-7"} rounded border border-white/10 bg-[#111516] px-2 text-[10px]`}><option value="current">현재 서버 값</option><option value="saved">저장 시점 값</option></select>;
+  return <select aria-label={`${name} saved or current snapshot`} value={preference ?? "current"} onChange={(event) => onPreference(entry.key, event.target.value as WatchlistPreference)} className={`${mobile ? "min-h-11 w-full" : "h-7"} rounded border border-white/10 bg-[#111516] px-2 type-caption`}><option value="current">현재 서버 값</option><option value="saved">저장 시점 값</option></select>;
 }
-function savedOnlyAction() { return <span className="inline-flex min-h-11 items-center justify-center rounded border border-white/10 px-2 text-xs text-zinc-400">Saved snapshot</span>; }
+function savedOnlyAction() { return <span className="inline-flex min-h-11 items-center justify-center rounded border border-white/10 px-2 text-base text-zinc-400">Saved snapshot</span>; }
 function legacyStatus(result: LegacyWatchlistResolution | undefined, showingCurrent: boolean, currentAvailable: boolean) {
   // Choosing a saved snapshot is a valid preference when a current profile is
   // available.  It is not a warning state, so do not add a noisy success badge.

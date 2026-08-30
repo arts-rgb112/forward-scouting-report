@@ -49,29 +49,31 @@ function expectCanvasClearedAfter(nextSpatial: unknown) {
 describe("LegacySpatialPitch", () => {
   it("renders one source shot per marker and retains the exact legacy summary/count lines", () => {
     render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
-    const section = screen.getByRole("region", { name: "Spatial pitch" });
-    expect(within(section).getByText("2 activity points. 4 shots. Goal ◇ · on target ● · off target × · blocked ■.")).toBeInTheDocument();
+    const section = screen.getByRole("region", { name: "2D 회랑" });
+    expect(within(section).getByText("활동 좌표 2개 · 슛 4개 · 득점 ◇ · 유효 슛 ● · 빗나감 × · 블록 ■")).toBeInTheDocument();
     expect(section.querySelectorAll("[data-shot-index]")).toHaveLength(4);
     expect(section.querySelectorAll('[data-shot-outcome="goal"]')).toHaveLength(1);
     expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke", "#C084FC");
+    expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke-width", "1.6");
+    expect(section.querySelector('[data-layer="cca-contour"]')).toHaveAttribute("stroke-opacity", "0.72");
     expect(section.querySelector("image")).toBeNull();
     expect(section.querySelector('[data-layer="guardiola-20-zone-guide"]')).toBeInTheDocument();
-    expect(section).toHaveTextContent("Goals 1"); expect(section).toHaveTextContent("On target 1"); expect(section).toHaveTextContent("Off target 1"); expect(section).toHaveTextContent("Blocked 1");
+    expect(section).toHaveTextContent("득점 1"); expect(section).toHaveTextContent("유효 슛 1"); expect(section).toHaveTextContent("빗나감 1"); expect(section).toHaveTextContent("블록 1");
   });
 
   it("fails closed on heatmap or shot count integrity mismatches", () => {
     const { rerender, container } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, heatmapPointCount: 3 })} />);
-    expect(screen.getAllByText(/Activity heatmap integrity mismatch/)).toHaveLength(2);
+    expect(screen.getAllByText(/활동 히트맵 무결성 불일치/)).toHaveLength(2);
     rerender(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, shotmapPointCount: 3 })} />);
-    expect(screen.getAllByText(/Shot snapshot integrity mismatch/)).toHaveLength(2);
+    expect(screen.getAllByText(/슈팅 스냅샷 무결성 불일치/)).toHaveLength(2);
     expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(0);
   });
 
   it("distinguishes unavailable snapshots from verified zero snapshots", () => {
     const { rerender } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, available: false, heatmapPointCount: 0, heatmapPoints: [], shotmapSnapshotAvailable: false, shotmapPointCount: 0, shotmapPoints: [] })} />);
-    expect(screen.getAllByText(/Activity heatmap unavailable.*Shot snapshot unavailable/)).toHaveLength(2);
+    expect(screen.getAllByText(/활동 히트맵 사용 불가.*슈팅 스냅샷 사용 불가/)).toHaveLength(2);
     rerender(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, heatmapPointCount: 0, heatmapPoints: [], shotmapPointCount: 0, shotmapPoints: [] })} />);
-    expect(screen.getAllByText(/Verified zero activity points.*Verified zero shots/)).toHaveLength(2);
+    expect(screen.getAllByText(/관측된 활동 좌표 0개.*관측된 슛 0개/)).toHaveLength(2);
   });
 
   it("clears the painted raster on populated to unavailable transitions", () => {
@@ -98,7 +100,7 @@ describe("LegacySpatialPitch", () => {
 
   it("preserves legacy caption symbols while using legacy Plotly marker geometry", () => {
     const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
-    expect(screen.getByText("2 activity points. 4 shots. Goal ◇ · on target ● · off target × · blocked ■.", { selector: "figcaption" })).toBeInTheDocument();
+    expect(screen.getByText("활동 좌표 2개 · 슛 4개 · 득점 ◇ · 유효 슛 ● · 빗나감 × · 블록 ■", { selector: "figcaption" })).toBeInTheDocument();
     expect(container.querySelector('[data-shot-outcome="goal"]')).toHaveAttribute("data-marker-symbol", "star");
     expect(container.querySelector('[data-shot-outcome="blocked"]')).toHaveAttribute("data-marker-symbol", "diamond-open");
     fireEvent.focus(container.querySelector('[data-shot-outcome="goal"]')!); expect(screen.getByRole("tooltip")).toHaveTextContent("xG —"); expect(screen.getByRole("tooltip")).toHaveTextContent("xGOT —");
@@ -106,13 +108,28 @@ describe("LegacySpatialPitch", () => {
 
   it("keeps the six shooting corridors visual-only and opt-in while explaining the permanent PK exclusion", () => {
     const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
-    expect(screen.getByText("페널티 11발은 분할선 위라 회랑 집계에서 제외")).toBeInTheDocument();
+    expect(screen.getByText("페널티는 분할선 위라 회랑 집계에서 항상 제외")).toBeInTheDocument();
     expect(container.querySelector('[data-layer="shot-corridors"]')).toBeNull();
-    const toggle = screen.getByRole("button", { name: "6-lane shooting corridors" });
+    const toggle = screen.getByRole("button", { name: "6레인 슈팅 회랑" });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-pressed", "true");
     expect(container.querySelectorAll('[data-layer="shot-corridors"] path')).toHaveLength(5);
+  });
+
+  it("uses thin white zone guides without bands and confines the sky PK axis to the penalty boxes", () => {
+    const { container } = render(<LegacySpatialPitch analysis={analysis(baseSpatial)} />);
+    const zoneGrid = container.querySelector('[data-layer="positional-grid"]')!;
+    const pkAxis = container.querySelector('[data-layer="pk-axis"]')!;
+    expect(container.querySelector('[data-layer="zone-grid"]')).toBeNull();
+    expect(zoneGrid).toHaveAttribute("stroke", "#FFFFFF");
+    expect(zoneGrid).toHaveAttribute("stroke-width", "1");
+    expect(zoneGrid).toHaveAttribute("stroke-opacity", "0.13");
+    expect(zoneGrid.closest('[data-layer="guardiola-20-zone-guide"]')).toHaveAttribute("fill", "none");
+    expect(pkAxis).toHaveAttribute("stroke", "#7DD3FC");
+    expect(pkAxis).toHaveAttribute("stroke-width", "2");
+    expect(pkAxis?.querySelectorAll("path")).toHaveLength(2);
+    expect([...pkAxis!.querySelectorAll("path")].every((path) => !path.getAttribute("d")?.includes("H100"))).toBe(true);
   });
 
   it("keeps one roving marker tab stop while exact-coordinate groups preserve all source counts", () => {
@@ -120,6 +137,6 @@ describe("LegacySpatialPitch", () => {
     const { container } = render(<LegacySpatialPitch analysis={analysis({ ...baseSpatial, shotmapPointCount: 119, shotmapPoints: many })} />);
     expect(container.querySelectorAll('[data-shot-index][tabindex="0"]')).toHaveLength(1); expect(container.querySelectorAll("[data-shot-index]")).toHaveLength(100);
     expect([...container.querySelectorAll("[data-shot-index]")].reduce((sum, marker) => sum + Number(marker.getAttribute("data-marker-count")), 0)).toBe(119);
-    const controls = screen.getByRole("group", { name: "Shot outcome visibility" }); expect(controls).toHaveClass("grid-cols-2"); expect(screen.getByRole("button", { name: /Goals, 119 shots/ })).toHaveClass("min-h-11", "min-w-11");
+    const controls = screen.getByRole("group", { name: "Shot outcome visibility" }); expect(controls).toHaveClass("grid-cols-2"); expect(screen.getByRole("button", { name: /득점, 119 shots/ })).toHaveClass("min-h-11", "min-w-11");
   });
 });

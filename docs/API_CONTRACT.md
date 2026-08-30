@@ -2,9 +2,23 @@
 
 ## 진행 중인 작업
 
-- 상태: 단계 1 진행 중 — PR #298 정리 (6레인 corridor + compact aggregate만 유지)
-- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-298-cleanup
-- 범위/가드: `origin/main` 최신화 기준으로 full Tier 3 count-weighted compact artifact와 additive `six-lane-shooting-corridor-v1`만 재적용한다. 선행 SportsAPI 수집기·goal-mouth additive·프런트 변경은 이 PR에서 제외한다. `data/harvest/`는 계속 ignore이고, `data/tactical_3zone_ratio.csv`·`data/tactical_heatmap_points.json`·CCA/30셀/점수 산식은 무변경이다. 게이트 1의 로컬 API/불변 검증 및 PR 상태 확인 전에는 병합·배포하지 않는다.
+- 상태: 로컬 구현·DOM 검증 완료 — PR #297 4차·5차 피드백 최종 게이트
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-live-fix
+- 범위/결과: 골대 정면·박스 프리셋에서 카메라 평면을 가로지르던 잔디 폴리곤을, 해당 프레임의 전방 terrain만 투영하도록 고쳐 4개 시점×3개 프리셋 12조합의 DOM path가 모두 유한함을 확인했다. CCA는 `1.6 / 0.72`로 조정했고 원본 32×22 HDR 계산은 바꾸지 않았다. 2D 마커는 반경 1.35 world-unit의 반투명·테두리형으로 고정하고 정확히 같은 원본 좌표는 paint-order 묶음/개수 배지로 표시한다. 골대맵은 50개 셀의 상시 숫자를 제거하고 hover/focus tooltip만 남겼다. 3D 구역은 0발 라벨을 숨기고 source shot snapshot에서 계산한 슈팅 비중만 보이며 hover에 슈팅·득점·xG·활동 점유를 함께 보여 준다. 6레인 표와 2D zone inspector 집계는 서버 계약 연결 전까지 `—` fail-closed를 유지하며, 점수·CSV·CCA/HDR 원본 격자·API·기능 플래그·SportsAPI 원본은 변경하지 않았다. 병합·배포는 발주자 승인 전 금지한다.
+- 검증: 수정한 `SpatialPitch.test.tsx`는 4각도×3프리셋의 `data-terrain-frame-from-x`/finite path, shot-share tooltip을 DOM으로 검증했다. `SixLaneCorridorPitch.test.tsx`는 mixed stack/PK/zoom-pan, `GoalMouthBaselineOverlay.test.tsx`는 기본 무수치와 hover tooltip, `LegacySpatialPitch.test.tsx`는 CCA 중간값을 검증한다. focused 10 files 64 passed, production build 통과(기존 chunk-size warning만). 실데이터 시각 QA는 API 환경변수 미주입으로 수행하지 않았고 완료로 주장하지 않는다.
+
+- 상태: 로컬 구현·검증 완료 — Player page 3차 피드백 9건 (PR #297 병합 전 유지)
+- 범위/결과: 접힌 상세 스탯 보드 첫 화면은 6개 카테고리의 이름·점수·막대만 남기고 서버 지표는 기존 펼침 영역에 모두 보존했다. 레이더 축 라벨은 14px로 낮추고 차트 안쪽으로 이동했다. 2D 회랑은 확대 후 버튼·휠·핀치와 동일 배율에서 pointer drag pan(경계 clamp)을 제공하며, 기존 클릭 zone inspector는 서버 집계가 없으므로 슛·득점·xG·점유를 `—`로 fail-closed한다. 3D는 server `positionalGrid` label hover tooltip과 페널티박스 중앙 y=50 시각 분할을 추가했고, 수치 원천이 없는 슛/득점/xG는 `—`로 표시한다. 시즌 레일은 score/99 길이와 티어 색을 사용하고, 전폭 카드 안에 identity/rank와 2열 season history를 재배치했다. 점수·CSV·CCA·30셀·API·flag·SportsAPI 원본은 변경하지 않았다.
+- 타이포 검증: `text-[0..11px]` 0, literal SVG `fontSize` 12 미만 0, `text-xs` 0, `text-base` 156회다. `text-xs`는 전수 제거했으므로 별도 사용처·근거는 없다; 12px 주석은 `.type-caption` 토큰으로만 남긴다.
+- 검증: 이번에 수정한 테스트 파일은 `PlayerProfileCard.test.tsx`(6), `SixLaneCorridorPitch.test.tsx`(1), `DuelPressV2DetailReadoutBoard.test.tsx`(5)로 12 passed다. 기존 `BenchmarkRadarV2.test.tsx` regression(3)도 함께 실행해 전체 15 passed; `pnpm build` 통과(기존 500kB chunk warning만). 실데이터 시각 QA는 로컬 API 환경변수 미주입으로 수행하지 않았다.
+
+- 상태: PR #297 병합 준비 중 — 라이브 피치 화면 반려 P0
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-live-fix
+- 범위/가드: 최신 `origin/main` 위로 재배치한 P0는 3D 표시 전용 96×66 업샘플, 원본 32×22 CCA/HDR 유지, 흰색 20-zone/PK 축 구분선, 공용 레이어 토글, 3개 피치 탭, 한국어 탐색·접힘·빈 상태를 포함한다. 2D는 `SixLaneCorridorPitch` 전용 컴포넌트로 교체해 field-internal lane label을 제거하고, 20-zone depth guide·display-only heatmap·CCA·trajectory·simple outcome marker·click inspector·native passive:false wheel/pinch/button zoom을 제공한다. exact PK 포함/제외는 부모 공용 토글을 그대로 소비하고, 표의 6-lane 수치와 zone inspector 집계는 서버 연결 전까지 `—`로 fail-closed다. 3D zone label은 기존 서버 `positionalGrid` 값만 표시하며 브라우저에서 점유율을 재집계하지 않는다. 점수·CSV·CCA·30셀·기능 플래그·SportsAPI 원본은 변경하지 않는다. 병합·배포는 발주자 게이트 승인 전 금지한다.
+- DOM 검증 기준: `LegacySpatialPitchFigure`의 `data-layer="positional-grid"`는 `pitchGeometry`의 `zone20Lines()`/`PATH_STYLE`을 사용하며 `stroke=#FFFFFF`, `stroke-opacity=0.13`, `stroke-width=1`이어야 한다.
+- 상태: 로컬 구현·검증 완료 — Player page typography unified + 1440 desktop composition (2026-08-30 KST), PR #297 병합 전 유지
+- 범위/가드: `CODEX_PLAYER_PAGE_REBUILD_ORDER.md`의 최종 `타이포그래피 통일 + 레이아웃`에 따라 `index.css`에 display(32)·metric(24)·title(18)·body(16)·label(14)·caption(12) 공용 토큰을 정의했다. `messi-2-dashboard/src`에서 `text-[Npx]`와 특히 12px 미만 임의 텍스트는 0건이며, 전술 요약의 주값은 metric 24로 낮췄고 상세 스탯 raw 값·프로필 rank/season 값은 label/body 이상으로 올렸다. 프로필은 12열 전체 폭을 사용해 우측 공백을 제거하고, desktop xl에서 피치 workspace 8열과 전술 요약 4열을 같은 행에 둔다. 점수·API·CSV·CCA·SportsAPI 수집·feature flag는 변경하지 않는다.
+- 검증: `rg 'text-\\[([0-9]|1[01])px\\]' messi-2-dashboard/src` 및 모든 `text-[Npx]` 검색은 0건이다. 변경/갱신 test 6 files `36 passed`; `pnpm build` 통과(기존 500kB chunk warning만). 로컬 Vite 1440×900 DOM 접근은 API 환경변수 미주입으로 configuration unavailable 상태여서 실데이터 화면 시각 QA는 주장하지 않는다.
 
 - 상태: 로컬 구현·실데이터 QA 완료 — 피치 워크스페이스 3개 1층 탭 + 접힌 헥스 원자료 (2026-08-28 KST), PR 준비 중
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-pitch-workspace

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { duelPressDetailReadoutEnvelopeSchema } from "../api/duelPressDetailReadoutContracts";
@@ -40,8 +40,8 @@ describe("native player detail panels", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
   });
   it("uses one responsive perspective pitch with an exact positional grid and no synthetic shots", () => {
-    render(<SpatialPitch analysis={analysis} />); const section = screen.getByRole("region", { name: "어디서 쏘고 어디로 꽂나" });
-    expect(within(section).getByRole("img")).toHaveAttribute("viewBox", "0 0 1000 650"); expect(section.querySelectorAll("svg")).toHaveLength(1); expect(section.querySelectorAll("[data-grid-segment]")).toHaveLength(15); expect(section.querySelectorAll("[data-zone-label]")).toHaveLength(0); expect(section.querySelectorAll("[data-goal]")).toHaveLength(2); expect(section.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
+    render(<SpatialPitch analysis={analysis} />); const section = screen.getByRole("region", { name: "3D 회랑" });
+    expect(within(section).getByRole("img")).toHaveAttribute("viewBox", "0 0 1000 650"); expect(section.querySelectorAll("svg")).toHaveLength(1); expect(section.querySelectorAll("[data-grid-segment]")).toHaveLength(17); expect(section.querySelectorAll("[data-zone-label]")).toHaveLength(0); expect(section.querySelectorAll("[data-goal]")).toHaveLength(2); expect(section.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
   });
   it("renders a six-sector, server-readout board with accessible non-fabricated score bars", () => {
     render(<PercentileProfile player={player} analysis={analysis} quality={{ kind: "idle" }} />); const section = screen.getByRole("region", { name: "Percentile profile" });
@@ -53,15 +53,33 @@ describe("native player detail panels", () => {
     render(<VolumeBenchmarkRadar player={player} dataset={{season:"2025/2026",mode:"league",scope:8,competition:"all"}} />); const section = screen.getByRole("region", { name: "Volume benchmark radar" });
     expect(section).toHaveTextContent("8-league benchmark is not enabled"); expect(section.querySelectorAll("[data-series]")).toHaveLength(0);
   });
-  it("keeps dossier and season naturally sized above a rail detail slot, then tactical/spatial and benchmarks", () => {
+  it("uses a full-width profile and keeps the three-tab pitch beside tactical summary at desktop width", () => {
     const { container } = render(<PlayerDetailDossierLayout player={player} analysis={analysis} quality={{ kind: "idle" }} history={{ loading: false, entries: [], failed: 0, requestedSeasons: 0 }} dataset={{season:"2025/2026",mode:"league",scope:8,competition:"all"}} />);
-    const outer = container.querySelector('[data-layout="detail-dossier-layout"]'); const rail = container.querySelector('[data-layout="detail-left-rail"]'); const dossierSeason = container.querySelector('[data-layout="dossier-season"]'); const slot = container.querySelector('[data-layout="detail-board-slot"]'); const benchmarks = container.querySelector('[data-layout="radar-benchmarks"]');
-    expect(outer).toHaveClass("min-w-0", "xl:grid-cols-[minmax(528px,596px)_minmax(0,1fr)]", "xl:items-start");
-    expect(rail).toHaveClass("min-w-0"); expect(dossierSeason).toHaveClass("min-w-0", "items-start", "md:grid-cols-[minmax(0,300px)_minmax(240px,280px)]"); expect(slot).toHaveClass("mt-4", "min-w-0"); expect(benchmarks).toHaveClass("mt-4", "min-w-0");
-    const workspace = within(outer!).getByRole("region", { name: "Tactical and spatial analysis" }); const tactical = within(workspace).getByRole("region", { name: "Tactical summary" }); const pitch = within(workspace).getByRole("region", { name: "Pitch workspace" });
-    expect(workspace).toHaveClass("min-w-0"); expect(workspace).toContainElement(tactical); expect(workspace).toContainElement(pitch); expect(within(pitch).getAllByRole("tab")).toHaveLength(3);
-    expect(tactical.compareDocumentPosition(pitch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(dossierSeason!.compareDocumentPosition(slot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(slot!.compareDocumentPosition(workspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(workspace.compareDocumentPosition(benchmarks!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(slot!).getByRole("region", { name: "Percentile profile" }).querySelector('[data-layout="legacy-percentile-grid"]')).toHaveClass("grid-cols-1", "sm:grid-cols-2");
+    const outer = container.querySelector('[data-layout="detail-dossier-layout"]'); const dossierSeason = container.querySelector('[data-layout="dossier-season"]'); const slot = container.querySelector('[data-layout="detail-board-slot"]'); const benchmarks = container.querySelector('[data-layout="radar-benchmarks"]'); const tacticalSlot = container.querySelector('[data-layout="tactical-summary-slot"]');
+    expect(outer).toHaveClass("min-w-0", "xl:grid-cols-12", "xl:items-start");
+    expect(dossierSeason).toHaveClass("min-w-0", "xl:col-span-12"); expect(dossierSeason?.querySelector('[data-layout="approved-profile-card"]')).toHaveClass("w-full"); expect(dossierSeason?.querySelector('[data-layout="approved-profile-card"]')).not.toHaveClass("max-w-[300px]"); expect(slot).toHaveClass("mt-4", "min-w-0"); expect(benchmarks).toHaveClass("mt-4", "min-w-0");
+    const workspace = within(outer!).getByRole("region", { name: "전술·공간 분석" }); const tactical = within(tacticalSlot!).getByRole("region", { name: "Tactical summary" }); const pitch = within(workspace).getByRole("region", { name: "피치 분석" }); const pitchSlot = workspace.querySelector('[data-layout="pitch-workspace-slot"]');
+    expect(workspace).toHaveClass("min-w-0", "xl:col-span-8"); expect(workspace).not.toContainElement(tactical); expect(workspace).toContainElement(pitch); expect(tacticalSlot).toHaveClass("min-w-0", "xl:col-span-4"); expect(within(pitch).getAllByRole("tab")).toHaveLength(3); expect(within(pitch).getByRole("tab", { name: "2D 회랑" })).toHaveAttribute("aria-selected", "true");
+    expect(pitchSlot).toContainElement(pitch); expect(tacticalSlot).toContainElement(tactical);
+    expect(workspace.compareDocumentPosition(tacticalSlot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(tacticalSlot!.compareDocumentPosition(slot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(slot!.compareDocumentPosition(benchmarks!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(slot!).getByRole("region", { name: "Percentile profile" }).querySelector('[data-layout="legacy-percentile-grid"]')).toHaveClass("sm:grid-cols-2", "lg:grid-cols-3");
+  });
+  it("uses a dedicated data-free six-lane 2D corridor with the shared layer controls", () => {
+    const { container } = render(<PlayerDetailDossierLayout player={player} analysis={analysis} quality={{ kind: "idle" }} history={{ loading: false, entries: [], failed: 0, requestedSeasons: 0 }} dataset={{season:"2025/2026",mode:"league",scope:8,competition:"all"}} />);
+    const pitch = container.querySelector('[data-layout="pitch-workspace"]')!;
+    const corridor = pitch.querySelector('[data-layout="six-lane-corridor-pitch"]')!;
+    expect(corridor).toBeInTheDocument();
+    expect(corridor.querySelectorAll("[data-lane]")).toHaveLength(6);
+    expect(corridor.querySelector('[data-layer="positional-grid"]')).not.toBeNull();
+    expect(corridor.querySelector('[data-layer="legacy-density"]')).not.toBeNull();
+    expect(corridor.querySelector('[data-layer="pk-axis"]')).toBeNull();
+    expect(within(corridor).getByRole("status")).toHaveTextContent("브라우저에서 값을 만들지 않았습니다");
+    const toolbar = within(pitch).getByRole("group", { name: "피치 레이어" });
+    const names = ["히트맵", "CCA", "궤적", "슈팅 마커"];
+    names.forEach((name) => expect(within(toolbar).getByRole("button", { name })).toHaveAttribute("aria-pressed", "true"));
+    fireEvent.click(within(toolbar).getByRole("button", { name: "히트맵" }));
+    expect(within(toolbar).getByRole("button", { name: "히트맵" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(within(pitch).getByRole("tab", { name: "3D 회랑" }));
+    expect(within(pitch).getByRole("button", { name: "히트맵" })).toHaveAttribute("aria-pressed", "false");
   });
 });

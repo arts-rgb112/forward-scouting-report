@@ -13,15 +13,19 @@ const rows = (container: HTMLElement) => Array.from(container.querySelectorAll("
 describe("DuelPressV2DetailReadoutBoard", () => {
   afterEach(() => cleanup());
 
-  it("exposes every server-owned v2 metric value by default, with raw values and percentile scores", () => {
+  it("shows six category-only summary cards and preserves every server metric in one collapsed detail section", () => {
     const { container } = render(<DuelPressV2DetailReadoutBoard data={parseDetail("complete_league")} layout="page"/>);
-    expect(rows(container)).toHaveLength(53);
-    expect(screen.getByText("박스 밖 슈팅 시도")).toBeInTheDocument();
-    expect(screen.getByText("박스 밖 슈팅 시도 /90")).toBeInTheDocument();
-    expect(screen.getByText("통합 경합 승률")).toBeInTheDocument();
-    expect(screen.getByText("박스 밖 슈팅")).toBeInTheDocument();
+    const summary = container.querySelector('[data-detail-level="summary"]') as HTMLElement;
+    const expanded = container.querySelector('[data-detail-level="expanded"]') as HTMLDetailsElement;
+    expect(within(summary).getAllByRole("article")).toHaveLength(6);
+    expect(rows(summary)).toHaveLength(0);
+    expect(rows(expanded)).toHaveLength(53);
+    expect(expanded.open).toBe(false);
+    expect(within(expanded).getByText("박스 밖 슈팅 시도 /90")).toBeInTheDocument();
+    expect(within(expanded).getByText("통합 경합 승률")).toBeInTheDocument();
+    expect(screen.getAllByText("박스 밖 슈팅").length).toBeGreaterThan(0);
     expect(screen.queryByText("Outside-box shot attempts")).toBeNull();
-    const attemptRows = container.querySelectorAll('[data-metric-id="outsideBoxShotAttempts"]');
+    const attemptRows = expanded.querySelectorAll('[data-metric-id="outsideBoxShotAttempts"]');
     expect(attemptRows).toHaveLength(2);
     expect(within(attemptRows[0] as HTMLElement).getByText("4")).toBeInTheDocument();
     expect(within(attemptRows[0] as HTMLElement).getByText("99")).toBeInTheDocument();
@@ -29,7 +33,8 @@ describe("DuelPressV2DetailReadoutBoard", () => {
 
   it("orders pair totals first, then every /90 value, then percentages and other quality values", () => {
     const { container } = render(<DuelPressV2DetailReadoutBoard data={parseDetail("complete_league")} layout="page"/>);
-    const category = container.querySelectorAll('article[data-taxonomy="duel-press-v2"]')[2] as HTMLElement;
+    const expanded = container.querySelector('[data-detail-level="expanded"]') as HTMLElement;
+    const category = expanded.querySelectorAll('article[data-taxonomy="duel-press-v2"]')[2] as HTMLElement;
     const ids = rows(category).map((row) => `${row.getAttribute("data-metric-id")}:${row.getAttribute("data-metric-slot")}`);
     expect(ids).toEqual([
       "dribbleAttempts:total", "successfulDribbles:total", "failedDribbles:total",
@@ -39,9 +44,9 @@ describe("DuelPressV2DetailReadoutBoard", () => {
 
   it("preserves the server's three combined-duel groups and uses Korean group labels", () => {
     render(<DuelPressV2DetailReadoutBoard data={parseDetail("complete_league")} layout="page"/>);
-    expect(screen.getAllByRole("heading", { name: "통합 경합" })).toHaveLength(2);
-    expect(screen.getByRole("heading", { name: "지상 경합" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "공중 경합" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "통합 경합" })).toHaveLength(3);
+    expect(screen.getAllByRole("heading", { name: "지상 경합" })).toHaveLength(1);
+    expect(screen.getAllByRole("heading", { name: "공중 경합" })).toHaveLength(1);
   });
 
   it("keeps observed zero distinct from unavailable values", () => {
@@ -66,7 +71,8 @@ describe("DuelPressV2DetailReadoutBoard", () => {
     value.formulaId = "wins-divided-by-attempts";
     value.formulaVersion = "v1";
     render(<DuelPressV2DetailReadoutBoard data={duelPressV2DetailMetricsSchema.parse(input)} layout="page"/>);
-    const trigger = screen.getByRole("button", { name: /지상 경합 승률 상세 정보/ });
+    const expanded = document.querySelector('[data-detail-level="expanded"]') as HTMLElement;
+    const trigger = within(expanded).getByRole("button", { name: /지상 경합 승률 상세 정보/ });
     fireEvent.focus(trigger);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("중앙값");
     expect(screen.getByRole("tooltip")).toHaveTextContent("순위");

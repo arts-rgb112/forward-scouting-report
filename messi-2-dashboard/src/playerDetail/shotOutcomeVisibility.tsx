@@ -7,10 +7,10 @@ type Spatial = PlayerAnalysis["spatial"];
 
 export const outcomeOrder: readonly ShotOutcome[] = ["goal", "on_target", "off_target", "blocked"];
 export const outcomePresentation: Record<ShotOutcome, { label: string; plural: string; color: string; symbol: string; size: number; summary: string }> = {
-  goal: { label: "Goal", plural: "Goals", color: "#F8FAFC", symbol: "star", size: 12, summary: "◇" },
-  on_target: { label: "On target", plural: "On target", color: "#22D3EE", symbol: "circle", size: 9, summary: "●" },
-  off_target: { label: "Off target", plural: "Off target", color: "#FB923C", symbol: "x", size: 9, summary: "×" },
-  blocked: { label: "Blocked", plural: "Blocked", color: "#EAB308", symbol: "diamond-open", size: 8, summary: "■" },
+  goal: { label: "득점", plural: "득점", color: "#F8FAFC", symbol: "star", size: 12, summary: "◇" },
+  on_target: { label: "유효 슛", plural: "유효 슛", color: "#22D3EE", symbol: "circle", size: 9, summary: "●" },
+  off_target: { label: "빗나감", plural: "빗나감", color: "#FB923C", symbol: "x", size: 9, summary: "×" },
+  blocked: { label: "블록", plural: "블록", color: "#EAB308", symbol: "diamond-open", size: 8, summary: "■" },
 };
 
 const singleClickDelayMs = 350;
@@ -26,7 +26,7 @@ const validTrajectory = (shot: ShotmapPoint) => {
 export const validShot = (shot: ShotmapPoint) => validCoordinate(shot.x) && validCoordinate(shot.y) && isOutcome(shot.outcome) && validTrajectory(shot);
 export const shotIntegrity = (spatial: Spatial | undefined) => Boolean(spatial?.shotmapSnapshotAvailable && spatial.shotmapPointCount === spatial.shotmapPoints.length && spatial.shotmapPoints.every(validShot));
 export const formatShotMetric = (value: number | null | undefined) => Number.isFinite(value) ? Number(value).toFixed(2) : "—";
-const trajectorySummary = (shot: ShotmapPoint) => !shot.trajectory ? "No trajectory available." : shot.trajectory.endpointKind === "blocked" ? `Blocked trajectory to ${shot.trajectory.endX.toFixed(1)}, ${shot.trajectory.endY.toFixed(1)}.` : `Goal-mouth trajectory to ${shot.trajectory.endX.toFixed(1)}, ${shot.trajectory.endY.toFixed(1)}, height ${shot.trajectory.endZMeters == null ? "unavailable" : `${shot.trajectory.endZMeters.toFixed(2)} metres`}.`;
+const trajectorySummary = (shot: ShotmapPoint) => !shot.trajectory ? "궤적 정보 없음." : shot.trajectory.endpointKind === "blocked" ? `블록 지점 ${shot.trajectory.endX.toFixed(1)}, ${shot.trajectory.endY.toFixed(1)}.` : `골대 도달 지점 ${shot.trajectory.endX.toFixed(1)}, ${shot.trajectory.endY.toFixed(1)}, 높이 ${shot.trajectory.endZMeters == null ? "미상" : `${shot.trajectory.endZMeters.toFixed(2)} m`}.`;
 export const shotMarkerLabel = (shot: ShotmapPoint) => `${outcomePresentation[shot.outcome].label}. ${shot.xg == null ? "xG 미상; 중앙값 크기" : `xG ${formatShotMetric(shot.xg)}`}. xGOT ${formatShotMetric(shot.xgot)}. ${trajectorySummary(shot)}`;
 export const outcomeSummary = (outcomes: readonly ShotOutcome[]) => outcomes.length ? outcomes.map((outcome) => outcomePresentation[outcome].plural).join(", ") : "none";
 
@@ -76,15 +76,16 @@ export function useShotOutcomeVisibility(spatial: Spatial | undefined, contextId
   return { integrity, counts, presentOutcomes, visibleOutcomes, onClick, onDoubleClick };
 }
 
-export function OutcomeControls({ outcomes, counts, visible, markerLayerId, onClick, onDoubleClick }: {
+export function OutcomeControls({ outcomes, counts, visible, markerLayerId, onClick, onDoubleClick, showCounts = true }: {
   outcomes: readonly ShotOutcome[]; counts: Record<ShotOutcome, number>; visible: ReadonlySet<ShotOutcome>; markerLayerId: string;
+  showCounts?: boolean;
   onClick(outcome: ShotOutcome, detail: number): void; onDoubleClick(outcome: ShotOutcome): void;
 }) {
   return <div role="group" aria-label="Shot outcome visibility" className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
     {outcomes.map((outcome) => { const item = outcomePresentation[outcome]; const pressed = visible.has(outcome); return <button key={outcome} type="button" aria-pressed={pressed} aria-controls={markerLayerId} aria-label={`${item.plural}, ${counts[outcome]} shots. ${pressed ? "Visible" : "Hidden"}. Click to show or hide; double-click to isolate.`}
       onClick={(event) => onClick(outcome, event.detail)} onDoubleClick={() => onDoubleClick(outcome)}
-      className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded border px-3 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200 ${pressed ? "border-white/30 bg-white/10 text-zinc-100" : "border-white/10 bg-black/20 text-zinc-500"}`}>
-      <span aria-hidden="true" className="font-mono" style={{ color: item.color }}>{item.summary}</span><span>{item.plural} {counts[outcome]}</span>
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded border px-3 text-base font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200 ${pressed ? "border-white/30 bg-white/10 text-zinc-100" : "border-white/10 bg-black/20 text-zinc-500"}`}>
+      <span aria-hidden="true" className="font-mono" style={{ color: item.color }}>{item.summary}</span><span>{item.plural}{showCounts ? ` ${counts[outcome]}` : ""}</span>
     </button>; })}
   </div>;
 }
