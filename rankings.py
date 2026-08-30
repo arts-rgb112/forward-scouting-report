@@ -17,7 +17,7 @@ from fotmob_client import (
 from metrics import DecisionMetrics, extract_multi_season_metrics
 from spear_cohort import get_static_spear_cohort, load_spear_cohort, spear_cohort_data_version
 from tactical_ratio import (
-    get_tactical_ratio_for_session,
+    get_tactical_ratio_for_session, get_tactical_session_row,
     passes_final_third_filter,
     tactical_data_version,
 )
@@ -626,6 +626,9 @@ def get_spear_leaderboard(
     records: list[dict[str, object]] = []
     for player_id, metric in peers.items():
         row = spatial.get(player_id)
+        session_row = get_tactical_session_row(
+            player_id, metric.league_name or "", season_name,
+        )
         box_ratio = float(row.get("in_box_ratio") or 0.0) if row else 0.0
         # Role is a spatial-depth label only. Missing micro-zone values must
         # never turn a conventional box player into a false nine.
@@ -695,6 +698,7 @@ def get_spear_leaderboard(
             "aerial_lost_per90_raw": metric.aerial_duels_lost_per90,
             "aerial_duel_win_rate_raw": metric.aerial_duels_won_percentage,
             "cca_area_pct": row.get("cca_area_pct") if row is not None else None,
+            "activity_valid_point_count": session_row.get("activity_valid_point_count") if session_row is not None else None,
             # Ratio-companion raw values use the exact same fully eligible
             # domestic eight-league rows as the cached M.E.S.S.I. table.
             # They are additive internal columns; public leaderboard DTOs do
@@ -715,6 +719,36 @@ def get_spear_leaderboard(
             "final_third_possessions_won_per90": metric.final_third_possessions_won_per90,
             "final_third_possessions_won_source": metric.final_third_possessions_won_source,
             "forward_press_concentration_raw": metric.forward_press_concentration,
+            # Exact M.E.S.S.I. 3.0 decomposition.  These are the already
+            # calculated 50:50 pair inputs behind the six public sectors;
+            # retaining them prevents a later API layer from rebuilding a
+            # second score from raw values or from applying attenuation again.
+            "outside_shot_volume_score": round(volume_scores["outside_box"].get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "outside_shot_ratio_score": round(out_box_ratio_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "deep_box_volume_score": round(volume_scores["box"].get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "deep_box_ratio_score": round(deep_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "danger_zone_volume_score": round(volume_scores["dribble"].get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "danger_zone_ratio_score": round(progression_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "combined_duel_volume_score": round(combined_duel_volume_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "combined_duel_ratio_score": round(combined_duel_efficiency_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "space_control_volume_score": round(volume_scores["space"].get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "space_control_ratio_score": round(danger_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "forward_press_volume_score": round(recovery_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
+            "forward_press_ratio_score": round(forward_press_concentration_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
+            # Presence must travel with the conservative score floor: a real
+            # percentile of 20 is not the same thing as an unavailable source.
+            "outside_shot_volume_observed": player_id in volume_scores["outside_box"],
+            "outside_shot_ratio_observed": player_id in out_box_ratio_scores,
+            "deep_box_volume_observed": player_id in volume_scores["box"],
+            "deep_box_ratio_observed": player_id in deep_scores,
+            "danger_zone_volume_observed": player_id in volume_scores["dribble"],
+            "danger_zone_ratio_observed": player_id in progression_scores,
+            "combined_duel_volume_observed": player_id in volume_scores["ground"] and player_id in volume_scores["aerial"],
+            "combined_duel_ratio_observed": player_id in duel_scores and player_id in aerial_scores,
+            "space_control_volume_observed": player_id in volume_scores["space"],
+            "space_control_ratio_observed": player_id in danger_scores,
+            "forward_press_volume_observed": player_id in recovery_scores,
+            "forward_press_ratio_observed": player_id in forward_press_concentration_scores,
             # The strict score is intentionally independent from its relative
             # tier.  The latter is assigned only after every cohort score is
             # ranked below.
@@ -746,7 +780,8 @@ def get_spear_leaderboard(
             "space_control_score": round(sector_scores["space"][player_id], 2),
             "combined_duel_score": round(sector_scores["duel"][player_id], 2),
             "forward_press_score": round(sector_scores["press"][player_id], 2),
-            "combined_duel_volume_score": round(combined_duel_volume_scores[player_id], 2),
+            # `final_third_press_score` remains the legacy /90 diagnostic;
+            # it is intentionally distinct from forward_press_ratio_score.
             "combined_duel_efficiency_score": round(combined_duel_efficiency_scores[player_id], 2),
             "recoveries_score": round(recovery_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),
             "final_third_press_score": round(final_third_press_per90_scores.get(player_id, MISSING_COMPONENT_SCORE), 2),

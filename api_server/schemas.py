@@ -748,6 +748,38 @@ class DetailV2Group(BaseModel):
     metrics: list[DetailV2Metric] = Field(min_length=1)
 
 
+class DuelPressScoreSample(BaseModel):
+    """Observed denominator facts for one exact M.E.S.S.I. score half.
+
+    The client may display these facts but must never turn them into an
+    alternative score or apply a second small-sample adjustment.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    attempts: float | None = Field(default=None, ge=0)
+    minutes: int = Field(ge=0)
+
+
+class DuelPressScoreBreakdown(BaseModel):
+    """The exact two halves already used by one unified score category."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    compositeScore: float = Field(ge=0, le=100)
+    volumeScore: float = Field(ge=0, le=100)
+    ratioScore: float = Field(ge=0, le=100)
+    volumeSample: DuelPressScoreSample
+    ratioSample: DuelPressScoreSample
+    sampleState: Literal["observed", "low_sample", "unavailable"]
+
+    @model_validator(mode="after")
+    def validate_exact_pair(self) -> "DuelPressScoreBreakdown":
+        if abs(self.compositeScore - round((self.volumeScore + self.ratioScore) / 2.0, 2)) > 0.005:
+            raise ValueError("compositeScore must equal the 50:50 volume/ratio pair")
+        return self
+
+
 class DuelPressDetailV2Category(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -760,6 +792,7 @@ class DuelPressDetailV2Category(BaseModel):
     comparison: DetailV2Comparison
     formulaId: Literal["stat-pairs-category-v2", "pressing-sector-score-v3"] = "pressing-sector-score-v3"
     formulaVersion: Literal["stat-pairs-v2", "messi-score-unified-v3"] = "messi-score-unified-v3"
+    scoreBreakdown: "DuelPressScoreBreakdown | None" = None
     groups: list[DetailV2Group] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -768,6 +801,13 @@ class DuelPressDetailV2Category(BaseModel):
             raise ValueError("v2 category score state is inconsistent")
         if (self.scoreState == "imputed") != bool(self.imputedComponents):
             raise ValueError("v2 category imputation is inconsistent")
+        if self.formulaVersion == "messi-score-unified-v3" and self.scoreBreakdown is None:
+            raise ValueError("unified category requires scoreBreakdown")
+        if self.formulaVersion == "stat-pairs-v2" and self.scoreBreakdown is not None:
+            raise ValueError("legacy stat-pairs category cannot expose unified scoreBreakdown")
+        if self.scoreBreakdown is not None and self.percentileScore is not None:
+            if abs(self.percentileScore - self.scoreBreakdown.compositeScore) > 0.005:
+                raise ValueError("category score must equal the exact scoreBreakdown composite")
         return self
 
 
@@ -805,6 +845,17 @@ class DuelPressDetailReadoutV2Envelope(BaseModel):
             raise ValueError("v2 context indicators must use canonical order")
         if self.context.playerId != self.player.id:
             raise ValueError("v2 player identity must match context")
+        expected_formula_id = (
+            "pressing-sector-score-v3"
+            if self.ratingVersion == "messi-score-unified-v3"
+            else "stat-pairs-category-v2"
+        )
+        if any(
+            item.formulaVersion != self.ratingVersion
+            or item.formulaId != expected_formula_id
+            for item in self.categories
+        ):
+            raise ValueError("category score formula must match the envelope rating version")
         return self
 
 
@@ -2123,7 +2174,10 @@ class BenchmarkRadarV2PositionReference(BaseModel):
     minimumPopulation: Literal[20] = 20
     population: int = Field(ge=0)
     state: BenchmarkRadarV2ReferenceState
-    reason: Literal["position_label_not_player_role", "position_population_below_minimum"] | None = None
+    reason: Literal[
+        "position_label_not_player_role", "position_population_below_minimum",
+        "position_population_unavailable",
+    ] | None = None
 
     @model_validator(mode="after")
     def validate_position_reference(self) -> "BenchmarkRadarV2PositionReference":
@@ -2131,8 +2185,10 @@ class BenchmarkRadarV2PositionReference(BaseModel):
             raise ValueError("observed position reference requires the minimum population and no reason")
         if self.state == "low_sample" and (self.population >= self.minimumPopulation or self.reason != "position_population_below_minimum"):
             raise ValueError("low-sample position reference requires its explicit reason")
-        if self.state == "unavailable" and self.reason != "position_label_not_player_role":
-            raise ValueError("unavailable position reference requires player-role reason")
+        if self.state == "unavailable" and self.reason not in {
+            "position_label_not_player_role", "position_population_unavailable",
+        }:
+            raise ValueError("unavailable position reference requires an explicit unavailable reason")
         return self
 
 
@@ -2177,7 +2233,10 @@ class BenchmarkRadarV2ReferenceScore(BaseModel):
     score: float | None = Field(default=None, ge=0, le=99)
     population: int = Field(ge=0)
     state: BenchmarkRadarV2ReferenceState
-    reason: Literal["position_label_not_player_role", "position_population_below_minimum"] | None = None
+    reason: Literal[
+        "position_label_not_player_role", "position_population_below_minimum",
+        "position_population_unavailable",
+    ] | None = None
 
     @model_validator(mode="after")
     def validate_reference_score(self) -> "BenchmarkRadarV2ReferenceScore":

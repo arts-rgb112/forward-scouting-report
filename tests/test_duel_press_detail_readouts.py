@@ -22,6 +22,7 @@ from scripts.audit_duel_press_v2_sources import (
     COHORT_FIELDS, TACTICAL_FIELDS, _tactical_competition_name, _v2_context,
     build_audit_rows,
 )
+from tactical_ratio import get_tactical_session_row
 
 
 DUEL_FIXTURES = Path(__file__).parents[1] / "docs" / "fixtures" / "duel_press_v1"
@@ -37,6 +38,21 @@ def _player():
 def _record(player_id: int = 194165) -> dict[str, object]:
     record = json.loads((DETAIL_FIXTURES / "complete_static_record.json").read_text(encoding="utf-8"))
     record["player_id"] = player_id
+    # Exact persisted halves from rankings.py.  This canonical in-memory v2
+    # frame intentionally mirrors a fully scored static leaderboard row.
+    for prefix, score in {
+        "outside_shot": 93.3,
+        "deep_box": 93.3,
+        "danger_zone": 84.72,
+        "combined_duel": 71.92,
+        "space_control": 87.35,
+        "forward_press": 42.25,
+    }.items():
+        record[f"{prefix}_volume_score"] = score
+        record[f"{prefix}_ratio_score"] = score
+        record[f"{prefix}_volume_observed"] = True
+        record[f"{prefix}_ratio_observed"] = True
+    record["activity_valid_point_count"] = 180
     return record
 
 
@@ -81,7 +97,19 @@ def test_full_v2_endpoint_fixtures_are_strictly_model_valid(fixture_name: str) -
         payload = responses[field]
         validated = model.model_validate(payload)
         assert validated.schemaVersion == "2.0.0"
-        assert validated.model_dump(mode="json") == payload
+        # Legacy stat-pairs fixtures predate the nullable unified field.
+        # Their canonical response representation makes the compatibility
+        # explicit with ``scoreBreakdown: null`` on every legacy category.
+        expected = payload
+        if field == "detail":
+            expected = {
+                **payload,
+                "categories": [
+                    {**category, "scoreBreakdown": category.get("scoreBreakdown")}
+                    for category in payload["categories"]
+                ],
+            }
+        assert validated.model_dump(mode="json") == expected
 
 
 def test_complete_detail_readout_has_six_ordered_categories_and_all_legacy_bars(monkeypatch) -> None:
@@ -433,6 +461,118 @@ def test_v2_stat_pairs_are_server_owned_and_share_one_snapshot(monkeypatch) -> N
     assert detail.metricTaxonomyVersion == fixture["metricTaxonomyVersion"]
     assert [item.id for item in detail.categories] == fixture["categoryOrder"]
     assert [item.id for item in detail.contextIndicators] == fixture["contextIndicatorOrder"]
+
+
+def test_v3_score_breakdown_is_exact_additive_and_keeps_sample_state_informational(monkeypatch) -> None:
+    """The public category score is the persisted 50:50 pair, never a radar re-score."""
+    player = _player()
+    record = _record(player.id)
+    record.update({
+        "out_box_shots_raw": 0,
+        "forward_press_ratio_score": 67.9,
+        # This deliberately disagrees with the retired benchmark diagnostic.
+        "final_third_press_score": 12.0,
+        "space_control_volume_score": 78.4,
+        "space_control_ratio_score": 99.9,
+        "outside_shot_score": 93.3,
+        "deep_box_score": 93.3,
+        "danger_zone_score": 84.72,
+        "combined_duel_score": 71.92,
+        "space_control_score": 89.15,
+        "forward_press_score": 55.08,
+        "pressing_score": 85.43,
+    })
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    profile = service.find_duel_press_v2_player(player.id, "2025/2026", "league", 8, "all")
+    assert detail is not None and profile is not None
+    categories = {category.id: category for category in detail.categories}
+    for category in categories.values():
+        breakdown = category.scoreBreakdown
+        assert breakdown is not None
+        assert breakdown.compositeScore == round(
+            (breakdown.volumeScore + breakdown.ratioScore) / 2.0, 2,
+        )
+        assert category.percentileScore == breakdown.compositeScore
+        # An observed zero is not unavailable and does not alter the score.
+        if category.id == "outsideShot":
+            assert breakdown.volumeSample.attempts == 0
+            assert breakdown.sampleState == "low_sample"
+
+    press = categories["forwardPress"].scoreBreakdown
+    assert press is not None
+    assert (press.volumeScore, press.ratioScore, press.compositeScore) == (42.25, 67.9, 55.08)
+    assert press.ratioScore != record["final_third_press_score"]
+    space = categories["spaceControl"].scoreBreakdown
+    assert space is not None
+    assert space.volumeSample.attempts is None
+    assert space.sampleState == "observed"
+    weighted = round(sum(
+        service.V2_OVERALL_WEIGHT_POINTS[category_id] * categories[category_id].percentileScore
+        for category_id in service.V2_CATEGORY_ORDER
+    ) / 100.0, 2)
+    assert profile.data.overallRating.rawValue == weighted
+
+    unavailable_record = {**record, "forward_press_ratio_observed": False}
+    assert service._v3_score_breakdown(unavailable_record, "forwardPress").sampleState == "unavailable"
+    service._v2_frame_cached.cache_clear()
+
+
+def test_v3_schema_requires_breakdown_and_rejects_mixed_category_versions(monkeypatch) -> None:
+    player = _player()
+    record = _record(player.id)
+    monkeypatch.setattr(service, "build_duel_press_players", lambda *args: (player,))
+    monkeypatch.setattr(service, "_detail_frame_records", lambda *args: [record])
+    service._v2_frame_cached.cache_clear()
+    detail = service.find_duel_press_detail_readouts_v2(player.id, "2025/2026", "league", 8, "all")
+    assert detail is not None
+    payload = detail.model_dump(mode="json")
+    payload["categories"][0]["scoreBreakdown"] = None
+    with pytest.raises(ValidationError):
+        DuelPressDetailReadoutV2Envelope.model_validate(payload)
+
+    mixed = detail.model_dump(mode="json")
+    mixed["categories"][0].update({
+        "formulaId": "stat-pairs-category-v2",
+        "formulaVersion": "stat-pairs-v2",
+        "scoreBreakdown": None,
+    })
+    with pytest.raises(ValidationError):
+        DuelPressDetailReadoutV2Envelope.model_validate(mixed)
+
+    legacy = _v2_fixture("complete_league.json")["responses"]["detail"]
+    assert DuelPressDetailReadoutV2Envelope.model_validate(legacy).categories[0].scoreBreakdown is None
+    explicit_legacy = {
+        **legacy,
+        "categories": [{**category, "scoreBreakdown": None} for category in legacy["categories"]],
+    }
+    assert DuelPressDetailReadoutV2Envelope.model_validate(explicit_legacy).categories[0].scoreBreakdown is None
+    service._v2_frame_cached.cache_clear()
+
+
+def test_v3_space_sample_uses_same_static_fixed_n_count_without_score_penalty() -> None:
+    kane = get_tactical_session_row("194165", "Bundesliga", "2025/2026")
+    jesus = get_tactical_session_row("576165", "Premier League", "2024/2025")
+    assert kane is not None and jesus is not None
+    # These are existing tactical_3zone_ratio.csv values from the max-180
+    # source used by the scoring path, not Tier 3 full-source counts.
+    assert kane["activity_valid_point_count"] == 180.0
+    assert jesus["activity_valid_point_count"] == 148.0
+
+    observed_record = _record()
+    low_record = {**observed_record, "activity_valid_point_count": 59}
+    observed = service._v3_score_breakdown(observed_record, "spaceControl")
+    low = service._v3_score_breakdown(low_record, "spaceControl")
+    assert observed is not None and low is not None
+    assert observed.sampleState == "observed"
+    assert low.sampleState == "low_sample"
+    assert (low.compositeScore, low.volumeScore, low.ratioScore) == (
+        observed.compositeScore, observed.volumeScore, observed.ratioScore,
+    )
+    assert low.volumeSample.attempts is None
 
 
 def test_v2_box_xgot_minus_xg_pairs_are_server_derived_and_rerate_shooting(monkeypatch) -> None:

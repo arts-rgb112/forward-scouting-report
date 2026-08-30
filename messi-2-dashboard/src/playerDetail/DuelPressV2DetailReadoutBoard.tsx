@@ -75,6 +75,23 @@ function CategoryTooltip({ category }: { category: DuelPressV2Category }) {
   return <><p>서버 백분위 점수: {category.percentileScore}/99</p><p>중앙값 {category.comparison.median ?? "데이터 없음"} · 순위 {category.comparison.rank ?? "데이터 없음"}/{category.comparison.population}</p>{category.imputedComponents.length > 0 && <p className="text-amber-200">대체 구성요소: {category.imputedComponents.join(", ")}</p>}</>;
 }
 
+function sampleCopy(sample: NonNullable<DuelPressV2Category["scoreBreakdown"]>["volumeSample"]) {
+  const attempts = sample.attempts === null ? "시도 수 해당 없음" : `시도 ${sample.attempts.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}`;
+  return `${attempts} · ${sample.minutes.toLocaleString("ko-KR")}분`;
+}
+
+function ScoreBreakdown({ category }: { category: DuelPressV2Category }) {
+  const breakdown = category.scoreBreakdown;
+  if (!breakdown) return null;
+  const state = breakdown.sampleState === "low_sample" ? "저표본" : breakdown.sampleState === "unavailable" ? "원천 일부 없음" : "관측됨";
+  const stateTone = breakdown.sampleState === "low_sample" ? "text-amber-200" : breakdown.sampleState === "unavailable" ? "text-rose-200" : "text-zinc-400";
+  return <section data-score-breakdown={category.id} aria-label={`${duelPressAxisLabels[category.id]} 정본 점수 분해`} className="mt-3 border-t border-white/10 pt-2">
+    <div className="grid grid-cols-3 gap-2 font-mono type-label tabular-nums text-zinc-200"><span>종합 {breakdown.compositeScore.toFixed(2)}</span><span>볼륨 {breakdown.volumeScore.toFixed(2)}</span><span>비율 {breakdown.ratioScore.toFixed(2)}</span></div>
+    <p className="mt-1 type-caption text-zinc-500">볼륨 {sampleCopy(breakdown.volumeSample)} · 비율 {sampleCopy(breakdown.ratioSample)}</p>
+    <p className={`mt-1 type-caption ${stateTone}`}>{state}{breakdown.sampleState === "low_sample" ? " · 점수 감쇠 없음" : ""}</p>
+  </section>;
+}
+
 function CategoryCard({ category, summary = false }: { category: DuelPressV2Category; summary?: boolean }) {
   const score = formatAuthoritativePercentile(category.percentileScore);
   const tone = scoreTone(score);
@@ -83,6 +100,7 @@ function CategoryCard({ category, summary = false }: { category: DuelPressV2Cate
   return <article data-taxonomy="duel-press-v2" className="min-w-0 rounded-xl border border-white/10 bg-[#101415] p-3 shadow-sm">
     <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate type-title font-black text-white">{title}</h3><p className="mt-1 type-caption text-zinc-500">원시값 · 동일 코호트 백분위</p></div><Tooltip label={title} content={<CategoryTooltip category={category}/>}><b className={`inline-flex min-w-11 items-center justify-center rounded border px-2 py-1 font-mono type-metric font-black ${tone.badge}`}>{score ?? "—"}</b></Tooltip></div>
     <div role="progressbar" aria-label={`${title} 백분위`} aria-valuemin={0} aria-valuemax={99} {...(score === null ? {} : { "aria-valuenow": score })} className="mt-3 h-1.5 overflow-hidden rounded bg-white/10"><span className={`block h-full rounded ${tone.fill}`} style={{ width: `${score ?? 0}%` }} /></div>
+    <ScoreBreakdown category={category}/>
     {!summary && category.groups.map((group) => <section key={group.id} className="mt-3 min-w-0" aria-label={duelPressV2GroupLabel(group.id, group.label)}>{hasMultipleGroups && <h4 className="border-b border-white/10 pb-1 type-label font-bold text-zinc-200">{duelPressV2GroupLabel(group.id, group.label)}</h4>}{rowsForGroup(group).map((row) => <MetricRow key={`${row.metric.id}-${row.slot}`} row={row}/>)}</section>)}
   </article>;
 }

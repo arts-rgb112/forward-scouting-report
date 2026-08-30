@@ -36,9 +36,18 @@ const pairMetric = z.object({ id: z.string().min(1), label: z.string().min(1), p
 });
 
 const group = z.object({ id: z.string().min(1), label: z.string().min(1), kind: z.enum(["count_rate_pair", "duel_split", "spatial", "pressing"]), metrics: z.array(pairMetric).min(1) }).strict();
-const category = z.object({ id: z.enum(DUEL_PRESS_V2_CATEGORIES), label: z.string().min(1), percentileScore: unifiedScore, scoreState: z.enum(["observed", "imputed", "unavailable"]), imputedComponents: z.array(z.string().min(1)), direction, comparison, formulaId: z.string().min(1), formulaVersion: z.string().min(1), groups: z.array(group).min(1) }).strict().superRefine((value, ctx) => {
+const scoreSample = z.object({ attempts: finite.nullable(), minutes: z.number().int().nonnegative() }).strict().superRefine((value, ctx) => {
+  if (value.attempts !== null && value.attempts < 0) ctx.addIssue({ code: "custom", message: "score sample attempts must be nonnegative" });
+});
+const scoreBreakdown = z.object({ compositeScore: unifiedScore, volumeScore: unifiedScore, ratioScore: unifiedScore, volumeSample: scoreSample, ratioSample: scoreSample, sampleState: z.enum(["observed", "low_sample", "unavailable"]) }).strict().superRefine((value, ctx) => {
+  if (Math.abs(value.compositeScore - Math.round(((value.volumeScore + value.ratioScore) / 2) * 100) / 100) > 0.005) ctx.addIssue({ code: "custom", message: "score breakdown composite must equal the exact 50:50 pair" });
+});
+const category = z.object({ id: z.enum(DUEL_PRESS_V2_CATEGORIES), label: z.string().min(1), percentileScore: unifiedScore, scoreState: z.enum(["observed", "imputed", "unavailable"]), imputedComponents: z.array(z.string().min(1)), direction, comparison, formulaId: z.string().min(1), formulaVersion: z.string().min(1), scoreBreakdown: scoreBreakdown.nullable().optional(), groups: z.array(group).min(1) }).strict().superRefine((value, ctx) => {
   if (value.scoreState === "imputed" && value.imputedComponents.length === 0) ctx.addIssue({ code: "custom", message: "imputed category must identify components" });
   if (value.scoreState !== "imputed" && value.imputedComponents.length > 0) ctx.addIssue({ code: "custom", message: "imputed components require imputed category" });
+  if (value.formulaVersion === "messi-score-unified-v3" && value.scoreBreakdown == null) ctx.addIssue({ code: "custom", message: "unified category requires exact scoreBreakdown" });
+  if (value.formulaVersion === "stat-pairs-v2" && value.scoreBreakdown != null) ctx.addIssue({ code: "custom", message: "legacy category cannot contain unified scoreBreakdown" });
+  if (value.scoreBreakdown && Math.abs(value.percentileScore - value.scoreBreakdown.compositeScore) > 0.005) ctx.addIssue({ code: "custom", message: "category score must equal breakdown composite" });
 });
 
 const context = z.object({ playerId: z.number().int().positive().safe(), idNamespace: z.literal("fotmob"), season: z.string().regex(/^20\d{2}\/20\d{2}$/), mode: z.enum(["league", "europe"]), scope: scope.nullable(), competition: z.enum(["all", "ucl", "uel", "uecl"]).nullable() }).strict().superRefine((value, ctx) => {
@@ -61,6 +70,8 @@ export const duelPressV2DetailMetricsSchema = z.object({ ...envelopeFields, cont
   verifyRatingSnapshot(value, ctx);
   if (value.categories.map((item) => item.id).join("|") !== DUEL_PRESS_V2_CATEGORIES.join("|")) ctx.addIssue({ code: "custom", message: "v2 category order is invalid" });
   if (value.contextIndicators.map((item) => item.id).join("|") !== DUEL_PRESS_V2_CONTEXT_INDICATORS.join("|")) ctx.addIssue({ code: "custom", message: "v2 indicator order is invalid" });
+  const expectedFormulaId = value.ratingVersion === "messi-score-unified-v3" ? "pressing-sector-score-v3" : "stat-pairs-category-v2";
+  if (value.categories.some((item) => item.formulaVersion !== value.ratingVersion || item.formulaId !== expectedFormulaId)) ctx.addIssue({ code: "custom", message: "category score formula must match the envelope rating version" });
 });
 export const duelPressV2PlayerSchema = z.object({ ...envelopeFields, context, cohortPopulation: z.number().int().nonnegative(), data: playerData }).strict().superRefine((value, ctx) => { verifyRatingSnapshot(value, ctx); if (value.context.playerId !== value.data.id || value.context.idNamespace !== value.data.idNamespace) ctx.addIssue({ code: "custom", message: "v2 player identity mismatch" }); });
 const leaderboardMeta = z.object({ applied: z.object({ ageBand: z.string(), minutesBand: z.string(), order: z.enum(["asc", "desc"]), position: z.string().nullable(), q: z.string().nullable(), role: z.string().nullable(), sort: z.string() }).strict(), competition: z.enum(["all", "ucl", "uel", "uecl"]).nullable(), generatedAt: z.string().min(1), hasNextPage: z.boolean(), mode: z.enum(["league", "europe"]), page: z.number().int().positive(), pageSize: z.literal(50), population: z.number().int().nonnegative(), returned: z.number().int().nonnegative(), schemaVersion: z.literal("2.0.0"), scope: scope.nullable(), season: z.string().regex(/^20\d{2}\/20\d{2}$/), source: z.string().min(1), totalItems: z.number().int().nonnegative(), totalPages: z.number().int().nonnegative() }).strict();

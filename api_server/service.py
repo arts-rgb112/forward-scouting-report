@@ -37,6 +37,7 @@ from .schemas import (
     DuelPressDetailReadout, DuelPressDetailReadoutEnvelope,
     DetailV2Comparison, DetailV2Datum, DetailV2Metric, DetailV2Group,
     DuelPressDetailV2Category, DuelPressDetailV2ContextIndicator,
+    DuelPressScoreBreakdown, DuelPressScoreSample,
     DuelPressDetailReadoutV2Envelope, DuelPressV2BoardCategory, DuelPressV2RatingStats,
     DuelPressV2LeaderboardPlayer, DuelPressV2LeaderboardPageEnvelope,
     DuelPressV2PlayerEnvelope, DuelPressV2LeaderboardMeta, DuelPressV2CohortContext,
@@ -1448,6 +1449,77 @@ V3_CANONICAL_CATEGORY_COLUMNS = {
     "forwardPress": "forward_press_score",
 }
 
+# ``rankings.py`` persists the exact two 50:50 inputs at leaderboard build
+# time.  This endpoint only transports them; it must never recompute a score
+# from raw data or reuse the retired v2 reliability attenuation.
+V3_SCORE_BREAKDOWN_COLUMNS = {
+    "outsideShot": ("outside_shot_volume_score", "outside_shot_ratio_score", "outside_shot_volume_observed", "outside_shot_ratio_observed"),
+    "boxThreat": ("deep_box_volume_score", "deep_box_ratio_score", "deep_box_volume_observed", "deep_box_ratio_observed"),
+    "dangerZone": ("danger_zone_volume_score", "danger_zone_ratio_score", "danger_zone_volume_observed", "danger_zone_ratio_observed"),
+    "combinedDuel": ("combined_duel_volume_score", "combined_duel_ratio_score", "combined_duel_volume_observed", "combined_duel_ratio_observed"),
+    "spaceControl": ("space_control_volume_score", "space_control_ratio_score", "space_control_volume_observed", "space_control_ratio_observed"),
+    "forwardPress": ("forward_press_volume_score", "forward_press_ratio_score", "forward_press_volume_observed", "forward_press_ratio_observed"),
+}
+V3_SCORE_BREAKDOWN_LOW_SAMPLE_ATTEMPTS = 20
+V3_SCORE_BREAKDOWN_FIXED_N_POINTS = 60
+
+
+def _v3_score_breakdown_attempts(record: dict[str, object], category: str) -> float | None:
+    """Return the source denominator for an already-calculated score half."""
+    if category == "outsideShot":
+        return _detail_number(record.get("out_box_shots_raw"))
+    if category == "boxThreat":
+        return _detail_number(record.get("in_box_shots_raw"))
+    if category == "dangerZone":
+        return _detail_number(record.get("dribble_attempts_raw"))
+    if category == "combinedDuel":
+        ground = _detail_number(record.get("ground_duel_attempts_raw"))
+        aerial = _detail_number(record.get("aerial_duel_attempts_raw"))
+        return ground + aerial if ground is not None and aerial is not None else None
+    if category == "forwardPress":
+        return _detail_number(record.get("recoveries"))
+    # CCA/space-control has a fixed-N coordinate guard, not an event attempt
+    # denominator.  ``null`` is intentional and never means observed zero.
+    return None
+
+
+def _v3_score_breakdown(record: dict[str, object], category: str) -> DuelPressScoreBreakdown | None:
+    volume_key, ratio_key, volume_observed_key, ratio_observed_key = V3_SCORE_BREAKDOWN_COLUMNS[category]
+    volume = _detail_number(record.get(volume_key))
+    ratio = _detail_number(record.get(ratio_key))
+    if volume is None or ratio is None:
+        # A unified v3 frame must have these persisted.  Returning no object
+        # lets the strict schema fail closed instead of inventing a breakdown.
+        return None
+    minutes_value = _detail_number(record.get("minutes_played"))
+    minutes = max(0, round(minutes_value or 0.0))
+    attempts = _v3_score_breakdown_attempts(record, category)
+    source_observed = bool(record.get(volume_observed_key)) and bool(record.get(ratio_observed_key))
+    if not source_observed:
+        sample_state = "unavailable"
+    elif category == "spaceControl":
+        coordinate_count = _detail_number(record.get("activity_valid_point_count"))
+        sample_state = (
+            "low_sample"
+            if coordinate_count is not None and coordinate_count < V3_SCORE_BREAKDOWN_FIXED_N_POINTS
+            else "observed" if coordinate_count is not None else "unavailable"
+        )
+    elif attempts is None:
+        sample_state = "unavailable"
+    elif attempts < V3_SCORE_BREAKDOWN_LOW_SAMPLE_ATTEMPTS:
+        sample_state = "low_sample"
+    else:
+        sample_state = "observed"
+    sample = DuelPressScoreSample(attempts=attempts, minutes=minutes)
+    return DuelPressScoreBreakdown(
+        compositeScore=round((volume + ratio) / 2.0, 2),
+        volumeScore=round(volume, 2),
+        ratioScore=round(ratio, 2),
+        volumeSample=sample,
+        ratioSample=sample,
+        sampleState=sample_state,
+    )
+
 
 def _score_unified_rating_snapshot(
     records: list[dict[str, object]], season: str, mode: str, scope: int, competition: str,
@@ -1468,13 +1540,37 @@ def _score_unified_rating_snapshot(
                 for category, column in V3_CANONICAL_CATEGORY_COLUMNS.items()
             }
             overall = round(float(record["pressing_score"]), 2)
+            breakdowns = {
+                category: _v3_score_breakdown(record, category)
+                for category in V2_CATEGORY_ORDER
+            }
         except (KeyError, TypeError, ValueError):
             # The static leaderboard only emits a row after every score
             # component is eligible.  A malformed record cannot be assigned
             # an invented score or a separate missing-value composite.
             continue
+        if any(breakdown is None for breakdown in breakdowns.values()):
+            continue
+        if any(
+            abs(categories[category] - breakdowns[category].compositeScore) > 0.005
+            for category in V2_CATEGORY_ORDER
+        ):
+            continue
+        weighted = round(
+            sum(
+                V2_OVERALL_WEIGHT_POINTS[category] * categories[category]
+                for category in V2_OVERALL_WEIGHT_POINTS
+            ) / 100.0,
+            2,
+        )
+        if abs(overall - weighted) > 0.005:
+            continue
         ratings[player_id] = {
             "categories": categories,
+            "scoreBreakdowns": {
+                category: breakdowns[category].model_dump(mode="json")
+                for category in V2_CATEGORY_ORDER
+            },
             "missing": {category: [] for category in V2_CATEGORY_ORDER},
             "overall": overall,
         }
@@ -1676,7 +1772,10 @@ def _v2_player(
     )
 
 
-def _v2_category_from_rating(category: str, rating: dict[str, object], comparison: DetailV2Comparison, groups: list[DetailV2Group]) -> DuelPressDetailV2Category:
+def _v2_category_from_rating(
+    category: str, rating: dict[str, object], comparison: DetailV2Comparison,
+    groups: list[DetailV2Group], score_breakdown: DuelPressScoreBreakdown | None,
+) -> DuelPressDetailV2Category:
     missing = rating["missing"][category]
     return DuelPressDetailV2Category(
         id=category, label=category, percentileScore=rating["categories"][category],
@@ -1684,6 +1783,7 @@ def _v2_category_from_rating(category: str, rating: dict[str, object], compariso
         comparison=comparison,
         formulaId="pressing-sector-score-v3",
         formulaVersion=DETAIL_V2_FORMULA_VERSION,
+        scoreBreakdown=score_breakdown,
         groups=groups,
     )
 
@@ -1747,7 +1847,10 @@ def _v2_category(record: dict[str, object], records: list[dict[str, object]], ca
         ])],
     }[category]
     missing = rating["missing"][category]
-    return _v2_category_from_rating(category, rating, rating["categoryComparisons"][category], groups)
+    return _v2_category_from_rating(
+        category, rating, rating["categoryComparisons"][category], groups,
+        _v3_score_breakdown(record, category),
+    )
 
 
 def _v2_context_indicators(record: dict[str, object], records: list[dict[str, object]]) -> list[DuelPressDetailV2ContextIndicator]:
@@ -2353,6 +2456,19 @@ def _benchmark_radar_v2_specs() -> dict[str, dict[str, tuple[dict[str, object], 
             "source": "press_total", "formula_id": None, "category": "forwardPress",
         }
 
+    def legacy_press_per90(identifier: str, label: str, per90_key: str) -> dict[str, object]:
+        """Keep the retired /90 diagnostic available to benchmark consumers.
+
+        It is deliberately not obtained from the M.E.S.S.I. component specs:
+        unified forwardPress now uses final-third/recoveries as its ratio half.
+        """
+        return {
+            "id": identifier, "label": label, "unit": "per90", "direction": "higher_is_better",
+            "evaluator": lambda row, per90_key=per90_key: _detail_number(row.get(per90_key)),
+            "zero_attempt_floor": lambda _row: False,
+            "source": "press_per90", "formula_id": None, "category": "forwardPress",
+        }
+
     return {
         "volume": {
             "outsideShot": (
@@ -2402,7 +2518,7 @@ def _benchmark_radar_v2_specs() -> dict[str, dict[str, tuple[dict[str, object], 
             ),
             "forwardPress": (
                 v2_component("forwardPress", "recoveries_per90", "Recoveries /90", "per90", source="press_per90"),
-                v2_component("forwardPress", "final_third_possessions_won_per90", "Final-third possessions won /90", "per90", source="press_per90"),
+                legacy_press_per90("final_third_possessions_won_per90", "Final-third possessions won /90", "final_third_possessions_won_per90"),
             ),
         },
     }
@@ -2530,6 +2646,13 @@ def build_benchmark_radar_v2(
     position_records = [record for record in benchmark_records if _benchmark_position_key(record.get("position")) == position_key]
     if position_key == "coach":
         position_state, position_reason = "unavailable", "position_label_not_player_role"
+    elif not position_records:
+        # A benchmark endpoint can be called against a legitimately filtered
+        # static frame (or a fixture frame) with no comparable role rows.  A
+        # low-sample reference requires a score by contract; an empty set has
+        # none and must remain explicitly unavailable rather than borrowing
+        # the global average.
+        position_state, position_reason = "unavailable", "position_population_unavailable"
     elif len(position_records) < BENCHMARK_RADAR_V2_MINIMUM_POSITION_POPULATION:
         position_state, position_reason = "low_sample", "position_population_below_minimum"
     else:

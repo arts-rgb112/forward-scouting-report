@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from api_server.main import app
 from api_server.schemas import BenchmarkRadarV2Envelope
@@ -17,6 +18,16 @@ FIXTURE = Path(__file__).parents[1] / "docs" / "fixtures" / "benchmark_radar_v2"
 
 def _league_params(season: str = "2025/2026") -> dict[str, object]:
     return {"season": season, "mode": "league", "scope": 8, "competition": "all"}
+
+
+@pytest.fixture(autouse=True)
+def _clear_static_frame_caches() -> None:
+    """This endpoint must never inherit a monkeypatched detail-frame cache."""
+    service._v2_frame_cached.cache_clear()
+    service.build_benchmark_radar_v2.cache_clear()
+    yield
+    service._v2_frame_cached.cache_clear()
+    service.build_benchmark_radar_v2.cache_clear()
 
 
 def test_benchmark_radar_v2_is_strict_and_preserves_exact_v2_axis_order() -> None:
@@ -57,6 +68,10 @@ def test_benchmark_radar_v2_uses_v2_component_states_and_lower_better_direction(
     press = envelope.data.volume.axes[5]
     assert [component.id for component in press.components] == ["recoveries", "final_third_possessions_won"]
     assert all(component.source in {"player_season_total", "league_per90_fallback", "unavailable"} for component in press.components)
+    # The old /90 readout remains an explicit benchmark-only diagnostic.  It
+    # must not be silently replaced with unified final-third/recovery ratio.
+    ratio_press = envelope.data.ratio.axes[5]
+    assert [component.id for component in ratio_press.components] == ["recoveries_per90", "final_third_possessions_won_per90"]
 
 
 def test_benchmark_radar_v2_low_sample_position_is_never_replaced_by_global_average() -> None:
