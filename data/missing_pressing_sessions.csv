@@ -77,12 +77,15 @@ player_id,player_name,team_name,league_id,league_name,season_name,reason
 1097466,Micky van de Ven,Tottenham Hotspur,47,Premier League,2025/2026,final_third_possessions_won_unavailable
 1137407,Malick Thiaw,Newcastle United,47,Premier League,2025/2026,final_third_possessions_won_unavailable
 950829,Chris Richards,Crystal Palace,47,Premier League,2025/2026,final_third_possessions_won_unavailable
+1070712,Josko Gvardiol,Manchester City,47,Premier League,2025/2026,final_third_possessions_won_unavailable
+848034,Santiago Bueno,Wolverhampton Wanderers,47,Premier League,2025/2026,final_third_possessions_won_unavailable
 815431,Davide Frattesi,Inter,55,Serie A,2025/2026,final_third_possessions_won_unavailable
 474448,Antonio Sanabria,Cremonese,55,Serie A,2025/2026,final_third_possessions_won_unavailable
 1574492,Tiago Gabriel,Lecce,55,Serie A,2025/2026,final_third_possessions_won_unavailable
 1186444,Charlie Cresswell,Toulouse,53,Ligue 1,2025/2026,final_third_possessions_won_unavailable
 1159831,Casper Widell,Excelsior,57,Eredivisie,2025/2026,final_third_possessions_won_unavailable
-969711,Justin De Haas,Famalicao,61,Liga Portugal,2025/2026,final_third_possessions_won_unavailable
+970565,Kenneth Taylor,Ajax,57,Eredivisie,2025/2026,final_third_possessions_won_unavailable
+969711,Justin De Haas,Famalicão,61,Liga Portugal,2025/2026,final_third_possessions_won_unavailable
 1342516,Rein Van Helden,St.Truiden,40,Belgian Pro League,2025/2026,final_third_possessions_won_unavailable
 965823,Ewoud Pletinckx,OH Leuven,40,Belgian Pro League,2025/2026,final_third_possessions_won_unavailable
 1437306,Yuto Tsunashima,Royal Antwerp,40,Belgian Pro League,2025/2026,final_third_possessions_won_unavailable
@@ -90,8 +93,26 @@ player_id,player_name,team_name,league_id,league_name,season_name,reason
 939427,Mujaid Sadick,Genk,40,Belgian Pro League,2025/2026,final_third_possessions_won_unavailable
 1088753,Geny Catamo,Sporting CP,42,Champions League,2025/2026,final_third_possessions_won_unavailable
 721089,Gianluca Scamacca,Atalanta,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+654908,Richarlison,Tottenham Hotspur,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+749736,Kai Havertz,Arsenal,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+1189288,Federico Gatti,Juventus,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+737857,Dusan Vlahovic,Juventus,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+1184693,Couhaib Driouech,PSV Eindhoven,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+609516,Robin Le Normand,Atlético Madrid,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+1354085,Joel Ordóñez,Club Brugge,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+351999,Wout Weghorst,Ajax,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+876734,Anderson Silva,Pafos FC,42,Champions League,2025/2026,final_third_possessions_won_unavailable
+815431,Davide Frattesi,Inter,42,Champions League,2025/2026,final_third_possessions_won_unavailable
 852071,Juan Hernández,Real Betis,73,Europa League,2025/2026,final_third_possessions_won_unavailable
 660301,Donyell Malen,Aston Villa,73,Europa League,2025/2026,final_third_possessions_won_unavailable
 609505,Borja Iglesias,Celta Vigo,73,Europa League,2025/2026,final_third_possessions_won_unavailable
 766611,Nikola Milenkovic,Nottingham Forest,73,Europa League,2025/2026,final_third_possessions_won_unavailable
 352968,Sébastien Haller,FC Utrecht,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+940453,Yorbe Vertessen,Salzburg,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+616170,Martin Erlic,FC Midtjylland,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+169719,Chris Wood,Nottingham Forest,73,Europa League,2025/2026,both_source_metrics_unavailable
+643724,Philipp Lienhart,Freiburg,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+1318701,Andrews Tetteh,Panathinaikos,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+1425998,Leo Sauer,Feyenoord,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+1095445,Arnaud Kalimuendo-Muinga,Nottingham Forest,73,Europa League,2025/2026,final_third_possessions_won_unavailable
+688271,Auston Trusty,Celtic,73,Europa League,2025/2026,final_third_possessions_won_unavailable
