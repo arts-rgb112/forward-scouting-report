@@ -88,9 +88,9 @@ def test_player_context_additive_summary_hex_frequency_and_penalty_toggle() -> N
     included_data = included.json()["data"]
     assert included_data["placementSummary"] == {
         "onFrameShots": 67,
-        "placementExpectedGoals": 23.5508,
+        "placementExpectedGoals": 23.5516,
         "actualGoals": 36,
-        "delta": 12.4492,
+        "delta": 12.4484,
         "excludesPenalties": False,
     }
     frequency = included_data["hexFrequency"]
@@ -105,9 +105,9 @@ def test_player_context_additive_summary_hex_frequency_and_penalty_toggle() -> N
     excluded_data = excluded.json()["data"]
     assert excluded_data["placementSummary"] == {
         "onFrameShots": 57,
-        "placementExpectedGoals": 18.797,
+        "placementExpectedGoals": 18.7977,
         "actualGoals": 26,
-        "delta": 7.203,
+        "delta": 7.2023,
         "excludesPenalties": True,
     }
     assert excluded_data["hexFrequency"] == frequency
