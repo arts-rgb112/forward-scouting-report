@@ -39,3 +39,19 @@ def test_gabriel_jesus_2025_26_remains_below_the_minutes_floor() -> None:
         row["player_id"] == "576165" and row["season_name"] == "2025/2026"
         for row in cohort
     )
+
+
+def test_gabriel_jesus_2024_25_has_verified_shotmap_snapshot() -> None:
+    shard = json.loads(
+        (ROOT / "data" / "tactical_shotmap_points_2024_2025.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    shots = shard["576165:17:61627"]
+
+    assert len(shots) == 20
+    assert all(shot.get("sourceEventId") for shot in shots)
+    assert all(shot.get("trajectory") for shot in shots)
+    assert {outcome: sum(shot["outcome"] == outcome for shot in shots) for outcome in (
+        "goal", "on_target", "off_target", "blocked",
+    )} == {"goal": 3, "on_target": 5, "off_target": 8, "blocked": 4}

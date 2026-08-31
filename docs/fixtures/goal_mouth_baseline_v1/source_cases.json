@@ -12,8 +12,8 @@
     "nonfinite_normalized_goal_mouth_coordinate"
   ],
   "audit": {
-    "eligibleShots": 104612,
-    "goals": 34436,
+    "eligibleShots": 104620,
+    "goals": 34439,
     "observedCells": 50,
     "lowSampleCells": [],
     "unavailableCells": []

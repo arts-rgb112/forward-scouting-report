@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 긴급 구현·로컬 검증 완료, 릴리스 진행 — Gabriel Jesus 2024/25 슈팅 스냅샷 및 골대 기준선 정합 핫픽스
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-jesus-shotmap-hotfix
+- 범위/가드: 최신 `origin/main`에서 `data/tactical_shotmap_points_2024_2025.json`에 exact key `576165:17:61627`의 검증된 FotMob 슈팅 20발만 additive로 추가했다. 기존 1,992개 키는 변경하지 않았다. 이 shard는 고정 5시즌 골대 기준선 원천이므로 strict fixture와 provenance를 함께 갱신해 baseline `104,612/34,436 → 104,620/34,439` 정합을 보존했다. Jesus 20발 중 baseline 적격은 8발·3골이며 50셀은 전부 observed 상태를 유지한다. Kane placement summary는 PK 포함 `23.5516/12.4484`, 제외 `18.7977/7.2023`으로 새 baseline에 맞춰 회귀값을 갱신했다. Jesus exact snapshot·strict shotmap·goal-mouth baseline 집중 테스트는 `37 passed`다. 점수 CSV·공간 세션·CCA·30셀·기능 플래그·프런트 코드는 변경하지 않는다. 배포는 Render만 수행하며 Vercel은 재배포하지 않는다.
+
 - 상태: 로컬 구현·검증 완료, 릴리스 진행 중 — 2D 회랑 근접 클러스터링 비활성 핫픽스
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-cluster-off-hotfix
 - 범위/가드: `CORRIDOR_CLUSTER_DISTANCE`만 `1.6→0`으로 바꾸어 서로 다른 원좌표 슛을 하나의 마커로 합치지 않는다. 승인된 결과별 마커 반지름·색·테두리, 정확히 동일한 원좌표 스택의 감사 정보, 슛/점수/API/데이터는 변경하지 않는다. focused `SixLaneCorridorPitch.test.tsx` 4/4와 production build가 통과했다. Kane PK 제외 108발과 Gabriel Jesus 2024/25 55발에서 렌더 그룹 수가 슛 수와 같은지, proximity cluster 배지가 0인지 Production 캐시 우회 DOM으로 확인한다.
