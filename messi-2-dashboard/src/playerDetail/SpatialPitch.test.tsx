@@ -56,19 +56,66 @@ describe("perspective spatial pitch", () => {
     expect(screen.getByRole("tooltip")).toHaveTextContent("슛 1 · 득점 1 · xG 0.30");
   });
 
-  it("keeps terrain finite across every approved camera-angle and zoom-preset combination", () => {
-    const { container } = render(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 85, y: 50 }] })}/>);
+  it("removes orphaned zoom presets and frames all four camera angles with honest end-on shot counts", () => {
+    const { container } = render(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 85, y: 50 }], shotmapSnapshotAvailable: true, shotmapPointCount: 2, shotmapPoints: [{ x: 40, y: 40, outcome: "off_target" }, { x: 80, y: 60, outcome: "goal" }] })}/>);
     const terrain = () => container.querySelector("[data-terrain-full]")!;
-    for (const angle of ["좌측", "우측", "골대 정면", "골대 뒤"]) {
-      fireEvent.click(screen.getByRole("button", { name: angle }));
-      for (const frame of ["전체 필드", "공격 진영", "박스"]) {
-        fireEvent.click(screen.getByRole("button", { name: frame }));
-        expect(terrain().getAttribute("d")).not.toMatch(/NaN|Infinity/);
-        expect(terrain()).toHaveAttribute("data-terrain-full", "true");
-        expect(container.querySelector("[data-full-turf-matte]")).toBeInTheDocument();
-        expect(container.querySelector("clipPath rect")).toHaveAttribute("width", "1000");
-      }
+    expect(screen.queryByRole("group", { name: "줌 프리셋" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "전체 필드" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "공격 진영" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "박스" })).not.toBeInTheDocument();
+    const cases = [
+      { label: "좌측", azimuth: "90", endOn: false },
+      { label: "우측", azimuth: "270", endOn: false },
+      { label: "골대 정면", azimuth: "180", endOn: true },
+      { label: "골대 뒤", azimuth: "0", endOn: true },
+    ] as const;
+    for (const { label, azimuth, endOn } of cases) {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      const svg = screen.getByRole("img", { name: /3D 회랑/ });
+      expect(svg).toHaveAttribute("data-camera-azimuth", azimuth);
+      expect(svg).toHaveAttribute("data-camera-elevation", label.startsWith("골대") ? "27" : "30");
+      expect(svg).toHaveAttribute("data-camera-frame-from-x", endOn ? "50" : "0");
+      expect(svg).toHaveAttribute("data-visible-shot-count", endOn ? "1" : "2");
+      expect(svg).toHaveAttribute("data-total-shot-count", "2");
+      expect(Number(svg.getAttribute("data-attacking-goal-width-pct"))).toBeGreaterThan(0);
+      expect(Number(svg.getAttribute("data-attacking-goal-height-pct"))).toBeGreaterThan(0);
+      expect(terrain().getAttribute("d")).not.toMatch(/NaN|Infinity/);
+      expect(terrain()).toHaveAttribute("data-terrain-full", "true");
+      expect(container.querySelector("[data-full-turf-matte]")).toBeInTheDocument();
+      expect(container.querySelector("clipPath rect")).toHaveAttribute("width", "1000");
+      const markerPositions = [...container.querySelectorAll("[data-marker-visual]")].map((marker) => {
+        const match = marker.getAttribute("transform")?.match(/translate\(([-\d.]+) ([-\d.]+)\)/);
+        return match ? { x: Number(match[1]), y: Number(match[2]) } : null;
+      }).filter((point): point is { x: number; y: number } => point != null);
+      expect(markerPositions).toHaveLength(endOn ? 1 : 2);
+      expect(markerPositions.every(({ x, y }) => x >= 0 && x <= 1000 && y >= 0 && y <= 650)).toBe(true);
+      if (endOn) expect(container.querySelector("[data-offscreen-shot-count='1']")).toHaveTextContent("화면 밖 1발");
+      else expect(container.querySelector("[data-offscreen-shot-count]")).not.toBeInTheDocument();
     }
+  });
+
+  it("uses one screen-scale zoom for buttons, wheel, pinch, and reset without changing camera distance", () => {
+    const { container } = render(<SpatialPitch analysis={analysisWith({})}/>);
+    const svg = screen.getByRole("img", { name: /3D 회랑/ });
+    expect(svg).toHaveAttribute("data-camera-distance", "84");
+    expect(svg).toHaveAttribute("data-camera-zoom", "1");
+    const initialViewBox = svg.getAttribute("viewBox");
+
+    fireEvent.click(screen.getByRole("button", { name: "확대" }));
+    expect(svg).toHaveAttribute("data-camera-zoom", "1.25");
+    expect(svg.getAttribute("viewBox")).not.toBe(initialViewBox);
+
+    fireEvent.wheel(svg, { deltaY: -100 });
+    expect(Number(svg.getAttribute("data-camera-zoom"))).toBeGreaterThan(1.25);
+    expect(svg).toHaveAttribute("data-camera-distance", "84");
+
+    fireEvent.click(screen.getByRole("button", { name: "기본 시점" }));
+    expect(svg).toHaveAttribute("data-camera-zoom", "1");
+    fireEvent.pointerDown(svg, { pointerId: 1, pointerType: "touch", clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(svg, { pointerId: 2, pointerType: "touch", clientX: 200, clientY: 100 });
+    fireEvent.pointerMove(svg, { pointerId: 2, pointerType: "touch", clientX: 250, clientY: 100 });
+    expect(Number(svg.getAttribute("data-camera-zoom"))).toBeCloseTo(1.5, 5);
+    expect(svg).toHaveAttribute("data-camera-distance", "84");
   });
 
   it("adds both goal frames and nets but no inferred shot trajectory", () => {
@@ -263,7 +310,7 @@ describe("perspective spatial pitch", () => {
     expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
   });
 
-  it("uses one clamped camera distance for buttons, wheel, and touch pinch while keeping azimuth free", () => {
+  it("keeps one clamped screen zoom across controls while leaving camera distance fixed and azimuth free", () => {
     vi.spyOn(SVGSVGElement.prototype, "getBoundingClientRect").mockImplementation(() => svgBounds(1000, 650));
     const analysis = analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 50, y: 50 }], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 80, y: 50, outcome: "goal" }] });
     const { container, rerender } = render(<SpatialPitch analysis={analysis} contextIdentity="one"/>);
@@ -271,19 +318,23 @@ describe("perspective spatial pitch", () => {
     expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
     expect(viewport()).toHaveAttribute("data-camera-pivot", "84,34,0");
     expect(viewport()).toHaveAttribute("data-camera-distance", "84");
+    expect(viewport()).toHaveAttribute("data-camera-zoom", "1");
     fireEvent.click(screen.getByRole("button", { name: "확대" }));
-    expect(viewport()).toHaveAttribute("viewBox", "0 0 1000 650");
-    expect(viewport()).toHaveAttribute("data-camera-distance", "72");
+    expect(viewport()).toHaveAttribute("viewBox", "100 65 800 520");
+    expect(viewport()).toHaveAttribute("data-camera-zoom", "1.25");
+    expect(viewport()).toHaveAttribute("data-camera-distance", "84");
     fireEvent.wheel(viewport(), { deltaY: 100 });
-    expect(viewport()).toHaveAttribute("data-camera-distance", "76");
+    expect(Number(viewport().getAttribute("data-camera-zoom"))).toBeGreaterThan(1);
     fireEvent.pointerDown(viewport(), { pointerId: 11, pointerType: "touch", clientX: 100, clientY: 100 });
     fireEvent.pointerDown(viewport(), { pointerId: 12, pointerType: "touch", clientX: 200, clientY: 100 });
     fireEvent.pointerMove(viewport(), { pointerId: 12, pointerType: "touch", clientX: 300, clientY: 100 });
-    expect(Number(viewport().getAttribute("data-camera-distance"))).toBeCloseTo(48);
+    expect(Number(viewport().getAttribute("data-camera-zoom"))).toBeGreaterThan(2);
+    expect(viewport()).toHaveAttribute("data-camera-distance", "84");
     fireEvent.pointerUp(viewport(), { pointerId: 11, pointerType: "touch" });
     fireEvent.pointerUp(viewport(), { pointerId: 12, pointerType: "touch" });
+    const beforeZoomOut = Number(viewport().getAttribute("data-camera-zoom"));
     fireEvent.click(screen.getByRole("button", { name: "축소" }));
-    expect(viewport()).toHaveAttribute("data-camera-distance", "60");
+    expect(Number(viewport().getAttribute("data-camera-zoom"))).toBeCloseTo(beforeZoomOut - .25, 8);
     const densityCell = container.querySelector("[data-density-cell]")!;
     expect(viewport()).toHaveAttribute("data-camera-azimuth", "-48");
     fireEvent.pointerDown(densityCell, { pointerId: 1, clientX: 500, clientY: 325 });
@@ -295,8 +346,10 @@ describe("perspective spatial pitch", () => {
     expect(viewport()).toHaveAttribute("data-camera-azimuth", "-48");
     expect(viewport()).toHaveAttribute("data-camera-elevation", "30");
     expect(viewport()).toHaveAttribute("data-camera-distance", "84");
+    expect(viewport()).toHaveAttribute("data-camera-zoom", "1");
     rerender(<SpatialPitch analysis={analysis} contextIdentity="two"/>);
     expect(viewport()).toHaveAttribute("data-camera-distance", "84");
+    expect(viewport()).toHaveAttribute("data-camera-zoom", "1");
   });
 
   it("defaults reduced-motion users to the responsive 2D fallback and remains keyboard switchable", () => {

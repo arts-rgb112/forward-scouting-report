@@ -14,16 +14,11 @@ const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow
 const PITCH_VIEW_COPY = {
   perspective: "3D 회랑",
   plan: "2D 회랑",
-  cameraFrames: {
-    full: "전체 필드",
-    attacking: "공격 진영",
-    box: "박스",
-  },
-  cameraFrameGroup: "줌 프리셋",
   cameraAngleGroup: "카메라 각도 프리셋",
-  cameraZoomGroup: "카메라 거리 조절",
+  cameraZoomGroup: "화면 배율 조절",
   resetCamera: "기본 시점",
   anglePresets: { left: "좌측", right: "우측", goalFront: "골대 정면", goalBack: "골대 뒤" },
+  outsideShots: (count: number) => `화면 밖 ${count}발`,
 } as const;
 
 export const POSITIONAL_DEPTH_BOUNDARIES = [0, 16.67, 33.33, 50, 66.67, 83.33, 100] as const;
@@ -69,7 +64,6 @@ export type ViewMode = "perspective" | "plan";
 type ZoomLevel = 1 | 2 | 3;
 type Viewport = { x: number; y: number };
 type OrbitCamera = { azimuth: number; elevation: number; distance: number };
-type CameraFrame = "full" | "attacking" | "box";
 type CameraAngle = "left" | "right" | "goalFront" | "goalBack";
 type DensityMeshCell = { index: number; row: number; column: number; normalized: number; fill: string; fillOpacity: number; d: string };
 
@@ -86,14 +80,14 @@ export const finalThirdPlanCrop = () => {
 const BASE_VIEWPORT = SPATIAL_PITCH_VIEWBOX;
 const EMPTY_HEAT: PitchPoint[] = [];
 const DEFAULT_ORBIT_CAMERA: OrbitCamera = { azimuth: TACTICS_BOARD_CAMERA.azimuth, elevation: TACTICS_BOARD_CAMERA.elevation, distance: TACTICS_BOARD_CAMERA.radius };
-const ORBIT_DISTANCE = { minimum: 48, maximum: 132, step: 12 } as const;
-const ORBIT_FRAME_DISTANCE: Record<CameraFrame, number> = { full: 112, attacking: 84, box: 58 };
+const PERSPECTIVE_ZOOM = { minimum: 1, maximum: 3, step: .25 } as const;
 const CAMERA_ANGLE_PRESETS: Record<CameraAngle, Pick<OrbitCamera, "azimuth" | "elevation">> = {
-  left: { azimuth: -48, elevation: 30 }, right: { azimuth: 48, elevation: 30 }, goalFront: { azimuth: 180, elevation: 27 }, goalBack: { azimuth: 0, elevation: 27 },
+  left: { azimuth: 90, elevation: 30 }, right: { azimuth: 270, elevation: 30 }, goalFront: { azimuth: 180, elevation: 27 }, goalBack: { azimuth: 0, elevation: 27 },
 };
+const END_ON_ANGLES = new Set<CameraAngle>(["goalFront", "goalBack"]);
 
 const clamp = (value: number) => Math.min(100, Math.max(0, value));
-const clampDistance = (value: number) => Math.min(ORBIT_DISTANCE.maximum, Math.max(ORBIT_DISTANCE.minimum, value));
+const clampPerspectiveZoom = (value: number) => Math.min(PERSPECTIVE_ZOOM.maximum, Math.max(PERSPECTIVE_ZOOM.minimum, value));
 
 const median = (values: readonly number[]) => {
   if (!values.length) return null;
@@ -276,7 +270,7 @@ function usePerspectivePixelScale() {
   return { ref, scale };
 }
 
-const zoomViewport = (zoom: ZoomLevel) => ({ width: BASE_VIEWPORT.width / zoom, height: BASE_VIEWPORT.height / zoom });
+const zoomViewport = (zoom: number) => ({ width: BASE_VIEWPORT.width / zoom, height: BASE_VIEWPORT.height / zoom });
 const clampViewport = (viewport: Viewport, zoom: ZoomLevel): Viewport => {
   const visible = zoomViewport(zoom);
   return { x: Math.min(BASE_VIEWPORT.width - visible.width, Math.max(0, viewport.x)), y: Math.min(BASE_VIEWPORT.height - visible.height, Math.max(0, viewport.y)) };
@@ -316,29 +310,32 @@ function ShotGlyph({ group, medianXg, projection, geometryProjection, perspectiv
   </g>;
 }
 
-export function createOrbitProjection(camera: OrbitCamera, frame: CameraFrame): Projection {
-  // Retaining the full geometry avoids camera-plane crops at low goal-front angles.
-  const projection = orbitCamera({ ...TACTICS_BOARD_CAMERA, azimuth: camera.azimuth, elevation: camera.elevation, radius: camera.distance, frameFromX: 0, width: BASE_VIEWPORT.width, height: BASE_VIEWPORT.height });
+export function createOrbitProjection(camera: OrbitCamera, frameFromX = 0): Projection {
+  const projection = orbitCamera({ ...TACTICS_BOARD_CAMERA, azimuth: camera.azimuth, elevation: camera.elevation, radius: camera.distance, frameFromX, width: BASE_VIEWPORT.width, height: BASE_VIEWPORT.height });
   return (point) => { const [x, y] = projection.pp(point.y, point.x); return { x, y }; };
 }
 
 function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, contextIdentity, layers }: { spatial: PlayerAnalysis["spatial"] | undefined; mode: ViewMode; filterId: string; visibleOutcomes: ReadonlySet<ShotOutcome>; markerLayerId: string; contextIdentity: string; layers: PitchLayerVisibility }) {
   const perspective = mode === "perspective";
   const [camera, setCamera] = useState<OrbitCamera>(DEFAULT_ORBIT_CAMERA);
-  const [cameraFrame, setCameraFrame] = useState<CameraFrame>("attacking");
-  const [cameraAngleState, setCameraAngle] = useState<CameraAngle | null>("left");
+  const [cameraAngleState, setCameraAngle] = useState<CameraAngle | null>(null);
+  const [perspectiveZoom, setPerspectiveZoom] = useState(1);
   const [hoveredZone, setHoveredZone] = useState<HoveredZone | null>(null);
   const heatValid = Boolean(spatial?.available && spatial.heatmapPointCount === spatial.heatmapPoints.length && spatial.heatmapPoints.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= 100 && y >= 0 && y <= 100));
   const heat = heatValid ? spatial!.heatmapPoints : EMPTY_HEAT;
   const shotsValid = shotIntegrity(spatial);
   const shots = shotsValid ? spatial!.shotmapPoints.map((shot, sourceIndex) => ({ shot, sourceIndex })).filter(({ shot }) => visibleOutcomes.has(shot.outcome)) : [];
+  const endOnFrame = perspective && cameraAngleState != null && END_ON_ANGLES.has(cameraAngleState);
+  const framedShots = endOnFrame ? shots.filter(({ shot }) => shot.x >= 50) : shots;
+  const offscreenShotCount = shots.length - framedShots.length;
   const medianXg = shotsValid ? medianObservedXg(spatial!.shotmapPoints) : null;
-  const markerGroups = groupPitchShots(shots);
+  const markerGroups = groupPitchShots(framedShots);
   const heatState = !spatial?.available ? "활동 히트맵 사용 불가" : !heatValid ? "활동 히트맵 무결성 불일치" : heat.length ? `활동 좌표 ${heat.length}개` : "관측된 활동 좌표 0개";
   const shotState = !spatial?.shotmapSnapshotAvailable ? "슈팅 스냅샷 사용 불가" : !shotsValid ? "슈팅 스냅샷 무결성 불일치" : spatial.shotmapPoints.length ? `슛 ${spatial.shotmapPoints.length}개` : "관측된 슛 0개";
   const normalized = useMemo(() => normalizeDensity(legacyDensityGrid(heat)), [heat]);
   const orbitPivot = useMemo(() => deriveOrbitPivot(spatial, normalized), [normalized, spatial]);
-  const geometryProjection = useMemo(() => orbitCamera({ ...TACTICS_BOARD_CAMERA, pivot: orbitPivot, azimuth: camera.azimuth, elevation: camera.elevation, radius: DEFAULT_ORBIT_CAMERA.distance, frameFromX: 0, width: BASE_VIEWPORT.width, height: BASE_VIEWPORT.height }), [camera.azimuth, camera.elevation, orbitPivot]);
+  const containedFrame = cameraAngleState === "left" || cameraAngleState === "right" || cameraAngleState === "goalBack";
+  const geometryProjection = useMemo(() => orbitCamera({ ...TACTICS_BOARD_CAMERA, pivot: orbitPivot, azimuth: camera.azimuth, elevation: camera.elevation, radius: camera.distance, frameFromX: endOnFrame ? 50 : 0, fit: containedFrame ? "contain" : "cover", width: BASE_VIEWPORT.width, height: BASE_VIEWPORT.height }), [camera, containedFrame, endOnFrame, orbitPivot]);
   const projection = useMemo(() => perspective ? ((point: PitchPoint) => { const [x, y] = geometryProjection.pp(point.y, point.x); return { x, y }; }) : projectPlan, [geometryProjection, perspective]);
   const displayDensity = useMemo(() => displayDensityGrid(normalized), [normalized]);
   const meshBuildCount = useRef(0);
@@ -354,17 +351,23 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
   const pointerPan = useRef<{ pointerId: number; clientX: number; clientY: number; viewport: Viewport } | null>(null);
   const pointerOrbit = useRef<{ pointerId: number; clientX: number; clientY: number; camera: OrbitCamera } | null>(null);
   const touchPoints = useRef(new Map<number, { x: number; y: number }>());
-  const pinch = useRef<{ gap: number; distance: number } | null>(null);
-  const resetViewport = () => { pointerPan.current = null; pointerOrbit.current = null; touchPoints.current.clear(); pinch.current = null; setZoom(1); setViewport({ x: 0, y: 0 }); setCamera(DEFAULT_ORBIT_CAMERA); setCameraFrame("attacking"); setCameraAngle("left"); };
+  const pinch = useRef<{ gap: number; zoom: number } | null>(null);
+  const resetViewport = () => { pointerPan.current = null; pointerOrbit.current = null; touchPoints.current.clear(); pinch.current = null; setZoom(1); setPerspectiveZoom(1); setViewport({ x: 0, y: 0 }); setCamera(DEFAULT_ORBIT_CAMERA); setCameraAngle(null); };
   useEffect(() => { resetViewport(); }, [contextIdentity]);
   const visibleViewport = zoomViewport(zoom);
-  const viewBox = perspective ? `0 0 ${BASE_VIEWPORT.width} ${BASE_VIEWPORT.height}` : `${viewport.x} ${viewport.y} ${visibleViewport.width} ${visibleViewport.height}`;
-  const pixelScale = rendered.scale / (perspective ? 1 : zoom);
+  const perspectiveViewport = zoomViewport(perspectiveZoom);
+  const perspectiveOrigin = { x: (BASE_VIEWPORT.width - perspectiveViewport.width) / 2, y: (BASE_VIEWPORT.height - perspectiveViewport.height) / 2 };
+  const viewBox = perspective ? `${perspectiveOrigin.x} ${perspectiveOrigin.y} ${perspectiveViewport.width} ${perspectiveViewport.height}` : `${viewport.x} ${viewport.y} ${visibleViewport.width} ${visibleViewport.height}`;
+  const pixelScale = rendered.scale / (perspective ? perspectiveZoom : zoom);
+  const attackingGoalGround = [geometryProjection.pp(GOAL_POST_Y[0], 100), geometryProjection.pp(GOAL_POST_Y[1], 100)] as const;
+  const attackingGoalTop = geometryProjection.pp(GOAL_POST_Y[0], 100, GOAL_CROSSBAR_HEIGHT_METERS);
+  const attackingGoalWidthPct = Math.hypot(attackingGoalGround[1][0] - attackingGoalGround[0][0], attackingGoalGround[1][1] - attackingGoalGround[0][1]) / perspectiveViewport.width * 100;
+  const attackingGoalHeightPct = Math.hypot(attackingGoalTop[0] - attackingGoalGround[0][0], attackingGoalTop[1] - attackingGoalGround[0][1]) / perspectiveViewport.height * 100;
   const setZoomLevel = (next: ZoomLevel) => { setViewport((current) => centeredViewport(current, zoom, next)); setZoom(next); };
   const panBy = (x: number, y: number) => setViewport((current) => clampViewport({ x: current.x + x, y: current.y + y }, zoom));
   const [activeId, setActiveId] = useState<string | null>(null), [tooltipIdState, setTooltipIdState] = useState<string | null>(null);
   // Paint order protects goals visually; keyboard order begins with the first source event.
-  const firstGroup = shots.length ? markerGroups.find((group) => group.sourceIndexes.includes(shots[0].sourceIndex)) : undefined;
+  const firstGroup = framedShots.length ? markerGroups.find((group) => group.sourceIndexes.includes(framedShots[0].sourceIndex)) : undefined;
   const firstId = firstGroup ? `${filterId}-shot-${firstGroup.key}` : null;
   const activeVisibleId = markerGroups.some((group) => `${filterId}-shot-${group.key}` === activeId) ? activeId : firstId;
   const tooltipEntry = markerGroups.find((group) => `${filterId}-shot-${group.key}` === tooltipIdState);
@@ -374,13 +377,12 @@ function PitchSvg({ spatial, mode, filterId, visibleOutcomes, markerLayerId, con
   useEffect(() => {
     const element = rendered.ref.current;
     if (!perspective || !element) return;
-    const handleWheel = (event: WheelEvent) => { event.preventDefault(); setCamera((current) => ({ ...current, distance: clampDistance(current.distance + event.deltaY * .04) })); };
+    const handleWheel = (event: WheelEvent) => { event.preventDefault(); setPerspectiveZoom((current) => clampPerspectiveZoom(current * Math.exp(-event.deltaY * .0015))); };
     element.addEventListener("wheel", handleWheel, { passive: false });
     return () => element.removeEventListener("wheel", handleWheel);
   }, [perspective, rendered.ref]);
-  const chooseFrame = (frame: CameraFrame) => { setCameraFrame(frame); if (perspective) setCamera((current) => ({ ...current, distance: ORBIT_FRAME_DISTANCE[frame] })); };
-  const chooseAngle = (angle: CameraAngle) => { const preset = CAMERA_ANGLE_PRESETS[angle]; setCameraAngle(angle); setCamera((current) => ({ ...current, ...preset })); };
-  return <><div className="space-y-2 border-b border-white/10 bg-black/25 px-2 py-2"><div role="group" aria-label={PITCH_VIEW_COPY.cameraAngleGroup} className="flex flex-wrap items-center gap-1">{(Object.keys(CAMERA_ANGLE_PRESETS) as CameraAngle[]).map((angle) => <button key={angle} type="button" data-camera-preset={angle} aria-pressed={cameraAngle === angle} onClick={() => chooseAngle(angle)} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold aria-pressed:bg-lime-300 aria-pressed:text-slate-950">{PITCH_VIEW_COPY.anglePresets[angle]}</button>)}</div><div className="flex flex-wrap items-center gap-2"><div role="group" aria-label={PITCH_VIEW_COPY.cameraFrameGroup} className="grid flex-1 grid-cols-3 gap-2">{(["full", "attacking", "box"] as const).map((frame) => <button key={frame} type="button" data-zoom-preset={frame} aria-pressed={cameraFrame === frame} onClick={() => chooseFrame(frame)} className="min-h-12 rounded border border-white/15 bg-[#101719] px-2 py-1 text-left text-base font-bold aria-pressed:border-sky-200 aria-pressed:bg-sky-200/15"><span className="block h-2 rounded-sm border border-white/20"><span className="block h-full bg-sky-300/35" style={{ width: frame === "full" ? "100%" : frame === "attacking" ? "50%" : "24%", marginLeft: "auto" }}/></span><span className="mt-1 block">{PITCH_VIEW_COPY.cameraFrames[frame]}</span></button>)}</div><div role="group" aria-label={PITCH_VIEW_COPY.cameraZoomGroup} className="flex items-center gap-1"><button type="button" aria-label="축소" disabled={perspective ? camera.distance >= ORBIT_DISTANCE.maximum : zoom === 1} onClick={() => perspective ? setCamera((current) => ({ ...current, distance: clampDistance(current.distance + ORBIT_DISTANCE.step) })) : setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 font-bold disabled:opacity-40">−</button><button type="button" aria-label="확대" disabled={perspective ? camera.distance <= ORBIT_DISTANCE.minimum : zoom === 3} onClick={() => perspective ? setCamera((current) => ({ ...current, distance: clampDistance(current.distance - ORBIT_DISTANCE.step) })) : setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 font-bold disabled:opacity-40">+</button><button type="button" aria-label={PITCH_VIEW_COPY.resetCamera} onClick={resetViewport} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold">초기화</button></div><p aria-live="polite" className="text-base text-zinc-300">{perspective ? `${camera.azimuth.toFixed(0)}° · ${camera.elevation.toFixed(0)}° · ${camera.distance.toFixed(0)}m` : `${zoom}배`}</p></div></div><svg ref={rendered.ref} viewBox={viewBox} preserveAspectRatio="xMidYMid meet" className="block h-auto w-full rounded-b-lg bg-[#050a08] touch-none" role="img" tabIndex={0} aria-label={`${perspective ? "3D" : "2D"} 회랑. ${heatState}. ${shotState}.`} data-camera-azimuth={perspective ? camera.azimuth : undefined} data-camera-elevation={perspective ? camera.elevation : undefined} data-camera-distance={perspective ? camera.distance : undefined} data-camera-pivot={perspective ? orbitPivot.join(",") : undefined} data-camera-frame={perspective ? cameraFrame : undefined} onPointerDown={(event) => { if (event.defaultPrevented || isInteractivePitchTarget(event.target)) return; if (perspective) { if (event.pointerType === "touch") { touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (touchPoints.current.size === 2) { const points = [...touchPoints.current.values()]; pinch.current = { gap: Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y), distance: camera.distance }; pointerOrbit.current = null; } else pointerOrbit.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, camera }; } else pointerOrbit.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, camera }; event.currentTarget.setPointerCapture?.(event.pointerId); return; } if (zoom === 1) return; pointerPan.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport }; event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { if (perspective && event.pointerType === "touch" && touchPoints.current.has(event.pointerId)) { touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (touchPoints.current.size === 2 && pinch.current) { const points = [...touchPoints.current.values()]; const gap = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y); if (gap > 0) setCamera((current) => ({ ...current, distance: clampDistance(pinch.current!.distance * pinch.current!.gap / gap) })); return; } } const orbit = pointerOrbit.current; if (orbit?.pointerId === event.pointerId) { setCameraAngle("left"); setCamera({ azimuth: orbit.camera.azimuth - (event.clientX - orbit.clientX) * .22, elevation: Math.max(12, Math.min(65, orbit.camera.elevation + (event.clientY - orbit.clientY) * .18)), distance: orbit.camera.distance }); return; } const start = pointerPan.current; if (!start || start.pointerId !== event.pointerId) return; const bounds = event.currentTarget.getBoundingClientRect(); if (!bounds.width || !bounds.height) return; setViewport(clampViewport({ x: start.viewport.x - (event.clientX - start.clientX) * visibleViewport.width / bounds.width, y: start.viewport.y - (event.clientY - start.clientY) * visibleViewport.height / bounds.height }, zoom)); }} onPointerUp={endPointer} onPointerCancel={endPointer} onLostPointerCapture={() => { pointerPan.current = null; pointerOrbit.current = null; touchPoints.current.clear(); pinch.current = null; }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); resetViewport(); return; } if (event.defaultPrevented || event.target !== event.currentTarget || perspective || zoom === 1) return; const step = Math.min(48, visibleViewport.width / 5); if (event.key === "ArrowLeft") { event.preventDefault(); panBy(-step, 0); } else if (event.key === "ArrowRight") { event.preventDefault(); panBy(step, 0); } else if (event.key === "ArrowUp") { event.preventDefault(); panBy(0, -step); } else if (event.key === "ArrowDown") { event.preventDefault(); panBy(0, step); } }}>
+  const chooseAngle = (angle: CameraAngle) => { const preset = CAMERA_ANGLE_PRESETS[angle]; setCameraAngle(angle); setPerspectiveZoom(1); setCamera((current) => ({ ...current, ...preset })); };
+  return <><div className="space-y-2 border-b border-white/10 bg-black/25 px-2 py-2"><div role="group" aria-label={PITCH_VIEW_COPY.cameraAngleGroup} className="flex flex-wrap items-center gap-1">{(Object.keys(CAMERA_ANGLE_PRESETS) as CameraAngle[]).map((angle) => <button key={angle} type="button" data-camera-preset={angle} aria-pressed={cameraAngle === angle} onClick={() => chooseAngle(angle)} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold aria-pressed:bg-lime-300 aria-pressed:text-slate-950">{PITCH_VIEW_COPY.anglePresets[angle]}</button>)}</div><div className="flex flex-wrap items-center gap-2"><div role="group" aria-label={PITCH_VIEW_COPY.cameraZoomGroup} className="flex items-center gap-1"><button type="button" aria-label="축소" disabled={perspective ? perspectiveZoom <= PERSPECTIVE_ZOOM.minimum : zoom === 1} onClick={() => perspective ? setPerspectiveZoom((current) => clampPerspectiveZoom(current - PERSPECTIVE_ZOOM.step)) : setZoomLevel((zoom - 1) as ZoomLevel)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 font-bold disabled:opacity-40">−</button><button type="button" aria-label="확대" disabled={perspective ? perspectiveZoom >= PERSPECTIVE_ZOOM.maximum : zoom === 3} onClick={() => perspective ? setPerspectiveZoom((current) => clampPerspectiveZoom(current + PERSPECTIVE_ZOOM.step)) : setZoomLevel((zoom + 1) as ZoomLevel)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 font-bold disabled:opacity-40">+</button><button type="button" aria-label={PITCH_VIEW_COPY.resetCamera} onClick={resetViewport} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold">초기화</button></div><p aria-live="polite" className="text-base text-zinc-300">{perspective ? `${camera.azimuth.toFixed(0)}° · ${camera.elevation.toFixed(0)}° · ${perspectiveZoom.toFixed(2)}배` : `${zoom}배`}</p>{perspective && endOnFrame && <p data-offscreen-shot-count={offscreenShotCount} className="rounded border border-amber-300/35 bg-amber-300/10 px-2 py-1 text-base font-bold text-amber-100">{PITCH_VIEW_COPY.outsideShots(offscreenShotCount)}</p>}</div></div><svg ref={rendered.ref} viewBox={viewBox} preserveAspectRatio="xMidYMid meet" className="block h-auto w-full rounded-b-lg bg-[#050a08] touch-none" role="img" tabIndex={0} aria-label={`${perspective ? "3D" : "2D"} 회랑. ${heatState}. ${shotState}.`} data-camera-azimuth={perspective ? camera.azimuth : undefined} data-camera-elevation={perspective ? camera.elevation : undefined} data-camera-distance={perspective ? camera.distance : undefined} data-camera-zoom={perspective ? perspectiveZoom : undefined} data-camera-frame-from-x={perspective ? (endOnFrame ? 50 : 0) : undefined} data-visible-shot-count={perspective ? framedShots.length : undefined} data-total-shot-count={perspective ? shots.length : undefined} data-attacking-goal-width-pct={perspective ? attackingGoalWidthPct.toFixed(2) : undefined} data-attacking-goal-height-pct={perspective ? attackingGoalHeightPct.toFixed(2) : undefined} data-camera-pivot={perspective ? orbitPivot.join(",") : undefined} onPointerDown={(event) => { if (event.defaultPrevented || isInteractivePitchTarget(event.target)) return; if (perspective) { if (event.pointerType === "touch") { touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (touchPoints.current.size === 2) { const points = [...touchPoints.current.values()]; pinch.current = { gap: Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y), zoom: perspectiveZoom }; pointerOrbit.current = null; } else pointerOrbit.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, camera }; } else pointerOrbit.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, camera }; event.currentTarget.setPointerCapture?.(event.pointerId); return; } if (zoom === 1) return; pointerPan.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport }; event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { if (perspective && event.pointerType === "touch" && touchPoints.current.has(event.pointerId)) { touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (touchPoints.current.size === 2 && pinch.current) { const points = [...touchPoints.current.values()]; const gap = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y); if (gap > 0) setPerspectiveZoom(clampPerspectiveZoom(pinch.current.zoom * gap / pinch.current.gap)); return; } } const orbit = pointerOrbit.current; if (orbit?.pointerId === event.pointerId) { setCameraAngle(null); setCamera({ azimuth: orbit.camera.azimuth - (event.clientX - orbit.clientX) * .22, elevation: Math.max(12, Math.min(65, orbit.camera.elevation + (event.clientY - orbit.clientY) * .18)), distance: orbit.camera.distance }); return; } const start = pointerPan.current; if (!start || start.pointerId !== event.pointerId) return; const bounds = event.currentTarget.getBoundingClientRect(); if (!bounds.width || !bounds.height) return; setViewport(clampViewport({ x: start.viewport.x - (event.clientX - start.clientX) * visibleViewport.width / bounds.width, y: start.viewport.y - (event.clientY - start.clientY) * visibleViewport.height / bounds.height }, zoom)); }} onPointerUp={endPointer} onPointerCancel={endPointer} onLostPointerCapture={() => { pointerPan.current = null; pointerOrbit.current = null; touchPoints.current.clear(); pinch.current = null; }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); resetViewport(); return; } if (event.defaultPrevented || event.target !== event.currentTarget || perspective || zoom === 1) return; const step = Math.min(48, visibleViewport.width / 5); if (event.key === "ArrowLeft") { event.preventDefault(); panBy(-step, 0); } else if (event.key === "ArrowRight") { event.preventDefault(); panBy(step, 0); } else if (event.key === "ArrowUp") { event.preventDefault(); panBy(0, -step); } else if (event.key === "ArrowDown") { event.preventDefault(); panBy(0, step); } }}>
     <defs><clipPath id={`${filterId}-pitch-clip`}><rect x="0" y="0" width={BASE_VIEWPORT.width} height={BASE_VIEWPORT.height}/></clipPath><filter id={`${filterId}-display-heat-blur`} x="-12%" y="-18%" width="124%" height="136%" colorInterpolationFilters="sRGB"><feGaussianBlur stdDeviation="9"/></filter><linearGradient id={`${filterId}-grass`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#123A20"/><stop offset="1" stopColor="#081F15"/></linearGradient></defs>
     <rect data-full-turf-matte x="0" y="0" width={BASE_VIEWPORT.width} height={BASE_VIEWPORT.height} fill={`url(#${filterId}-grass)`} />
     <path data-terrain-full="true" d={pitchShape} fill={`url(#${filterId}-grass)`} stroke="#143d2f" strokeWidth="9" />
