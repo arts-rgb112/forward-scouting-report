@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 구현·실데이터 DOM/시각 QA 완료 — 선수 페이지 7차 피드백 3D 카메라/프레이밍 핫픽스
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-pitch-feedback7
+- 범위/결과: 최신 `origin/main`의 6차 줌 변경은 버튼·휠·핀치가 `camera.distance`를 바꾸지만 투영은 고정 distance 84를 사용해 아무 효과가 없는 미완료 상태였다. 이를 하나의 화면 중심 배율 `1.0~3.0`으로 통일하고 distance는 84로 고정했으며, 효과 없는 전체필드·공격진영·박스 버튼은 제거했다. 좌/우 프리셋은 정확한 `90°/270°`, 고도 `30°`로 고정하고 전체 피치와 슛이 들어오는 contain 프레이밍을 쓴다. 골대 정면/뒤는 `180°/0°`, 고도 `27°`, 공격 진영 `x>=50` 프레임을 쓰며 제외 슛은 `화면 밖 N발`로 공개한다. 케인 2025/26 실데이터(119발) DOM은 좌측 골대 `2.30%×1.97%`, 우측 `2.30%×2.08%`, 골대 정면 `9.60%×4.56%`, 골대 뒤 `10.66%×4.78%`; 표시 슛은 좌/우 `119/119`, 정면/뒤 `118/119`이고 네 프리셋 모두 렌더 마커 그룹이 viewBox 안에 있음을 확인했다. 캡처는 `artifacts/qa/feedback7/kane-{left,right,goal-front,goal-back}.png`에 보존했다. 수정 테스트 `SpatialPitch.test.tsx` `24 passed`, production build 통과(기존 chunk 경고만). 백엔드/API/점수/원본 수집은 변경하지 않으며 병합·Production 배포는 별도 승인 전 수행하지 않는다.
+
 - 상태: 긴급 구현·로컬 검증 완료, 릴리스 진행 — Gabriel Jesus 2024/25 슈팅 스냅샷 및 골대 기준선 정합 핫픽스
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-jesus-shotmap-hotfix
 - 범위/가드: 최신 `origin/main`에서 `data/tactical_shotmap_points_2024_2025.json`에 exact key `576165:17:61627`의 검증된 FotMob 슈팅 20발만 additive로 추가했다. 기존 1,992개 키는 변경하지 않았다. 이 shard는 고정 5시즌 골대 기준선 원천이므로 strict fixture와 provenance를 함께 갱신해 baseline `104,612/34,436 → 104,620/34,439` 정합을 보존했다. Jesus 20발 중 baseline 적격은 8발·3골이며 50셀은 전부 observed 상태를 유지한다. Kane placement summary는 PK 포함 `23.5516/12.4484`, 제외 `18.7977/7.2023`으로 새 baseline에 맞춰 회귀값을 갱신했다. Jesus exact snapshot·strict shotmap·goal-mouth baseline 집중 테스트는 `37 passed`다. 점수 CSV·공간 세션·CCA·30셀·기능 플래그·프런트 코드는 변경하지 않는다. 배포는 Render만 수행하며 Vercel은 재배포하지 않는다.
