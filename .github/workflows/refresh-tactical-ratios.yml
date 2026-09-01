@@ -15,9 +15,6 @@ on:
         description: Optional comma-separated competition labels; leave blank to verify and refresh all 11 target competitions
         required: false
         default: ""
-  schedule:
-    - cron: "15 3 * * 1"
-
 permissions:
   contents: write
 
