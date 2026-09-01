@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 긴급 복구 구현·로컬 검증 완료, Production 릴리스 진행 — scheduled tactical ratio 회귀
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-tactical-recovery
+- 범위/결과: 손상 커밋 `c8afbd3`의 자동 재실행을 막기 위해 `refresh-tactical-ratios` GitHub Actions workflow를 `disabled_manually`로 중단했고 cron trigger도 제거한다. `1dc6e56`의 검증된 fixed-N 10,413 exact session을 기준으로 현재 main에만 있는 51 exact `heatmap_key` session을 union했으며, 겹치는 session은 release-tested fixed-N 기준 행과 좌표 snapshot을 보존했다. 신규 51 session만 canonical `backfill_standardized_cca.py`로 `fixed-n60-r20-v2` 변환해 총 10,464행/좌표 키를 만들었다. 시즌별 행은 `1,958 / 1,938 / 1,947 / 2,051 / 2,570`; 사용자 제시 `(fotmob_player_id, season_name)`은 domestic/Europe context 1,880건을 겹치게 하므로 물리 병합 키로 쓰지 않는다. `c8afbd3`의 다른 세 generated diagnostic CSV는 축소가 아니라 증가했으므로 현재 main을 유지한다. focused CCA·tactical summary·Jesus·API 회귀는 `47 passed`, Kane 2024/25 service 결과는 `available=true`, `reason=complete`, `lines=3`이다. 원인은 구형 builder의 `continuous-hdr-50-v1` 선언과 기존 `fixed-n60-r20-v2` row 불일치가 전량 reset 경로를 타고, workflow가 `if: always()`로 부분 2025/26 결과를 main에 직접 push한 것이다. 점수 산식·슈팅 원천·SportsAPI raw는 변경하지 않는다. 복구·Render 검증 뒤에도 builder의 버전/스키마 정합성과 destructive reset·partial-publish guard를 별도 수정하기 전까지 예약 실행은 재개하지 않는다.
+
 - 상태: 구현·실데이터 DOM/시각 QA 완료 — 선수 페이지 7차 피드백 3D 카메라/프레이밍 핫픽스
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-pitch-feedback7
 - 범위/결과: 최신 `origin/main`의 6차 줌 변경은 버튼·휠·핀치가 `camera.distance`를 바꾸지만 투영은 고정 distance 84를 사용해 아무 효과가 없는 미완료 상태였다. 이를 하나의 화면 중심 배율 `1.0~3.0`으로 통일하고 distance는 84로 고정했으며, 효과 없는 전체필드·공격진영·박스 버튼은 제거했다. 좌/우 프리셋은 정확한 `90°/270°`, 고도 `30°`로 고정하고 전체 피치와 슛이 들어오는 contain 프레이밍을 쓴다. 골대 정면/뒤는 `180°/0°`, 고도 `27°`, 공격 진영 `x>=50` 프레임을 쓰며 제외 슛은 `화면 밖 N발`로 공개한다. 케인 2025/26 실데이터(119발) DOM은 좌측 골대 `2.30%×1.97%`, 우측 `2.30%×2.08%`, 골대 정면 `9.60%×4.56%`, 골대 뒤 `10.66%×4.78%`; 표시 슛은 좌/우 `119/119`, 정면/뒤 `118/119`이고 네 프리셋 모두 렌더 마커 그룹이 viewBox 안에 있음을 확인했다. 캡처는 `C:/Users/USER/Downloads/files/messi-qa-artifacts/pitch-feedback7/kane-{left,right,goal-front,goal-back}.png`에 보존했다. 수정 테스트 `SpatialPitch.test.tsx` `24 passed`, production build 통과(기존 chunk 경고만). 백엔드/API/점수/원본 수집은 변경하지 않으며 병합·Production 배포는 별도 승인 전 수행하지 않는다.
