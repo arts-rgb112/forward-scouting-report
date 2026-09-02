@@ -9,7 +9,7 @@ export const HEATMAP_ROWS = 22;
 export const DISPLAY_HEATMAP_COLUMNS = 96;
 export const DISPLAY_HEATMAP_ROWS = 66;
 /** Display-only tone mapping. Native density stays unchanged for CCA/HDR. */
-export const HEATMAP_DISPLAY_GAMMA = .85;
+export const HEATMAP_DISPLAY_GAMMA = .65;
 export const HEATMAP_KERNEL = [1, 4, 6, 4, 1] as const;
 export const HEATMAP_STOPS = [
   [0, [47, 30, 78]],

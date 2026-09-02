@@ -34,8 +34,9 @@ describe("legacy 32 x 22 spatial raster", () => {
 
   it("applies gamma only when selecting display colours", () => {
     const native = .24;
-    expect(HEATMAP_DISPLAY_GAMMA).toBe(.85);
-    expect(displayHeatmapColor(native)).toEqual(legacyHeatmapColor(native ** .85));
+    expect(HEATMAP_DISPLAY_GAMMA).toBe(.65);
+    expect(displayHeatmapColor(native)).toEqual(legacyHeatmapColor(native ** .65));
+    expect(displayHeatmapColor(.05)[3]).toBeCloseTo(.06 + .52 * (.05 ** .65), 6);
     expect(native).toBe(.24);
   });
 
