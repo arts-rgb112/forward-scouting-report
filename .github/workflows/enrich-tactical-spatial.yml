@@ -2,6 +2,12 @@ name: Enrich tactical spatial metrics
 
 on:
   workflow_dispatch:
+    inputs:
+      migrate_definition_from:
+        description: "Explicit reviewed source activity_filter; leave empty to forbid migrations"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -15,8 +21,17 @@ jobs:
         with:
           python-version: "3.11"
       - name: Enrich saved heatmap sessions without API calls
-        run: python scripts/enrich_tactical_spatial_metrics.py
+        env:
+          MIGRATE_DEFINITION_FROM: ${{ inputs.migrate_definition_from }}
+        run: |
+          if [ -n "$MIGRATE_DEFINITION_FROM" ]; then
+            python scripts/enrich_tactical_spatial_metrics.py \
+              --migrate-definition-from "$MIGRATE_DEFINITION_FROM"
+          else
+            python scripts/enrich_tactical_spatial_metrics.py
+          fi
       - name: Commit enriched tactical data
+        if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
