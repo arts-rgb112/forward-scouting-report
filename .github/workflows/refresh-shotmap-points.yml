@@ -44,7 +44,6 @@ jobs:
         run: pip install -r requirements.txt -r requirements-api.txt
       - name: Snapshot exact FotMob shot coordinates
         id: snapshot
-        continue-on-error: true
         shell: bash
         run: |
           args=(--season-name "${{ inputs.season_name }}" --workers "${{ inputs.workers }}")
@@ -53,10 +52,10 @@ jobs:
           fi
           python scripts/build_shotmap_points.py "${args[@]}"
       - name: Audit all tactical sessions
-        if: always()
+        if: success()
         run: python scripts/audit_shotmap_coverage.py
       - name: Commit shotmap snapshot
-        if: always()
+        if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -79,9 +78,4 @@ jobs:
             sleep $((attempt * 2))
           done
           echo "Could not publish the snapshot after 5 attempts."
-          exit 1
-      - name: Report snapshot failure after preserving checkpoints
-        if: steps.snapshot.outcome == 'failure'
-        run: |
-          echo "The snapshot process failed, but checkpointed data was published. Re-run this season to resume."
           exit 1

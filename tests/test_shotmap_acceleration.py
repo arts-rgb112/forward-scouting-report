@@ -251,7 +251,8 @@ def test_parallel_refresh_preserves_malformed_and_accepts_explicit_zero(
         patch("scripts.build_shotmap_points.fetch_player_multi_season_data", side_effect=fetch),
         patch("scripts.build_shotmap_points.configure_request_start_interval", return_value=0.0),
     ):
-        assert build("2025/2026", refresh_existing=True, workers=3) == (2, 1)
+        with pytest.raises(ShotmapBackfillError, match="source anomalies=1"):
+            build("2025/2026", refresh_existing=True, workers=3)
 
     stored = json.loads(output.read_text(encoding="utf-8"))
     assert set(stored) == {"baseline", "malformed", "verified-zero"}
@@ -284,3 +285,6 @@ def test_workflow_serializes_backfills_and_defaults_to_three_workers() -> None:
     assert 'default: "3"' in workflow
     assert '--workers "${{ inputs.workers }}"' in workflow
     assert "pip install -r requirements.txt -r requirements-api.txt" in workflow
+    assert "continue-on-error: true" not in workflow
+    assert "if: always()" not in workflow
+    assert workflow.count("if: success()") == 2

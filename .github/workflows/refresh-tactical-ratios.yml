@@ -63,10 +63,9 @@ jobs:
             fi
           done
       - name: Commit refreshed static data
-        # Each completed competition is checkpointed by the ETL.  Persist that
-        # work even when a later competition reaches the API quota, so the next
-        # run resumes from the last durable season/tournament checkpoint.
-        if: always()
+        # Never publish a partial checkpoint after a provider, schema, or
+        # formula failure. Local checkpoints disappear with the failed runner.
+        if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

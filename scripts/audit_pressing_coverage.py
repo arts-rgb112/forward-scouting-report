@@ -15,6 +15,7 @@ MISSING_FIELDS = (
     "player_id", "player_name", "team_name", "league_id", "league_name",
     "season_name", "reason",
 )
+COHORT_KEY_FIELDS = ("player_id", "league_id", "season_name")
 
 
 def present(row: dict[str, str], field: str) -> bool:
@@ -40,11 +41,65 @@ def audit(path: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     return rows, missing
 
 
+def exact_key(row: dict[str, str]) -> tuple[str, str, str]:
+    return tuple(
+        str(row.get(field, "")).strip() for field in COHORT_KEY_FIELDS
+    )  # type: ignore[return-value]
+
+
+def audit_baseline_non_loss(
+    rows: list[dict[str, str]], baseline_path: Path,
+) -> tuple[int, int]:
+    """Require every previously published exact cohort row to survive."""
+
+    with baseline_path.open(encoding="utf-8", newline="") as source:
+        baseline_rows = list(csv.DictReader(source))
+    baseline_keys = {exact_key(row) for row in baseline_rows}
+    current_keys = [exact_key(row) for row in rows]
+    current_key_set = set(current_keys)
+    if len(current_key_set) != len(current_keys):
+        raise SystemExit(
+            "Cohort non-loss audit failed: duplicate exact player/competition/season keys"
+        )
+    missing = sorted(baseline_keys - current_key_set)
+    if missing:
+        preview = ", ".join("|".join(key) for key in missing[:5])
+        raise SystemExit(
+            "Cohort non-loss audit failed: "
+            f"{len(missing)} previously published exact keys are missing; sample={preview}"
+        )
+    baseline_slices = {
+        (
+            str(row.get("season_name", "")).strip(),
+            str(row.get("league_id", "")).strip(),
+        )
+        for row in baseline_rows
+    }
+    current_slices = {
+        (
+            str(row.get("season_name", "")).strip(),
+            str(row.get("league_id", "")).strip(),
+        )
+        for row in rows
+    }
+    missing_slices = sorted(baseline_slices - current_slices)
+    if missing_slices:
+        raise SystemExit(
+            "Cohort non-loss audit failed: published season/competition slices disappeared: "
+            + ", ".join(f"{season}|{league}" for season, league in missing_slices)
+        )
+    return len(baseline_keys), len(current_key_set)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cohort", type=Path, default=COHORT_PATH)
     parser.add_argument("--write-missing", type=Path, default=DEFAULT_MISSING_PATH)
     parser.add_argument("--minimum-coverage", type=float, default=0.98)
+    parser.add_argument(
+        "--baseline", type=Path,
+        help="Optional published cohort whose exact keys must all remain present.",
+    )
     args = parser.parse_args()
 
     rows, missing = audit(args.cohort)
@@ -83,6 +138,12 @@ def main() -> None:
     if coverage < args.minimum_coverage:
         raise SystemExit(
             f"Pressing coverage {coverage:.4%} is below required {args.minimum_coverage:.2%}."
+        )
+    if args.baseline is not None:
+        baseline_count, current_count = audit_baseline_non_loss(rows, args.baseline)
+        print(
+            "Cohort non-loss audit: "
+            f"retained={baseline_count}/{baseline_count} current={current_count}"
         )
 
 

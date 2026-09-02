@@ -15,8 +15,6 @@ on:
         description: Optional comma-separated competition labels; leave blank to refresh all supported competitions
         required: false
         default: ""
-  schedule:
-    - cron: "45 4 * * 1"
 
 permissions:
   contents: write
@@ -33,6 +31,8 @@ jobs:
           python-version: "3.11"
       - name: Install cohort dependencies
         run: pip install -r requirements.txt
+      - name: Preserve published cohort baseline
+        run: cp data/spear_cohort.csv "$RUNNER_TEMP/spear_cohort.before.csv"
       - name: Build static S.P.E.A.R. cohort CSV
         run: |
           seasons="${{ inputs.season_names }}"
@@ -60,7 +60,10 @@ jobs:
             fi
           done
       - name: Audit forward-pressing source coverage
-        run: python scripts/audit_pressing_coverage.py --minimum-coverage 0.98
+        run: >-
+          python scripts/audit_pressing_coverage.py
+          --minimum-coverage 0.98
+          --baseline "$RUNNER_TEMP/spear_cohort.before.csv"
       - name: Commit static cohort
         if: success()
         run: |
@@ -74,4 +77,9 @@ jobs:
           git commit -m "Refresh S.P.E.A.R. cohorts"
           git fetch origin main
           git rebase origin/main
+          git show origin/main:data/spear_cohort.csv > "$RUNNER_TEMP/spear_cohort.origin-main.csv"
+          python scripts/audit_pressing_coverage.py \
+            --minimum-coverage 0.98 \
+            --baseline "$RUNNER_TEMP/spear_cohort.origin-main.csv" \
+            --write-missing "$RUNNER_TEMP/missing_pressing_sessions.csv"
           git push origin HEAD:main

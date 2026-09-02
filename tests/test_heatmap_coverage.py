@@ -21,6 +21,7 @@ from scripts.build_tactical_ratios import (
     resolve_ranked_sportsapi_id,
     spatial_metrics,
     tactical_coverage_regressions,
+    validate_checkpoint_compatibility,
 )
 from positional_grid import (
     POSITIONAL_CELL_FIELDS,
@@ -39,7 +40,11 @@ from tactical_ratio import (
 )
 from scripts.backfill_true_core_zones import DEFINITION_VERSION
 from scripts.build_shotmap_points import build as build_shotmap_points
-from scripts.build_shotmap_points import normalize_shotmap, shot_outcome
+from scripts.build_shotmap_points import (
+    ShotmapBackfillError,
+    normalize_shotmap,
+    shot_outcome,
+)
 from fotmob_client import FotMobError, _get, _league_selections
 from scripts.audit_shotmap_coverage import load_source_exceptions
 
@@ -300,12 +305,12 @@ class CcaOverlayTests(unittest.TestCase):
                     ),
                     patch("builtins.print") as log,
                 ):
-                    self.assertEqual(
+                    with self.assertRaisesRegex(
+                        ShotmapBackfillError, "source anomalies=1",
+                    ):
                         build_shotmap_points(
                             "2025/2026", refresh_existing=True,
-                        ),
-                        (1, 0),
-                    )
+                        )
 
                 self.assertEqual(
                     json.loads(output.read_text(encoding="utf-8"))[key], populated,
@@ -477,6 +482,35 @@ class CcaOverlayTests(unittest.TestCase):
 
 
 class TacticalCoverageAuditTests(unittest.TestCase):
+    def test_formula_mismatch_fails_instead_of_resetting_published_history(self) -> None:
+        rows = [{
+            "heatmap_key": "194165:35:63516",
+            "activity_filter": "fixed-n60-r20-v2",
+        }]
+
+        with self.assertRaisesRegex(SystemExit, "explicit versioned migration required"):
+            validate_checkpoint_compatibility(
+                rows, {"194165:35:63516": [[90.0, 50.0]]},
+            )
+
+    def test_csv_json_checkpoint_key_mismatch_fails_closed(self) -> None:
+        rows = [{
+            "heatmap_key": "194165:35:63516",
+            "activity_filter": "continuous-hdr-50-v1",
+        }]
+
+        with self.assertRaisesRegex(SystemExit, "1 CSV keys are absent"):
+            validate_checkpoint_compatibility(rows, {"other": [[90.0, 50.0]]})
+
+    def test_tactical_workflow_never_publishes_after_failure(self) -> None:
+        workflow = (
+            Path(__file__).resolve().parents[1]
+            / ".github" / "workflows" / "refresh-tactical-ratios.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("if: always()", workflow)
+        self.assertIn("if: success()", workflow)
+
     def test_scoring_cache_refresh_clears_all_static_score_layers(self) -> None:
         import rankings
 

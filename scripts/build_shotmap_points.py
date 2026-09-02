@@ -352,10 +352,17 @@ def build(
             file=sys.stderr,
             flush=True,
         )
-    if fatal_errors:
+    if preserved_invalid_sources or fetch_errors or fatal_errors:
+        failures: list[str] = []
+        if preserved_invalid_sources:
+            failures.append(f"source anomalies={preserved_invalid_sources}")
+        if fetch_errors:
+            failures.append(f"fetch errors={fetch_errors}")
+        if fatal_errors:
+            failures.append("unexpected worker failures=" + "; ".join(fatal_errors))
         raise ShotmapBackfillError(
-            "Unexpected worker failures after preserving checkpoints: "
-            + "; ".join(fatal_errors)
+            "Shotmap refresh incomplete after preserving local checkpoints: "
+            + ", ".join(failures)
         )
     return len(targets), completed
 

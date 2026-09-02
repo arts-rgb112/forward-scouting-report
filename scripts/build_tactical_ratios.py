@@ -858,6 +858,36 @@ def enrich_checkpoint_spatial_metrics(
         row.update(spatial_metrics(core_activity_points(points), positional_points=points))
 
 
+def validate_checkpoint_compatibility(
+    rows: list[dict[str, Any]], visual_points: dict[str, list[list[float]]],
+) -> None:
+    """Reject destructive schema/formula migrations before any provider call."""
+
+    if bool(rows) != bool(visual_points):
+        raise SystemExit(
+            "Tactical checkpoint CSV/JSON presence mismatch; canonical data was not modified."
+        )
+    versions = {
+        str(row.get("activity_filter", "")).strip()
+        for row in rows
+    }
+    if versions and versions != {ACTIVITY_FILTER_VERSION}:
+        raise SystemExit(
+            "Tactical checkpoint formula mismatch; explicit versioned migration required. "
+            f"expected={ACTIVITY_FILTER_VERSION} observed={sorted(versions)}"
+        )
+    missing_point_keys = sorted({
+        str(row.get("heatmap_key", "")).strip()
+        for row in rows
+        if str(row.get("heatmap_key", "")).strip() not in visual_points
+    })
+    if missing_point_keys:
+        raise SystemExit(
+            "Tactical checkpoint key mismatch; "
+            f"{len(missing_point_keys)} CSV keys are absent from JSON."
+        )
+
+
 def write_outputs(
     output: list[dict[str, Any]], unmatched: list[dict[str, Any]],
     auto_mapped: list[dict[str, Any]], visual_points: dict[str, list[list[float]]],
@@ -921,12 +951,11 @@ def main() -> None:
     point_path = DATA_DIR / "tactical_heatmap_points.json"
     try:
         visual_points = json.loads(point_path.read_text(encoding="utf-8")) if point_path.exists() else {}
-    except (OSError, ValueError):
-        visual_points = {}
-    if not visual_points or any(row.get("activity_filter") != ACTIVITY_FILTER_VERSION for row in output):
-        output = []
-        visual_points = {}
-    enrich_checkpoint_spatial_metrics(output, visual_points)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(
+            f"Tactical checkpoint JSON is unreadable; canonical data was not modified: {exc}"
+        ) from exc
+    validate_checkpoint_compatibility(output, visual_points)
     baseline_missing = missing_static_cohort_sessions(output, visual_points=visual_points)
     baseline_missing_keys = {missing_session_key(row) for row in baseline_missing}
     failure_reasons = read_missing_failure_reasons(DATA_DIR / "missing_tactical_sessions.csv")

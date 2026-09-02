@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import sys
 import time
 from dataclasses import asdict
@@ -33,6 +34,10 @@ COMPETITIONS = {
     "UEFA Europa Conference League": 108,
 }
 
+
+class CohortBuildError(RuntimeError):
+    """Fail a requested cohort refresh before any canonical data is written."""
+
 def build(
     season_name: str, competition_names: tuple[str, ...] | list[str] | None = None,
 ) -> list[dict[str, object]]:
@@ -49,8 +54,13 @@ def build(
             # not name expected-goals-only entrants as "Unknown".
             name_rows = cohort_candidate_rows(league_id, season_name).values()
         except FotMobError as exc:
-            print(f"Skipping {competition_name}: {exc}")
-            continue
+            raise CohortBuildError(
+                f"Failed requested competition {competition_name}: {exc}"
+            ) from exc
+        if not metrics_by_player:
+            raise CohortBuildError(
+                f"Requested competition {competition_name} returned zero eligible rows"
+            )
         names = {str(row.get("id")): str(row.get("name", "Unknown")) for row in name_rows}
         # Stat-table rows expose a team ID rather than a team name.  Resolve
         # each distinct team once, never once per player.
@@ -103,11 +113,19 @@ def write(rows: list[dict[str, object]]) -> None:
                     str(row.get("league_id", "")).strip(),
                 ) not in refreshed_slices
             ]
-    with DATA_PATH.open("w", encoding="utf-8", newline="") as target:
-        writer = csv.DictWriter(target, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        writer.writerows(retained)
-        writer.writerows(rows)
+    temporary_path = DATA_PATH.with_name(f".{DATA_PATH.name}.{os.getpid()}.tmp")
+    try:
+        with temporary_path.open("w", encoding="utf-8", newline="") as target:
+            writer = csv.DictWriter(target, fieldnames=CSV_FIELDS)
+            writer.writeheader()
+            writer.writerows(retained)
+            writer.writerows(rows)
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary_path, DATA_PATH)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
 
 
 def main() -> None:
