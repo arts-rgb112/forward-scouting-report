@@ -21,7 +21,7 @@ from rankings import (
 from spear_cohort import load_spear_cohort
 from tactical_ratio import (
     full_activity_aggregate_version, get_full_activity_context, get_heatmap_points,
-    get_tactical_ratio_for_session, get_tactical_session_row,
+    get_tactical_ratio_for_session, get_tactical_session_row, tactical_data_version,
 )
 from shotmap_store_v2 import (
     ShotmapSnapshotError, get_shotmap_snapshot, shotmap_snapshot_revision,
@@ -78,6 +78,7 @@ from .schemas import (
     SixLaneShootingCorridorContext, SixLaneShootingCorridorData,
     SixLaneShootingCorridorEnvelope, SixLaneShootingCorridorLane,
     SixLaneShootingCorridorProvenance, SixLaneShootingCorridorTotals,
+    FullActivityHeatmapData, FullActivityHeatmapEnvelope,
 )
 from .profiles import league_logo_url, player_age, player_face_url, team_logo_url
 from .search import canonical_search_key
@@ -3790,32 +3791,27 @@ def _shotmap_point_without_internal_identity(raw: object) -> tuple[object, str |
     return {key: value for key, value in raw.items() if key != "sourceEventId"}, event_id
 
 
-def _final_third_source_snapshots(
+def _selected_tactical_heatmap_keys(
     player_id: int, player: PlayerResponse, season: str, mode: str, competition: str,
-) -> tuple[list[tuple[str, list[object]]], list[str], str]:
-    """Load only exact selected-context snapshot shards, never a fallback.
+) -> list[str]:
+    """Resolve exact selected-context tactical sessions without loading a shot source.
 
     ``europe=all`` is a true union of the UEFA tournaments in which this
-    player has an exact tactical session. It may be partial when one of those
-    committed competition snapshots is unavailable, but it must never choose
+    player has an exact tactical session. It must never choose
     a single competition based on the arbitrary display league of an all-cup
     aggregate row.
     """
 
     if mode == "league":
         competition_names = (player.league.name,)
-        unavailable_reason = FINAL_THIRD_UNAVAILABLE_REASON
     elif competition == "all":
         competition_names = tuple(label for _, label in FINAL_THIRD_EUROPE_COMPETITIONS)
-        unavailable_reason = FINAL_THIRD_COMPETITION_UNAVAILABLE_REASON
     else:
         competition_names = tuple(
             label for code, label in FINAL_THIRD_EUROPE_COMPETITIONS if code == competition
         )
-        unavailable_reason = FINAL_THIRD_COMPETITION_UNAVAILABLE_REASON
 
-    snapshots: list[tuple[str, list[object]]] = []
-    missing_keys: list[str] = []
+    heatmap_keys: list[str] = []
     seen_keys: set[str] = set()
     for competition_name in competition_names:
         tactical = get_tactical_session_row(player_id, competition_name, season)
@@ -3823,6 +3819,25 @@ def _final_third_source_snapshots(
         if not heatmap_key or heatmap_key in seen_keys:
             continue
         seen_keys.add(heatmap_key)
+        heatmap_keys.append(heatmap_key)
+    return heatmap_keys
+
+
+def _final_third_source_snapshots(
+    player_id: int, player: PlayerResponse, season: str, mode: str, competition: str,
+) -> tuple[list[tuple[str, list[object]]], list[str], str]:
+    """Load only exact selected-context shot snapshot shards, never a fallback."""
+    heatmap_keys = _selected_tactical_heatmap_keys(
+        player_id, player, season, mode, competition,
+    )
+    unavailable_reason = (
+        FINAL_THIRD_UNAVAILABLE_REASON
+        if mode == "league"
+        else FINAL_THIRD_COMPETITION_UNAVAILABLE_REASON
+    )
+    snapshots: list[tuple[str, list[object]]] = []
+    missing_keys: list[str] = []
+    for heatmap_key in heatmap_keys:
         try:
             snapshot_available, source_rows = get_shotmap_snapshot(heatmap_key, season)
         except ShotmapSnapshotError as exc:
@@ -4290,6 +4305,84 @@ def build_six_lane_shooting_corridor(
     return _build_six_lane_shooting_corridor_cached(
         player_id, season, mode, scope, competition,
         shotmap_snapshot_revision(season), full_activity_aggregate_version(),
+    )
+
+
+@lru_cache(maxsize=128)
+def _build_full_activity_heatmap_cached(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+    activity_revision: tuple[int, int] | None,
+    tactical_revision: tuple[tuple[int, int] | None, tuple[int, int] | None],
+) -> FullActivityHeatmapEnvelope | None:
+    del activity_revision, tactical_revision
+    player = find_v2_player(player_id, season, mode, scope, competition)
+    if player is None:
+        return None
+    context = SixLaneShootingCorridorContext(
+        playerId=player_id, season=season, mode=mode,
+        scope=scope if mode == "league" else None,
+        competition=competition if mode == "europe" else None,
+    )
+    heatmap_keys = _selected_tactical_heatmap_keys(
+        player_id, player, season, mode, competition,
+    )
+    counts = [0] * (32 * 22)
+    valid_points = 0
+    activity_snapshots = 0
+    missing_activity_keys: list[str] = []
+    for heatmap_key in heatmap_keys:
+        aggregate = get_full_activity_context(heatmap_key)
+        heatmap = aggregate.get("activityHeatmap") if isinstance(aggregate, dict) else None
+        raw_counts = heatmap.get("cellCounts") if isinstance(heatmap, dict) else None
+        aggregate_valid_point_count = (
+            aggregate.get("activityValidPointCount") if isinstance(aggregate, dict) else None
+        )
+        if (
+            not isinstance(heatmap, dict)
+            or heatmap.get("definitionVersion") != "full-tier3-count-weighted-histogram-32x22-v1"
+            or heatmap.get("columns") != 32 or heatmap.get("rows") != 22
+            or not isinstance(raw_counts, list) or len(raw_counts) != len(counts)
+            or any(type(value) is not int or value < 0 for value in raw_counts)
+            or type(aggregate_valid_point_count) is not int
+            or aggregate_valid_point_count < 0
+            or sum(raw_counts) != aggregate_valid_point_count
+        ):
+            missing_activity_keys.append(heatmap_key)
+            continue
+        counts = [left + right for left, right in zip(counts, raw_counts)]
+        valid_points += aggregate_valid_point_count
+        activity_snapshots += 1
+    reason = None
+    if not heatmap_keys:
+        reason = "full_activity_context_unavailable_for_selected_context"
+    elif missing_activity_keys:
+        reason = "full_activity_heatmap_unavailable"
+    available = reason is None
+    if not available:
+        counts = [0] * len(counts)
+        valid_points = 0
+        activity_snapshots = 0
+    return FullActivityHeatmapEnvelope(
+        context=context,
+        data=FullActivityHeatmapData(
+            available=available,
+            reason=reason,
+            definitionVersion="full-tier3-count-weighted-histogram-32x22-v1",
+            cellCounts=counts,
+            validPointCount=valid_points,
+            activitySnapshotCount=activity_snapshots,
+            sourceDefinitionVersion="sportsapi-heatmap-points-count-weighted-full-v1",
+        ),
+    )
+
+
+def build_full_activity_heatmap(
+    player_id: int, season: str, mode: str, scope: int, competition: str,
+) -> FullActivityHeatmapEnvelope | None:
+    """Return a display-only full Tier-3 histogram; never a max-180 fallback."""
+    return _build_full_activity_heatmap_cached(
+        player_id, season, mode, scope, competition,
+        full_activity_aggregate_version(), tactical_data_version(),
     )
 
 

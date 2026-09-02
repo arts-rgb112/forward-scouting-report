@@ -2962,6 +2962,49 @@ class SixLaneShootingCorridorEnvelope(BaseModel):
     data: SixLaneShootingCorridorData
 
 
+class FullActivityHeatmapData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    available: bool
+    reason: str | None = None
+    definitionVersion: Literal["full-tier3-count-weighted-histogram-32x22-v1"]
+    columns: Literal[32] = 32
+    rows: Literal[22] = 22
+    cellCounts: list[int] = Field(min_length=704, max_length=704)
+    validPointCount: int = Field(ge=0)
+    activitySnapshotCount: int = Field(ge=0)
+    sourceDefinitionVersion: Literal["sportsapi-heatmap-points-count-weighted-full-v1"]
+
+    @model_validator(mode="after")
+    def validate_histogram(self) -> "FullActivityHeatmapData":
+        if any(value < 0 for value in self.cellCounts):
+            raise ValueError("full activity heatmap counts must be non-negative")
+        if self.available:
+            if (
+                self.reason is not None
+                or sum(self.cellCounts) != self.validPointCount
+                or self.activitySnapshotCount < 1
+            ):
+                raise ValueError("available full activity heatmap is inconsistent")
+        elif (
+            self.reason is None
+            or self.validPointCount != 0
+            or self.activitySnapshotCount != 0
+            or any(self.cellCounts)
+        ):
+            raise ValueError("unavailable full activity heatmap must be empty with a reason")
+        return self
+
+
+class FullActivityHeatmapEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal["1.0.0"] = "1.0.0"
+    heatmapTaxonomyVersion: Literal["full-activity-heatmap-v1"] = "full-activity-heatmap-v1"
+    context: SixLaneShootingCorridorContext
+    data: FullActivityHeatmapData
+
+
 class GoalMouthBaselineData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

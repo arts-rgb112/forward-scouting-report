@@ -8,19 +8,19 @@ export const HEATMAP_ROWS = 22;
 /** Display-only resolution. The 32 × 22 grid remains the sole scoring/CCA raster. */
 export const DISPLAY_HEATMAP_COLUMNS = 96;
 export const DISPLAY_HEATMAP_ROWS = 66;
-export const DISPLAY_HEATMAP_COLOR_STAGES = 12;
 /** Display-only tone mapping. Native density stays unchanged for CCA/HDR. */
-export const HEATMAP_DISPLAY_GAMMA = .6;
+export const HEATMAP_DISPLAY_GAMMA = .85;
 export const HEATMAP_KERNEL = [1, 4, 6, 4, 1] as const;
 export const HEATMAP_STOPS = [
-  [0, [0, 0, 0, 0]],
-  [0.08, [124, 151, 71, 0.18]],
-  [0.24, [188, 185, 65, 0.56]],
-  [0.48, [244, 209, 60, 0.78]],
-  [0.72, [247, 135, 39, 0.9]],
-  [1, [222, 63, 31, 0.98]],
+  [0, [47, 30, 78]],
+  [.3, [124, 42, 110]],
+  [.6, [196, 70, 60]],
+  [.85, [232, 99, 42]],
+  [1, [222, 63, 31]],
 ] as const;
-export const HEATMAP_OPACITY = .55;
+export const HEATMAP_OPACITY = 1;
+export const TWO_D_HEATMAP_BLUR_PX = 0;
+export const THREE_D_HEATMAP_BLUR = 4;
 
 export type ActivityPoint = { x: number; y: number };
 export type HeatmapGrid = Float64Array;
@@ -42,6 +42,12 @@ export function rawActivityHistogram(points: readonly ActivityPoint[]): HeatmapG
   return grid;
 }
 
+/** Server-owned count-weighted Tier 3 histogram; no coordinate reconstruction. */
+export function activityHistogramGrid(cellCounts: readonly number[]): HeatmapGrid {
+  if (cellCounts.length !== HEATMAP_ROWS * HEATMAP_COLUMNS || cellCounts.some((value) => !Number.isInteger(value) || value < 0)) return new Float64Array(HEATMAP_ROWS * HEATMAP_COLUMNS);
+  return Float64Array.from(cellCounts);
+}
+
 function smoothAxis(source: HeatmapGrid, axis: "row" | "column"): HeatmapGrid {
   const target = new Float64Array(source.length);
   for (let row = 0; row < HEATMAP_ROWS; row += 1) for (let column = 0; column < HEATMAP_COLUMNS; column += 1) {
@@ -59,6 +65,11 @@ function smoothAxis(source: HeatmapGrid, axis: "row" | "column"): HeatmapGrid {
 /** Edge-replicated [1,4,6,4,1]/16 smoothing: rows, then columns, matching continuous_core.py. */
 export function legacyDensityGrid(points: readonly ActivityPoint[]): HeatmapGrid {
   return smoothAxis(smoothAxis(rawActivityHistogram(points), "row"), "column");
+}
+
+/** Apply the established display smoothing directly to the server histogram. */
+export function fullActivityDensityGrid(cellCounts: readonly number[]): HeatmapGrid {
+  return smoothAxis(smoothAxis(activityHistogramGrid(cellCounts), "row"), "column");
 }
 
 export function normalizeDensity(grid: HeatmapGrid): HeatmapGrid {
@@ -99,7 +110,7 @@ export function displayDensityGrid(grid: HeatmapGrid, columns = DISPLAY_HEATMAP_
 }
 
 export function legacyHeatmapColor(value: number): readonly [number, number, number, number] {
-  const normalized = Math.round(clamp(value, 0, 1) * (DISPLAY_HEATMAP_COLOR_STAGES - 1)) / (DISPLAY_HEATMAP_COLOR_STAGES - 1);
+  const normalized = clamp(value, 0, 1);
   const upperIndex = HEATMAP_STOPS.findIndex(([stop]) => normalized <= stop);
   const upper = HEATMAP_STOPS[upperIndex < 0 ? HEATMAP_STOPS.length - 1 : upperIndex];
   const lower = HEATMAP_STOPS[Math.max(0, (upperIndex < 0 ? HEATMAP_STOPS.length - 1 : upperIndex) - 1)];
@@ -108,7 +119,7 @@ export function legacyHeatmapColor(value: number): readonly [number, number, num
     lower[1][0] + (upper[1][0] - lower[1][0]) * amount,
     lower[1][1] + (upper[1][1] - lower[1][1]) * amount,
     lower[1][2] + (upper[1][2] - lower[1][2]) * amount,
-    lower[1][3] + (upper[1][3] - lower[1][3]) * amount,
+    normalized <= 0 ? 0 : Math.min(.58, .06 + .52 * normalized),
   ];
 }
 

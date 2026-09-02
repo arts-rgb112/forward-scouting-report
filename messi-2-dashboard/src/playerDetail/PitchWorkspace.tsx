@@ -4,6 +4,7 @@ import type { MessiApiConfig } from "../api/env";
 import type { FinalThirdRenderableData } from "../api/finalThirdShotMapV2Contracts";
 import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contracts";
 import type { DatasetRouteState, PlayerAnalysis } from "../dashboard/types";
+import { useFullActivityHeatmap } from "./useFullActivityHeatmap";
 import { GoalMouthView } from "./GoalMouthView";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { DEFAULT_PITCH_LAYERS, PITCH_LAYER_LABELS, type PitchLayerVisibility } from "./pitchLayers";
@@ -45,6 +46,8 @@ export function PitchWorkspace({ analysis, contextIdentity, config, playerId, da
   const [layers, setLayers] = useState<PitchLayerVisibility>(DEFAULT_PITCH_LAYERS);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const finalThird = useFinalThirdShotMap(config, playerId, dataset);
+  const fullHeatmap = useFullActivityHeatmap(config, playerId, dataset);
+  const fullActivityHeatmap = fullHeatmap.kind === "ready" ? fullHeatmap.data : undefined;
   const { includePenalties } = usePitchPenalty();
   const baselineContext = useMemo(() => ({ playerId, season: dataset.season, mode: dataset.mode, scope: dataset.scope, competition: dataset.competition, includePenalties }), [dataset.competition, dataset.mode, dataset.scope, dataset.season, includePenalties, playerId]);
   const baseline = useGoalMouthBaseline(config, baselineContext);
@@ -77,8 +80,8 @@ export function PitchWorkspace({ analysis, contextIdentity, config, playerId, da
       {(Object.keys(PITCH_LAYER_LABELS) as Array<keyof PitchLayerVisibility>).map((layer) => <button key={layer} type="button" aria-pressed={layers[layer]} onClick={() => setLayers((current) => ({ ...current, [layer]: !current[layer] }))} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold aria-pressed:border-lime-300/60 aria-pressed:bg-lime-300/15 aria-pressed:text-lime-100">{PITCH_LAYER_LABELS[layer]}</button>)}
     </div>}
     <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${activeTab}`} className="mt-3">
-      {activeTab === "threeD" && <SpatialPitch analysis={analysis} contextIdentity={contextIdentity} forcedMode="perspective" embedded layers={layers}/>}
-      {activeTab === "twoD" && <SixLaneCorridorPitch analysis={analysis} layers={layers}/>}
+      {activeTab === "threeD" && <SpatialPitch analysis={analysis} contextIdentity={contextIdentity} forcedMode="perspective" embedded layers={layers} fullActivityHeatmap={fullActivityHeatmap}/>}
+      {activeTab === "twoD" && <SixLaneCorridorPitch analysis={analysis} layers={layers} fullActivityHeatmap={fullActivityHeatmap}/>}
       {activeTab === "goalMouth" && (goalData ? <GoalMouthView data={goalData} config={config} baselineResource={baseline.state}/> : <p role="status" aria-live="polite" className="rounded border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">{!current || finalThird.state.kind === "loading" ? WORKSPACE_COPY.loading : WORKSPACE_COPY.unavailable}</p>)}
     </div>
   </section>;

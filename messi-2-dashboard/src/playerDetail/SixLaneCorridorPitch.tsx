@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
+import type { FullActivityHeatmapData } from "../api/fullActivityHeatmapContracts";
 import { HeatmapCanvas } from "./LegacySpatialPitch";
 import { legacyDensityGrid, marchingSquares, normalizeDensity } from "./legacyHeatmap";
 import { CCA_STYLE, ZONE20 } from "./pitchGeometry";
@@ -112,7 +113,7 @@ const contourPath = (segments: readonly (readonly [number, number, number, numbe
   return `M${start.x.toFixed(4)} ${start.y.toFixed(4)}L${end.x.toFixed(4)} ${end.y.toFixed(4)}`;
 }).join("");
 
-export function SixLaneCorridorPitch({ analysis, layers }: { analysis?: PlayerAnalysis; layers: PitchLayerVisibility }) {
+export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap }: { analysis?: PlayerAnalysis; layers: PitchLayerVisibility; fullActivityHeatmap?: FullActivityHeatmapData }) {
   const spatial = analysis?.spatial;
   const shots = spatial?.shotmapPoints;
   const { includePenalties } = usePitchPenalty();
@@ -169,7 +170,7 @@ export function SixLaneCorridorPitch({ analysis, layers }: { analysis?: PlayerAn
       <figure className="min-w-0" aria-describedby="six-lane-corridor-caption">
         <div ref={stageRef} className="relative overflow-hidden rounded-lg border border-white/10 bg-[#123A20] touch-none" style={{ aspectRatio: "105 / 68" }}>
           <div data-zoom-pan className="absolute inset-0 origin-center" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
-          <HeatmapCanvas points={validHeat ? spatial!.heatmapPoints : []} enabled={layers.heatmap && validHeat} opacity={.62}/>
+          <HeatmapCanvas cellCounts={fullActivityHeatmap?.available ? fullActivityHeatmap.cellCounts : undefined} enabled={layers.heatmap && Boolean(fullActivityHeatmap?.available)}/>
           <svg viewBox="-2 -2 109 72" role="img" aria-label={`${COPY.fieldLabel}. ${markerDescription}`} className="h-full w-full" onClick={(event) => { if (!moved.current) zoneAt(event); moved.current = false; }} onPointerDown={(event) => { if (event.pointerType === "touch") { touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (touchPoints.current.size === 2) { const points = [...touchPoints.current.values()]; pinch.current = { gap: Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y), zoom }; } } if (zoom > 1 && !(event.target instanceof Element && event.target.closest("[data-corridor-shot-marker]"))) drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, pan }; event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { if (event.pointerType === "touch" && touchPoints.current.has(event.pointerId)) { touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pinch.current && touchPoints.current.size === 2) { const points = [...touchPoints.current.values()]; const gap = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y); if (gap > 0) changeZoom(pinch.current.zoom * gap / pinch.current.gap); return; } } const start = drag.current; if (!start || start.pointerId !== event.pointerId) return; const dx = event.clientX - start.x, dy = event.clientY - start.y; if (Math.abs(dx) + Math.abs(dy) > 2) moved.current = true; setPan(clampPan({ x: start.pan.x + dx, y: start.pan.y + dy })); }} onPointerUp={(event) => finishPointer(event.pointerId)} onPointerCancel={(event) => finishPointer(event.pointerId)}>
             {LANES.map((lane) => {
               const y = lineY(lane.high);
@@ -179,7 +180,7 @@ export function SixLaneCorridorPitch({ analysis, layers }: { analysis?: PlayerAn
             <PitchLines />
             <GuardiolaDepthGrid />
             {LANES.slice(1).map((lane) => <path key={lane.id} d={`M0 ${lineY(lane.high)}H105`} stroke="#FFFFFF" strokeOpacity=".26" strokeWidth=".34" vectorEffect="non-scaling-stroke" />)}
-            {layers.cca && contour.length > 0 && <path data-layer="cca-contour" d={contourPath(contour)} fill="none" stroke={CCA_STYLE.stroke} strokeOpacity={CCA_STYLE.opacity} strokeWidth={CCA_STYLE.width * .42} strokeDasharray={CCA_STYLE.dash} vectorEffect="non-scaling-stroke"/>}
+            {layers.cca && contour.length > 0 && <path data-layer="cca-contour" d={contourPath(contour)} fill="none" stroke={CCA_STYLE.stroke} strokeOpacity={CCA_STYLE.opacity} strokeWidth={CCA_STYLE.width} strokeDasharray={CCA_STYLE.dash} vectorEffect="non-scaling-stroke"/>}
             <circle cx="93.999" cy="34" r="1.1" fill="#FFFFFF" fillOpacity=".8" />
             <circle cx="93.999" cy="34" r="2.9" fill="none" stroke="#FBBF24" strokeOpacity=".9" strokeWidth=".45" strokeDasharray="1.2 .9" vectorEffect="non-scaling-stroke" />
             {layers.trajectories && <g data-layer="shot-trajectories-2d" fill="none" pointerEvents="none">{displayedShots.map((shot, index) => shot.trajectory ? <path key={index} d={`M${world(shot).x.toFixed(4)} ${world(shot).y.toFixed(4)}L${(shot.trajectory.endX * 1.05).toFixed(4)} ${((100 - shot.trajectory.endY) * .68).toFixed(4)}`} stroke="#E2E8F0" strokeOpacity=".24" strokeWidth=".28" vectorEffect="non-scaling-stroke"/> : null)}</g>}

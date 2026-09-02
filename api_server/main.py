@@ -29,7 +29,7 @@ from .schemas import (
     PlayerEnvelope, PlayersEnvelope, WatchlistDataQualityEnvelope,
     ShotmapServiceErrorDetail, ShotmapServiceErrorEnvelope,
     FinalThirdEffectiveShotEnvelope, FinalThirdGoalMouthEnvelope, FinalThirdShotEnvelope,
-    GoalMouthBaselineEnvelope, SixLaneShootingCorridorEnvelope,
+    GoalMouthBaselineEnvelope, SixLaneShootingCorridorEnvelope, FullActivityHeatmapEnvelope,
     WatchlistResolveEnvelope, WatchlistResolveRequest, TacticalQuadrantEnvelope,
 )
 from .service import (
@@ -44,7 +44,7 @@ from .service import (
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
     resolve_metric_rank_entries,
     build_benchmark_radar_v2, build_ratio_benchmark, build_tactical_summary, build_tactical_summary_v2, build_volume_benchmark,
-    build_final_third_shot_map, build_goal_mouth_baseline, build_six_lane_shooting_corridor,
+    build_final_third_shot_map, build_goal_mouth_baseline, build_six_lane_shooting_corridor, build_full_activity_heatmap,
     ShotmapContractViolation,
 )
 
@@ -645,6 +645,36 @@ def get_six_lane_shooting_corridor(
         raise HTTPException(status_code=422, detail="scope must be omitted for europe context")
     validate_duel_press_context(mode, competition)
     envelope = build_six_lane_shooting_corridor(playerId, season, mode, int(scope), competition)
+    if envelope is None:
+        raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
+    return envelope
+
+
+@app.get(
+    "/api/v2/players/{playerId}/full-activity-heatmap",
+    response_model=FullActivityHeatmapEnvelope,
+    tags=["players"],
+    responses={
+        404: {"model": ApiErrorEnvelope, "description": "Player unavailable in the exact selected context."},
+        422: {"description": "League/europe context dimensions are invalid."},
+    },
+)
+def get_full_activity_heatmap(
+    request: Request,
+    response: Response,
+    playerId: int,
+    season: str = Query(default="2025/2026", pattern=r"^20\d{2}/20\d{2}$"),
+    mode: Literal["league", "europe"] = Query(default="league"),
+    scope: Literal["3", "5", "7", "8"] = Query(default="8"),
+    competition: Literal["all", "ucl", "uel", "uecl"] = Query(default="all"),
+) -> FullActivityHeatmapEnvelope:
+    if season not in supported_seasons():
+        raise HTTPException(status_code=404, detail=f"No static cohort is available for season {season}")
+    if mode == "europe" and "scope" in request.query_params:
+        raise HTTPException(status_code=422, detail="scope must be omitted for europe context")
+    validate_duel_press_context(mode, competition)
+    envelope = build_full_activity_heatmap(playerId, season, mode, int(scope), competition)
     if envelope is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"

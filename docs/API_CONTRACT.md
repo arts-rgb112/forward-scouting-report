@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 구현·로컬 비교 QA 완료, PR 준비 — full Tier 3 활동원천 기반 히트맵 B안
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b
+- 범위/결과 (2026-09-02): additive `GET /api/v2/players/{playerId}/full-activity-heatmap`과 strict taxonomy `full-activity-heatmap-v1`을 신설했다. 요청 query는 `season/mode/scope/competition`만 허용하며, 응답은 exact context와 `available/reason`, `32×22` count-weighted `cellCounts`, `validPointCount`, `activitySnapshotCount`, `sourceDefinitionVersion=sportsapi-heatmap-points-count-weighted-full-v1`을 반환한다. 원천이 없으면 빈 704셀과 구조화된 unavailable을 반환하며 max-180으로 fallback하지 않는다. artefact는 ignored Tier 3 raw의 `{x,y,count}`를 오프라인에서 집계하고 같은 디렉터리 임시 파일을 fsync한 뒤 atomic replace한다. 현재 exact context `10,430`, unavailable `34`; Kane `194165:35:77333`은 raw cell `1,187`, count-weighted valid `1,401`, histogram 합 `1,401`이다. 2D/3D 표시 히트맵만 이 endpoint로 이전했고 기존 `PlayerDetail.spatial`·CCA/HDR·점수·CSV·max-180 JSON은 변경하지 않았다. 램프는 `#2F1E4E→#7C2A6E→#C4463C→#E8632A→#DE3F1F`, 감마 `0.85`, alpha `0.06 + 0.52*v^0.85`(상한 `0.58`), 저밀도 cutoff 없음이다. CCA 시각선은 `#C084FC / 2.4 / .95 / 9 6`, blur는 2D `0`(기존 32×22 이항 smoothing+96×66 bilinear만), 3D `4`(원근 mesh seam 완화)로 분리했다. 로컬 HTTP는 200·704셀·합 1,401, backend `6 passed`, frontend `49 passed`, production build를 통과했다. 원천·램프 전후와 CCA 확대 캡처는 `C:/Users/USER/Downloads/files/messi-qa-artifacts/heatmap-full-tier3-b/`에 보존했다. 발주자 시각 판단 전에는 병합·배포하지 않는다.
+
 - 상태: 구현·로컬 검증 완료, PR 준비 — manual enrich ETL 비손실·산식 불변 보호
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-enrichment-etl-safety
 - 범위/결과 (2026-09-02): `enrich-tactical-spatial`은 쓰기 전에 exact `heatmap_key` 중복·보존과 CSV/JSON 양방향 key parity를 검사하고, 공간 파생 필드 외 값은 불변으로 고정하며, `activity_filter` 변경은 기존 단일 버전과 정확히 일치하는 `--migrate-definition-from` 없이는 거부한다. 현재 canonical `10,464 CSV = 10,464 JSON`, `fixed-n60-r20-v2`이므로 기본 실행은 `continuous-hdr-50-v1`로의 암묵적 변경을 0.314초 안에 차단했고 두 파일 SHA는 불변이었다. 승인된 migration에서도 source version exact match를 강제하고 같은 디렉터리 temporary file을 fsync한 뒤 `os.replace`한다. `enrich-spear-cohort-teams`는 exact `(player_id, league_id, season_name)` `6,314/6,314`를 보존하고 `team_name` 외 전 필드 불변을 검사한 뒤에만 atomic replace한다. 두 manual workflow는 실패 뒤 commit되지 않도록 `if: success()`를 명시했으며 tactical workflow의 migration source는 수동 입력으로만 전달된다. 신규/관련 회귀 `72 passed, 3 subtests passed`, YAML parse·`py_compile`·`git diff --check`를 통과했다. 세 원격 refresh workflow는 `disabled_manually`임을 재확인했고 재활성화하지 않았다. canonical data·점수 산식·SportsAPI 원문 수집은 변경하지 않는다.
@@ -25,7 +29,6 @@
 - 상태: 로컬 구현·검증 완료, 릴리스 진행 중 — 2D 회랑 근접 클러스터링 비활성 핫픽스
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-cluster-off-hotfix
 - 범위/가드: `CORRIDOR_CLUSTER_DISTANCE`만 `1.6→0`으로 바꾸어 서로 다른 원좌표 슛을 하나의 마커로 합치지 않는다. 승인된 결과별 마커 반지름·색·테두리, 정확히 동일한 원좌표 스택의 감사 정보, 슛/점수/API/데이터는 변경하지 않는다. focused `SixLaneCorridorPitch.test.tsx` 4/4와 production build가 통과했다. Kane PK 제외 108발과 Gabriel Jesus 2024/25 55발에서 렌더 그룹 수가 슛 수와 같은지, proximity cluster 배지가 0인지 Production 캐시 우회 DOM으로 확인한다.
-
 - 상태: 구현·로컬 검증 완료, PR #302 갱신·병합 준비 — 2D 회랑 결과별 마커 반지름 핫픽스
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-score-unify-v3-clean
 - 범위/가드: 승인 시안의 피치 폭 대비 크기에 맞춰 2D 회랑 마커를 goal `0.72`, on_target `0.56`, blocked `0.50`, off_target X half-extent `0.50`으로 분리했다. 색·투명도·테두리도 시안의 goal `#BEF264/#0A1F10/1.2`, on_target `#38BDF8/#0A1F10/1.0`, blocked `none/#E2E8F0/.6/1.1`, off_target `#94A3B8/.55/1.1`로 맞췄다. 피치 viewBox·캔버스·줌·clustering·클릭 상세·3D 마커는 변경하지 않았다. 변경 테스트 `4 passed`와 production build가 통과했다. 병합·프로덕션 배포는 이번 #302 승인 범위 안에서 한 번만 수행한다.

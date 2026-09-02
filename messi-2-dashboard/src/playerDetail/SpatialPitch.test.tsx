@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PlayerAnalysis } from "../dashboard/types";
 import { deriveOrbitPivot, GOAL_CROSSBAR_HEIGHT_METERS, GOAL_POST_Y, GOAL_WIDTH_METERS, PITCH_WIDTH_METERS, POSITIONAL_LANE_BOUNDARIES, projectPerspective, SIX_YARD_BOX_Y, SpatialPitch } from "./SpatialPitch";
-import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, displayDensityGrid, displayHeatmapColor, legacyDensityGrid, normalizeDensity } from "./legacyHeatmap";
+import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_OPACITY, HEATMAP_ROWS, displayDensityGrid, displayHeatmapColor, legacyDensityGrid, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
 import { outcomePresentation } from "./shotOutcomeVisibility";
 
 const analysisWith = (spatial: Partial<PlayerAnalysis["spatial"]>): PlayerAnalysis => ({
@@ -19,6 +19,7 @@ const analysisWith = (spatial: Partial<PlayerAnalysis["spatial"]>): PlayerAnalys
     dangerZoneDensity: null, deepBoxZoneScore: null, ...spatial,
   },
 });
+const fullHeatmap = (points: readonly { x: number; y: number }[]) => ({ available: true, reason: null, definitionVersion: "full-tier3-count-weighted-histogram-32x22-v1", columns: 32, rows: 22, cellCounts: [...rawActivityHistogram(points)], validPointCount: points.length, activitySnapshotCount: 1, sourceDefinitionVersion: "sportsapi-heatmap-points-count-weighted-full-v1" }) as never;
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -234,7 +235,7 @@ describe("perspective spatial pitch", () => {
   it("renders a 96 by 66 display mesh while keeping the source 32 by 22 grid for CCA", () => {
     const point = { x: 44, y: 21.82 };
     const analysis = analysisWith({ heatmapPointCount: 1, heatmapPoints: [point], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ ...point, outcome: "goal", xg: .72, xgot: .84 }] });
-    const { container } = render(<SpatialPitch analysis={analysis}/>);
+    const { container } = render(<SpatialPitch analysis={analysis} fullActivityHeatmap={fullHeatmap([point])}/>);
     const normalized = normalizeDensity(legacyDensityGrid([point]));
     const display = displayDensityGrid(normalized);
     const row = Math.floor(point.y / 100 * DISPLAY_HEATMAP_ROWS), column = Math.floor(point.x / 100 * DISPLAY_HEATMAP_COLUMNS);
@@ -247,9 +248,11 @@ describe("perspective spatial pitch", () => {
     expect(heat).toHaveAttribute("fill-opacity", String(alpha * HEATMAP_OPACITY));
     expect(heat.closest("[data-layer=heat]")).toHaveAttribute("clip-path");
     expect(heat.closest("[data-layer=heat]")).toHaveAttribute("data-density-source", "display-96x66");
+    expect(heat.closest("[data-layer=heat]")).toHaveAttribute("data-density-input", "full-tier3-32x22");
+    expect(heat.closest("[data-layer=heat]")).toHaveAttribute("data-blur-std-deviation", "4");
     expect(heat.closest("[data-layer=heat]")).toHaveAttribute("filter", expect.stringContaining("display-heat-blur"));
     expect(heat.closest("[data-layer=heat]")).not.toHaveAttribute("style");
-    expect(container.querySelector("filter feGaussianBlur")).toHaveAttribute("stdDeviation", "9");
+    expect(container.querySelector("filter feGaussianBlur")).toHaveAttribute("stdDeviation", "4");
     expect(container.querySelector('linearGradient stop')).toHaveAttribute("stop-color", "#123A20");
     expect(container.querySelector('[data-layer="pitch-markings"] path')).toHaveAttribute("stroke", "#FFFFFF");
     expect(container.querySelector('[data-layer="positional-grid"]')).toHaveAttribute("stroke", "#FFFFFF");
@@ -266,15 +269,15 @@ describe("perspective spatial pitch", () => {
     const { rerender } = render(<SpatialPitch analysis={analysisWith({ available: false })}/>);
     expect(screen.getAllByText(/Activity heatmap unavailable|활동 히트맵 사용 불가/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Shot snapshot unavailable|슈팅 스냅샷 사용 불가/).length).toBeGreaterThan(0);
-    rerender(<SpatialPitch analysis={analysisWith({ available: true, shotmapSnapshotAvailable: true })}/>);
-    expect(screen.getAllByText(/Verified zero activity points|관측된 활동 좌표 0개/).length).toBeGreaterThan(0);
+    rerender(<SpatialPitch analysis={analysisWith({ available: true, shotmapSnapshotAvailable: true })} fullActivityHeatmap={fullHeatmap([])}/>);
+    expect(screen.getAllByText(/full Tier 3 활동 좌표 0개/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Verified zero shots|관측된 슛 0개/).length).toBeGreaterThan(0);
   });
 
   it("keeps a production-sized payload bounded while camera distance rebuilds one fixed-size mesh", () => {
     const heatmapPoints = Array.from({ length: 2000 }, (_, index) => ({ x: index % 100, y: (index * 7) % 100 }));
     const shotmapPoints = Array.from({ length: 150 }, (_, index) => ({ x: 70 + index % 30, y: 25 + index % 50, outcome: "on_target" as const, xg: .1, xgot: .2 }));
-    const { container } = render(<SpatialPitch analysis={analysisWith({ heatmapPointCount: heatmapPoints.length, heatmapPoints, shotmapSnapshotAvailable: true, shotmapPointCount: shotmapPoints.length, shotmapPoints })}/>);
+    const { container } = render(<SpatialPitch analysis={analysisWith({ heatmapPointCount: heatmapPoints.length, heatmapPoints, shotmapSnapshotAvailable: true, shotmapPointCount: shotmapPoints.length, shotmapPoints })} fullActivityHeatmap={fullHeatmap(heatmapPoints)}/>);
     const before = [...container.querySelectorAll("[data-density-cell]")];
     const heatLayer = container.querySelector("[data-layer=heat]")!;
     const meshBuilds = heatLayer.getAttribute("data-density-mesh-builds");
@@ -299,15 +302,17 @@ describe("perspective spatial pitch", () => {
     expect(deriveOrbitPivot(undefined, new Float64Array(HEATMAP_COLUMNS * HEATMAP_ROWS))).toEqual([82, 34, 0]);
   });
 
-  it("fails closed for unavailable, mismatched, and invalid heatmap coordinates", () => {
+  it("keeps the full display source separate when legacy CCA coordinates are unavailable or invalid", () => {
     const { container, rerender } = render(<SpatialPitch analysis={analysisWith({ available: false })}/>);
     expect(container.querySelectorAll("[data-density-cell]")).toHaveLength(DISPLAY_HEATMAP_ROWS * DISPLAY_HEATMAP_COLUMNS);
     expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
-    rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 2, heatmapPoints: [{ x: 50, y: 50 }] })}/>);
-    expect(screen.getAllByText(/Activity heatmap integrity mismatch|활동 히트맵 무결성 불일치/).length).toBeGreaterThan(0);
-    expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
-    rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 101, y: 50 }] })}/>);
-    expect([...container.querySelectorAll("[data-density-cell]")].every((cell) => cell.getAttribute("data-density-normalized") === "0")).toBe(true);
+    rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 2, heatmapPoints: [{ x: 50, y: 50 }] })} fullActivityHeatmap={fullHeatmap([{ x: 60, y: 40 }])}/>);
+    expect(screen.getAllByText(/full Tier 3 활동 좌표 1개/).length).toBeGreaterThan(0);
+    expect([...container.querySelectorAll("[data-density-cell]")].some((cell) => cell.getAttribute("data-density-normalized") !== "0")).toBe(true);
+    expect(container.querySelector('[data-layer="cca-contour"]')).not.toBeInTheDocument();
+    rerender(<SpatialPitch analysis={analysisWith({ heatmapPointCount: 1, heatmapPoints: [{ x: 101, y: 50 }] })} fullActivityHeatmap={fullHeatmap([{ x: 60, y: 40 }])}/>);
+    expect([...container.querySelectorAll("[data-density-cell]")].some((cell) => cell.getAttribute("data-density-normalized") !== "0")).toBe(true);
+    expect(container.querySelector('[data-layer="cca-contour"]')).not.toBeInTheDocument();
   });
 
   it("keeps one clamped screen zoom across controls while leaving camera distance fixed and azimuth free", () => {

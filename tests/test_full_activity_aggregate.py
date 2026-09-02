@@ -30,6 +30,10 @@ def test_count_weighted_aggregate_keeps_both_centre_half_lanes() -> None:
     # its centre receives both six-lane halves and no scorer file is written.
     assert result["positionalGrid"]["D6L3"]["activityPoints"] == 5
     assert sum(item["activityPoints"] for item in result["lanes"].values()) == 10
+    histogram = result["activityHeatmap"]
+    assert histogram["definitionVersion"] == "full-tier3-count-weighted-histogram-32x22-v1"
+    assert len(histogram["cellCounts"]) == 704
+    assert sum(histogram["cellCounts"]) == 10
 
 
 def test_invalid_records_are_excluded_without_turning_zero_into_missing() -> None:
@@ -47,3 +51,4 @@ def test_invalid_records_are_excluded_without_turning_zero_into_missing() -> Non
         "invalid_coordinate_or_count": 1,
         "non_positive_count": 1,
     }
+    assert sum(result["activityHeatmap"]["cellCounts"]) == 4

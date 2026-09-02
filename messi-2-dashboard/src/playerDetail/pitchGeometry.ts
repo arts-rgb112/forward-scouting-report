@@ -228,6 +228,6 @@ export const PATH_STYLE: Record<PathRole, { stroke: string; width: number; opaci
 };
 /** Background reference only: the CCA must not overpower pitch markings or shot events. */
 /** Tuned against the heat ramp: visible as an area boundary without masking shot events. */
-export const CCA_STYLE = { stroke: "#C084FC", width: 1.6, opacity: 0.72, dash: "7 7" };
-export const HEAT_DISPLAY_GAMMA = 0.6;
-export const HEAT_OPACITY_CEILING = { perspective: 0.55, plan: 0.62 };
+export const CCA_STYLE = { stroke: "#C084FC", width: 2.4, opacity: 0.95, dash: "9 6" };
+export const HEAT_DISPLAY_GAMMA = 0.85;
+export const HEAT_OPACITY_CEILING = { perspective: 0.58, plan: 0.58 };

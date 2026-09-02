@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_DISPLAY_GAMMA, HEATMAP_ROWS, HEATMAP_STOPS, bilinearDensity, displayDensityGrid, displayHeatmapColor, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
+import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_DISPLAY_GAMMA, HEATMAP_ROWS, HEATMAP_STOPS, activityHistogramGrid, bilinearDensity, displayDensityGrid, displayHeatmapColor, fullActivityDensityGrid, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
 
 describe("legacy 32 x 22 spatial raster", () => {
   it("keeps numpy-compatible endpoint values in the final bin", () => {
@@ -25,18 +25,25 @@ describe("legacy 32 x 22 spatial raster", () => {
     expect(bilinearDensity(density, -1, 50)).toBe(0);
   });
 
-  it("quantizes the display palette into the live olive-to-red stages", () => {
-    expect(legacyHeatmapColor(0)).toEqual([0, 0, 0, 0]);
-    expect(HEATMAP_STOPS[1]).toEqual([.08, [124, 151, 71, .18]]);
-    expect(HEATMAP_STOPS[4]).toEqual([.72, [247, 135, 39, .9]]);
-    expect(legacyHeatmapColor(1)).toEqual([222, 63, 31, .98]);
+  it("uses the approved purple-to-red B ramp with visible positive low density", () => {
+    expect(legacyHeatmapColor(0)).toEqual([47, 30, 78, 0]);
+    expect(HEATMAP_STOPS).toEqual([[0, [47, 30, 78]], [.3, [124, 42, 110]], [.6, [196, 70, 60]], [.85, [232, 99, 42]], [1, [222, 63, 31]]]);
+    expect(legacyHeatmapColor(.001)[3]).toBeGreaterThan(.06);
+    expect(legacyHeatmapColor(1)).toEqual([222, 63, 31, .58]);
   });
 
   it("applies gamma only when selecting display colours", () => {
     const native = .24;
-    expect(HEATMAP_DISPLAY_GAMMA).toBe(.6);
-    expect(displayHeatmapColor(native)).toEqual(legacyHeatmapColor(native ** .6));
+    expect(HEATMAP_DISPLAY_GAMMA).toBe(.85);
+    expect(displayHeatmapColor(native)).toEqual(legacyHeatmapColor(native ** .85));
     expect(native).toBe(.24);
+  });
+
+  it("smooths a server count-weighted histogram without reconstructing points", () => {
+    const counts = new Array(HEATMAP_COLUMNS * HEATMAP_ROWS).fill(0); counts[0] = 4;
+    expect([...activityHistogramGrid(counts)].reduce((sum, value) => sum + value, 0)).toBe(4);
+    const density = fullActivityDensityGrid(counts);
+    expect(density[0]).toBeCloseTo(4 * 121 / 256, 12);
   });
 
   it("upsamples only the display mesh and leaves the 32 by 22 scoring raster intact", () => {
