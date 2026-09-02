@@ -19,6 +19,7 @@ jobs:
       - name: Enrich team names from bulk league tables
         run: python scripts/enrich_spear_cohort_teams.py
       - name: Commit enriched cohort
+        if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
