@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 오케스트레이터 구축·로컬 검증 완료, PART B 원격 루프는 새 API 키 주입 대기 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
+- 범위/결과: 프로젝트 루트에 `agent_loop.py`를 두고 planner/coder Responses API 루프, 원자적 `[FILE: 상대경로]` 패치와 traversal/secret/self-edit 차단, Windows UTF-8·`CI=true`, child-process 테스트와 최대 3,000자 tail 전달을 구현했다. 요청된 Jest 명령을 먼저 실행하고 이 Vitest 저장소가 `--watchAll=false`를 거부할 때만 native 명령으로 1회 호환 재실행한다. SDK가 없으면 표준 라이브러리 HTTPS Responses client를 쓰며, 키가 없으면 network call 없이 exit 2와 원인만 반환한다. Python 단위 테스트 `6 passed`; 실제 repository test runner 호환 재실행은 `569 passed / 8 failed`로 동작했고 실패는 기존 브랜치의 4개 테스트 파일에서 발생했다. 현재 프로세스 환경에는 `OPENAI_API_KEY`가 없어 PART B agent iteration은 시작되지 않았으며, 삭제한 작업공간 최상위 초안에는 평문 키와 문법 단절이 있어 키 재발급이 필요하다. 기존 3개 탭·API·점수·코호트·CCA 계산·SportsAPI 수집은 변경하지 않았고 자동 병합·push·배포는 금지한다.
+
 - 상태: 구현·실데이터 시각 QA 완료, PR #308 병합 승인 대기 — 승인 시안 v16 원본 램프 복원
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b
 - 범위/결과 (2026-09-03): 첨부 작업지시 PART A에 따라 full Tier 3 `32×22` 원천·표시 해상도·레이어 토글·2D/3D blur 분리·CCA는 유지하고, 색 계산만 승인 시안 `heatmap_dotmatrix_v16`의 원본 금색→주황→빨강 6-stop·감마 `0.6`·12단계 quantization·stop alpha·전역 opacity `0.55`로 복원했다. frontend 집중 회귀는 `36 passed`, production build는 통과했다(기존 500kB chunk warning만). Production API와 PR backend를 결합한 실데이터 QA에서 Kane 2D canvas는 `data-density-source=full-tier3-32x22`, `422×273`, 히트맵 단독 토글이었고 3D는 `data-density-input=full-tier3-32x22`, mesh `6,336`개였다. 두 화면에서 기존 보라 stop 잔존 `0`을 확인했고 캡처는 `C:/Users/USER/Downloads/files/qa-artifacts/pr308-part-a-kane-{2d,3d}-original-ramp.png`에 보존했다. 현재 Production endpoint는 HTTP `404`이므로 #308 backend 병합·Render 배포 전 Vercel Preview에서는 full-source를 직접 확인할 수 없으며, 배포 뒤 endpoint가 노출된다. 기존 `PlayerDetail.spatial`·CCA/HDR·점수·CSV·max-180 JSON은 변경하지 않았다. PART B 도트 매트릭스 탭은 #308 병합 및 별도 승인 전 착수하지 않는다.
