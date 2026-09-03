@@ -1,4 +1,5 @@
 import importlib.util
+import asyncio
 import os
 import sys
 import tempfile
@@ -204,6 +205,55 @@ export const label = "히트맵";
         self.assertEqual(result, 0)
         self.assertEqual(post.call_count, 2)
         run_loop.assert_not_called()
+
+    def test_slack_command_failure_does_not_reconnect_socket(self):
+        bridge = agent_loop.SlackSocketBridge(
+            app_token="xapp-test", bot_token="xoxb-test", channel_id="C123"
+        )
+
+        class FakeSocket:
+            def __init__(self):
+                self.messages = iter(
+                    [
+                        '{"envelope_id":"E1","payload":{"type":"event_callback",'
+                        '"event_id":"Ev7","event":{"type":"app_mention",'
+                        '"channel":"C123","user":"U1","text":"<@UBOT> run",'
+                        '"ts":"100.7"}}}',
+                        '{"type":"disconnect","reason":"link_disabled"}',
+                    ]
+                )
+                self.acks = []
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                try:
+                    return next(self.messages)
+                except StopIteration as exc:
+                    raise StopAsyncIteration from exc
+
+            async def send(self, value):
+                self.acks.append(value)
+
+        class FakeContext:
+            def __init__(self, socket):
+                self.socket = socket
+
+            async def __aenter__(self):
+                return self.socket
+
+            async def __aexit__(self, exc_type, exc, traceback):
+                return False
+
+        socket = FakeSocket()
+        websockets = type("FakeWebsockets", (), {"connect": lambda *args, **kwargs: FakeContext(socket)})
+        bridge._resolve_bot_user_id = lambda: "UBOT"
+        bridge._socket_url = lambda: "wss://example.invalid"
+        with patch.object(bridge, "_websockets_module", return_value=websockets):
+            with self.assertRaises(agent_loop.AgentLoopError):
+                asyncio.run(bridge.listen(lambda command: (_ for _ in ()).throw(RuntimeError())))
+        self.assertEqual(socket.acks, ['{"envelope_id": "E1"}'])
 
     def test_apply_file_changes_writes_under_project_root(self):
         with tempfile.TemporaryDirectory() as temp_dir:

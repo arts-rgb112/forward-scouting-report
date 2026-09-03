@@ -5,6 +5,7 @@
 - 상태: 구현·전송/WebSocket 검증 완료, 사용자 멘션 수신 확인 대기 — Slack Socket Mode planner/coder 대화 브리지 (2026-09-03 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
 - 범위/결과: 사용자 환경에서 `SLACK_BOT_TOKEN`·`SLACK_APP_TOKEN`·`SLACK_CHANNEL_ID`·`SLACK_AUDIT_REQUIRED` 존재만 확인했으며 값은 출력·로그·Git에 기록하지 않았다. `chat.postMessage` 실전송은 thread 생성까지 성공했고 Socket Mode는 `connected=true/hello=true`를 확인했다. 승인 채널의 새 작업은 app mention만 허용하고, 활성 thread의 사람 후속 메시지만 직렬 처리한다. bot/self·다른 채널·무관 일반 메시지·중복 event는 거부하며 envelope은 모델 처리 전에 ack한다. `연결 확인`/`연결 테스트`/`ping`은 모델·파일 변경 없이 응답한다. 파일 패치·테스트·모델 호출의 기존 fail-closed 경계는 유지했고 Python 단위 테스트 `14 passed`와 `py_compile`을 통과했다. 실제 사용자 event 수신은 listener 실행 뒤 멘션 1건으로 최종 확인한다. 점수·API·데이터·SportsAPI 수집·배포는 변경하지 않는다.
+- 실수신 결과/정정: 사용자 app mention은 실제 수신됐으나 OpenAI Responses 호출이 `429 credit_balance_exhausted`로 종료됐다. 이는 Slack·Socket 권한 문제가 아니라 API 조직 크레딧 부족이다. 최초 구현은 모델 실패를 `STOP`으로 두 번 게시하고 socket transport 실패로 오인해 재연결했으므로, command 예외를 socket loop 내부에서 격리하고 `run_loop`만 단일 `STOP`을 게시하도록 수정했다. 크레딧 해결 전에는 background listener를 중지한다.
 
 - 상태: 코드·로컬 검증 완료, Slack workspace 자격정보 설정 대기 — planner/coder/test 감사 채널 연동 (2026-09-03 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard

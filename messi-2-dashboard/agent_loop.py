@@ -440,7 +440,13 @@ class SlackSocketBridge:
                             await socket.send(json.dumps({"envelope_id": envelope_id}))
                         command = self.command_from_envelope(envelope)
                         if command is not None:
-                            await asyncio.to_thread(handler, command)
+                            try:
+                                await asyncio.to_thread(handler, command)
+                            except Exception as exc:
+                                print(
+                                    f"agent_loop: Slack command failed: {type(exc).__name__}",
+                                    file=sys.stderr,
+                                )
                         if envelope.get("type") == "disconnect" and envelope.get("reason") == "link_disabled":
                             raise AgentLoopError("Slack Socket Mode was disabled")
             except AgentLoopError:
@@ -749,11 +755,6 @@ def handle_slack_command(command: SlackCommand, *, max_iterations: int, test_tim
             require_slack=True,
             audit_sink=audit,
         )
-    except Exception as exc:
-        try:
-            audit.post("AGENT RUN → STOP", f"{type(exc).__name__}: {exc}")
-        finally:
-            raise
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
