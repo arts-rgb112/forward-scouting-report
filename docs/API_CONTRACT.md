@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료, Claude exact ID allowlist 설정 및 실수신 대기 — Slack Claude 계획/토론 → Codex 단일 실행 오케스트레이션 및 구독 사용량 보호 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
+- 범위/결과: `[PLAN]`·`[DISCUSS]`는 스레드 기록만 하고 Codex·파일·테스트를 호출하지 않으며, `[APPLY]`·`[REVISE]`만 누적된 스레드 문맥으로 각각 단 한 번 `codex exec`를 실행하도록 내부 Codex planner와 자동 반복을 제거했다. Claude bot/app은 `SLACK_ALLOWED_BOT_IDS`/`SLACK_ALLOWED_APP_IDS` exact allowlist만 허용하고 self-bot·무태그 메시지는 거부한다. 토큰을 저장하지 않는 원자적 스레드 상태, 재시작 후 문맥·event 중복 차단, 사용자 전용 `[RESET]`, `[STOP]`, 기본 스레드당 3회 실행 상한을 추가했다. `test_agent_loop.py` 26/26 및 `py_compile`이 통과했고 모든 모델 호출은 mock했다. 호스트 `--check`는 ChatGPT 구독 Codex 준비·Slack Socket 준비·단일 실행 프로토콜을 확인했지만 Claude allowlist는 아직 `0/0`이라 exact bot/app ID 설정 전 Claude 메시지는 fail-closed한다. Slack 토큰·SportsAPI 수집·점수·API·데이터·배포는 변경하지 않았다.
+
 - 상태: 로컬 구현·단위 검증 및 호스트 ChatGPT 로그인 smoke 완료 — Slack 오케스트레이터의 OpenAI API 호출을 ChatGPT 인증 `codex exec`로 전환 (2026-09-03 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
 - 범위/결과: `agent_loop.py`의 planner/coder OpenAI Responses API/SDK·stdlib HTTPS fallback을 제거하고, 로컬 Codex CLI의 ChatGPT 구독 인증과 stable non-interactive `codex exec`를 사용하도록 전환했다. `OPENAI_API_KEY`·조직·프로젝트·Base URL이 설정돼 있어도 child process에서 제거하며, 시작 전 `codex login status` 출력이 ChatGPT 인증임을 명시하지 않거나 API-key 인증이면 파일 수정 전에 fail-closed한다. planner/coder 모두 `--ephemeral --sandbox read-only --output-last-message`로 실행하고 기존 Slack Socket Mode 수신·thread 감사·원자적 파일 패치·테스트·중복 event 차단은 보존했다. `test_agent_loop.py` 17/17과 `py_compile`이 통과했다. 호스트 사용자 npm prefix에 공식 `@openai/codex` CLI `0.153.0`을 설치했고, 호스트 권한 smoke에서 `python agent_loop.py --check`가 `codexCliReady=true`와 `ready (ChatGPT subscription via codex exec)`를 반환했다. `OPENAI_API_KEY`가 존재해도 `openAiApiKeyIgnored=true`로 확인됐다. Claude 자동 호출은 범위 밖이며 사용자가 별도로 운용한다. 점수·API·데이터·SportsAPI 수집·배포는 변경하지 않았다.

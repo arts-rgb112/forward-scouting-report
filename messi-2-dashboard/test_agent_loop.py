@@ -237,6 +237,64 @@ export const label = "히트맵";
         self.assertIsNone(bridge.command_from_envelope(bot_envelope))
         self.assertIsNone(bridge.command_from_envelope(bot_envelope))
 
+    def test_slack_socket_accepts_only_exact_allowlisted_claude_bot(self):
+        bridge = agent_loop.SlackSocketBridge(
+            app_token="xapp-test",
+            bot_token="xoxb-test",
+            channel_id="C123",
+            allowed_bot_ids={"BCLAUDE"},
+        )
+        command = bridge.command_from_envelope(
+            {
+                "payload": {
+                    "type": "event_callback",
+                    "event_id": "EvClaude",
+                    "event": {
+                        "type": "app_mention",
+                        "subtype": "bot_message",
+                        "channel": "C123",
+                        "user": "UCLAUDE",
+                        "bot_id": "BCLAUDE",
+                        "app_id": "ACLAUDE",
+                        "text": "<@UBOT> [PLAN] bounded work",
+                        "ts": "100.55",
+                    },
+                }
+            }
+        )
+        self.assertIsNotNone(command)
+        assert command is not None
+        self.assertEqual(command.actor_type, "allowed_bot")
+        self.assertEqual(command.text, "[PLAN] bounded work")
+
+    def test_slack_socket_always_rejects_own_bot_user(self):
+        bridge = agent_loop.SlackSocketBridge(
+            app_token="xapp-test",
+            bot_token="xoxb-test",
+            channel_id="C123",
+            allowed_bot_ids={"BSELF"},
+        )
+        bridge.bot_user_id = "USELF"
+        self.assertIsNone(
+            bridge.command_from_envelope(
+                {
+                    "payload": {
+                        "type": "event_callback",
+                        "event_id": "EvSelf",
+                        "event": {
+                            "type": "app_mention",
+                            "subtype": "bot_message",
+                            "channel": "C123",
+                            "user": "USELF",
+                            "bot_id": "BSELF",
+                            "text": "<@USELF> [APPLY] loop",
+                            "ts": "100.56",
+                        },
+                    }
+                }
+            )
+        )
+
     def test_slack_connection_probe_does_not_invoke_model_loop(self):
         command = agent_loop.SlackCommand(
             event_id="Ev6",
@@ -256,6 +314,226 @@ export const label = "히트맵";
         self.assertEqual(result, 0)
         self.assertEqual(post.call_count, 2)
         run_loop.assert_not_called()
+
+    def test_plan_and_discuss_persist_without_codex_or_tests(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = agent_loop.SlackThreadStore(Path(temp_dir))
+            sink = agent_loop.SlackAuditSink(bot_token="xoxb-test", channel_id="C123")
+            for event_id, text in (("EvPlan", "[PLAN] 계획"), ("EvDiscuss", "[DISCUSS] 수정 의견")):
+                command = agent_loop.SlackCommand(
+                    event_id=event_id,
+                    user_id="U1",
+                    text=text,
+                    channel_id="C123",
+                    thread_ts="200.1",
+                    event_ts="200.1",
+                )
+                with patch.object(agent_loop.SlackAuditSink, "from_environment", return_value=sink):
+                    with patch.object(sink, "_bot_post"):
+                        with patch.object(agent_loop, "call_agent") as call_agent:
+                            with patch.object(agent_loop, "run_tests") as run_tests:
+                                self.assertEqual(
+                                    agent_loop.handle_slack_command(
+                                        command,
+                                        max_iterations=8,
+                                        test_timeout=1,
+                                        state_store=store,
+                                    ),
+                                    0,
+                                )
+                        call_agent.assert_not_called()
+                        run_tests.assert_not_called()
+            state = store.load("C123", "200.1")
+            self.assertEqual([item["action"] for item in state["messages"]], ["PLAN", "DISCUSS"])
+            self.assertEqual(state["executionCount"], 0)
+
+    def test_apply_invokes_exactly_one_codex_turn_and_one_test_run(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = agent_loop.SlackThreadStore(root / "state")
+            prior = store.load("C123", "200.2")
+            agent_loop.SlackThreadStore.append_message(
+                prior, action="PLAN", actor="allowed_bot:UCLAUDE", text="change one file", event_ts="1"
+            )
+            store.save(prior)
+            command = agent_loop.SlackCommand(
+                event_id="EvApply",
+                user_id="U1",
+                text="[APPLY] apply approved plan",
+                channel_id="C123",
+                thread_ts="200.2",
+                event_ts="2",
+            )
+            sink = agent_loop.SlackAuditSink(bot_token="xoxb-test", channel_id="C123")
+            passed = agent_loop.TestResult(["test"], 0, "ok", 0.1)
+            response = "[FILE: src/one.ts]\n```ts\nexport const one = 1;\n```"
+            with patch.object(agent_loop, "PROJECT_ROOT", root):
+                with patch.object(agent_loop.SlackAuditSink, "from_environment", return_value=sink):
+                    with patch.object(sink, "_bot_post"):
+                        with patch.object(
+                            agent_loop,
+                            "build_codex_runner",
+                            return_value=(agent_loop.CodexCliRunner("codex"), "ready"),
+                        ):
+                            with patch.object(agent_loop, "call_agent", return_value=response) as call_agent:
+                                with patch.object(agent_loop, "run_tests", return_value=passed) as run_tests:
+                                    result = agent_loop.handle_slack_command(
+                                        command,
+                                        max_iterations=8,
+                                        test_timeout=1,
+                                        state_store=store,
+                                    )
+            self.assertEqual(result, 0)
+            self.assertEqual(call_agent.call_count, 1)
+            self.assertEqual(run_tests.call_count, 1)
+            self.assertEqual((root / "src/one.ts").read_text(encoding="utf-8"), "export const one = 1;")
+            self.assertEqual(store.load("C123", "200.2")["executionCount"], 1)
+
+    def test_untagged_message_never_invokes_codex(self):
+        command = agent_loop.SlackCommand(
+            event_id="EvPlain",
+            user_id="U1",
+            text="그냥 대화",
+            channel_id="C123",
+            thread_ts="200.3",
+            event_ts="3",
+        )
+        sink = agent_loop.SlackAuditSink(bot_token="xoxb-test", channel_id="C123")
+        with patch.object(agent_loop.SlackAuditSink, "from_environment", return_value=sink):
+            with patch.object(sink, "_bot_post"):
+                with patch.object(agent_loop, "build_codex_runner") as runner:
+                    self.assertEqual(
+                        agent_loop.handle_slack_command(command, max_iterations=8, test_timeout=1),
+                        0,
+                    )
+        runner.assert_not_called()
+
+    def test_execution_limit_requires_human_reset(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = agent_loop.SlackThreadStore(Path(temp_dir))
+            state = store.load("C123", "200.4")
+            state["executionCount"] = 3
+            store.save(state)
+            sink = agent_loop.SlackAuditSink(bot_token="xoxb-test", channel_id="C123")
+            command = agent_loop.SlackCommand(
+                event_id="EvLimit",
+                user_id="U1",
+                text="[REVISE] again",
+                channel_id="C123",
+                thread_ts="200.4",
+                event_ts="4",
+            )
+            with patch.dict(os.environ, {"SLACK_MAX_CODEX_RUNS_PER_THREAD": "3"}, clear=False):
+                with patch.object(agent_loop.SlackAuditSink, "from_environment", return_value=sink):
+                    with patch.object(sink, "_bot_post"):
+                        with patch.object(agent_loop, "build_codex_runner") as runner:
+                            self.assertEqual(
+                                agent_loop.handle_slack_command(
+                                    command, max_iterations=8, test_timeout=1, state_store=store
+                                ),
+                                2,
+                            )
+            runner.assert_not_called()
+
+            reset = agent_loop.SlackCommand(
+                event_id="EvReset",
+                user_id="U1",
+                text="[RESET]",
+                channel_id="C123",
+                thread_ts="200.4",
+                event_ts="5",
+            )
+            with patch.object(agent_loop.SlackAuditSink, "from_environment", return_value=sink):
+                with patch.object(sink, "_bot_post"):
+                    self.assertEqual(
+                        agent_loop.handle_slack_command(
+                            reset, max_iterations=8, test_timeout=1, state_store=store
+                        ),
+                        0,
+                    )
+            self.assertEqual(store.load("C123", "200.4")["executionCount"], 0)
+
+    def test_persisted_thread_is_accepted_after_bridge_restart(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = agent_loop.SlackThreadStore(Path(temp_dir))
+            state = store.load("C123", "200.5")
+            store.save(state)
+            bridge = agent_loop.SlackSocketBridge(
+                app_token="xapp-test",
+                bot_token="xoxb-test",
+                channel_id="C123",
+                state_store=store,
+            )
+            command = bridge.command_from_envelope(
+                {
+                    "payload": {
+                        "type": "event_callback",
+                        "event_id": "EvRestart",
+                        "event": {
+                            "type": "message",
+                            "channel": "C123",
+                            "user": "U1",
+                            "text": "[DISCUSS] listener restarted",
+                            "thread_ts": "200.5",
+                            "ts": "6",
+                        },
+                    }
+                }
+            )
+            self.assertIsNotNone(command)
+
+    def test_persisted_event_id_prevents_second_codex_turn_after_restart(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = agent_loop.SlackThreadStore(Path(temp_dir))
+            state = store.load("C123", "200.6")
+            state["processedEventIds"] = ["EvAlready"]
+            store.save(state)
+            command = agent_loop.SlackCommand(
+                event_id="EvAlready",
+                user_id="U1",
+                text="[APPLY] must not repeat",
+                channel_id="C123",
+                thread_ts="200.6",
+                event_ts="7",
+            )
+            sink = agent_loop.SlackAuditSink(bot_token="xoxb-test", channel_id="C123")
+            with patch.object(agent_loop.SlackAuditSink, "from_environment", return_value=sink):
+                with patch.object(sink, "_bot_post"):
+                    with patch.object(agent_loop, "build_codex_runner") as runner:
+                        self.assertEqual(
+                            agent_loop.handle_slack_command(
+                                command, max_iterations=8, test_timeout=1, state_store=store
+                            ),
+                            0,
+                        )
+            runner.assert_not_called()
+
+    def test_task_file_loop_uses_one_executor_turn_even_with_large_legacy_limit(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            task = root / "task.md"
+            task.write_text("one bounded change", encoding="utf-8")
+            sink = agent_loop.SlackAuditSink()
+            response = "[FILE: src/once.ts]\n```ts\nexport const once = true;\n```"
+            passed = agent_loop.TestResult(["test"], 0, "ok", 0.1)
+            with patch.object(agent_loop, "PROJECT_ROOT", root):
+                with patch.object(
+                    agent_loop,
+                    "build_codex_runner",
+                    return_value=(agent_loop.CodexCliRunner("codex"), "ready"),
+                ):
+                    with patch.object(agent_loop, "call_agent", return_value=response) as call_agent:
+                        with patch.object(agent_loop, "run_tests", return_value=passed):
+                            with patch.object(agent_loop, "write_report"):
+                                result = agent_loop.run_loop(
+                                    task,
+                                    max_iterations=99,
+                                    test_timeout=1,
+                                    audit_sink=sink,
+                                )
+            self.assertEqual(result, 0)
+            self.assertEqual(call_agent.call_count, 1)
+            self.assertEqual(call_agent.call_args.kwargs["role"], "executor")
 
     def test_slack_command_failure_does_not_reconnect_socket(self):
         bridge = agent_loop.SlackSocketBridge(

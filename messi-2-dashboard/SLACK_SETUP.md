@@ -1,10 +1,9 @@
 # Slack audit and command setup for `agent_loop.py`
 
-The integration writes one redacted audit thread per run and can receive
-commands over Socket Mode. New work must begin with an app mention in the one
-configured channel. Human replies in that active thread are accepted as
-follow-up tasks while the listener process remains running. Messages from bots,
-other channels, unrelated channel chatter, and duplicate event IDs are ignored.
+The integration receives explicit commands over Socket Mode and writes a
+redacted audit into the same Slack thread. Claude plans/reviews; Codex only
+implements explicit execution commands. There is no internal Codex planner and
+no automatic model retry loop.
 
 ## Slack app configuration
 
@@ -22,14 +21,58 @@ other channels, unrelated channel chatter, and duplicate event IDs are ignored.
    - `SLACK_APP_TOKEN`: app token beginning with `xapp-`
    - `SLACK_CHANNEL_ID`: exact channel ID beginning with `C`
    - `SLACK_AUDIT_REQUIRED`: `true`
+   - `SLACK_ALLOWED_BOT_IDS`: comma-separated exact Claude bot IDs (`B...`)
+   - `SLACK_ALLOWED_APP_IDS`: comma-separated exact Claude app IDs (`A...`)
+   - `SLACK_MAX_CODEX_RUNS_PER_THREAD`: default `3`
+
+Only configure the Claude identity actually used in the workspace. A bot
+message is accepted when either its exact `bot_id` or `app_id` is allowlisted;
+all other bots and the audit bot itself are ignored. Humans in the configured
+channel remain allowed. Never use a wildcard or copy token values into these
+ID variables.
 
 Do not put credentials in source files, chat messages, `.env` files, command
 output, or Git. Restart the terminal/Codex process after changing Windows user
 environment variables.
 
+## Message protocol and usage guard
+
+Every actionable message must begin with one of these tags:
+
+- `[PLAN]`: save a Claude/human plan in persistent thread context. Zero Codex turns.
+- `[DISCUSS]`: save discussion or a user correction. Zero Codex turns.
+- `[APPLY]`: run exactly one Codex executor turn, patch files, then run tests once.
+- `[REVISE]`: run exactly one further Codex executor turn using accumulated context.
+- `[STOP]`: stop the thread without invoking Codex.
+- `[RESET]`: human-only; reopen a stopped thread and reset its execution counter.
+
+Untagged messages are not sent to Codex. `[PLAN]` and `[DISCUSS]` never modify
+files or run tests. Thread context is stored atomically under
+`.agent-loop-state/` (Git-ignored), survives listener restarts, contains no
+credentials, and is size-bounded. The default budget is three explicit Codex
+turns per Slack thread; only a human `[RESET]` can replenish it.
+
+The latest human instruction has priority over an earlier Claude plan. This
+lets the user join the thread, correct the plan, stop execution, or directly
+request an apply/revision without creating a hidden agent-to-agent loop.
+
+Example:
+
+```text
+Claude: @MESSI Agent Audit [PLAN] Implement the approved dot-matrix heatmap only.
+User:   [DISCUSS] Keep the CCA calculation unchanged.
+Claude: [APPLY] Apply the plan and the user's constraint.
+Codex:  audit summary + changed-file list + test result
+User:   [REVISE] Fix only the failed marker-size assertion.
+```
+
+For a new thread, mention the audit app. Thread replies are received through
+`message.channels`; therefore `channels:history` and that bot event are needed
+for both human and allowlisted-Claude follow-ups.
+
 ## Codex subscription authentication
 
-The planner and coder run through the local `codex exec` command, not the
+The executor runs through the local `codex exec` command, not the
 OpenAI Responses API. Authenticate the Codex CLI with the same ChatGPT account
 that owns the Codex subscription:
 
@@ -73,20 +116,20 @@ python agent_loop.py --check-slack-socket
 python agent_loop.py --listen-slack --require-slack
 ```
 
-In the configured channel, start a task with:
+In the configured channel, start a task with an explicit tag:
 
 ```text
-@MESSI Agent Audit <bounded task>
+@MESSI Agent Audit [PLAN] <bounded plan>
 ```
 
 For a no-model connectivity probe, send `@MESSI Agent Audit 연결 확인`.
 
-Each run stays in that Slack thread and records `USER → AGENT`, `AGENT RUN`,
-`PLANNER → CODER`, `CODER → FILES`, `TEST → PLANNER`, and `DONE/STOP` events.
+Each run stays in that Slack thread and records the Slack actor, saved plan or
+discussion, `AGENT RUN`, `CODEX → FILES`, `TEST`, and `DONE/STOP` events.
 Source code and source-file contents are not posted. ANSI terminal codes,
 OpenAI keys, Slack tokens, authorization headers, and webhook URLs are redacted.
-Claude is not called by this process; any Claude planning remains a separate
-user-managed workflow.
+Claude is not called by this process; the allowlisted Claude Slack app remains
+separately operated by the user.
 
 The listener serializes tasks. A follow-up received while a run is executing is
 handled after Slack redelivers or queues the event; it does not interrupt an
@@ -99,6 +142,10 @@ To run a local task file without listening for Slack commands:
 ```powershell
 python agent_loop.py --require-slack
 ```
+
+This local task-file form also performs exactly one Codex executor turn and
+one test run. `--max-iterations` is retained only for command compatibility and
+does not create extra model turns.
 
 Incoming webhooks remain a write-only, non-thread fallback through
 `SLACK_WEBHOOK_URL`; they cannot receive Socket Mode commands.

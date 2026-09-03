@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Bounded local planner/coder loop for frontend implementation work."""
+"""Slack-guided, single-turn Codex executor for bounded frontend work."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -30,6 +31,11 @@ MAX_TEST_TAIL = 3_000
 MAX_CONTEXT_FILE_BYTES = 160_000
 MAX_SLACK_CHUNK = 3_000
 DEFAULT_CODEX_TIMEOUT_SECONDS = 1_800
+DEFAULT_MAX_CODEX_RUNS_PER_THREAD = 3
+MAX_THREAD_MESSAGES = 100
+MAX_THREAD_CONTEXT_CHARS = 60_000
+MAX_THREAD_MESSAGE_CHARS = 12_000
+DEFAULT_STATE_DIR = PROJECT_ROOT / ".agent-loop-state"
 OPENAI_API_ENV_NAMES = (
     "OPENAI_API_KEY",
     "OPENAI_ORG_ID",
@@ -46,6 +52,9 @@ READ_RE = re.compile(r"(?m)^\[READ:\s*([^\]\r\n]+?)\s*\]\s*$")
 DONE_RE = re.compile(r"(?m)^\s*DONE\s*$")
 VITEST_WATCHALL_RE = re.compile(r"unknown option.*watchall", re.I)
 SLACK_MENTION_RE = re.compile(r"<@[A-Z0-9]+>", re.I)
+SLACK_ACTION_RE = re.compile(
+    r"(?is)^\s*\[(PLAN|DISCUSS|APPLY|REVISE|STOP|RESET)\]\s*(.*?)\s*$"
+)
 
 
 class AgentLoopError(RuntimeError):
@@ -80,12 +89,119 @@ class SlackCommand:
     channel_id: str
     thread_ts: str
     event_ts: str
+    actor_type: str = "human"
+    bot_id: str = ""
+    app_id: str = ""
 
 
 @dataclass(frozen=True)
 class CodexCliRunner:
     executable: str
     authentication: str = "chatgpt-subscription"
+
+
+def _csv_ids(value: str) -> frozenset[str]:
+    return frozenset(part.strip() for part in value.split(",") if part.strip())
+
+
+class SlackThreadStore:
+    """Persist bounded, token-free orchestration context per Slack thread."""
+
+    def __init__(self, root: Path | None = None) -> None:
+        configured = os.environ.get("AGENT_LOOP_STATE_DIR", "").strip()
+        self.root = (Path(configured) if configured else root or DEFAULT_STATE_DIR).resolve()
+
+    @classmethod
+    def from_environment(cls) -> "SlackThreadStore":
+        return cls()
+
+    def _path(self, channel_id: str, thread_ts: str) -> Path:
+        digest = hashlib.sha256(f"{channel_id}:{thread_ts}".encode("utf-8")).hexdigest()
+        return self.root / f"{digest}.json"
+
+    def load(self, channel_id: str, thread_ts: str) -> dict[str, Any]:
+        path = self._path(channel_id, thread_ts)
+        if not path.is_file():
+            return {
+                "version": 1,
+                "channelId": channel_id,
+                "threadTs": thread_ts,
+                "status": "open",
+                "executionCount": 0,
+                "processedEventIds": [],
+                "messages": [],
+                "lastExecution": None,
+            }
+        try:
+            state = json.loads(path.read_text(encoding="utf-8", errors="strict"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise AgentLoopError(f"Slack thread state is unreadable: {path.name}") from exc
+        if (
+            not isinstance(state, dict)
+            or state.get("channelId") != channel_id
+            or state.get("threadTs") != thread_ts
+            or not isinstance(state.get("messages"), list)
+        ):
+            raise AgentLoopError(f"Slack thread state identity mismatch: {path.name}")
+        return state
+
+    def exists_open(self, channel_id: str, thread_ts: str) -> bool:
+        if not self._path(channel_id, thread_ts).is_file():
+            return False
+        try:
+            return self.load(channel_id, thread_ts).get("status") != "stopped"
+        except AgentLoopError:
+            return False
+
+    def save(self, state: dict[str, Any]) -> None:
+        channel_id = str(state.get("channelId", ""))
+        thread_ts = str(state.get("threadTs", ""))
+        if not channel_id or not thread_ts:
+            raise AgentLoopError("Slack thread state has no identity")
+        messages = state.get("messages", [])
+        if not isinstance(messages, list):
+            raise AgentLoopError("Slack thread messages must be a list")
+        state["messages"] = messages[-MAX_THREAD_MESSAGES:]
+        event_ids = state.get("processedEventIds", [])
+        if not isinstance(event_ids, list):
+            raise AgentLoopError("Slack processed event IDs must be a list")
+        state["processedEventIds"] = event_ids[-2_000:]
+        self.root.mkdir(parents=True, exist_ok=True)
+        target = self._path(channel_id, thread_ts)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            errors="strict",
+            newline="\n",
+            dir=self.root,
+            prefix=f".{target.stem}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            json.dump(state, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            temporary = Path(handle.name)
+        os.replace(temporary, target)
+
+    @staticmethod
+    def append_message(
+        state: dict[str, Any], *, action: str, actor: str, text: str, event_ts: str
+    ) -> None:
+        safe_text = redact_audit_text(text.strip())[:MAX_THREAD_MESSAGE_CHARS]
+        state.setdefault("messages", []).append(
+            {"action": action, "actor": actor, "text": safe_text, "eventTs": event_ts}
+        )
+
+    @staticmethod
+    def context(state: dict[str, Any]) -> str:
+        lines = [
+            f"[{item.get('action', 'DISCUSS')}] {item.get('actor', 'unknown')}: "
+            f"{item.get('text', '')}"
+            for item in state.get("messages", [])
+            if isinstance(item, dict)
+        ]
+        context = "\n\n".join(lines)
+        return context[-MAX_THREAD_CONTEXT_CHARS:]
 
 
 def configure_stdio() -> None:
@@ -325,7 +441,16 @@ class SlackAuditSink:
 class SlackSocketBridge:
     """Receive bounded commands from one Slack channel over Socket Mode."""
 
-    def __init__(self, *, app_token: str, bot_token: str, channel_id: str) -> None:
+    def __init__(
+        self,
+        *,
+        app_token: str,
+        bot_token: str,
+        channel_id: str,
+        allowed_bot_ids: Iterable[str] = (),
+        allowed_app_ids: Iterable[str] = (),
+        state_store: SlackThreadStore | None = None,
+    ) -> None:
         if not app_token or not bot_token or not channel_id:
             raise AgentLoopError(
                 "SLACK_APP_TOKEN, SLACK_BOT_TOKEN, and SLACK_CHANNEL_ID are required"
@@ -333,6 +458,9 @@ class SlackSocketBridge:
         self.app_token = app_token
         self.bot_token = bot_token
         self.channel_id = channel_id
+        self.allowed_bot_ids = frozenset(allowed_bot_ids)
+        self.allowed_app_ids = frozenset(allowed_app_ids)
+        self.state_store = state_store or SlackThreadStore.from_environment()
         self.bot_user_id = ""
         self.active_threads: set[str] = set()
         self.seen_event_ids: set[str] = set()
@@ -344,6 +472,8 @@ class SlackSocketBridge:
             app_token=os.environ.get("SLACK_APP_TOKEN", "").strip(),
             bot_token=os.environ.get("SLACK_BOT_TOKEN", "").strip(),
             channel_id=os.environ.get("SLACK_CHANNEL_ID", "").strip(),
+            allowed_bot_ids=_csv_ids(os.environ.get("SLACK_ALLOWED_BOT_IDS", "")),
+            allowed_app_ids=_csv_ids(os.environ.get("SLACK_ALLOWED_APP_IDS", "")),
         )
 
     @staticmethod
@@ -402,10 +532,13 @@ class SlackSocketBridge:
         event_id = payload.get("event_id")
         if not isinstance(event_id, str) or not self._remember_event(event_id):
             return None
-        if event.get("bot_id") or event.get("subtype") == "bot_message":
-            return None
         user_id = event.get("user")
         if not isinstance(user_id, str) or not user_id or user_id == self.bot_user_id:
+            return None
+        bot_id = event.get("bot_id") if isinstance(event.get("bot_id"), str) else ""
+        app_id = event.get("app_id") if isinstance(event.get("app_id"), str) else ""
+        is_bot = bool(bot_id or event.get("subtype") == "bot_message")
+        if is_bot and bot_id not in self.allowed_bot_ids and app_id not in self.allowed_app_ids:
             return None
         event_type = event.get("type")
         event_ts = event.get("ts")
@@ -419,7 +552,10 @@ class SlackSocketBridge:
         if event_type == "app_mention":
             text = SLACK_MENTION_RE.sub("", text).strip()
             self.active_threads.add(thread_ts)
-        elif event_type == "message" and event.get("thread_ts") in self.active_threads:
+        elif event_type == "message" and event.get("thread_ts") and (
+            event.get("thread_ts") in self.active_threads
+            or self.state_store.exists_open(self.channel_id, str(event.get("thread_ts")))
+        ):
             text = text.strip()
         else:
             return None
@@ -432,6 +568,9 @@ class SlackSocketBridge:
             channel_id=self.channel_id,
             thread_ts=thread_ts,
             event_ts=event_ts,
+            actor_type="allowed_bot" if is_bot else "human",
+            bot_id=bot_id,
+            app_id=app_id,
         )
 
     @staticmethod
@@ -703,16 +842,14 @@ def call_agent(
         return output_text
 
 
-PLANNER_INSTRUCTIONS = """You are the planning/review agent for a bounded React/Vite task.
-Never emit file changes. Request source files with one `[READ: relative/path]` per line.
-Return a concrete next plan. Return a line containing only `DONE` only when every acceptance
-criterion is met and tests passed. Never request git, secrets, environment files, network calls,
-deployment, or changes outside the project root."""
-
-CODER_INSTRUCTIONS = """You are the implementation agent for a bounded React/Vite task.
-Follow the task and planner. Emit each changed file in full as a fenced
+EXECUTOR_INSTRUCTIONS = """You are the sole implementation agent for a bounded React/Vite task.
+The Slack thread context contains plans and discussion from humans and an explicitly allowlisted
+Claude bot. Treat the latest human instruction as highest priority. Inspect the repository in your
+read-only sandbox, implement only the explicit APPLY or REVISE request, and emit each changed file
+in full as a fenced
 `[FILE: relative/path]` block. Do not emit diffs. Never change agent_loop.py, environment files,
-git state, APIs, scores, cohorts, data files, or unrelated files. Do not claim tests passed."""
+git state, APIs, scores, cohorts, data files, or unrelated files. Do not claim tests passed. Do not
+request or perform another agent turn: one Slack execution trigger equals exactly one Codex turn."""
 
 
 def write_report(payload: dict[str, Any], report_file: Path = DEFAULT_REPORT_FILE) -> None:
@@ -728,6 +865,7 @@ def run_loop(
     require_slack: bool = False,
     audit_sink: SlackAuditSink | None = None,
 ) -> int:
+    """Execute a task file with exactly one Codex turn; no internal planner or retry loop."""
     runner, runner_status = build_codex_runner()
     if runner is None:
         raise AgentLoopError(runner_status)
@@ -736,79 +874,36 @@ def run_loop(
     task = _read_utf8(task_file)
     audit = audit_sink or SlackAuditSink.from_environment(required=require_slack)
     run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
-    history: list[dict[str, Any]] = []
-    test_result: TestResult | None = None
-    planner_prompt = f"TASK\n{task}\n\nRequest only the source files needed for iteration 1."
-
     audit.post(
         "AGENT RUN",
         f"run={run_id}\nengine=codex exec\nauth={runner.authentication}\n"
-        f"task={task_file.name}\n\n{task[:2_000]}",
+        f"task={task_file.name}\nmodelTurns=1\n\n{task[:2_000]}",
         root=not bool(audit.thread_ts),
     )
 
     try:
-        for iteration in range(1, max_iterations + 1):
-            planner_text = call_agent(
-                runner,
-                role="planner",
-                instructions=PLANNER_INSTRUCTIONS,
-                prompt=planner_prompt,
-                timeout_seconds=agent_timeout,
-            )
-            audit.post(f"PLANNER → CODER · iteration {iteration}", planner_text)
-            context = collect_requested_context(planner_text)
-            if DONE_RE.search(planner_text):
-                if test_result and test_result.passed:
-                    audit.post("PLANNER → DONE", planner_text)
-                    write_report(
-                        {
-                            "status": "complete",
-                            "runId": run_id,
-                            "slack": audit.status(),
-                            "iterations": history,
-                            "finalPlanner": planner_text,
-                        }
-                    )
-                    return 0
-                planner_text += "\nTests have not passed; provide the next corrective plan."
-
-            coder_text = call_agent(
-                runner,
-                role="coder",
-                instructions=CODER_INSTRUCTIONS,
-                prompt=f"TASK\n{task}\n\nPLANNER\n{planner_text}\n\nSOURCE\n{context or '[none requested]'}",
-                timeout_seconds=agent_timeout,
-            )
-            proposed = extract_file_changes(coder_text)
-            audit.post(
-                f"CODER → FILES · iteration {iteration}",
-                "\n".join(
-                    f"{path} · {len(content.encode('utf-8'))} bytes" for path, content in proposed
-                ),
-            )
-            applied = apply_file_changes(coder_text)
-            test_result = run_tests(timeout_seconds=test_timeout)
-            event = {
-                "iteration": iteration,
-                "planner": planner_text,
-                "applied": [asdict(change) for change in applied],
-                "tests": asdict(test_result),
-            }
-            audit.post(
-                f"TEST → PLANNER · iteration {iteration}",
-                json.dumps(event["tests"], ensure_ascii=False, indent=2),
-            )
-            history.append(event)
-            write_report(
-                {"status": "running", "runId": run_id, "slack": audit.status(), "iterations": history}
-            )
-            planner_prompt = (
-                f"TASK\n{task}\n\nITERATION {iteration}\n"
-                f"Changed: {json.dumps(event['applied'], ensure_ascii=False)}\n"
-                f"Tests: {json.dumps(event['tests'], ensure_ascii=False)}\n"
-                "Review and request exact source files for the next correction, or return DONE."
-            )
+        coder_text = call_agent(
+            runner,
+            role="executor",
+            instructions=EXECUTOR_INSTRUCTIONS,
+            prompt=f"EXPLICIT APPLY REQUEST\n{task}",
+            timeout_seconds=agent_timeout,
+        )
+        proposed = extract_file_changes(coder_text)
+        audit.post(
+            "CODEX → FILES",
+            "\n".join(
+                f"{path} · {len(content.encode('utf-8'))} bytes" for path, content in proposed
+            ),
+        )
+        applied = apply_file_changes(coder_text)
+        test_result = run_tests(timeout_seconds=test_timeout)
+        event = {"applied": [asdict(change) for change in applied], "tests": asdict(test_result)}
+        audit.post("TEST", json.dumps(event["tests"], ensure_ascii=False, indent=2))
+        status = "complete" if test_result.passed else "tests_failed"
+        audit.post("AGENT RUN → DONE" if test_result.passed else "AGENT RUN → STOP", status)
+        write_report({"status": status, "runId": run_id, "slack": audit.status(), **event})
+        return 0 if test_result.passed else 2
     except Exception as exc:
         try:
             audit.post("AGENT RUN → STOP", f"{type(exc).__name__}: {exc}")
@@ -816,11 +911,25 @@ def run_loop(
             pass
         raise
 
-    audit.post("AGENT RUN → STOP", f"iteration limit reached: {max_iterations}")
-    write_report(
-        {"status": "iteration_limit", "runId": run_id, "slack": audit.status(), "iterations": history}
-    )
-    return 2
+
+def parse_slack_action(text: str) -> tuple[str, str] | None:
+    match = SLACK_ACTION_RE.match(text)
+    if not match:
+        return None
+    return match.group(1).upper(), match.group(2).strip()
+
+
+def _execution_limit() -> int:
+    raw = os.environ.get(
+        "SLACK_MAX_CODEX_RUNS_PER_THREAD", str(DEFAULT_MAX_CODEX_RUNS_PER_THREAD)
+    ).strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise AgentLoopError("SLACK_MAX_CODEX_RUNS_PER_THREAD must be an integer") from exc
+    if value < 1 or value > 20:
+        raise AgentLoopError("SLACK_MAX_CODEX_RUNS_PER_THREAD must be between 1 and 20")
+    return value
 
 
 def handle_slack_command(
@@ -829,40 +938,138 @@ def handle_slack_command(
     max_iterations: int,
     test_timeout: int,
     agent_timeout: int = DEFAULT_CODEX_TIMEOUT_SECONDS,
+    state_store: SlackThreadStore | None = None,
 ) -> int:
     audit = SlackAuditSink.from_environment(required=True)
     audit.thread_ts = command.thread_ts
     audit.post(
-        "USER → AGENT",
-        f"user={command.user_id}\nevent={command.event_id}\n\n{command.text}",
+        "SLACK → AGENT",
+        f"actor={command.actor_type}:{command.user_id}\nevent={command.event_id}\n\n{command.text}",
     )
     if command.text.casefold() in {"ping", "연결 확인", "연결 테스트"}:
         audit.post("AGENT LOOP", "Socket Mode command receive is ready; no model was invoked.")
         return 0
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            errors="strict",
-            newline="\n",
-            prefix="messi-slack-task-",
-            suffix=".md",
-            delete=False,
-        ) as handle:
-            handle.write(command.text)
-            temporary_path = Path(handle.name)
-        return run_loop(
-            temporary_path,
-            max_iterations,
-            test_timeout,
-            agent_timeout=agent_timeout,
-            require_slack=True,
-            audit_sink=audit,
+
+    parsed = parse_slack_action(command.text)
+    if parsed is None:
+        audit.post(
+            "AGENT LOOP · RECORDED NOTHING",
+            "No Codex call was made. Use [PLAN], [DISCUSS], [APPLY], [REVISE], [STOP], or [RESET].",
         )
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+        return 0
+    action, body = parsed
+    if action not in {"STOP", "RESET"} and not body:
+        audit.post("AGENT LOOP · REJECTED", f"[{action}] requires message text; no Codex call was made.")
+        return 2
+
+    store = state_store or SlackThreadStore.from_environment()
+    state = store.load(command.channel_id, command.thread_ts)
+    processed_event_ids = state.setdefault("processedEventIds", [])
+    if command.event_id in processed_event_ids:
+        audit.post("AGENT LOOP · DUPLICATE", "Event already processed; no Codex call was made.")
+        return 0
+    processed_event_ids.append(command.event_id)
+    actor = f"{command.actor_type}:{command.user_id}"
+    if action == "RESET":
+        if command.actor_type != "human":
+            audit.post("AGENT LOOP · REJECTED", "Only a human can reset the execution budget.")
+            return 2
+        state["status"] = "open"
+        state["executionCount"] = 0
+        state["lastExecution"] = None
+        SlackThreadStore.append_message(
+            state, action=action, actor=actor, text=body or "reset", event_ts=command.event_ts
+        )
+        store.save(state)
+        audit.post("AGENT LOOP · RESET", "Thread reopened; Codex execution count reset to 0.")
+        return 0
+    if action == "STOP":
+        SlackThreadStore.append_message(
+            state, action=action, actor=actor, text=body or "stop", event_ts=command.event_ts
+        )
+        state["status"] = "stopped"
+        store.save(state)
+        audit.post("AGENT LOOP · STOPPED", "Thread stopped; no Codex call was made.")
+        return 0
+    if state.get("status") == "stopped":
+        audit.post("AGENT LOOP · REJECTED", "Thread is stopped. A human must send [RESET].")
+        return 2
+
+    SlackThreadStore.append_message(
+        state, action=action, actor=actor, text=body, event_ts=command.event_ts
+    )
+    if action in {"PLAN", "DISCUSS"}:
+        store.save(state)
+        audit.post(
+            f"AGENT LOOP · {action} SAVED",
+            "Persistent thread context updated; no Codex call, file write, or test run occurred.",
+        )
+        return 0
+
+    limit = _execution_limit()
+    execution_count = int(state.get("executionCount", 0))
+    if execution_count >= limit:
+        store.save(state)
+        audit.post(
+            "AGENT LOOP · EXECUTION LIMIT",
+            f"{execution_count}/{limit} Codex turns used. A human [RESET] is required; no Codex call was made.",
+        )
+        return 2
+
+    state["executionCount"] = execution_count + 1
+    state["status"] = "executing"
+    store.save(state)
+    try:
+        runner, runner_status = build_codex_runner()
+        if runner is None:
+            raise AgentLoopError(runner_status)
+        thread_context = store.context(state)
+        audit.post(
+            f"AGENT RUN · {action} {state['executionCount']}/{limit}",
+            f"engine=codex exec\nauth={runner.authentication}\nmodelTurns=1\ncontextChars={len(thread_context)}",
+        )
+        coder_text = call_agent(
+            runner,
+            role="executor",
+            instructions=EXECUTOR_INSTRUCTIONS,
+            prompt=(
+                f"SLACK THREAD CONTEXT\n{thread_context}\n\n"
+                f"CURRENT EXPLICIT {action} REQUEST\n{body}"
+            ),
+            timeout_seconds=agent_timeout,
+        )
+        proposed = extract_file_changes(coder_text)
+        audit.post(
+            "CODEX → FILES",
+            "\n".join(
+                f"{path} · {len(content.encode('utf-8'))} bytes" for path, content in proposed
+            ),
+        )
+        applied = apply_file_changes(coder_text)
+        test_result = run_tests(timeout_seconds=test_timeout)
+        execution = {
+            "action": action,
+            "applied": [asdict(change) for change in applied],
+            "tests": asdict(test_result),
+        }
+        state["lastExecution"] = execution
+        state["status"] = "open"
+        store.save(state)
+        audit.post("TEST", json.dumps(execution["tests"], ensure_ascii=False, indent=2))
+        audit.post(
+            "AGENT RUN → DONE" if test_result.passed else "AGENT RUN → STOP",
+            f"Codex turns this trigger: 1; testsPassed={str(test_result.passed).lower()}",
+        )
+        return 0 if test_result.passed else 2
+    except Exception as exc:
+        state["status"] = "open"
+        state["lastExecution"] = {"action": action, "error": type(exc).__name__}
+        store.save(state)
+        try:
+            audit.post("AGENT RUN → STOP", f"{type(exc).__name__}: {exc}")
+        except Exception:
+            pass
+        raise
 
 
 def check_environment(run_test: bool = False) -> int:
@@ -882,6 +1089,10 @@ def check_environment(run_test: bool = False) -> int:
             os.environ.get(name, "").strip()
             for name in ("SLACK_APP_TOKEN", "SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID")
         ),
+        "slackAllowedBotIds": len(_csv_ids(os.environ.get("SLACK_ALLOWED_BOT_IDS", ""))),
+        "slackAllowedAppIds": len(_csv_ids(os.environ.get("SLACK_ALLOWED_APP_IDS", ""))),
+        "slackProtocol": "explicit-tags-single-codex-turn-v1",
+        "maxCodexRunsPerThread": _execution_limit(),
     }
     if run_test:
         payload["tests"] = asdict(run_tests())
@@ -910,13 +1121,18 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         help="fail closed before model calls or file writes when Slack audit is unavailable",
     )
     parser.add_argument("--task", type=Path, default=DEFAULT_TASK_FILE)
-    parser.add_argument("--max-iterations", type=int, default=8)
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=1,
+        help="legacy compatibility option; one explicit trigger always runs exactly one Codex turn",
+    )
     parser.add_argument("--test-timeout", type=int, default=900)
     parser.add_argument(
         "--agent-timeout",
         type=int,
         default=DEFAULT_CODEX_TIMEOUT_SECONDS,
-        help="timeout in seconds for each planner or coder codex exec turn",
+        help="timeout in seconds for the single executor codex exec turn",
     )
     return parser.parse_args(argv)
 
@@ -937,18 +1153,18 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(json.dumps(asyncio.run(bridge.check_connection()), ensure_ascii=False, indent=2))
         return 0
     if args.listen_slack:
-        runner, runner_status = build_codex_runner()
-        if runner is None:
-            raise AgentLoopError(runner_status)
         bridge = SlackSocketBridge.from_environment()
         print(
             json.dumps(
                 {
                     "status": "listening",
-                    "engine": "codex exec",
-                    "authentication": runner.authentication,
+                    "engine": "codex exec on [APPLY]/[REVISE] only",
+                    "authentication": "validated lazily before an execution trigger",
                     "channelConfigured": True,
                     "mentionRequiredForNewThread": True,
+                    "allowedBotIds": len(bridge.allowed_bot_ids),
+                    "allowedAppIds": len(bridge.allowed_app_ids),
+                    "maxCodexRunsPerThread": _execution_limit(),
                 },
                 ensure_ascii=False,
             )
