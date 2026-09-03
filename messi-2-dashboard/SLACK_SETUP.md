@@ -1,42 +1,77 @@
-# Slack audit setup for `agent_loop.py`
+# Slack audit and command setup for `agent_loop.py`
 
-The integration is write-only. It posts the local automation transcript to one
-Slack channel and does not read messages, users, files, or workspace history.
+The integration writes one redacted audit thread per run and can receive
+commands over Socket Mode. New work must begin with an app mention in the one
+configured channel. Human replies in that active thread are accepted as
+follow-up tasks while the listener process remains running. Messages from bots,
+other channels, unrelated channel chatter, and duplicate event IDs are ignored.
 
-## Recommended: bot thread
+## Slack app configuration
 
-1. Create a Slack app for the intended workspace.
-2. Add the bot OAuth scope `chat:write` only.
-3. Install the app to the workspace.
-4. Invite the bot to a dedicated channel such as `#messi-agent-audit`.
-5. Copy the bot token and the channel ID. Do not paste either into source files,
-   chat messages, `.env` files, command output, or Git.
-6. Add these Windows user environment variables using the Environment Variables UI:
+1. Add bot OAuth scopes `chat:write`, `app_mentions:read`, and
+   `channels:history`.
+2. Enable Socket Mode.
+3. Generate an app-level token with `connections:write`.
+4. Enable Event Subscriptions and subscribe to bot events `app_mention` and
+   `message.channels`.
+5. Install or reinstall the app to the workspace.
+6. Invite the bot to one dedicated public channel.
+7. Store credentials only as Windows user environment variables:
 
-   - `SLACK_BOT_TOKEN`: the bot token
-   - `SLACK_CHANNEL_ID`: the dedicated channel ID, for example `C0123456789`
+   - `SLACK_BOT_TOKEN`: bot token beginning with `xoxb-`
+   - `SLACK_APP_TOKEN`: app token beginning with `xapp-`
+   - `SLACK_CHANNEL_ID`: exact channel ID beginning with `C`
    - `SLACK_AUDIT_REQUIRED`: `true`
 
-7. Restart Codex Desktop so the process inherits the variables.
-8. From this directory, run `python agent_loop.py --check-slack`. This sends one
-   real connectivity message. Do not run it repeatedly.
+Do not put credentials in source files, chat messages, `.env` files, command
+output, or Git. Restart the terminal/Codex process after changing Windows user
+environment variables.
 
-Each automation run creates one root message. Planner plans, proposed file names
-and byte counts, test results, completion, and stop reasons are replies in that
-thread. Source code and source-file contents are not posted. ANSI terminal codes,
+## Connection checks
+
+Send exactly one write probe:
+
+```powershell
+python agent_loop.py --check-slack
+```
+
+Validate the Socket Mode token and WebSocket handshake without invoking a model
+or changing files:
+
+```powershell
+python agent_loop.py --check-slack-socket
+```
+
+## Run the command listener
+
+```powershell
+python agent_loop.py --listen-slack --require-slack
+```
+
+In the configured channel, start a task with:
+
+```text
+@MESSI Agent Audit <bounded task>
+```
+
+For a no-model connectivity probe, send `@MESSI Agent Audit 연결 확인`.
+
+Each run stays in that Slack thread and records `USER → AGENT`, `AGENT RUN`,
+`PLANNER → CODER`, `CODER → FILES`, `TEST → PLANNER`, and `DONE/STOP` events.
+Source code and source-file contents are not posted. ANSI terminal codes,
 OpenAI keys, Slack tokens, authorization headers, and webhook URLs are redacted.
 
-Run the audited loop with:
+The listener serializes tasks. A follow-up received while a run is executing is
+handled after Slack redelivers or queues the event; it does not interrupt an
+in-flight model call or filesystem write.
+
+## Write-only audited loop
+
+To run a local task file without listening for Slack commands:
 
 ```powershell
 python agent_loop.py --require-slack
 ```
 
-With `--require-slack`, missing credentials or a Slack delivery failure stops the
-loop before the next model call or file mutation instead of silently losing the
-audit trail.
-
-## Fallback: incoming webhook
-
-Set `SLACK_WEBHOOK_URL` instead of the bot variables. This requires less setup but
-cannot group a run into a Slack thread, so the bot-thread method is preferred.
+Incoming webhooks remain a write-only, non-thread fallback through
+`SLACK_WEBHOOK_URL`; they cannot receive Socket Mode commands.

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import re
@@ -18,7 +19,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -36,6 +37,7 @@ FILE_BLOCK_RE = re.compile(
 READ_RE = re.compile(r"(?m)^\[READ:\s*([^\]\r\n]+?)\s*\]\s*$")
 DONE_RE = re.compile(r"(?m)^\s*DONE\s*$")
 VITEST_WATCHALL_RE = re.compile(r"unknown option.*watchall", re.I)
+SLACK_MENTION_RE = re.compile(r"<@[A-Z0-9]+>", re.I)
 
 
 class AgentLoopError(RuntimeError):
@@ -60,6 +62,16 @@ class TestResult:
 class AppliedChange:
     path: str
     bytes_written: int
+
+
+@dataclass(frozen=True)
+class SlackCommand:
+    event_id: str
+    user_id: str
+    text: str
+    channel_id: str
+    thread_ts: str
+    event_ts: str
 
 
 def configure_stdio() -> None:
@@ -272,6 +284,176 @@ class SlackAuditSink:
                 self._webhook_post(message)
 
 
+class SlackSocketBridge:
+    """Receive bounded commands from one Slack channel over Socket Mode."""
+
+    def __init__(self, *, app_token: str, bot_token: str, channel_id: str) -> None:
+        if not app_token or not bot_token or not channel_id:
+            raise AgentLoopError(
+                "SLACK_APP_TOKEN, SLACK_BOT_TOKEN, and SLACK_CHANNEL_ID are required"
+            )
+        self.app_token = app_token
+        self.bot_token = bot_token
+        self.channel_id = channel_id
+        self.bot_user_id = ""
+        self.active_threads: set[str] = set()
+        self.seen_event_ids: set[str] = set()
+        self._seen_event_order: list[str] = []
+
+    @classmethod
+    def from_environment(cls) -> "SlackSocketBridge":
+        return cls(
+            app_token=os.environ.get("SLACK_APP_TOKEN", "").strip(),
+            bot_token=os.environ.get("SLACK_BOT_TOKEN", "").strip(),
+            channel_id=os.environ.get("SLACK_CHANNEL_ID", "").strip(),
+        )
+
+    @staticmethod
+    def _json_request(url: str, token: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload or {}).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                body = json.loads(response.read().decode("utf-8", errors="replace"))
+        except urllib.error.HTTPError as exc:
+            raise AgentLoopError(f"Slack Socket API HTTP {exc.code}") from exc
+        except urllib.error.URLError as exc:
+            raise AgentLoopError(f"Slack Socket API network error: {exc.reason}") from exc
+        if body.get("ok") is not True:
+            raise AgentLoopError(f"Slack Socket API error: {body.get('error', 'unknown_error')}")
+        return body
+
+    def _socket_url(self) -> str:
+        body = self._json_request("https://slack.com/api/apps.connections.open", self.app_token)
+        url = body.get("url")
+        if not isinstance(url, str) or not url.startswith("wss://"):
+            raise AgentLoopError("Slack Socket API returned no WebSocket URL")
+        return url
+
+    def _resolve_bot_user_id(self) -> str:
+        body = self._json_request("https://slack.com/api/auth.test", self.bot_token)
+        user_id = body.get("user_id")
+        if not isinstance(user_id, str) or not user_id:
+            raise AgentLoopError("Slack auth.test returned no bot user ID")
+        return user_id
+
+    def _remember_event(self, event_id: str) -> bool:
+        if not event_id or event_id in self.seen_event_ids:
+            return False
+        self.seen_event_ids.add(event_id)
+        self._seen_event_order.append(event_id)
+        if len(self._seen_event_order) > 2_000:
+            expired = self._seen_event_order.pop(0)
+            self.seen_event_ids.discard(expired)
+        return True
+
+    def command_from_envelope(self, envelope: dict[str, Any]) -> SlackCommand | None:
+        payload = envelope.get("payload")
+        if not isinstance(payload, dict) or payload.get("type") != "event_callback":
+            return None
+        event = payload.get("event")
+        if not isinstance(event, dict) or event.get("channel") != self.channel_id:
+            return None
+        event_id = payload.get("event_id")
+        if not isinstance(event_id, str) or not self._remember_event(event_id):
+            return None
+        if event.get("bot_id") or event.get("subtype") == "bot_message":
+            return None
+        user_id = event.get("user")
+        if not isinstance(user_id, str) or not user_id or user_id == self.bot_user_id:
+            return None
+        event_type = event.get("type")
+        event_ts = event.get("ts")
+        text = event.get("text")
+        if not isinstance(event_ts, str) or not isinstance(text, str):
+            return None
+
+        thread_ts = event.get("thread_ts") or event_ts
+        if not isinstance(thread_ts, str) or not thread_ts:
+            return None
+        if event_type == "app_mention":
+            text = SLACK_MENTION_RE.sub("", text).strip()
+            self.active_threads.add(thread_ts)
+        elif event_type == "message" and event.get("thread_ts") in self.active_threads:
+            text = text.strip()
+        else:
+            return None
+        if not text:
+            return None
+        return SlackCommand(
+            event_id=event_id,
+            user_id=user_id,
+            text=text,
+            channel_id=self.channel_id,
+            thread_ts=thread_ts,
+            event_ts=event_ts,
+        )
+
+    @staticmethod
+    def _websockets_module() -> Any:
+        try:
+            import websockets
+        except (ImportError, OSError) as exc:
+            raise AgentLoopError(
+                "Socket Mode requires the Python 'websockets' package"
+            ) from exc
+        return websockets
+
+    async def check_connection(self) -> dict[str, Any]:
+        websockets = self._websockets_module()
+        url = await asyncio.to_thread(self._socket_url)
+        async with websockets.connect(
+            url, open_timeout=30, close_timeout=10, ping_interval=20, max_size=1_000_000
+        ) as socket:
+            raw = await asyncio.wait_for(socket.recv(), timeout=30)
+            hello = json.loads(raw)
+            if hello.get("type") != "hello":
+                raise AgentLoopError("Slack Socket Mode did not return a hello envelope")
+        return {"connected": True, "hello": True, "channelConfigured": True}
+
+    async def listen(self, handler: Callable[[SlackCommand], int]) -> None:
+        websockets = self._websockets_module()
+        self.bot_user_id = await asyncio.to_thread(self._resolve_bot_user_id)
+        backoff = 1
+        while True:
+            url = await asyncio.to_thread(self._socket_url)
+            try:
+                async with websockets.connect(
+                    url,
+                    open_timeout=30,
+                    close_timeout=10,
+                    ping_interval=20,
+                    max_size=1_000_000,
+                ) as socket:
+                    backoff = 1
+                    async for raw in socket:
+                        envelope = json.loads(raw)
+                        envelope_id = envelope.get("envelope_id")
+                        if isinstance(envelope_id, str) and envelope_id:
+                            await socket.send(json.dumps({"envelope_id": envelope_id}))
+                        command = self.command_from_envelope(envelope)
+                        if command is not None:
+                            await asyncio.to_thread(handler, command)
+                        if envelope.get("type") == "disconnect" and envelope.get("reason") == "link_disabled":
+                            raise AgentLoopError("Slack Socket Mode was disabled")
+            except AgentLoopError:
+                raise
+            except Exception as exc:
+                print(
+                    f"agent_loop: Slack socket reconnect after {type(exc).__name__}",
+                    file=sys.stderr,
+                )
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 30)
+
+
 def _safe_project_path(raw_path: str) -> Path:
     normalized = raw_path.strip().replace("\\", "/")
     candidate = Path(normalized)
@@ -443,6 +625,7 @@ def run_loop(
     test_timeout: int,
     *,
     require_slack: bool = False,
+    audit_sink: SlackAuditSink | None = None,
 ) -> int:
     client, client_status = build_client()
     if client is None:
@@ -450,7 +633,7 @@ def run_loop(
     if not task_file.is_file():
         raise AgentLoopError(f"task file not found: {task_file}")
     task = _read_utf8(task_file)
-    audit = SlackAuditSink.from_environment(required=require_slack)
+    audit = audit_sink or SlackAuditSink.from_environment(required=require_slack)
     planner_model = os.environ.get("OPENAI_PLANNER_MODEL", "gpt-5.4")
     coder_model = os.environ.get("OPENAI_CODER_MODEL", planner_model)
     run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
@@ -462,7 +645,7 @@ def run_loop(
         "AGENT RUN",
         f"run={run_id}\nplanner={planner_model}\ncoder={coder_model}\n"
         f"task={task_file.name}\n\n{task[:2_000]}",
-        root=True,
+        root=not bool(audit.thread_ts),
     )
 
     try:
@@ -536,6 +719,46 @@ def run_loop(
     return 2
 
 
+def handle_slack_command(command: SlackCommand, *, max_iterations: int, test_timeout: int) -> int:
+    audit = SlackAuditSink.from_environment(required=True)
+    audit.thread_ts = command.thread_ts
+    audit.post(
+        "USER → AGENT",
+        f"user={command.user_id}\nevent={command.event_id}\n\n{command.text}",
+    )
+    if command.text.casefold() in {"ping", "연결 확인", "연결 테스트"}:
+        audit.post("AGENT LOOP", "Socket Mode command receive is ready; no model was invoked.")
+        return 0
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            errors="strict",
+            newline="\n",
+            prefix="messi-slack-task-",
+            suffix=".md",
+            delete=False,
+        ) as handle:
+            handle.write(command.text)
+            temporary_path = Path(handle.name)
+        return run_loop(
+            temporary_path,
+            max_iterations,
+            test_timeout,
+            require_slack=True,
+            audit_sink=audit,
+        )
+    except Exception as exc:
+        try:
+            audit.post("AGENT RUN → STOP", f"{type(exc).__name__}: {exc}")
+        finally:
+            raise
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
 def check_environment(run_test: bool = False) -> int:
     client, status = build_client()
     payload: dict[str, Any] = {
@@ -548,6 +771,10 @@ def check_environment(run_test: bool = False) -> int:
         "pythonIoEncoding": normalized_environment().get("PYTHONIOENCODING"),
         "defaultTestCommand": DEFAULT_TEST_COMMAND,
         "slack": SlackAuditSink.from_environment().status(),
+        "slackSocketConfigured": all(
+            os.environ.get(name, "").strip()
+            for name in ("SLACK_APP_TOKEN", "SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID")
+        ),
     }
     if run_test:
         payload["tests"] = asdict(run_tests())
@@ -560,6 +787,16 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--check", action="store_true", help="validate without API calls")
     parser.add_argument("--check-tests", action="store_true", help="also run the test command")
     parser.add_argument("--check-slack", action="store_true", help="post one Slack connectivity probe")
+    parser.add_argument(
+        "--check-slack-socket",
+        action="store_true",
+        help="open Socket Mode, validate the hello envelope, then exit",
+    )
+    parser.add_argument(
+        "--listen-slack",
+        action="store_true",
+        help="listen for approved-channel mentions and thread follow-ups",
+    )
     parser.add_argument(
         "--require-slack",
         action="store_true",
@@ -579,6 +816,28 @@ def main(argv: Iterable[str] | None = None) -> int:
         sink = SlackAuditSink.from_environment(required=True)
         sink.post("AGENT LOOP · CONNECTION TEST", "Slack audit transport is ready.", root=True)
         print(json.dumps(sink.status(), ensure_ascii=False, indent=2))
+        return 0
+    if args.check_slack_socket:
+        bridge = SlackSocketBridge.from_environment()
+        print(json.dumps(asyncio.run(bridge.check_connection()), ensure_ascii=False, indent=2))
+        return 0
+    if args.listen_slack:
+        bridge = SlackSocketBridge.from_environment()
+        print(
+            json.dumps(
+                {"status": "listening", "channelConfigured": True, "mentionRequiredForNewThread": True},
+                ensure_ascii=False,
+            )
+        )
+        asyncio.run(
+            bridge.listen(
+                lambda command: handle_slack_command(
+                    command,
+                    max_iterations=args.max_iterations,
+                    test_timeout=args.test_timeout,
+                )
+            )
+        )
         return 0
     if args.check or args.check_tests:
         return check_environment(run_test=args.check_tests)

@@ -72,6 +72,139 @@ export const label = "히트맵";
             sink.post("TEST", "x" * (agent_loop.MAX_SLACK_CHUNK + 10))
         self.assertEqual(post.call_count, 2)
 
+    def test_slack_socket_requires_all_three_credentials(self):
+        with patch.dict(
+            os.environ,
+            {"SLACK_APP_TOKEN": "xapp-test", "SLACK_BOT_TOKEN": "xoxb-test"},
+            clear=True,
+        ):
+            with self.assertRaises(agent_loop.AgentLoopError):
+                agent_loop.SlackSocketBridge.from_environment()
+
+    def test_slack_socket_accepts_mention_only_in_configured_channel(self):
+        bridge = agent_loop.SlackSocketBridge(
+            app_token="xapp-test", bot_token="xoxb-test", channel_id="C123"
+        )
+        command = bridge.command_from_envelope(
+            {
+                "payload": {
+                    "type": "event_callback",
+                    "event_id": "Ev1",
+                    "event": {
+                        "type": "app_mention",
+                        "channel": "C123",
+                        "user": "U1",
+                        "text": "<@UBOT> 도트 히트맵 수정",
+                        "ts": "100.1",
+                    },
+                }
+            }
+        )
+        self.assertIsNotNone(command)
+        assert command is not None
+        self.assertEqual(command.text, "도트 히트맵 수정")
+        self.assertEqual(command.thread_ts, "100.1")
+
+        wrong_channel = bridge.command_from_envelope(
+            {
+                "payload": {
+                    "type": "event_callback",
+                    "event_id": "Ev2",
+                    "event": {
+                        "type": "app_mention",
+                        "channel": "C999",
+                        "user": "U1",
+                        "text": "<@UBOT> ignore",
+                        "ts": "100.2",
+                    },
+                }
+            }
+        )
+        self.assertIsNone(wrong_channel)
+
+    def test_slack_socket_accepts_human_followup_only_in_active_thread(self):
+        bridge = agent_loop.SlackSocketBridge(
+            app_token="xapp-test", bot_token="xoxb-test", channel_id="C123"
+        )
+        bridge.active_threads.add("100.1")
+        followup = bridge.command_from_envelope(
+            {
+                "payload": {
+                    "type": "event_callback",
+                    "event_id": "Ev3",
+                    "event": {
+                        "type": "message",
+                        "channel": "C123",
+                        "user": "U1",
+                        "text": "그 부분은 보류해",
+                        "thread_ts": "100.1",
+                        "ts": "100.3",
+                    },
+                }
+            }
+        )
+        self.assertIsNotNone(followup)
+        assert followup is not None
+        self.assertEqual(followup.text, "그 부분은 보류해")
+
+        unrelated = bridge.command_from_envelope(
+            {
+                "payload": {
+                    "type": "event_callback",
+                    "event_id": "Ev4",
+                    "event": {
+                        "type": "message",
+                        "channel": "C123",
+                        "user": "U1",
+                        "text": "ordinary channel chatter",
+                        "ts": "100.4",
+                    },
+                }
+            }
+        )
+        self.assertIsNone(unrelated)
+
+    def test_slack_socket_rejects_bot_and_duplicate_events(self):
+        bridge = agent_loop.SlackSocketBridge(
+            app_token="xapp-test", bot_token="xoxb-test", channel_id="C123"
+        )
+        bot_envelope = {
+            "payload": {
+                "type": "event_callback",
+                "event_id": "Ev5",
+                "event": {
+                    "type": "app_mention",
+                    "channel": "C123",
+                    "user": "UBOT",
+                    "bot_id": "B1",
+                    "text": "<@UBOT> loop",
+                    "ts": "100.5",
+                },
+            }
+        }
+        self.assertIsNone(bridge.command_from_envelope(bot_envelope))
+        self.assertIsNone(bridge.command_from_envelope(bot_envelope))
+
+    def test_slack_connection_probe_does_not_invoke_model_loop(self):
+        command = agent_loop.SlackCommand(
+            event_id="Ev6",
+            user_id="U1",
+            text="연결 확인",
+            channel_id="C123",
+            thread_ts="100.6",
+            event_ts="100.6",
+        )
+        sink = agent_loop.SlackAuditSink(bot_token="xoxb-test", channel_id="C123")
+        with patch.object(agent_loop.SlackAuditSink, "from_environment", return_value=sink):
+            with patch.object(sink, "_bot_post") as post:
+                with patch.object(agent_loop, "run_loop") as run_loop:
+                    result = agent_loop.handle_slack_command(
+                        command, max_iterations=1, test_timeout=1
+                    )
+        self.assertEqual(result, 0)
+        self.assertEqual(post.call_count, 2)
+        run_loop.assert_not_called()
+
     def test_apply_file_changes_writes_under_project_root(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

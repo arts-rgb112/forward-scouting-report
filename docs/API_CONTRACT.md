@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 구현·전송/WebSocket 검증 완료, 사용자 멘션 수신 확인 대기 — Slack Socket Mode planner/coder 대화 브리지 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
+- 범위/결과: 사용자 환경에서 `SLACK_BOT_TOKEN`·`SLACK_APP_TOKEN`·`SLACK_CHANNEL_ID`·`SLACK_AUDIT_REQUIRED` 존재만 확인했으며 값은 출력·로그·Git에 기록하지 않았다. `chat.postMessage` 실전송은 thread 생성까지 성공했고 Socket Mode는 `connected=true/hello=true`를 확인했다. 승인 채널의 새 작업은 app mention만 허용하고, 활성 thread의 사람 후속 메시지만 직렬 처리한다. bot/self·다른 채널·무관 일반 메시지·중복 event는 거부하며 envelope은 모델 처리 전에 ack한다. `연결 확인`/`연결 테스트`/`ping`은 모델·파일 변경 없이 응답한다. 파일 패치·테스트·모델 호출의 기존 fail-closed 경계는 유지했고 Python 단위 테스트 `14 passed`와 `py_compile`을 통과했다. 실제 사용자 event 수신은 listener 실행 뒤 멘션 1건으로 최종 확인한다. 점수·API·데이터·SportsAPI 수집·배포는 변경하지 않는다.
+
 - 상태: 코드·로컬 검증 완료, Slack workspace 자격정보 설정 대기 — planner/coder/test 감사 채널 연동 (2026-09-03 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
 - 범위/결과: `agent_loop.py`의 역할 간 교환을 Slack 한 개 thread에 `TASK`, `PLANNER→CODER`, `CODER→FILES`, `TEST→PLANNER`, `DONE/STOP` 단계로 기록하도록 구현했다. Bot token은 `chat:write` 최소 권한과 초대된 channel ID만 환경변수에서 읽으며, 기본 감사에는 source/code 본문을 올리지 않고 파일명·바이트·테스트 tail만 전송한다. ANSI와 OpenAI/Slack token·Authorization·webhook URL은 전송 전에 redaction한다. `--require-slack`에서는 자격정보 누락 또는 전송 실패를 다음 OpenAI 호출·파일 수정 전에 fail-closed하고, `--check-slack`은 실메시지 한 건으로 연결을 검증한다. Incoming webhook은 비thread fallback으로만 지원한다. 신규 Python 단위 테스트는 `9 passed`; 현재 환경에는 Slack token/channel/webhook이 모두 없어 실전송은 하지 않았고 `--check-slack`은 의도대로 exit 2였다. 설정 절차는 `SLACK_SETUP.md`에 기록했다. 점수·API·데이터·기존 프런트 구현은 변경하지 않았으며 push·PR·merge·deploy는 별도 승인 전 금지한다.
