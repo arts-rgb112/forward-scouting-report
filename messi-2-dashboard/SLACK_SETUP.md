@@ -39,6 +39,11 @@ Do not put credentials in source files, chat messages, `.env` files, command
 output, or Git. Restart the terminal/Codex process after changing Windows user
 environment variables.
 
+`SLACK_AUDIT_REQUIRED` is optional. When it is present, only `true` or `false`
+is accepted, case-insensitively and with surrounding whitespace ignored. An
+empty value or typo such as `ture` or `1` stops startup instead of silently
+disabling the audit requirement.
+
 ## Message protocol and usage guard
 
 Every actionable message must begin with one of these tags:
@@ -59,6 +64,10 @@ turns per Slack thread; only a human `[RESET]` can replenish it.
 The latest human instruction has priority over an earlier Claude plan. This
 lets the user join the thread, correct the plan, stop execution, or directly
 request an apply/revision without creating a hidden agent-to-agent loop.
+
+Claude may send `[APPLY]` only when the user has already approved a written
+task order, and its body starts with `🤖 Claude Code`. `[RESET]`, push, merge,
+and deployment remain user-only approvals.
 
 Example:
 

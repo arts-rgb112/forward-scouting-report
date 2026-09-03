@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료, commit 대기 — 공통 운영 규칙 통합 + Slack PART C-1/C-2 정리 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-slack-loop
+- 범위/결과: 최신 `messi-specs/CODEX_OPERATING_RULES.md` §1~§10을 레포 루트 `AGENTS.md`에 통합했다. `SLACK_AUDIT_REQUIRED`는 미설정만 기존 기본값을 유지하고, `true`/`false`는 대소문자·앞뒤 공백을 허용하며, 빈 문자열·`ture`·`1`은 시작 단계에서 `AgentLoopError`로 실패한다. 이 검사는 `--check`·listener 등 모든 모드 분기 전에 실행된다. `agent/slack-agent-loop`를 `origin/main`의 #308 병합 SHA `ccf7849` 위로 rebase해 히트맵·API·data diff를 제거했고, 최종 diff는 `AGENTS.md`, 계약/Slack 문서, `.gitignore`, `TASK_ORDER.md`, `agent_loop.py`, `test_agent_loop.py`뿐이다. `.agent-loop-state/` ignore를 확인했다. `test_agent_loop.py` 31/31, `py_compile`, `git diff --check`가 통과했다. push·PR·merge·deploy는 수행하지 않았다.
+
 - 상태: 로컬 구현·실연결 검증 완료, commit 대기 — Slack `to_do_list`·`okr` 읽기 전용 컨텍스트 채널 연결 (2026-09-03 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-slack-loop/messi-2-dashboard
 - 범위/결과: 공개 채널 OAuth 권한과 봇 멤버십을 실제 API로 확인했다(`to_do_list` C0BUQLE84BT, `okr` C0BUSD1ML68). `SLACK_CONTEXT_CHANNEL_IDS`를 Windows 사용자 설정에 두 채널로 등록하고 기존 보고 4개(3,115자)를 토큰 없는 bounded·redacted 상태로 동기화했다. listener 시작 시 최근 기록을 보충하고 Socket Mode 신규 메시지를 누적하며, `[APPLY]`/`[REVISE]`의 단일 Codex 실행 문맥에만 읽기 전용 배경으로 주입한다. 두 채널 메시지 자체는 실행 트리거가 아니며 파일 변경·테스트·Codex 호출을 일으키지 않는다. `test_agent_loop.py` 28/28, `py_compile`, Socket Mode hello(`contextChannelCount=2`)가 통과했다. Slack 토큰 원문, 점수·API·데이터·SportsAPI 수집·배포는 변경하지 않았다.

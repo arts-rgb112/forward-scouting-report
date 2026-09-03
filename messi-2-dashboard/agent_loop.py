@@ -106,6 +106,23 @@ def _csv_ids(value: str) -> frozenset[str]:
     return frozenset(part.strip() for part in value.split(",") if part.strip())
 
 
+def optional_boolean_environment(name: str) -> bool | None:
+    """Parse an optional boolean without silently accepting a configured typo."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    normalized = raw.strip().casefold()
+    if not normalized:
+        # 빈 값은 "설정하지 않음"으로 본다. Windows 에서 변수를 지우면 빈 문자열이
+        # 남는 경우가 있어, 이걸 오타와 같이 취급하면 정상 해제가 기동을 막는다.
+        return None
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise AgentLoopError(f"{name} must be true or false when set")
+
+
 class SlackThreadStore:
     """Persist bounded, token-free orchestration context per Slack thread."""
 
@@ -1321,6 +1338,7 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Iterable[str] | None = None) -> int:
     args = parse_args(argv)
+    configured_audit_required = optional_boolean_environment("SLACK_AUDIT_REQUIRED")
     if args.max_iterations < 1:
         raise AgentLoopError("--max-iterations must be positive")
     if args.agent_timeout < 1:
@@ -1365,7 +1383,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         return 0
     if args.check or args.check_tests:
         return check_environment(run_test=args.check_tests)
-    require_slack = args.require_slack or os.environ.get("SLACK_AUDIT_REQUIRED") == "true"
+    require_slack = args.require_slack or configured_audit_required is True
     return run_loop(
         args.task.resolve(),
         args.max_iterations,

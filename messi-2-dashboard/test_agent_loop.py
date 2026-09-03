@@ -54,6 +54,39 @@ export const label = "히트맵";
         self.assertEqual(env["SLACK_CHANNEL_ID"], "C123")
         self.assertEqual(env["CI"], "true")
 
+    def test_optional_boolean_environment_accepts_only_trimmed_true_or_false(self):
+        with patch.dict(os.environ, {"SLACK_AUDIT_REQUIRED": "TRUE "}, clear=False):
+            self.assertIs(agent_loop.optional_boolean_environment("SLACK_AUDIT_REQUIRED"), True)
+        with patch.dict(os.environ, {"SLACK_AUDIT_REQUIRED": " false\t"}, clear=False):
+            self.assertIs(agent_loop.optional_boolean_environment("SLACK_AUDIT_REQUIRED"), False)
+
+    def test_optional_boolean_environment_distinguishes_unset_from_invalid(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertIsNone(agent_loop.optional_boolean_environment("SLACK_AUDIT_REQUIRED"))
+        for blank in ("", "   "):
+            with self.subTest(value=blank):
+                with patch.dict(
+                    os.environ, {"SLACK_AUDIT_REQUIRED": blank}, clear=False
+                ):
+                    self.assertIsNone(
+                        agent_loop.optional_boolean_environment("SLACK_AUDIT_REQUIRED")
+                    )
+        for invalid in ("ture", "1", "yes", "0"):
+            with self.subTest(value=invalid):
+                with patch.dict(
+                    os.environ, {"SLACK_AUDIT_REQUIRED": invalid}, clear=False
+                ):
+                    with self.assertRaisesRegex(
+                        agent_loop.AgentLoopError,
+                        "SLACK_AUDIT_REQUIRED must be true or false when set",
+                    ):
+                        agent_loop.optional_boolean_environment("SLACK_AUDIT_REQUIRED")
+
+    def test_main_rejects_invalid_audit_boolean_even_in_check_mode(self):
+        with patch.dict(os.environ, {"SLACK_AUDIT_REQUIRED": "ture"}, clear=False):
+            with self.assertRaisesRegex(agent_loop.AgentLoopError, "must be true or false"):
+                agent_loop.main(["--check"])
+
     def test_build_codex_runner_accepts_chatgpt_subscription_login(self):
         completed = CompletedProcess(
             args=["codex", "login", "status"],
