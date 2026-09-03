@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_DISPLAY_GAMMA, HEATMAP_ROWS, HEATMAP_STOPS, bilinearDensity, displayDensityGrid, displayHeatmapColor, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
+import { DISPLAY_HEATMAP_COLOR_STAGES, DISPLAY_HEATMAP_COLUMNS, DISPLAY_HEATMAP_ROWS, HEATMAP_COLUMNS, HEATMAP_DISPLAY_GAMMA, HEATMAP_ROWS, HEATMAP_STOPS, activityHistogramGrid, bilinearDensity, displayDensityGrid, displayHeatmapColor, fullActivityDensityGrid, legacyDensityGrid, legacyHeatmapColor, marchingSquares, normalizeDensity, rawActivityHistogram } from "./legacyHeatmap";
 
 describe("legacy 32 x 22 spatial raster", () => {
   it("keeps numpy-compatible endpoint values in the final bin", () => {
@@ -25,18 +25,32 @@ describe("legacy 32 x 22 spatial raster", () => {
     expect(bilinearDensity(density, -1, 50)).toBe(0);
   });
 
-  it("quantizes the display palette into the live olive-to-red stages", () => {
+  it("uses the approved six-stop gold-to-red ramp with stop-owned alpha", () => {
+    expect(HEATMAP_STOPS).toHaveLength(6);
+    expect(HEATMAP_STOPS.every(([, color]) => color.length === 4)).toBe(true);
     expect(legacyHeatmapColor(0)).toEqual([0, 0, 0, 0]);
-    expect(HEATMAP_STOPS[1]).toEqual([.08, [124, 151, 71, .18]]);
-    expect(HEATMAP_STOPS[4]).toEqual([.72, [247, 135, 39, .9]]);
     expect(legacyHeatmapColor(1)).toEqual([222, 63, 31, .98]);
   });
 
-  it("applies gamma only when selecting display colours", () => {
+  it("applies gamma and twelve-stage quantization only when selecting display colours", () => {
     const native = .24;
     expect(HEATMAP_DISPLAY_GAMMA).toBe(.6);
+    expect(DISPLAY_HEATMAP_COLOR_STAGES).toBe(12);
     expect(displayHeatmapColor(native)).toEqual(legacyHeatmapColor(native ** .6));
+    const quantized = Math.round((.05 ** HEATMAP_DISPLAY_GAMMA) * (DISPLAY_HEATMAP_COLOR_STAGES - 1)) / (DISPLAY_HEATMAP_COLOR_STAGES - 1);
+    const low = HEATMAP_STOPS[1], high = HEATMAP_STOPS[2];
+    const expectedAlpha = low[1][3] + (high[1][3] - low[1][3]) * ((quantized - low[0]) / (high[0] - low[0]));
+    expect(displayHeatmapColor(.05)[3]).toBeCloseTo(expectedAlpha, 6);
+    expect(legacyHeatmapColor(.051)).toEqual(legacyHeatmapColor(.052));
+    expect(displayHeatmapColor(0)[3]).toBe(0);
     expect(native).toBe(.24);
+  });
+
+  it("smooths a server count-weighted histogram without reconstructing points", () => {
+    const counts = new Array(HEATMAP_COLUMNS * HEATMAP_ROWS).fill(0); counts[0] = 4;
+    expect([...activityHistogramGrid(counts)].reduce((sum, value) => sum + value, 0)).toBe(4);
+    const density = fullActivityDensityGrid(counts);
+    expect(density[0]).toBeCloseTo(4 * 121 / 256, 12);
   });
 
   it("upsamples only the display mesh and leaves the 32 by 22 scoring raster intact", () => {

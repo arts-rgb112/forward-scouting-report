@@ -8,19 +8,21 @@ export const HEATMAP_ROWS = 22;
 /** Display-only resolution. The 32 × 22 grid remains the sole scoring/CCA raster. */
 export const DISPLAY_HEATMAP_COLUMNS = 96;
 export const DISPLAY_HEATMAP_ROWS = 66;
-export const DISPLAY_HEATMAP_COLOR_STAGES = 12;
 /** Display-only tone mapping. Native density stays unchanged for CCA/HDR. */
+export const DISPLAY_HEATMAP_COLOR_STAGES = 12;
 export const HEATMAP_DISPLAY_GAMMA = .6;
 export const HEATMAP_KERNEL = [1, 4, 6, 4, 1] as const;
 export const HEATMAP_STOPS = [
   [0, [0, 0, 0, 0]],
-  [0.08, [124, 151, 71, 0.18]],
-  [0.24, [188, 185, 65, 0.56]],
-  [0.48, [244, 209, 60, 0.78]],
-  [0.72, [247, 135, 39, 0.9]],
-  [1, [222, 63, 31, 0.98]],
+  [.08, [124, 151, 71, .18]],
+  [.24, [188, 185, 65, .56]],
+  [.48, [244, 209, 60, .78]],
+  [.72, [247, 135, 39, .9]],
+  [1, [222, 63, 31, .98]],
 ] as const;
 export const HEATMAP_OPACITY = .55;
+export const TWO_D_HEATMAP_BLUR_PX = 0;
+export const THREE_D_HEATMAP_BLUR = 4;
 
 export type ActivityPoint = { x: number; y: number };
 export type HeatmapGrid = Float64Array;
@@ -42,6 +44,12 @@ export function rawActivityHistogram(points: readonly ActivityPoint[]): HeatmapG
   return grid;
 }
 
+/** Server-owned count-weighted Tier 3 histogram; no coordinate reconstruction. */
+export function activityHistogramGrid(cellCounts: readonly number[]): HeatmapGrid {
+  if (cellCounts.length !== HEATMAP_ROWS * HEATMAP_COLUMNS || cellCounts.some((value) => !Number.isInteger(value) || value < 0)) return new Float64Array(HEATMAP_ROWS * HEATMAP_COLUMNS);
+  return Float64Array.from(cellCounts);
+}
+
 function smoothAxis(source: HeatmapGrid, axis: "row" | "column"): HeatmapGrid {
   const target = new Float64Array(source.length);
   for (let row = 0; row < HEATMAP_ROWS; row += 1) for (let column = 0; column < HEATMAP_COLUMNS; column += 1) {
@@ -59,6 +67,11 @@ function smoothAxis(source: HeatmapGrid, axis: "row" | "column"): HeatmapGrid {
 /** Edge-replicated [1,4,6,4,1]/16 smoothing: rows, then columns, matching continuous_core.py. */
 export function legacyDensityGrid(points: readonly ActivityPoint[]): HeatmapGrid {
   return smoothAxis(smoothAxis(rawActivityHistogram(points), "row"), "column");
+}
+
+/** Apply the established display smoothing directly to the server histogram. */
+export function fullActivityDensityGrid(cellCounts: readonly number[]): HeatmapGrid {
+  return smoothAxis(smoothAxis(activityHistogramGrid(cellCounts), "row"), "column");
 }
 
 export function normalizeDensity(grid: HeatmapGrid): HeatmapGrid {

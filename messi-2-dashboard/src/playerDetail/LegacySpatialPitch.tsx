@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
-import { displayDensityGrid, legacyDensityGrid, marchingSquares, normalizeDensity, renderDisplayHeatmap, type ActivityPoint } from "./legacyHeatmap";
+import { displayDensityGrid, fullActivityDensityGrid, legacyDensityGrid, marchingSquares, normalizeDensity, renderDisplayHeatmap, type ActivityPoint } from "./legacyHeatmap";
 import { groupPitchShots, medianObservedXg, pitchMarkerRadius, PitchShotMarker } from "./PitchShotMarker";
 import { DEFAULT_PITCH_LAYERS, type PitchLayerVisibility } from "./pitchLayers";
 import { usePitchPenalty } from "./PitchPenaltyContext";
@@ -26,15 +26,16 @@ const spatialIntegrity = (spatial: Spatial | undefined): Integrity => ({
 });
 
 /** Shared display-only heatmap canvas. It never supplies CCA/HDR inputs. */
-export function HeatmapCanvas({ points, enabled, opacity = .62 }: { points: readonly ActivityPoint[]; enabled: boolean; opacity?: number }) {
+export function HeatmapCanvas({ points = [], cellCounts, enabled }: { points?: readonly ActivityPoint[]; cellCounts?: readonly number[]; enabled: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const paintedRef = useRef(false);
-  const normalized = useMemo(() => normalizeDensity(legacyDensityGrid(points)), [points]);
+  const native = useMemo(() => cellCounts ? fullActivityDensityGrid(cellCounts) : legacyDensityGrid(points), [cellCounts, points]);
+  const normalized = useMemo(() => normalizeDensity(native), [native]);
   const displayDensity = useMemo(() => displayDensityGrid(normalized), [normalized]);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    if (!enabled || !points.length) {
+    if (!enabled || !normalized.some((value) => value > 0)) {
       if (paintedRef.current) canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
       canvas.width = 0; canvas.height = 0; paintedRef.current = false;
       return;
@@ -47,14 +48,14 @@ export function HeatmapCanvas({ points, enabled, opacity = .62 }: { points: read
       if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
       const context = canvas.getContext("2d");
       if (!context) return;
-      context.clearRect(0, 0, width, height); renderDisplayHeatmap(context, width, height, displayDensity, opacity); paintedRef.current = true;
+      context.clearRect(0, 0, width, height); renderDisplayHeatmap(context, width, height, displayDensity); paintedRef.current = true;
     };
     draw();
     const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(draw);
     observer?.observe(canvas); window.addEventListener("resize", draw);
     return () => { observer?.disconnect(); window.removeEventListener("resize", draw); };
-  }, [displayDensity, enabled, opacity, points.length]);
-  return <canvas ref={canvasRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full blur-[10px]" data-layer="legacy-density" data-density-columns="96" data-density-rows="66" />;
+  }, [displayDensity, enabled, normalized]);
+  return <canvas ref={canvasRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" data-layer="legacy-density" data-density-source={cellCounts ? "full-tier3-32x22" : "legacy-max180"} data-density-columns="96" data-density-rows="66" data-blur-px="0" />;
 }
 
 function useMarkerScale() {

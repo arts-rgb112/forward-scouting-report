@@ -12,6 +12,8 @@ import argparse
 import csv
 import json
 import math
+import os
+import tempfile
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -23,6 +25,9 @@ RAW_ROOT = DATA / "harvest" / "heatmaps"
 DEFAULT_OUTPUT = DATA / "tactical_full_activity_aggregate.json"
 
 VERSION = "sportsapi-heatmap-points-count-weighted-full-v1"
+HEATMAP_VERSION = "full-tier3-count-weighted-histogram-32x22-v1"
+HEATMAP_COLUMNS = 32
+HEATMAP_ROWS = 22
 LANES = (("L1", 0.0, 21.82), ("L2", 21.82, 37.0), ("L3R", 37.0, 50.0),
          ("L3L", 50.0, 63.0), ("L4", 63.0, 78.18), ("L5", 78.18, 100.0))
 DEPTHS = (0.0, 16.67, 33.33, 50.0, 66.67, 83.33, 100.0)
@@ -54,9 +59,9 @@ def _rounded_percentages(counts: dict[str, int], total: int, order: tuple[str, .
     return result
 
 
-def _context(row: dict[str, str]) -> tuple[str, Path]:
+def _context(row: dict[str, str], raw_root: Path = RAW_ROOT) -> tuple[str, Path]:
     key = row["heatmap_key"].strip()
-    path = RAW_ROOT / _slug(row["competition_name"]) / row["season_id"].strip() / f"{row['sportsapi_player_id'].strip()}.json"
+    path = raw_root / _slug(row["competition_name"]) / row["season_id"].strip() / f"{row['sportsapi_player_id'].strip()}.json"
     return key, path
 
 
@@ -70,6 +75,7 @@ def aggregate_payload(payload: object) -> dict[str, Any]:
     center_boundary = 0
     invalid = Counter()
     weighted_x = weighted_y = weighted_x2 = weighted_y2 = 0.0
+    histogram = [0] * (HEATMAP_COLUMNS * HEATMAP_ROWS)
     for point in points if isinstance(points, list) else []:
         raw_cells += 1
         if not isinstance(point, dict):
@@ -90,6 +96,9 @@ def aggregate_payload(payload: object) -> dict[str, Any]:
             invalid["outside_normalized_pitch"] += count
             continue
         lane_counts[LANES[lane][0]] += count
+        column = min(HEATMAP_COLUMNS - 1, math.floor(x / 100.0 * HEATMAP_COLUMNS))
+        row = min(HEATMAP_ROWS - 1, math.floor(y / 100.0 * HEATMAP_ROWS))
+        histogram[row * HEATMAP_COLUMNS + column] += count
         if y == 50.0:
             center_boundary += count
         # The existing 30-cell display stays five-lane: the new centre split
@@ -124,15 +133,21 @@ def aggregate_payload(payload: object) -> dict[str, Any]:
         "positionalGrid": {cell: {"activityPoints": grid_counts[cell], "activityPct": grid_pct[cell]} for cell in grid_order},
         "activitySpreadX": spread(weighted_x, weighted_x2),
         "activitySpreadY": spread(weighted_y, weighted_y2),
+        "activityHeatmap": {
+            "definitionVersion": HEATMAP_VERSION,
+            "columns": HEATMAP_COLUMNS,
+            "rows": HEATMAP_ROWS,
+            "cellCounts": histogram,
+        },
     }
 
 
-def build(output: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
+def build(output: Path = DEFAULT_OUTPUT, raw_root: Path = RAW_ROOT) -> dict[str, Any]:
     contexts: dict[str, dict[str, Any]] = {}
     unavailable = 0
     with (DATA / "tactical_3zone_ratio.csv").open(encoding="utf-8", newline="") as source:
         for row in csv.DictReader(source):
-            key, path = _context(row)
+            key, path = _context(row, raw_root)
             if key in contexts:
                 continue
             if not path.exists():
@@ -152,13 +167,29 @@ def build(output: Path = DEFAULT_OUTPUT) -> dict[str, Any]:
         "unavailableContextCount": unavailable,
         "contexts": contexts,
     }
-    output.write_text(json.dumps(result, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(result, ensure_ascii=False, separators=(",", ":")) + "\n"
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="", dir=output.parent,
+            prefix=f".{output.name}.", suffix=".tmp", delete=False,
+        ) as temporary:
+            temporary.write(serialized)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            temporary_path = Path(temporary.name)
+        os.replace(temporary_path, output)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
     return result
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--raw-root", type=Path, default=RAW_ROOT)
     args = parser.parse_args()
-    summary = build(args.output)
+    summary = build(args.output, args.raw_root)
     print(json.dumps({key: summary[key] for key in ("contextCount", "unavailableContextCount", "activitySourceDefinitionVersion")}, ensure_ascii=False))
