@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·실연결 검증 완료, commit 대기 — Slack `to_do_list`·`okr` 읽기 전용 컨텍스트 채널 연결 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-slack-loop/messi-2-dashboard
+- 범위/결과: 공개 채널 OAuth 권한과 봇 멤버십을 실제 API로 확인했다(`to_do_list` C0BUQLE84BT, `okr` C0BUSD1ML68). `SLACK_CONTEXT_CHANNEL_IDS`를 Windows 사용자 설정에 두 채널로 등록하고 기존 보고 4개(3,115자)를 토큰 없는 bounded·redacted 상태로 동기화했다. listener 시작 시 최근 기록을 보충하고 Socket Mode 신규 메시지를 누적하며, `[APPLY]`/`[REVISE]`의 단일 Codex 실행 문맥에만 읽기 전용 배경으로 주입한다. 두 채널 메시지 자체는 실행 트리거가 아니며 파일 변경·테스트·Codex 호출을 일으키지 않는다. `test_agent_loop.py` 28/28, `py_compile`, Socket Mode hello(`contextChannelCount=2`)가 통과했다. Slack 토큰 원문, 점수·API·데이터·SportsAPI 수집·배포는 변경하지 않았다.
+
 - 상태: 로컬 구현·검증 완료, Claude exact ID allowlist 설정 및 실수신 대기 — Slack Claude 계획/토론 → Codex 단일 실행 오케스트레이션 및 구독 사용량 보호 (2026-09-03 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
 - 범위/결과: `[PLAN]`·`[DISCUSS]`는 스레드 기록만 하고 Codex·파일·테스트를 호출하지 않으며, `[APPLY]`·`[REVISE]`만 누적된 스레드 문맥으로 각각 단 한 번 `codex exec`를 실행하도록 내부 Codex planner와 자동 반복을 제거했다. Claude bot/app은 `SLACK_ALLOWED_BOT_IDS`/`SLACK_ALLOWED_APP_IDS` exact allowlist만 허용하고 self-bot·무태그 메시지는 거부한다. 토큰을 저장하지 않는 원자적 스레드 상태, 재시작 후 문맥·event 중복 차단, 사용자 전용 `[RESET]`, `[STOP]`, 기본 스레드당 3회 실행 상한을 추가했다. `test_agent_loop.py` 26/26 및 `py_compile`이 통과했고 모든 모델 호출은 mock했다. 호스트 `--check`는 ChatGPT 구독 Codex 준비·Slack Socket 준비·단일 실행 프로토콜을 확인했지만 Claude allowlist는 아직 `0/0`이라 exact bot/app ID 설정 전 Claude 메시지는 fail-closed한다. Slack 토큰·SportsAPI 수집·점수·API·데이터·배포는 변경하지 않았다.

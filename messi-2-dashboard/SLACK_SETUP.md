@@ -7,19 +7,23 @@ no automatic model retry loop.
 
 ## Slack app configuration
 
-1. Add bot OAuth scopes `chat:write`, `app_mentions:read`, and
+1. Add bot OAuth scopes `chat:write`, `app_mentions:read`, `channels:read`, and
    `channels:history`.
 2. Enable Socket Mode.
 3. Generate an app-level token with `connections:write`.
 4. Enable Event Subscriptions and subscribe to bot events `app_mention` and
    `message.channels`.
 5. Install or reinstall the app to the workspace.
-6. Invite the bot to one dedicated public channel.
+6. Invite the bot to one dedicated execution channel and any read-only report
+   channels.
 7. Store credentials only as Windows user environment variables:
 
    - `SLACK_BOT_TOKEN`: bot token beginning with `xoxb-`
    - `SLACK_APP_TOKEN`: app token beginning with `xapp-`
    - `SLACK_CHANNEL_ID`: exact channel ID beginning with `C`
+   - `SLACK_CONTEXT_CHANNEL_IDS`: comma-separated IDs for read-only report
+     channels; these messages enrich future execution context but never trigger
+     Codex, file writes, or tests
    - `SLACK_AUDIT_REQUIRED`: `true`
    - `SLACK_ALLOWED_BOT_IDS`: comma-separated exact Claude bot IDs (`B...`)
    - `SLACK_ALLOWED_APP_IDS`: comma-separated exact Claude app IDs (`A...`)
@@ -69,6 +73,13 @@ User:   [REVISE] Fix only the failed marker-size assertion.
 For a new thread, mention the audit app. Thread replies are received through
 `message.channels`; therefore `channels:history` and that bot event are needed
 for both human and allowlisted-Claude follow-ups.
+
+Messages from `SLACK_CONTEXT_CHANNEL_IDS` are synchronized when the listener
+starts and then captured through `message.channels`. The bounded, redacted
+snapshot is stored in `.agent-loop-state/shared-slack-context.json` and added
+as background context only when a human explicitly sends `[APPLY]` or
+`[REVISE]` in the execution channel. The latest explicit human instruction
+always wins.
 
 ## Codex subscription authentication
 

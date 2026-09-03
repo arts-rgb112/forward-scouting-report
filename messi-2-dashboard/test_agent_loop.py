@@ -267,6 +267,43 @@ export const label = "히트맵";
         self.assertEqual(command.actor_type, "allowed_bot")
         self.assertEqual(command.text, "[PLAN] bounded work")
 
+    def test_context_channel_message_is_saved_but_never_becomes_a_command(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            context_store = agent_loop.SlackContextStore(Path(temp_dir))
+            bridge = agent_loop.SlackSocketBridge(
+                app_token="xapp-test",
+                bot_token="xoxb-test",
+                channel_id="CEXEC",
+                context_channel_ids={"CTODO", "COKR"},
+                context_store=context_store,
+            )
+            envelope = {
+                "payload": {
+                    "type": "event_callback",
+                    "event_id": "EvReport",
+                    "event": {
+                        "type": "message",
+                        "channel": "CTODO",
+                        "user": "UCLAUDE",
+                        "text": "정기 업무 보고",
+                        "ts": "100.57",
+                    },
+                }
+            }
+            self.assertTrue(bridge.capture_context_from_envelope(envelope))
+            self.assertFalse(bridge.capture_context_from_envelope(envelope))
+            self.assertFalse(
+                context_store.append(
+                    channel_id="CTODO",
+                    event_id="history:CTODO:100.57",
+                    event_ts="100.57",
+                    text="정기 업무 보고",
+                    actor="human:UCLAUDE",
+                )
+            )
+            self.assertIsNone(bridge.command_from_envelope(envelope))
+            self.assertIn("정기 업무 보고", context_store.context({"CTODO", "COKR"}))
+
     def test_slack_socket_always_rejects_own_bot_user(self):
         bridge = agent_loop.SlackSocketBridge(
             app_token="xapp-test",
@@ -388,6 +425,52 @@ export const label = "히트맵";
             self.assertEqual(run_tests.call_count, 1)
             self.assertEqual((root / "src/one.ts").read_text(encoding="utf-8"), "export const one = 1;")
             self.assertEqual(store.load("C123", "200.2")["executionCount"], 1)
+
+    def test_apply_includes_read_only_report_context_without_extra_codex_turn(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = agent_loop.SlackThreadStore(root / "thread-state")
+            context_store = agent_loop.SlackContextStore(root / "context-state")
+            context_store.append(
+                channel_id="COKR",
+                event_id="history:COKR:1",
+                event_ts="1",
+                text="OKR 기준선 보고",
+                actor="human:UCLAUDE",
+            )
+            command = agent_loop.SlackCommand(
+                event_id="EvApplyContext",
+                user_id="U1",
+                text="[APPLY] 승인된 변경",
+                channel_id="C123",
+                thread_ts="200.21",
+                event_ts="2",
+            )
+            sink = agent_loop.SlackAuditSink(bot_token="xoxb-test", channel_id="C123")
+            passed = agent_loop.TestResult(["test"], 0, "ok", 0.1)
+            response = "[FILE: src/context.ts]\n```ts\nexport const context = true;\n```"
+            with patch.dict(os.environ, {"SLACK_CONTEXT_CHANNEL_IDS": "CTODO,COKR"}, clear=False):
+                with patch.object(agent_loop, "PROJECT_ROOT", root):
+                    with patch.object(agent_loop.SlackAuditSink, "from_environment", return_value=sink):
+                        with patch.object(sink, "_bot_post"):
+                            with patch.object(
+                                agent_loop,
+                                "build_codex_runner",
+                                return_value=(agent_loop.CodexCliRunner("codex"), "ready"),
+                            ):
+                                with patch.object(agent_loop, "call_agent", return_value=response) as call_agent:
+                                    with patch.object(agent_loop, "run_tests", return_value=passed):
+                                        result = agent_loop.handle_slack_command(
+                                            command,
+                                            max_iterations=1,
+                                            test_timeout=1,
+                                            state_store=store,
+                                            context_store=context_store,
+                                        )
+            self.assertEqual(result, 0)
+            self.assertEqual(call_agent.call_count, 1)
+            self.assertIn("OKR 기준선 보고", call_agent.call_args.kwargs["prompt"])
+            self.assertIn("background status only", call_agent.call_args.kwargs["prompt"])
 
     def test_untagged_message_never_invokes_codex(self):
         command = agent_loop.SlackCommand(
