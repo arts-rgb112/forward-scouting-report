@@ -27,6 +27,31 @@ Do not put credentials in source files, chat messages, `.env` files, command
 output, or Git. Restart the terminal/Codex process after changing Windows user
 environment variables.
 
+## Codex subscription authentication
+
+The planner and coder run through the local `codex exec` command, not the
+OpenAI Responses API. Authenticate the Codex CLI with the same ChatGPT account
+that owns the Codex subscription:
+
+```powershell
+codex login status
+```
+
+The output must explicitly say that the CLI is signed in with ChatGPT. If it
+reports API-key authentication, switch it before starting the listener:
+
+```powershell
+codex logout
+codex login
+```
+
+Choose **ChatGPT** in the browser login flow. `agent_loop.py` fails closed when
+it cannot confirm ChatGPT authentication. It also removes `OPENAI_API_KEY` and
+related API organization variables from every `codex exec` child environment,
+so an existing machine-level API key cannot silently switch the loop back to
+usage-based API billing. `CODEX_CLI_PATH` may point to a specific Codex CLI
+executable if `codex` is not on `PATH`.
+
 ## Connection checks
 
 Send exactly one write probe:
@@ -60,6 +85,8 @@ Each run stays in that Slack thread and records `USER → AGENT`, `AGENT RUN`,
 `PLANNER → CODER`, `CODER → FILES`, `TEST → PLANNER`, and `DONE/STOP` events.
 Source code and source-file contents are not posted. ANSI terminal codes,
 OpenAI keys, Slack tokens, authorization headers, and webhook URLs are redacted.
+Claude is not called by this process; any Claude planning remains a separate
+user-managed workflow.
 
 The listener serializes tasks. A follow-up received while a run is executing is
 handled after Slack redelivers or queues the event; it does not interrupt an

@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,7 +19,6 @@ import urllib.request
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, Callable, Iterable, Sequence
 
 
@@ -29,6 +29,14 @@ DEFAULT_TEST_COMMAND = "npm test -- --watchAll=false"
 MAX_TEST_TAIL = 3_000
 MAX_CONTEXT_FILE_BYTES = 160_000
 MAX_SLACK_CHUNK = 3_000
+DEFAULT_CODEX_TIMEOUT_SECONDS = 1_800
+OPENAI_API_ENV_NAMES = (
+    "OPENAI_API_KEY",
+    "OPENAI_ORG_ID",
+    "OPENAI_ORGANIZATION",
+    "OPENAI_PROJECT_ID",
+    "OPENAI_BASE_URL",
+)
 
 FILE_BLOCK_RE = re.compile(
     r"(?ms)^\[FILE:\s*([^\]\r\n]+?)\s*\]\s*\r?\n"
@@ -74,6 +82,12 @@ class SlackCommand:
     event_ts: str
 
 
+@dataclass(frozen=True)
+class CodexCliRunner:
+    executable: str
+    authentication: str = "chatgpt-subscription"
+
+
 def configure_stdio() -> None:
     """Force stable UTF-8 output even from a CP949 Windows console."""
     for stream in (sys.stdout, sys.stderr):
@@ -90,55 +104,79 @@ def normalized_environment(base: dict[str, str] | None = None) -> dict[str, str]
     return env
 
 
-def build_client() -> tuple[Any | None, str]:
-    """Create an OpenAI client, or return a safe status instead of raising."""
-    if not os.environ.get("OPENAI_API_KEY", "").strip():
-        return None, "OPENAI_API_KEY is not set"
+def codex_environment(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Build a UTF-8 child environment that cannot fall back to API-key billing."""
+    env = normalized_environment(base)
+    for name in OPENAI_API_ENV_NAMES:
+        env.pop(name, None)
+    return env
+
+
+def resolve_codex_executable() -> str:
+    configured = os.environ.get("CODEX_CLI_PATH", "").strip()
+    if configured:
+        candidate = Path(configured).expanduser()
+        if not candidate.is_file():
+            raise AgentLoopError(f"CODEX_CLI_PATH is not a file: {candidate}")
+        return str(candidate)
+    discovered = shutil.which("codex")
+    if not discovered:
+        raise AgentLoopError("Codex CLI was not found on PATH")
+    return discovered
+
+
+def _completed_output(completed: subprocess.CompletedProcess[str]) -> str:
+    return "\n".join(part for part in (completed.stdout, completed.stderr) if part).strip()
+
+
+def inspect_codex_auth(executable: str, timeout_seconds: int = 30) -> str:
+    """Require an explicit ChatGPT subscription login before any agent run."""
     try:
-        from openai import OpenAI
-    except (ImportError, OSError) as exc:
-        return _StdlibOpenAIClient(os.environ["OPENAI_API_KEY"]), "ready (stdlib HTTPS fallback)"
-    try:
-        return OpenAI(), "ready"
-    except Exception as exc:
-        return None, f"OpenAI client initialization failed: {type(exc).__name__}: {exc}"
-
-
-class _StdlibResponses:
-    """Small Responses API fallback used when the optional SDK is unavailable."""
-
-    def __init__(self, api_key: str) -> None:
-        self._api_key = api_key
-
-    def create(self, **payload: Any) -> SimpleNamespace:
-        request = urllib.request.Request(
-            "https://api.openai.com/v1/responses",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
+        completed = subprocess.run(
+            [executable, "login", "status"],
+            cwd=PROJECT_ROOT,
+            env=codex_environment(),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds,
+            check=False,
         )
-        try:
-            with urllib.request.urlopen(request, timeout=120) as response:
-                body = json.loads(response.read().decode("utf-8", errors="replace"))
-        except urllib.error.HTTPError as exc:
-            raise AgentLoopError(f"Responses API HTTP {exc.code}") from exc
-        except urllib.error.URLError as exc:
-            raise AgentLoopError(f"Responses API network error: {exc.reason}") from exc
-        chunks: list[str] = []
-        for item in body.get("output", []):
-            for content in item.get("content", []):
-                text = content.get("text")
-                if content.get("type") == "output_text" and isinstance(text, str):
-                    chunks.append(text)
-        return SimpleNamespace(output_text="".join(chunks))
+    except subprocess.TimeoutExpired as exc:
+        raise AgentLoopError("codex login status timed out") from exc
+    except OSError as exc:
+        raise AgentLoopError(
+            f"Codex CLI could not start: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    output = redact_audit_text(_completed_output(completed))
+    if completed.returncode != 0:
+        raise AgentLoopError(
+            f"codex login status failed ({completed.returncode}): {output[-MAX_TEST_TAIL:]}"
+        )
+    folded = output.casefold()
+    if any(marker in folded for marker in ("api key", "api-key", "usage-based")):
+        raise AgentLoopError(
+            "Codex CLI is authenticated with an API key. Run `codex logout`, then "
+            "`codex login` and choose ChatGPT before starting the Slack listener."
+        )
+    if "chatgpt" not in folded:
+        raise AgentLoopError(
+            "Could not confirm ChatGPT subscription authentication from "
+            f"`codex login status`: {output[-MAX_TEST_TAIL:]}"
+        )
+    return output
 
 
-class _StdlibOpenAIClient:
-    def __init__(self, api_key: str) -> None:
-        self.responses = _StdlibResponses(api_key)
+def build_codex_runner() -> tuple[CodexCliRunner | None, str]:
+    """Create a subscription-only Codex CLI runner, or return a safe status."""
+    try:
+        executable = resolve_codex_executable()
+        inspect_codex_auth(executable)
+    except AgentLoopError as exc:
+        return None, str(exc)
+    return CodexCliRunner(executable=executable), "ready (ChatGPT subscription via codex exec)"
 
 
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -596,17 +634,73 @@ def collect_requested_context(response_text: str) -> str:
     return "\n\n".join(sections)
 
 
-def call_agent(client: Any, *, model: str, instructions: str, prompt: str) -> str:
-    response = client.responses.create(
-        model=model,
-        instructions=instructions,
-        input=prompt,
-        store=False,
+def call_agent(
+    runner: CodexCliRunner,
+    *,
+    role: str,
+    instructions: str,
+    prompt: str,
+    timeout_seconds: int,
+) -> str:
+    """Run one read-only, non-interactive Codex turn using ChatGPT plan access."""
+    combined_prompt = (
+        f"ROLE: {role}\n\n"
+        f"ROLE INSTRUCTIONS\n{instructions.strip()}\n\n"
+        f"WORK ITEM\n{prompt.strip()}\n"
     )
-    output_text = getattr(response, "output_text", None)
-    if not isinstance(output_text, str) or not output_text.strip():
-        raise AgentLoopError("Responses API returned no output_text")
-    return output_text
+    with tempfile.TemporaryDirectory(prefix="messi-codex-exec-") as temp_dir:
+        output_path = Path(temp_dir) / "last-message.txt"
+        argv = [
+            runner.executable,
+            "exec",
+            "--ephemeral",
+            "--color",
+            "never",
+            "--sandbox",
+            "read-only",
+            "--cd",
+            str(PROJECT_ROOT),
+            "--output-last-message",
+            str(output_path),
+            "-",
+        ]
+        try:
+            completed = subprocess.run(
+                argv,
+                cwd=PROJECT_ROOT,
+                env=codex_environment(),
+                input=combined_prompt,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise AgentLoopError(
+                f"Codex {role} timed out after {timeout_seconds}s"
+            ) from exc
+        except OSError as exc:
+            raise AgentLoopError(
+                f"Codex {role} could not start: {type(exc).__name__}: {exc}"
+            ) from exc
+
+        process_output = redact_audit_text(_completed_output(completed))
+        if completed.returncode != 0:
+            raise AgentLoopError(
+                f"Codex {role} failed ({completed.returncode}): "
+                f"{process_output[-MAX_TEST_TAIL:]}"
+            )
+        if not output_path.is_file():
+            raise AgentLoopError(
+                f"Codex {role} returned no final message file: "
+                f"{process_output[-MAX_TEST_TAIL:]}"
+            )
+        output_text = output_path.read_text(encoding="utf-8", errors="replace")
+        if not output_text.strip():
+            raise AgentLoopError(f"Codex {role} returned an empty final message")
+        return output_text
 
 
 PLANNER_INSTRUCTIONS = """You are the planning/review agent for a bounded React/Vite task.
@@ -630,18 +724,17 @@ def run_loop(
     max_iterations: int,
     test_timeout: int,
     *,
+    agent_timeout: int = DEFAULT_CODEX_TIMEOUT_SECONDS,
     require_slack: bool = False,
     audit_sink: SlackAuditSink | None = None,
 ) -> int:
-    client, client_status = build_client()
-    if client is None:
-        raise AgentLoopError(client_status)
+    runner, runner_status = build_codex_runner()
+    if runner is None:
+        raise AgentLoopError(runner_status)
     if not task_file.is_file():
         raise AgentLoopError(f"task file not found: {task_file}")
     task = _read_utf8(task_file)
     audit = audit_sink or SlackAuditSink.from_environment(required=require_slack)
-    planner_model = os.environ.get("OPENAI_PLANNER_MODEL", "gpt-5.4")
-    coder_model = os.environ.get("OPENAI_CODER_MODEL", planner_model)
     run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
     history: list[dict[str, Any]] = []
     test_result: TestResult | None = None
@@ -649,7 +742,7 @@ def run_loop(
 
     audit.post(
         "AGENT RUN",
-        f"run={run_id}\nplanner={planner_model}\ncoder={coder_model}\n"
+        f"run={run_id}\nengine=codex exec\nauth={runner.authentication}\n"
         f"task={task_file.name}\n\n{task[:2_000]}",
         root=not bool(audit.thread_ts),
     )
@@ -657,7 +750,11 @@ def run_loop(
     try:
         for iteration in range(1, max_iterations + 1):
             planner_text = call_agent(
-                client, model=planner_model, instructions=PLANNER_INSTRUCTIONS, prompt=planner_prompt
+                runner,
+                role="planner",
+                instructions=PLANNER_INSTRUCTIONS,
+                prompt=planner_prompt,
+                timeout_seconds=agent_timeout,
             )
             audit.post(f"PLANNER → CODER · iteration {iteration}", planner_text)
             context = collect_requested_context(planner_text)
@@ -677,10 +774,11 @@ def run_loop(
                 planner_text += "\nTests have not passed; provide the next corrective plan."
 
             coder_text = call_agent(
-                client,
-                model=coder_model,
+                runner,
+                role="coder",
                 instructions=CODER_INSTRUCTIONS,
                 prompt=f"TASK\n{task}\n\nPLANNER\n{planner_text}\n\nSOURCE\n{context or '[none requested]'}",
+                timeout_seconds=agent_timeout,
             )
             proposed = extract_file_changes(coder_text)
             audit.post(
@@ -725,7 +823,13 @@ def run_loop(
     return 2
 
 
-def handle_slack_command(command: SlackCommand, *, max_iterations: int, test_timeout: int) -> int:
+def handle_slack_command(
+    command: SlackCommand,
+    *,
+    max_iterations: int,
+    test_timeout: int,
+    agent_timeout: int = DEFAULT_CODEX_TIMEOUT_SECONDS,
+) -> int:
     audit = SlackAuditSink.from_environment(required=True)
     audit.thread_ts = command.thread_ts
     audit.post(
@@ -752,6 +856,7 @@ def handle_slack_command(command: SlackCommand, *, max_iterations: int, test_tim
             temporary_path,
             max_iterations,
             test_timeout,
+            agent_timeout=agent_timeout,
             require_slack=True,
             audit_sink=audit,
         )
@@ -761,13 +866,14 @@ def handle_slack_command(command: SlackCommand, *, max_iterations: int, test_tim
 
 
 def check_environment(run_test: bool = False) -> int:
-    client, status = build_client()
+    runner, status = build_codex_runner()
     payload: dict[str, Any] = {
         "projectRoot": str(PROJECT_ROOT),
         "packageJson": (PROJECT_ROOT / "package.json").is_file(),
         "taskFile": DEFAULT_TASK_FILE.is_file(),
-        "apiClientReady": client is not None,
-        "apiClientStatus": status,
+        "codexCliReady": runner is not None,
+        "codexCliStatus": status,
+        "openAiApiKeyIgnored": bool(os.environ.get("OPENAI_API_KEY", "").strip()),
         "ci": normalized_environment().get("CI"),
         "pythonIoEncoding": normalized_environment().get("PYTHONIOENCODING"),
         "defaultTestCommand": DEFAULT_TEST_COMMAND,
@@ -780,7 +886,7 @@ def check_environment(run_test: bool = False) -> int:
     if run_test:
         payload["tests"] = asdict(run_tests())
     print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0 if payload["packageJson"] and payload["taskFile"] else 2
+    return 0 if payload["packageJson"] and payload["taskFile"] and payload["codexCliReady"] else 2
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
@@ -806,6 +912,12 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--task", type=Path, default=DEFAULT_TASK_FILE)
     parser.add_argument("--max-iterations", type=int, default=8)
     parser.add_argument("--test-timeout", type=int, default=900)
+    parser.add_argument(
+        "--agent-timeout",
+        type=int,
+        default=DEFAULT_CODEX_TIMEOUT_SECONDS,
+        help="timeout in seconds for each planner or coder codex exec turn",
+    )
     return parser.parse_args(argv)
 
 
@@ -813,6 +925,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = parse_args(argv)
     if args.max_iterations < 1:
         raise AgentLoopError("--max-iterations must be positive")
+    if args.agent_timeout < 1:
+        raise AgentLoopError("--agent-timeout must be positive")
     if args.check_slack:
         sink = SlackAuditSink.from_environment(required=True)
         sink.post("AGENT LOOP · CONNECTION TEST", "Slack audit transport is ready.", root=True)
@@ -823,10 +937,19 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(json.dumps(asyncio.run(bridge.check_connection()), ensure_ascii=False, indent=2))
         return 0
     if args.listen_slack:
+        runner, runner_status = build_codex_runner()
+        if runner is None:
+            raise AgentLoopError(runner_status)
         bridge = SlackSocketBridge.from_environment()
         print(
             json.dumps(
-                {"status": "listening", "channelConfigured": True, "mentionRequiredForNewThread": True},
+                {
+                    "status": "listening",
+                    "engine": "codex exec",
+                    "authentication": runner.authentication,
+                    "channelConfigured": True,
+                    "mentionRequiredForNewThread": True,
+                },
                 ensure_ascii=False,
             )
         )
@@ -836,6 +959,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                     command,
                     max_iterations=args.max_iterations,
                     test_timeout=args.test_timeout,
+                    agent_timeout=args.agent_timeout,
                 )
             )
         )
@@ -847,6 +971,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         args.task.resolve(),
         args.max_iterations,
         args.test_timeout,
+        agent_timeout=args.agent_timeout,
         require_slack=require_slack,
     )
 

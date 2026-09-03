@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·단위 검증 완료, 호스트 ChatGPT 로그인 smoke 확인 대기 — Slack 오케스트레이터의 OpenAI API 호출을 ChatGPT 인증 `codex exec`로 전환 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
+- 범위/결과: `agent_loop.py`의 planner/coder OpenAI Responses API/SDK·stdlib HTTPS fallback을 제거하고, 로컬 Codex CLI의 ChatGPT 구독 인증과 stable non-interactive `codex exec`를 사용하도록 전환했다. `OPENAI_API_KEY`·조직·프로젝트·Base URL이 설정돼 있어도 child process에서 제거하며, 시작 전 `codex login status` 출력이 ChatGPT 인증임을 명시하지 않거나 API-key 인증이면 파일 수정 전에 fail-closed한다. planner/coder 모두 `--ephemeral --sandbox read-only --output-last-message`로 실행하고 기존 Slack Socket Mode 수신·thread 감사·원자적 파일 패치·테스트·중복 event 차단은 보존했다. `test_agent_loop.py` 17/17과 `py_compile`이 통과했다. 이 Codex 샌드박스 계정은 WindowsApps의 bundled `codex.exe` 실행 ACL이 없어 실제 host login smoke만 수행할 수 없었으며, 사용자의 일반 PowerShell에서 `codex login status`와 `python agent_loop.py --check`로 최종 확인한다. Claude 자동 호출은 범위 밖이며 사용자가 별도로 운용한다. 점수·API·데이터·SportsAPI 수집·배포는 변경하지 않았다.
+
 - 상태: 구현·전송/WebSocket 검증 완료, 사용자 멘션 수신 확인 대기 — Slack Socket Mode planner/coder 대화 브리지 (2026-09-03 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
 - 범위/결과: 사용자 환경에서 `SLACK_BOT_TOKEN`·`SLACK_APP_TOKEN`·`SLACK_CHANNEL_ID`·`SLACK_AUDIT_REQUIRED` 존재만 확인했으며 값은 출력·로그·Git에 기록하지 않았다. `chat.postMessage` 실전송은 thread 생성까지 성공했고 Socket Mode는 `connected=true/hello=true`를 확인했다. 승인 채널의 새 작업은 app mention만 허용하고, 활성 thread의 사람 후속 메시지만 직렬 처리한다. bot/self·다른 채널·무관 일반 메시지·중복 event는 거부하며 envelope은 모델 처리 전에 ack한다. `연결 확인`/`연결 테스트`/`ping`은 모델·파일 변경 없이 응답한다. 파일 패치·테스트·모델 호출의 기존 fail-closed 경계는 유지했고 Python 단위 테스트 `14 passed`와 `py_compile`을 통과했다. 실제 사용자 event 수신은 listener 실행 뒤 멘션 1건으로 최종 확인한다. 점수·API·데이터·SportsAPI 수집·배포는 변경하지 않는다.

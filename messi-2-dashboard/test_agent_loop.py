@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from subprocess import CompletedProcess
 from unittest.mock import patch
 
 
@@ -38,18 +39,68 @@ export const label = "히트맵";
         with self.assertRaises(agent_loop.AgentLoopError):
             agent_loop.apply_file_changes("[FILE: ../secret]\n```\nnope\n```")
 
-    def test_missing_api_key_is_a_safe_status(self):
-        with patch.dict(os.environ, {}, clear=True):
-            client, status = agent_loop.build_client()
-        self.assertIsNone(client)
-        self.assertEqual(status, "OPENAI_API_KEY is not set")
+    def test_codex_environment_removes_api_billing_variables(self):
+        env = agent_loop.codex_environment(
+            {
+                "OPENAI_API_KEY": "must-not-leak",
+                "OPENAI_PROJECT_ID": "project",
+                "OPENAI_BASE_URL": "https://example.invalid",
+                "SLACK_CHANNEL_ID": "C123",
+            }
+        )
+        self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertNotIn("OPENAI_PROJECT_ID", env)
+        self.assertNotIn("OPENAI_BASE_URL", env)
+        self.assertEqual(env["SLACK_CHANNEL_ID"], "C123")
+        self.assertEqual(env["CI"], "true")
 
-    def test_missing_sdk_uses_no_install_http_fallback(self):
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-only"}, clear=True):
-            with patch.dict(sys.modules, {"openai": None}):
-                client, status = agent_loop.build_client()
-        self.assertIsNotNone(client)
-        self.assertEqual(status, "ready (stdlib HTTPS fallback)")
+    def test_build_codex_runner_accepts_chatgpt_subscription_login(self):
+        completed = CompletedProcess(
+            args=["codex", "login", "status"],
+            returncode=0,
+            stdout="Logged in using ChatGPT\n",
+            stderr="",
+        )
+        with patch.object(agent_loop.shutil, "which", return_value="codex.exe"):
+            with patch.object(agent_loop.subprocess, "run", return_value=completed) as run:
+                runner, status = agent_loop.build_codex_runner()
+        self.assertEqual(runner, agent_loop.CodexCliRunner(executable="codex.exe"))
+        self.assertEqual(status, "ready (ChatGPT subscription via codex exec)")
+        self.assertNotIn("OPENAI_API_KEY", run.call_args.kwargs["env"])
+
+    def test_build_codex_runner_rejects_api_key_login(self):
+        completed = CompletedProcess(
+            args=["codex", "login", "status"],
+            returncode=0,
+            stdout="Logged in using an API key\n",
+            stderr="",
+        )
+        with patch.object(agent_loop.shutil, "which", return_value="codex.exe"):
+            with patch.object(agent_loop.subprocess, "run", return_value=completed):
+                runner, status = agent_loop.build_codex_runner()
+        self.assertIsNone(runner)
+        self.assertIn("authenticated with an API key", status)
+
+    def test_call_agent_uses_read_only_codex_exec_and_last_message(self):
+        def fake_run(argv, **kwargs):
+            output_path = Path(argv[argv.index("--output-last-message") + 1])
+            output_path.write_text("DONE\n", encoding="utf-8")
+            self.assertIn("--ephemeral", argv)
+            self.assertEqual(argv[argv.index("--sandbox") + 1], "read-only")
+            self.assertEqual(argv[-1], "-")
+            self.assertNotIn("OPENAI_API_KEY", kwargs["env"])
+            self.assertIn("ROLE: planner", kwargs["input"])
+            return CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
+
+        with patch.object(agent_loop.subprocess, "run", side_effect=fake_run):
+            result = agent_loop.call_agent(
+                agent_loop.CodexCliRunner(executable="codex.exe"),
+                role="planner",
+                instructions="Plan only.",
+                prompt="Inspect the task.",
+                timeout_seconds=10,
+            )
+        self.assertEqual(result, "DONE\n")
 
     def test_slack_required_fails_closed_without_credentials(self):
         with patch.dict(os.environ, {}, clear=True):
