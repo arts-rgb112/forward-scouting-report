@@ -50,6 +50,28 @@ export const label = "히트맵";
         self.assertIsNotNone(client)
         self.assertEqual(status, "ready (stdlib HTTPS fallback)")
 
+    def test_slack_required_fails_closed_without_credentials(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(agent_loop.AgentLoopError):
+                agent_loop.SlackAuditSink.from_environment(required=True)
+
+    def test_slack_audit_redacts_tokens_and_ansi(self):
+        raw = (
+            "\x1b[31mAuthorization: Bearer secret-token\x1b[0m "
+            "sk-example123456789 https://hooks.slack.com/services/T/A/B"
+        )
+        safe = agent_loop.redact_audit_text(raw)
+        self.assertNotIn("secret-token", safe)
+        self.assertNotIn("sk-example", safe)
+        self.assertNotIn("hooks.slack.com", safe)
+        self.assertNotIn("\x1b", safe)
+
+    def test_slack_posts_coder_summary_in_bounded_chunks(self):
+        sink = agent_loop.SlackAuditSink(bot_token="xoxb-test", channel_id="C123")
+        with patch.object(sink, "_bot_post") as post:
+            sink.post("TEST", "x" * (agent_loop.MAX_SLACK_CHUNK + 10))
+        self.assertEqual(post.call_count, 2)
+
     def test_apply_file_changes_writes_under_project_root(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

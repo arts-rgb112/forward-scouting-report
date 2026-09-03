@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 코드·로컬 검증 완료, Slack workspace 자격정보 설정 대기 — planner/coder/test 감사 채널 연동 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
+- 범위/결과: `agent_loop.py`의 역할 간 교환을 Slack 한 개 thread에 `TASK`, `PLANNER→CODER`, `CODER→FILES`, `TEST→PLANNER`, `DONE/STOP` 단계로 기록하도록 구현했다. Bot token은 `chat:write` 최소 권한과 초대된 channel ID만 환경변수에서 읽으며, 기본 감사에는 source/code 본문을 올리지 않고 파일명·바이트·테스트 tail만 전송한다. ANSI와 OpenAI/Slack token·Authorization·webhook URL은 전송 전에 redaction한다. `--require-slack`에서는 자격정보 누락 또는 전송 실패를 다음 OpenAI 호출·파일 수정 전에 fail-closed하고, `--check-slack`은 실메시지 한 건으로 연결을 검증한다. Incoming webhook은 비thread fallback으로만 지원한다. 신규 Python 단위 테스트는 `9 passed`; 현재 환경에는 Slack token/channel/webhook이 모두 없어 실전송은 하지 않았고 `--check-slack`은 의도대로 exit 2였다. 설정 절차는 `SLACK_SETUP.md`에 기록했다. 점수·API·데이터·기존 프런트 구현은 변경하지 않았으며 push·PR·merge·deploy는 별도 승인 전 금지한다.
+
 - 상태: 오케스트레이터 구축·로컬 검증 완료, PART B 원격 루프는 새 API 키 주입 대기 (2026-09-03 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
 - 범위/결과: 프로젝트 루트에 `agent_loop.py`를 두고 planner/coder Responses API 루프, 원자적 `[FILE: 상대경로]` 패치와 traversal/secret/self-edit 차단, Windows UTF-8·`CI=true`, child-process 테스트와 최대 3,000자 tail 전달을 구현했다. 요청된 Jest 명령을 먼저 실행하고 이 Vitest 저장소가 `--watchAll=false`를 거부할 때만 native 명령으로 1회 호환 재실행한다. SDK가 없으면 표준 라이브러리 HTTPS Responses client를 쓰며, 키가 없으면 network call 없이 exit 2와 원인만 반환한다. Python 단위 테스트 `6 passed`; 실제 repository test runner 호환 재실행은 `569 passed / 8 failed`로 동작했고 실패는 기존 브랜치의 4개 테스트 파일에서 발생했다. 현재 프로세스 환경에는 `OPENAI_API_KEY`가 없어 PART B agent iteration은 시작되지 않았으며, 삭제한 작업공간 최상위 초안에는 평문 키와 문법 단절이 있어 키 재발급이 필요하다. 기존 3개 탭·API·점수·코호트·CCA 계산·SportsAPI 수집은 변경하지 않았고 자동 병합·push·배포는 금지한다.

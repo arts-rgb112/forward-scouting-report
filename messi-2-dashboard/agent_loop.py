@@ -14,6 +14,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,6 +27,7 @@ DEFAULT_REPORT_FILE = PROJECT_ROOT / "AGENT_LOOP_REPORT.md"
 DEFAULT_TEST_COMMAND = "npm test -- --watchAll=false"
 MAX_TEST_TAIL = 3_000
 MAX_CONTEXT_FILE_BYTES = 160_000
+MAX_SLACK_CHUNK = 3_000
 
 FILE_BLOCK_RE = re.compile(
     r"(?ms)^\[FILE:\s*([^\]\r\n]+?)\s*\]\s*\r?\n"
@@ -125,6 +127,149 @@ class _StdlibResponses:
 class _StdlibOpenAIClient:
     def __init__(self, api_key: str) -> None:
         self.responses = _StdlibResponses(api_key)
+
+
+ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+AUDIT_SECRET_RES = (
+    re.compile(r"sk-[A-Za-z0-9_-]{12,}"),
+    re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"https://hooks\.slack\.com/services/\S+", re.I),
+    re.compile(r"(?i)(authorization\s*:\s*bearer\s+)\S+"),
+)
+
+
+def redact_audit_text(value: str) -> str:
+    text = ANSI_RE.sub("", value)
+    for pattern in AUDIT_SECRET_RES:
+        if pattern.groups:
+            text = pattern.sub(r"\1[REDACTED]", text)
+        else:
+            text = pattern.sub("[REDACTED]", text)
+    return text
+
+
+def _chunks(value: str, size: int = MAX_SLACK_CHUNK) -> list[str]:
+    value = value or "(empty)"
+    return [value[index : index + size] for index in range(0, len(value), size)]
+
+
+class SlackAuditSink:
+    """Write a redacted run transcript to one Slack channel/thread."""
+
+    def __init__(
+        self,
+        *,
+        bot_token: str = "",
+        channel_id: str = "",
+        webhook_url: str = "",
+        required: bool = False,
+    ) -> None:
+        self.bot_token = bot_token
+        self.channel_id = channel_id
+        self.webhook_url = webhook_url
+        self.required = required
+        self.thread_ts: str | None = None
+        self.disabled_reason: str | None = None
+
+    @classmethod
+    def from_environment(cls, *, required: bool = False) -> "SlackAuditSink":
+        token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+        channel = os.environ.get("SLACK_CHANNEL_ID", "").strip()
+        webhook = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
+        sink = cls(bot_token=token, channel_id=channel, webhook_url=webhook, required=required)
+        if bool(token) != bool(channel) and not webhook:
+            sink.disabled_reason = "SLACK_BOT_TOKEN and SLACK_CHANNEL_ID must be set together"
+        elif not sink.enabled:
+            sink.disabled_reason = "Slack credentials are not set"
+        if required and not sink.enabled:
+            raise AgentLoopError(sink.disabled_reason or "Slack audit is unavailable")
+        return sink
+
+    @property
+    def mode(self) -> str:
+        if self.bot_token and self.channel_id:
+            return "bot-thread"
+        if self.webhook_url:
+            return "incoming-webhook"
+        return "disabled"
+
+    @property
+    def enabled(self) -> bool:
+        return self.mode != "disabled"
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "mode": self.mode,
+            "required": self.required,
+            "channelConfigured": bool(self.channel_id),
+            "threadStarted": bool(self.thread_ts),
+            "reason": self.disabled_reason,
+        }
+
+    def _bot_post(self, text: str, *, root: bool) -> None:
+        payload: dict[str, Any] = {
+            "channel": self.channel_id,
+            "text": text,
+            "unfurl_links": False,
+            "unfurl_media": False,
+        }
+        if self.thread_ts and not root:
+            payload["thread_ts"] = self.thread_ts
+        request = urllib.request.Request(
+            "https://slack.com/api/chat.postMessage",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.bot_token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                body = json.loads(response.read().decode("utf-8", errors="replace"))
+        except urllib.error.HTTPError as exc:
+            raise AgentLoopError(f"Slack HTTP {exc.code}") from exc
+        except urllib.error.URLError as exc:
+            raise AgentLoopError(f"Slack network error: {exc.reason}") from exc
+        if body.get("ok") is not True:
+            raise AgentLoopError(f"Slack API error: {body.get('error', 'unknown_error')}")
+        if root:
+            thread_ts = body.get("ts")
+            if not isinstance(thread_ts, str) or not thread_ts:
+                raise AgentLoopError("Slack root message returned no thread timestamp")
+            self.thread_ts = thread_ts
+
+    def _webhook_post(self, text: str) -> None:
+        request = urllib.request.Request(
+            self.webhook_url,
+            data=json.dumps({"text": text}).encode("utf-8"),
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                if response.status < 200 or response.status >= 300:
+                    raise AgentLoopError(f"Slack webhook HTTP {response.status}")
+        except urllib.error.HTTPError as exc:
+            raise AgentLoopError(f"Slack webhook HTTP {exc.code}") from exc
+        except urllib.error.URLError as exc:
+            raise AgentLoopError(f"Slack webhook network error: {exc.reason}") from exc
+
+    def post(self, label: str, body: str, *, root: bool = False) -> None:
+        if not self.enabled:
+            if self.required:
+                raise AgentLoopError(self.disabled_reason or "Slack audit is unavailable")
+            return
+        safe = redact_audit_text(body)
+        pieces = _chunks(safe)
+        for index, piece in enumerate(pieces, start=1):
+            suffix = f" ({index}/{len(pieces)})" if len(pieces) > 1 else ""
+            message = f"*{label}{suffix}*\n```{piece}```"
+            if self.mode == "bot-thread":
+                self._bot_post(message, root=root and index == 1)
+            else:
+                self._webhook_post(message)
 
 
 def _safe_project_path(raw_path: str) -> Path:
@@ -292,54 +437,102 @@ def write_report(payload: dict[str, Any], report_file: Path = DEFAULT_REPORT_FIL
     report_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def run_loop(task_file: Path, max_iterations: int, test_timeout: int) -> int:
+def run_loop(
+    task_file: Path,
+    max_iterations: int,
+    test_timeout: int,
+    *,
+    require_slack: bool = False,
+) -> int:
     client, client_status = build_client()
     if client is None:
         raise AgentLoopError(client_status)
     if not task_file.is_file():
         raise AgentLoopError(f"task file not found: {task_file}")
     task = _read_utf8(task_file)
+    audit = SlackAuditSink.from_environment(required=require_slack)
     planner_model = os.environ.get("OPENAI_PLANNER_MODEL", "gpt-5.4")
     coder_model = os.environ.get("OPENAI_CODER_MODEL", planner_model)
+    run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
     history: list[dict[str, Any]] = []
     test_result: TestResult | None = None
     planner_prompt = f"TASK\n{task}\n\nRequest only the source files needed for iteration 1."
 
-    for iteration in range(1, max_iterations + 1):
-        planner_text = call_agent(
-            client, model=planner_model, instructions=PLANNER_INSTRUCTIONS, prompt=planner_prompt
-        )
-        context = collect_requested_context(planner_text)
-        if DONE_RE.search(planner_text):
-            if test_result and test_result.passed:
-                write_report({"status": "complete", "iterations": history, "finalPlanner": planner_text})
-                return 0
-            planner_text += "\nTests have not passed; provide the next corrective plan."
+    audit.post(
+        "AGENT RUN",
+        f"run={run_id}\nplanner={planner_model}\ncoder={coder_model}\n"
+        f"task={task_file.name}\n\n{task[:2_000]}",
+        root=True,
+    )
 
-        coder_text = call_agent(
-            client,
-            model=coder_model,
-            instructions=CODER_INSTRUCTIONS,
-            prompt=f"TASK\n{task}\n\nPLANNER\n{planner_text}\n\nSOURCE\n{context or '[none requested]'}",
-        )
-        applied = apply_file_changes(coder_text)
-        test_result = run_tests(timeout_seconds=test_timeout)
-        event = {
-            "iteration": iteration,
-            "planner": planner_text,
-            "applied": [asdict(change) for change in applied],
-            "tests": asdict(test_result),
-        }
-        history.append(event)
-        write_report({"status": "running", "iterations": history})
-        planner_prompt = (
-            f"TASK\n{task}\n\nITERATION {iteration}\n"
-            f"Changed: {json.dumps(event['applied'], ensure_ascii=False)}\n"
-            f"Tests: {json.dumps(event['tests'], ensure_ascii=False)}\n"
-            "Review and request exact source files for the next correction, or return DONE."
-        )
+    try:
+        for iteration in range(1, max_iterations + 1):
+            planner_text = call_agent(
+                client, model=planner_model, instructions=PLANNER_INSTRUCTIONS, prompt=planner_prompt
+            )
+            audit.post(f"PLANNER → CODER · iteration {iteration}", planner_text)
+            context = collect_requested_context(planner_text)
+            if DONE_RE.search(planner_text):
+                if test_result and test_result.passed:
+                    audit.post("PLANNER → DONE", planner_text)
+                    write_report(
+                        {
+                            "status": "complete",
+                            "runId": run_id,
+                            "slack": audit.status(),
+                            "iterations": history,
+                            "finalPlanner": planner_text,
+                        }
+                    )
+                    return 0
+                planner_text += "\nTests have not passed; provide the next corrective plan."
 
-    write_report({"status": "iteration_limit", "iterations": history})
+            coder_text = call_agent(
+                client,
+                model=coder_model,
+                instructions=CODER_INSTRUCTIONS,
+                prompt=f"TASK\n{task}\n\nPLANNER\n{planner_text}\n\nSOURCE\n{context or '[none requested]'}",
+            )
+            proposed = extract_file_changes(coder_text)
+            audit.post(
+                f"CODER → FILES · iteration {iteration}",
+                "\n".join(
+                    f"{path} · {len(content.encode('utf-8'))} bytes" for path, content in proposed
+                ),
+            )
+            applied = apply_file_changes(coder_text)
+            test_result = run_tests(timeout_seconds=test_timeout)
+            event = {
+                "iteration": iteration,
+                "planner": planner_text,
+                "applied": [asdict(change) for change in applied],
+                "tests": asdict(test_result),
+            }
+            audit.post(
+                f"TEST → PLANNER · iteration {iteration}",
+                json.dumps(event["tests"], ensure_ascii=False, indent=2),
+            )
+            history.append(event)
+            write_report(
+                {"status": "running", "runId": run_id, "slack": audit.status(), "iterations": history}
+            )
+            planner_prompt = (
+                f"TASK\n{task}\n\nITERATION {iteration}\n"
+                f"Changed: {json.dumps(event['applied'], ensure_ascii=False)}\n"
+                f"Tests: {json.dumps(event['tests'], ensure_ascii=False)}\n"
+                "Review and request exact source files for the next correction, or return DONE."
+            )
+    except Exception as exc:
+        try:
+            audit.post("AGENT RUN → STOP", f"{type(exc).__name__}: {exc}")
+        except Exception:
+            pass
+        raise
+
+    audit.post("AGENT RUN → STOP", f"iteration limit reached: {max_iterations}")
+    write_report(
+        {"status": "iteration_limit", "runId": run_id, "slack": audit.status(), "iterations": history}
+    )
     return 2
 
 
@@ -354,6 +547,7 @@ def check_environment(run_test: bool = False) -> int:
         "ci": normalized_environment().get("CI"),
         "pythonIoEncoding": normalized_environment().get("PYTHONIOENCODING"),
         "defaultTestCommand": DEFAULT_TEST_COMMAND,
+        "slack": SlackAuditSink.from_environment().status(),
     }
     if run_test:
         payload["tests"] = asdict(run_tests())
@@ -365,6 +559,12 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="validate without API calls")
     parser.add_argument("--check-tests", action="store_true", help="also run the test command")
+    parser.add_argument("--check-slack", action="store_true", help="post one Slack connectivity probe")
+    parser.add_argument(
+        "--require-slack",
+        action="store_true",
+        help="fail closed before model calls or file writes when Slack audit is unavailable",
+    )
     parser.add_argument("--task", type=Path, default=DEFAULT_TASK_FILE)
     parser.add_argument("--max-iterations", type=int, default=8)
     parser.add_argument("--test-timeout", type=int, default=900)
@@ -375,9 +575,20 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = parse_args(argv)
     if args.max_iterations < 1:
         raise AgentLoopError("--max-iterations must be positive")
+    if args.check_slack:
+        sink = SlackAuditSink.from_environment(required=True)
+        sink.post("AGENT LOOP · CONNECTION TEST", "Slack audit transport is ready.", root=True)
+        print(json.dumps(sink.status(), ensure_ascii=False, indent=2))
+        return 0
     if args.check or args.check_tests:
         return check_environment(run_test=args.check_tests)
-    return run_loop(args.task.resolve(), args.max_iterations, args.test_timeout)
+    require_slack = args.require_slack or os.environ.get("SLACK_AUDIT_REQUIRED") == "true"
+    return run_loop(
+        args.task.resolve(),
+        args.max_iterations,
+        args.test_timeout,
+        require_slack=require_slack,
+    )
 
 
 if __name__ == "__main__":
