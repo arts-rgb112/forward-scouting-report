@@ -2,6 +2,35 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료, commit 대기 — 공통 운영 규칙 통합 + Slack PART C-1/C-2 정리 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-slack-loop
+- 범위/결과: 최신 `messi-specs/CODEX_OPERATING_RULES.md` §1~§10을 레포 루트 `AGENTS.md`에 통합했다. `SLACK_AUDIT_REQUIRED`는 미설정만 기존 기본값을 유지하고, `true`/`false`는 대소문자·앞뒤 공백을 허용하며, 빈 문자열·`ture`·`1`은 시작 단계에서 `AgentLoopError`로 실패한다. 이 검사는 `--check`·listener 등 모든 모드 분기 전에 실행된다. `agent/slack-agent-loop`를 `origin/main`의 #308 병합 SHA `ccf7849` 위로 rebase해 히트맵·API·data diff를 제거했고, 최종 diff는 `AGENTS.md`, 계약/Slack 문서, `.gitignore`, `TASK_ORDER.md`, `agent_loop.py`, `test_agent_loop.py`뿐이다. `.agent-loop-state/` ignore를 확인했다. `test_agent_loop.py` 31/31, `py_compile`, `git diff --check`가 통과했다. push·PR·merge·deploy는 수행하지 않았다.
+
+- 상태: 로컬 구현·실연결 검증 완료, commit 대기 — Slack `to_do_list`·`okr` 읽기 전용 컨텍스트 채널 연결 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-slack-loop/messi-2-dashboard
+- 범위/결과: 공개 채널 OAuth 권한과 봇 멤버십을 실제 API로 확인했다(`to_do_list` C0BUQLE84BT, `okr` C0BUSD1ML68). `SLACK_CONTEXT_CHANNEL_IDS`를 Windows 사용자 설정에 두 채널로 등록하고 기존 보고 4개(3,115자)를 토큰 없는 bounded·redacted 상태로 동기화했다. listener 시작 시 최근 기록을 보충하고 Socket Mode 신규 메시지를 누적하며, `[APPLY]`/`[REVISE]`의 단일 Codex 실행 문맥에만 읽기 전용 배경으로 주입한다. 두 채널 메시지 자체는 실행 트리거가 아니며 파일 변경·테스트·Codex 호출을 일으키지 않는다. `test_agent_loop.py` 28/28, `py_compile`, Socket Mode hello(`contextChannelCount=2`)가 통과했다. Slack 토큰 원문, 점수·API·데이터·SportsAPI 수집·배포는 변경하지 않았다.
+
+- 상태: 로컬 구현·검증 완료, Claude exact ID allowlist 설정 및 실수신 대기 — Slack Claude 계획/토론 → Codex 단일 실행 오케스트레이션 및 구독 사용량 보호 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
+- 범위/결과: `[PLAN]`·`[DISCUSS]`는 스레드 기록만 하고 Codex·파일·테스트를 호출하지 않으며, `[APPLY]`·`[REVISE]`만 누적된 스레드 문맥으로 각각 단 한 번 `codex exec`를 실행하도록 내부 Codex planner와 자동 반복을 제거했다. Claude bot/app은 `SLACK_ALLOWED_BOT_IDS`/`SLACK_ALLOWED_APP_IDS` exact allowlist만 허용하고 self-bot·무태그 메시지는 거부한다. 토큰을 저장하지 않는 원자적 스레드 상태, 재시작 후 문맥·event 중복 차단, 사용자 전용 `[RESET]`, `[STOP]`, 기본 스레드당 3회 실행 상한을 추가했다. `test_agent_loop.py` 26/26 및 `py_compile`이 통과했고 모든 모델 호출은 mock했다. 호스트 `--check`는 ChatGPT 구독 Codex 준비·Slack Socket 준비·단일 실행 프로토콜을 확인했지만 Claude allowlist는 아직 `0/0`이라 exact bot/app ID 설정 전 Claude 메시지는 fail-closed한다. Slack 토큰·SportsAPI 수집·점수·API·데이터·배포는 변경하지 않았다.
+
+- 상태: 로컬 구현·단위 검증 및 호스트 ChatGPT 로그인 smoke 완료 — Slack 오케스트레이터의 OpenAI API 호출을 ChatGPT 인증 `codex exec`로 전환 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
+- 범위/결과: `agent_loop.py`의 planner/coder OpenAI Responses API/SDK·stdlib HTTPS fallback을 제거하고, 로컬 Codex CLI의 ChatGPT 구독 인증과 stable non-interactive `codex exec`를 사용하도록 전환했다. `OPENAI_API_KEY`·조직·프로젝트·Base URL이 설정돼 있어도 child process에서 제거하며, 시작 전 `codex login status` 출력이 ChatGPT 인증임을 명시하지 않거나 API-key 인증이면 파일 수정 전에 fail-closed한다. planner/coder 모두 `--ephemeral --sandbox read-only --output-last-message`로 실행하고 기존 Slack Socket Mode 수신·thread 감사·원자적 파일 패치·테스트·중복 event 차단은 보존했다. `test_agent_loop.py` 17/17과 `py_compile`이 통과했다. 호스트 사용자 npm prefix에 공식 `@openai/codex` CLI `0.153.0`을 설치했고, 호스트 권한 smoke에서 `python agent_loop.py --check`가 `codexCliReady=true`와 `ready (ChatGPT subscription via codex exec)`를 반환했다. `OPENAI_API_KEY`가 존재해도 `openAiApiKeyIgnored=true`로 확인됐다. Claude 자동 호출은 범위 밖이며 사용자가 별도로 운용한다. 점수·API·데이터·SportsAPI 수집·배포는 변경하지 않았다.
+
+- 상태: 구현·전송/WebSocket 검증 완료, 사용자 멘션 수신 확인 대기 — Slack Socket Mode planner/coder 대화 브리지 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
+- 범위/결과: 사용자 환경에서 `SLACK_BOT_TOKEN`·`SLACK_APP_TOKEN`·`SLACK_CHANNEL_ID`·`SLACK_AUDIT_REQUIRED` 존재만 확인했으며 값은 출력·로그·Git에 기록하지 않았다. `chat.postMessage` 실전송은 thread 생성까지 성공했고 Socket Mode는 `connected=true/hello=true`를 확인했다. 승인 채널의 새 작업은 app mention만 허용하고, 활성 thread의 사람 후속 메시지만 직렬 처리한다. bot/self·다른 채널·무관 일반 메시지·중복 event는 거부하며 envelope은 모델 처리 전에 ack한다. `연결 확인`/`연결 테스트`/`ping`은 모델·파일 변경 없이 응답한다. 파일 패치·테스트·모델 호출의 기존 fail-closed 경계는 유지했고 Python 단위 테스트 `14 passed`와 `py_compile`을 통과했다. 실제 사용자 event 수신은 listener 실행 뒤 멘션 1건으로 최종 확인한다. 점수·API·데이터·SportsAPI 수집·배포는 변경하지 않는다.
+- 실수신 결과/정정: 사용자 app mention은 실제 수신됐으나 OpenAI Responses 호출이 `429 credit_balance_exhausted`로 종료됐다. 이는 Slack·Socket 권한 문제가 아니라 API 조직 크레딧 부족이다. 최초 구현은 모델 실패를 `STOP`으로 두 번 게시하고 socket transport 실패로 오인해 재연결했으므로, command 예외를 socket loop 내부에서 격리하고 `run_loop`만 단일 `STOP`을 게시하도록 수정했다. 크레딧 해결 전에는 background listener를 중지한다.
+
+- 상태: 코드·로컬 검증 완료, Slack workspace 자격정보 설정 대기 — planner/coder/test 감사 채널 연동 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
+- 범위/결과: `agent_loop.py`의 역할 간 교환을 Slack 한 개 thread에 `TASK`, `PLANNER→CODER`, `CODER→FILES`, `TEST→PLANNER`, `DONE/STOP` 단계로 기록하도록 구현했다. Bot token은 `chat:write` 최소 권한과 초대된 channel ID만 환경변수에서 읽으며, 기본 감사에는 source/code 본문을 올리지 않고 파일명·바이트·테스트 tail만 전송한다. ANSI와 OpenAI/Slack token·Authorization·webhook URL은 전송 전에 redaction한다. `--require-slack`에서는 자격정보 누락 또는 전송 실패를 다음 OpenAI 호출·파일 수정 전에 fail-closed하고, `--check-slack`은 실메시지 한 건으로 연결을 검증한다. Incoming webhook은 비thread fallback으로만 지원한다. 신규 Python 단위 테스트는 `9 passed`; 현재 환경에는 Slack token/channel/webhook이 모두 없어 실전송은 하지 않았고 `--check-slack`은 의도대로 exit 2였다. 설정 절차는 `SLACK_SETUP.md`에 기록했다. 점수·API·데이터·기존 프런트 구현은 변경하지 않았으며 push·PR·merge·deploy는 별도 승인 전 금지한다.
+
+- 상태: 오케스트레이터 구축·로컬 검증 완료, PART B 원격 루프는 새 API 키 주입 대기 (2026-09-03 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b/messi-2-dashboard
+- 범위/결과: 프로젝트 루트에 `agent_loop.py`를 두고 planner/coder Responses API 루프, 원자적 `[FILE: 상대경로]` 패치와 traversal/secret/self-edit 차단, Windows UTF-8·`CI=true`, child-process 테스트와 최대 3,000자 tail 전달을 구현했다. 요청된 Jest 명령을 먼저 실행하고 이 Vitest 저장소가 `--watchAll=false`를 거부할 때만 native 명령으로 1회 호환 재실행한다. SDK가 없으면 표준 라이브러리 HTTPS Responses client를 쓰며, 키가 없으면 network call 없이 exit 2와 원인만 반환한다. Python 단위 테스트 `6 passed`; 실제 repository test runner 호환 재실행은 `569 passed / 8 failed`로 동작했고 실패는 기존 브랜치의 4개 테스트 파일에서 발생했다. 현재 프로세스 환경에는 `OPENAI_API_KEY`가 없어 PART B agent iteration은 시작되지 않았으며, 삭제한 작업공간 최상위 초안에는 평문 키와 문법 단절이 있어 키 재발급이 필요하다. 기존 3개 탭·API·점수·코호트·CCA 계산·SportsAPI 수집은 변경하지 않았고 자동 병합·push·배포는 금지한다.
+
 - 상태: 구현·실데이터 시각 QA 완료, PR #308 병합 승인 대기 — 승인 시안 v16 원본 램프 복원
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b
 - 범위/결과 (2026-09-03): 첨부 작업지시 PART A에 따라 full Tier 3 `32×22` 원천·표시 해상도·레이어 토글·2D/3D blur 분리·CCA는 유지하고, 색 계산만 승인 시안 `heatmap_dotmatrix_v16`의 원본 금색→주황→빨강 6-stop·감마 `0.6`·12단계 quantization·stop alpha·전역 opacity `0.55`로 복원했다. frontend 집중 회귀는 `36 passed`, production build는 통과했다(기존 500kB chunk warning만). Production API와 PR backend를 결합한 실데이터 QA에서 Kane 2D canvas는 `data-density-source=full-tier3-32x22`, `422×273`, 히트맵 단독 토글이었고 3D는 `data-density-input=full-tier3-32x22`, mesh `6,336`개였다. 두 화면에서 기존 보라 stop 잔존 `0`을 확인했고 캡처는 `C:/Users/USER/Downloads/files/qa-artifacts/pr308-part-a-kane-{2d,3d}-original-ramp.png`에 보존했다. 현재 Production endpoint는 HTTP `404`이므로 #308 backend 병합·Render 배포 전 Vercel Preview에서는 full-source를 직접 확인할 수 없으며, 배포 뒤 endpoint가 노출된다. 기존 `PlayerDetail.spatial`·CCA/HDR·점수·CSV·max-180 JSON은 변경하지 않았다. PART B 도트 매트릭스 탭은 #308 병합 및 별도 승인 전 착수하지 않는다.
