@@ -9,16 +9,18 @@ export const HEATMAP_ROWS = 22;
 export const DISPLAY_HEATMAP_COLUMNS = 96;
 export const DISPLAY_HEATMAP_ROWS = 66;
 /** Display-only tone mapping. Native density stays unchanged for CCA/HDR. */
-export const HEATMAP_DISPLAY_GAMMA = .65;
+export const DISPLAY_HEATMAP_COLOR_STAGES = 12;
+export const HEATMAP_DISPLAY_GAMMA = .6;
 export const HEATMAP_KERNEL = [1, 4, 6, 4, 1] as const;
 export const HEATMAP_STOPS = [
-  [0, [47, 30, 78]],
-  [.3, [124, 42, 110]],
-  [.6, [196, 70, 60]],
-  [.85, [232, 99, 42]],
-  [1, [222, 63, 31]],
+  [0, [0, 0, 0, 0]],
+  [.08, [124, 151, 71, .18]],
+  [.24, [188, 185, 65, .56]],
+  [.48, [244, 209, 60, .78]],
+  [.72, [247, 135, 39, .9]],
+  [1, [222, 63, 31, .98]],
 ] as const;
-export const HEATMAP_OPACITY = 1;
+export const HEATMAP_OPACITY = .55;
 export const TWO_D_HEATMAP_BLUR_PX = 0;
 export const THREE_D_HEATMAP_BLUR = 4;
 
@@ -110,7 +112,7 @@ export function displayDensityGrid(grid: HeatmapGrid, columns = DISPLAY_HEATMAP_
 }
 
 export function legacyHeatmapColor(value: number): readonly [number, number, number, number] {
-  const normalized = clamp(value, 0, 1);
+  const normalized = Math.round(clamp(value, 0, 1) * (DISPLAY_HEATMAP_COLOR_STAGES - 1)) / (DISPLAY_HEATMAP_COLOR_STAGES - 1);
   const upperIndex = HEATMAP_STOPS.findIndex(([stop]) => normalized <= stop);
   const upper = HEATMAP_STOPS[upperIndex < 0 ? HEATMAP_STOPS.length - 1 : upperIndex];
   const lower = HEATMAP_STOPS[Math.max(0, (upperIndex < 0 ? HEATMAP_STOPS.length - 1 : upperIndex) - 1)];
@@ -119,7 +121,7 @@ export function legacyHeatmapColor(value: number): readonly [number, number, num
     lower[1][0] + (upper[1][0] - lower[1][0]) * amount,
     lower[1][1] + (upper[1][1] - lower[1][1]) * amount,
     lower[1][2] + (upper[1][2] - lower[1][2]) * amount,
-    normalized <= 0 ? 0 : Math.min(.58, .06 + .52 * normalized),
+    lower[1][3] + (upper[1][3] - lower[1][3]) * amount,
   ];
 }
 
