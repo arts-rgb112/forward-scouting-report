@@ -7,12 +7,12 @@ no automatic model retry loop.
 
 ## Slack app configuration
 
-1. Add bot OAuth scopes `chat:write`, `app_mentions:read`, `channels:read`, and
-   `channels:history`.
+1. Add bot OAuth scopes `chat:write`, `app_mentions:read`, `channels:read`,
+   `channels:history`, `im:history`, and `reactions:write`.
 2. Enable Socket Mode.
 3. Generate an app-level token with `connections:write`.
-4. Enable Event Subscriptions and subscribe to bot events `app_mention` and
-   `message.channels`.
+4. Enable Event Subscriptions and subscribe to bot events `app_mention`,
+   `message.channels`, `message.im`, and `reaction_added`.
 5. Install or reinstall the app to the workspace.
 6. Invite the bot to one dedicated execution channel and any read-only report
    channels.
@@ -28,6 +28,14 @@ no automatic model retry loop.
    - `SLACK_ALLOWED_BOT_IDS`: comma-separated exact Claude bot IDs (`B...`)
    - `SLACK_ALLOWED_APP_IDS`: comma-separated exact Claude app IDs (`A...`)
    - `SLACK_MAX_CODEX_RUNS_PER_THREAD`: default `3`
+   - `SLACK_CLAUDE_USER_ID`: exact Claude DM recipient ID
+   - `SLACK_CODEX_RECIPIENT_ID`: exact Codex mention recipient ID
+   - `SLACK_WATCH_CHANNEL_IDS`: comma-separated execution and discussion channel IDs
+   - `SLACK_BRAINSHOWER_CHANNEL_IDS`: comma-separated discussion-channel subset
+   - `SLACK_CLAUDE_USER_IDS` / `SLACK_CLAUDE_BOT_IDS` /
+     `SLACK_CLAUDE_APP_IDS`: exact Claude sender identities
+   - `SLACK_CODEX_USER_IDS` / `SLACK_CODEX_BOT_IDS` /
+     `SLACK_CODEX_APP_IDS`: exact Codex sender identities
 
 Only configure the Claude identity actually used in the workspace. A bot
 message is accepted when either its exact `bot_id` or `app_id` is allowlisted;
@@ -135,6 +143,36 @@ python agent_loop.py --check-slack-socket
 ```powershell
 python agent_loop.py --listen-slack --require-slack
 ```
+
+For continuous command handling plus channel/DM monitoring, run the repository
+watcher instead of a second Socket Mode client:
+
+```powershell
+python slack_watcher.py
+```
+
+`slack_watcher.py` reuses `SlackSocketBridge` and keeps one Socket Mode
+connection as the primary path. It also invokes the existing command handler,
+so do not run `agent_loop.py --listen-slack` alongside it. On a socket failure
+only, it scans recent channel, thread, and DM history as a polling fallback.
+Message-level exceptions are logged and the next event is processed. SIGINT or
+the file `.agent-loop-state/slack_watcher.stop` stops the service.
+
+The persistent dedup and alert state is
+`.agent-loop-state/slack_watch_alert_state.json`. It records bounded message
+keys, alerted thread timestamps, the current commit SHA, and pending 90-second
+receipt checks. Neither tokens nor full channel history are stored. Validate
+configuration without connecting to Slack with:
+
+```powershell
+python slack_watcher.py --check
+```
+
+Codex reports use `[DONE]`, `[FAIL]`, `[BLOCKED]`, `[ASK]`, `[LIMIT]`, or
+`[NOTE]`. Urgent tags wake Claude by DM; an untagged Codex message is a quiet
+`[NOTE]`. `[DONE]` is flagged when any of `commit`, `branch`, `push`, `tests`,
+or `files` is missing. The watcher never writes a reply to Codex; its only
+message-side acknowledgement is an `eyes` reaction.
 
 In the configured channel, start a task with an explicit tag:
 
