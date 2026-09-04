@@ -67,6 +67,7 @@ class WatchConfig:
     brainshower_channel_ids: frozenset[str]
     claude_user_id: str
     codex_recipient_id: str
+    owner_dm_channel_id: str
     claude_user_ids: frozenset[str]
     claude_bot_ids: frozenset[str]
     claude_app_ids: frozenset[str]
@@ -97,13 +98,17 @@ class WatchConfig:
             raise AgentLoopError("Slack watcher timeout values must be positive")
         claude_user_id = os.environ.get("SLACK_CLAUDE_USER_ID", "").strip()
         codex_recipient_id = os.environ.get("SLACK_CODEX_RECIPIENT_ID", "").strip()
-        if not claude_user_id or not codex_recipient_id:
-            raise AgentLoopError("SLACK_CLAUDE_USER_ID and SLACK_CODEX_RECIPIENT_ID are required")
+        owner_dm_channel_id = os.environ.get("SLACK_OWNER_DM_CHANNEL_ID", "").strip()
+        if not codex_recipient_id or not owner_dm_channel_id:
+            raise AgentLoopError(
+                "SLACK_CODEX_RECIPIENT_ID and SLACK_OWNER_DM_CHANNEL_ID are required"
+            )
         return cls(
             channel_ids=channels,
             brainshower_channel_ids=brainshower,
             claude_user_id=claude_user_id,
             codex_recipient_id=codex_recipient_id,
+            owner_dm_channel_id=owner_dm_channel_id,
             claude_user_ids=_csv_ids(os.environ.get("SLACK_CLAUDE_USER_IDS", "")),
             claude_bot_ids=_csv_ids(os.environ.get("SLACK_CLAUDE_BOT_IDS", "")),
             claude_app_ids=_csv_ids(os.environ.get("SLACK_CLAUDE_APP_IDS", "")),
@@ -196,31 +201,19 @@ class WatchState:
 
 
 class SlackWakeClient:
-    def __init__(self, bridge: SlackSocketBridge, claude_user_id: str) -> None:
+    def __init__(self, bridge: SlackSocketBridge, owner_dm_channel_id: str) -> None:
         self.bridge = bridge
-        self.claude_user_id = claude_user_id
-        self._dm_channel_id = ""
-
-    def _claude_dm(self) -> str:
-        if not self.claude_user_id:
-            raise AgentLoopError("SLACK_CLAUDE_USER_ID is required to send wake-up DMs")
-        if not self._dm_channel_id:
-            body = self.bridge._json_request(
-                "https://slack.com/api/conversations.open",
-                self.bridge.bot_token,
-                {"users": self.claude_user_id},
-            )
-            channel = body.get("channel")
-            self._dm_channel_id = channel.get("id", "") if isinstance(channel, dict) else ""
-            if not self._dm_channel_id:
-                raise AgentLoopError("Slack conversations.open returned no Claude DM channel")
-        return self._dm_channel_id
+        self.owner_dm_channel_id = owner_dm_channel_id
 
     def wake(self, summary: str) -> str:
         body = self.bridge._json_request(
             "https://slack.com/api/chat.postMessage",
             self.bridge.bot_token,
-            {"channel": self._claude_dm(), "text": summary, "unfurl_links": False},
+            {
+                "channel": self.owner_dm_channel_id,
+                "text": f"@claude {summary}",
+                "unfurl_links": False,
+            },
         )
         return str(body.get("ts", ""))
 
@@ -330,7 +323,7 @@ class SlackWatcher:
         self.config = config
         self.bridge = bridge
         self.state = WatchState(config.state_file)
-        self.wake_client = wake_client or SlackWakeClient(bridge, config.claude_user_id)
+        self.wake_client = wake_client or SlackWakeClient(bridge, config.owner_dm_channel_id)
         self.clock = clock
         self.command_handler = command_handler or (lambda command: 0)
         self.opinion_handler = opinion_handler or (lambda command: 0)
@@ -354,7 +347,6 @@ class SlackWatcher:
             message.user_id in self.config.claude_user_ids
             or message.bot_id in self.config.claude_bot_ids
             or message.app_id in self.config.claude_app_ids
-            or message.user_id == self.config.claude_user_id
         ):
             return "claude"
         return "other"
@@ -374,7 +366,10 @@ class SlackWatcher:
             alert_ts = self.wake_client.wake(summary)
         except Exception as exc:
             self.state.data.setdefault("pendingAlerts", {})[key] = summary
-            print(f"slack_watcher: wake queued after {type(exc).__name__}", file=sys.stderr)
+            print(
+                f"slack_watcher: wake queued after {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             return
         self.state.remember("alertedKeys", key)
         self.state.data.setdefault("pendingAlerts", {}).pop(key, None)
@@ -562,7 +557,10 @@ class SlackWatcher:
             try:
                 self.wake_client.eyes(message)
             except Exception as exc:
-                print(f"slack_watcher: eyes failed: {type(exc).__name__}", file=sys.stderr)
+                print(
+                    f"slack_watcher: eyes failed: {type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
         if message.channel_id in self.config.channel_ids and not alerted_for_message:
             claude_called = (
                 self.config.claude_user_id in mentioned_ids
@@ -619,7 +617,10 @@ class SlackWatcher:
             try:
                 alert_ts = self.wake_client.wake(str(summary))
             except Exception as exc:
-                print(f"slack_watcher: wake retry failed: {type(exc).__name__}", file=sys.stderr)
+                print(
+                    f"slack_watcher: wake retry failed: {type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
                 continue
             self.state.remember("alertedKeys", key)
             self.state.data["pendingAlerts"].pop(key, None)
@@ -630,7 +631,7 @@ class SlackWatcher:
     def poll_fallback(self) -> None:
         """Backup-only history scan used by SlackSocketBridge while reconnecting."""
         channels = set(self.config.channel_ids)
-        ims = self.bridge._json_request(
+        ims = self.bridge._query_request(
             "https://slack.com/api/conversations.list",
             self.bridge.bot_token,
             {"types": "im", "limit": 200},
@@ -639,7 +640,7 @@ class SlackWatcher:
             if isinstance(item, dict) and isinstance(item.get("id"), str):
                 channels.add(str(item["id"]))
         for channel_id in sorted(channels):
-            history = self.bridge._json_request(
+            history = self.bridge._query_request(
                 "https://slack.com/api/conversations.history",
                 self.bridge.bot_token,
                 {"channel": channel_id, "limit": 20},
@@ -661,7 +662,7 @@ class SlackWatcher:
                 self.process_envelope(polled_envelope)
                 self._dispatch_polled_command(polled_envelope)
                 if int(raw.get("reply_count", 0) or 0) > 0 and isinstance(raw.get("ts"), str):
-                    replies = self.bridge._json_request(
+                    replies = self.bridge._query_request(
                         "https://slack.com/api/conversations.replies",
                         self.bridge.bot_token,
                         {"channel": channel_id, "ts": raw["ts"], "limit": 100},

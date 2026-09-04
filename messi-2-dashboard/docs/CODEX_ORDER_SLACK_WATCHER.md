@@ -261,3 +261,34 @@ ChatGPT 앱이 채널에 있어도 **기술 토론은 기존 코덱스 경로(�
 이 프로젝트에서 토큰은 실제 제약이다. 발주자가 오늘 두 번 지적했다
 ("티켓만 다 쓰잖아", "슬랙 채널 읽는 것도 토큰 드냐"). 예산 증액은 **명시적 행위**여야 하고,
 한 번의 오타로 무제한이 되면 안 된다.
+
+## 14. 깨우기 목적지 정정 — 봇은 봇에게 DM 을 못 보낸다 (2026-09-04, 내 지시서 오류)
+
+**이건 코덱스 잘못이 아니라 이 지시서의 잘못이다.** §4·§10~§13 에서 "DM 으로 Claude 를 깨운다"고만
+쓰고 *어디로* 보내는지를 정하지 않았다. 그래서 `SLACK_CLAUDE_USER_ID`(Slack Claude 앱의 봇 사용자)
+와 DM 을 여는 구현이 나왔고, Slack 은 그걸 허용하지 않는다.
+
+**실측:**
+```
+conversations.open  users=U0BUNP1R95Y (Claude 앱, 봇)  ->  ok=false  error=cannot_dm_bot
+conversations.open  users=U0BU7BTNLJK (발주자, 사람)   ->  ok=true   channel=D0BUSGP6YN8
+```
+
+### 정정된 규격
+
+- **깨우기 DM 은 발주자 DM 채널(`SLACK_OWNER_DM_CHANNEL_ID`, 실측 `D0BUSGP6YN8`)로 보낸다.**
+  이 환경변수는 이미 존재한다. `conversations.open` 을 호출하지 마라 — 채널 ID 를 그대로 쓴다.
+- `SLACK_CLAUDE_USER_ID` 는 **DM 목적지가 아니다.** §11 의 `@claude` 호출을 *매칭*하는 용도로만 남긴다.
+- 깨우기 본문 맨 앞에 `@claude` 를 붙여 무엇을 위한 알림인지 보이게 한다.
+
+### 왜 이게 맞는 구조인가
+
+Claude Code 는 Slack 사용자가 아니다. 이 세션은 Slack 이벤트를 직접 못 받는다.
+실제 경로는 **감시기 → 발주자 DM → 발주자 또는 Claude 가 그 DM 을 읽음** 이다.
+지시서가 이 사실을 흐리게 써서 구현이 헛다리를 짚었다.
+
+### 함께 고칠 것 — 무음 실패를 또 만들지 마라
+
+`wake retry failed: {type(exc).__name__}` 는 **예외 메시지를 버린다.** 실제로 이것 때문에
+`cannot_dm_bot` 을 찾는 데 진단을 여러 번 돌려야 했다. 이 프로젝트에서 무음 실패는 반복 사고다.
+**예외 문자열을 그대로 출력해라.** Slack API 오류면 `error` 코드까지 찍어라.
