@@ -1,7 +1,7 @@
 import type { FinalThirdZone } from "../api/finalThirdShotMapContracts";
 import type { FinalThirdRenderableData, FinalThirdShotMapV2Data } from "../api/finalThirdShotMapV2Contracts";
 import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contracts";
-import { finalThirdPlanCrop, PlanPitchGeometry, PLAN_VERTICAL_TRANSFORM_Y, projectPlan } from "./SpatialPitch";
+import { finalThirdPlanCrop, PlanPitchGeometry, PLAN_VERTICAL_TRANSFORM_Y, projectPlan } from "./planPitchGeometry";
 
 const OUTER_RADIUS = 52;
 const conversionTiers = [

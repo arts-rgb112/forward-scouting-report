@@ -6,29 +6,45 @@ import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contract
 import type { DatasetRouteState, PlayerAnalysis } from "../dashboard/types";
 import { useFullActivityHeatmap } from "./useFullActivityHeatmap";
 import { GoalMouthView } from "./GoalMouthView";
+import { PitchDotMatrixHeatmap } from "./PitchDotMatrixHeatmap";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { DEFAULT_PITCH_LAYERS, PITCH_LAYER_LABELS, type PitchLayerVisibility } from "./pitchLayers";
 import { excludePenaltyShots, summarizeShots } from "./pitchPenalties";
-import { SpatialPitch } from "./SpatialPitch";
 import { SixLaneCorridorPitch } from "./SixLaneCorridorPitch";
 import { shotIntegrity } from "./shotOutcomeVisibility";
 import { useFinalThirdShotMap } from "./useFinalThirdShotMap";
 import { useGoalMouthBaseline } from "./useGoalMouthBaseline";
 
+// "heat" remains temporary until PLAYER_PAGE_V2_LAYOUT_SPEC.md absorbs it.
+// The 3D corridor now lives at /player/:id/3d so its WebGL code is route-lazy.
 const WORKSPACE_COPY = {
   title: "피치 분석",
   tabs: {
     twoD: "2D 회랑",
-    threeD: "3D 회랑",
     goalMouth: "골대맵",
+    heat: "히트맵",
   },
   unavailable: "골문 배치 데이터가 이 컨텍스트에서 제공되지 않습니다.",
   loading: "골문 배치 데이터를 불러오는 중입니다.",
 } as const;
 
-const TAB_IDS = ["twoD", "threeD", "goalMouth"] as const;
+const TAB_IDS = ["twoD", "goalMouth", "heat"] as const;
 type WorkspaceTab = typeof TAB_IDS[number];
 type RenderableData = FinalThirdRenderableData | FinalThirdShotMapV3Data;
+
+const TAB_LAYER_KEYS = {
+  twoD: ["trajectories", "markers"],
+} as const satisfies Record<"twoD", readonly (keyof PitchLayerVisibility)[]>;
+
+function layersForTab(tab: "twoD", layers: PitchLayerVisibility): PitchLayerVisibility {
+  const allowed = new Set<keyof PitchLayerVisibility>(TAB_LAYER_KEYS[tab]);
+  return {
+    heatmap: allowed.has("heatmap") && layers.heatmap,
+    cca: allowed.has("cca") && layers.cca,
+    trajectories: allowed.has("trajectories") && layers.trajectories,
+    markers: allowed.has("markers") && layers.markers,
+  };
+}
 
 function isRenderableData(value: unknown): value is RenderableData {
   return Boolean(value && typeof value === "object" && "shots" in value);
@@ -58,6 +74,7 @@ export function PitchWorkspace({ analysis, contextIdentity, config, playerId, da
   const visibleShots = useMemo(() => shotSnapshotValid ? excludePenaltyShots(analysis!.spatial.shotmapPoints, includePenalties) : [], [analysis, includePenalties, shotSnapshotValid]);
   const shotSummary = useMemo(() => shotSnapshotValid ? summarizeShots(visibleShots) : null, [shotSnapshotValid, visibleShots]);
   const onFrame = visibleShots.filter((shot) => shot.outcome === "goal" || shot.outcome === "on_target").length;
+  const activeLayerKeys = activeTab === "twoD" ? TAB_LAYER_KEYS.twoD : [];
   const select = (next: WorkspaceTab, focus = false) => {
     setActiveTab(next);
     if (focus) requestAnimationFrame(() => tabRefs.current[TAB_IDS.indexOf(next)]?.focus());
@@ -76,13 +93,13 @@ export function PitchWorkspace({ analysis, contextIdentity, config, playerId, da
     <div role="tablist" aria-label={WORKSPACE_COPY.title} className="mt-3 flex flex-wrap gap-2">
       {TAB_IDS.map((tab, index) => <button key={tab} ref={(element) => { tabRefs.current[index] = element; }} id={`${id}-${tab}`} role="tab" type="button" tabIndex={activeTab === tab ? 0 : -1} aria-selected={activeTab === tab} aria-controls={`${id}-panel`} onClick={() => select(tab)} onKeyDown={(event) => onKeyDown(event, index)} className="min-h-11 rounded border border-white/20 px-4 text-sm font-bold aria-selected:bg-lime-300 aria-selected:text-zinc-950 focus-visible:ring-2 focus-visible:ring-lime-300">{WORKSPACE_COPY.tabs[tab]}</button>)}
     </div>
-    {activeTab !== "goalMouth" && <div role="group" aria-label="피치 레이어" className="mt-3 flex flex-wrap gap-2">
-      {(Object.keys(PITCH_LAYER_LABELS) as Array<keyof PitchLayerVisibility>).map((layer) => <button key={layer} type="button" aria-pressed={layers[layer]} onClick={() => setLayers((current) => ({ ...current, [layer]: !current[layer] }))} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold aria-pressed:border-lime-300/60 aria-pressed:bg-lime-300/15 aria-pressed:text-lime-100">{PITCH_LAYER_LABELS[layer]}</button>)}
+    {activeLayerKeys.length > 0 && <div role="group" aria-label="피치 레이어" className="mt-3 flex flex-wrap gap-2">
+      {activeLayerKeys.map((layer) => <button key={layer} type="button" aria-pressed={layers[layer]} onClick={() => setLayers((current) => ({ ...current, [layer]: !current[layer] }))} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold aria-pressed:border-lime-300/60 aria-pressed:bg-lime-300/15 aria-pressed:text-lime-100">{PITCH_LAYER_LABELS[layer]}</button>)}
     </div>}
     <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${activeTab}`} className="mt-3">
-      {activeTab === "threeD" && <SpatialPitch analysis={analysis} contextIdentity={contextIdentity} forcedMode="perspective" embedded layers={layers} fullActivityHeatmap={fullActivityHeatmap}/>}
-      {activeTab === "twoD" && <SixLaneCorridorPitch analysis={analysis} layers={layers} fullActivityHeatmap={fullActivityHeatmap}/>}
+      {activeTab === "twoD" && <SixLaneCorridorPitch analysis={analysis} layers={layersForTab("twoD", layers)} fullActivityHeatmap={fullActivityHeatmap}/>}
       {activeTab === "goalMouth" && (goalData ? <GoalMouthView data={goalData} config={config} baselineResource={baseline.state}/> : <p role="status" aria-live="polite" className="rounded border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">{!current || finalThird.state.kind === "loading" ? WORKSPACE_COPY.loading : WORKSPACE_COPY.unavailable}</p>)}
+      {activeTab === "heat" && <PitchDotMatrixHeatmap analysis={analysis} fullHeatmap={fullHeatmap}/>}
     </div>
   </section>;
 }

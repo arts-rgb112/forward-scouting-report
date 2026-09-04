@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { finalThirdShotMapFixture } from "../test/fixtures/finalThirdShotMap";
-import { PLAN_VERTICAL_TRANSFORM_Y, POSITIONAL_DEPTH_BOUNDARIES, projectPlan } from "./SpatialPitch";
+import { PLAN_VERTICAL_TRANSFORM_Y, POSITIONAL_DEPTH_BOUNDARIES, projectPlan } from "./planPitchGeometry";
 const hook = vi.hoisted(() => ({ value: undefined as unknown })); vi.mock("./useFinalThirdShotMap", () => ({ useFinalThirdShotMap: () => hook.value }));
 import { FinalThirdShootingMap } from "./FinalThirdShootingMap";
 import { FinalThirdPitchView } from "./FinalThirdPitchView";

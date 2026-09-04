@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { DataQualityIdentityError, fetchPlayerDataQuality } from "../api/dataQualityApi";
 import { parseMessiApiConfig, type MessiApiConfig } from "../api/env";
@@ -19,6 +19,8 @@ import { PlayerDetailRoute as NativePlayerDetailRoute } from "../playerDetail/Pl
 import { useContextualCompare, type ContextualComparePanelState } from "../api/useContextualCompare";
 import type { ContextualCompareResponse } from "../api/contextualCompareContracts";
 import { duelPressCompareHref, parseDuelPressCompare, type CompareSide } from "../dashboard/duelPressCompareUrl";
+
+const Player3DRoute = lazy(() => import("../playerDetail/Player3DRoute").then((module) => ({ default: module.Player3DRoute })));
 
 function currentDataset(config?: MessiApiConfig): DatasetRouteState { return datasetFromSearch(window.location.search, { season: config?.season ?? "2025/2026", mode: "league", scope: config?.scope ?? 8, competition: "all" }); }
 function ContextBadge({ dataset }: { dataset: DatasetRouteState }) { return <span className="inline-flex rounded border border-lime-300/30 bg-lime-300/10 px-2 py-1 type-caption font-bold text-lime-200">{dataset.mode === "europe" ? `Europe · ${dataset.competition.toUpperCase()}` : `League · ${dataset.scope} leagues`} · {dataset.season}</span>; }
@@ -177,6 +179,8 @@ export function StaticRoute() {
   const dataset = currentDataset(config);
   if (path === "/about/messi") return <Page><FocusTitle>M.E.S.S.I. methodology</FocusTitle><div className="mt-3 space-y-3 text-sm text-zinc-300"><p>Crystal-v2 preserves legacy continuity. Scores, ranks and cohorts are server-authoritative; the browser does not calculate analytics.</p><p>Duel-press-v1 orders outside shot, box threat, danger zone, combined duel, space control and forward press. Combined duel retains ground and aerial evidence; its two contextual indicators are net progression per 90 and shooting luck or goalkeeper impact.</p><p>Source and provenance remain visible. Zero is observed, null is unavailable, and explicit imputed or fallback values are not silently substituted.</p><p>Spatial Pitch is server-provided: 2D/perspective density, the 30-zone model, zoom/pan and source-only shot trajectories. No trajectory is inferred.</p></div><a href="/" className="mt-6 inline-flex min-h-11 items-center text-lime-300 hover:underline">Browse leaderboard</a></Page>;
   if (path === "/compare") return <ContextualCompareRoute config={config} />;
+  const player3DMatch = /^\/player\/([1-9]\d*)\/3d\/?$/.exec(path);
+  if (player3DMatch) return <Suspense fallback={<main id="main-content" className="grid min-h-screen place-items-center bg-[#080b0c] p-6 text-zinc-100"><p role="status" aria-live="polite">3D 회랑을 불러오는 중입니다.</p></main>}><Player3DRoute id={Number(player3DMatch[1])} dataset={dataset} config={config}/></Suspense>;
   const playerId = Number(path.split("/")[2]);
   const taxonomy = new URLSearchParams(window.location.search).get("taxonomy");
   const duelPressRequested = taxonomy === "duel-press-v1";
