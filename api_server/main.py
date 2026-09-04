@@ -33,7 +33,7 @@ from .schemas import (
     WatchlistResolveEnvelope, WatchlistResolveRequest, TacticalQuadrantEnvelope,
 )
 from .service import (
-    build_duel_spatial_analysis, build_player_data_quality, build_players,
+    build_duel_spatial_analysis, build_player_data_quality, build_players, build_v2_players,
     duel_press_leaderboard_envelope, find_duel_press_player,
     find_duel_press_detail_readouts,
     duel_press_v2_leaderboard_envelope, find_duel_press_v2_player,
@@ -239,7 +239,7 @@ app.add_middleware(
 
 
 async def _warm_player_summary_cache() -> None:
-    """Build season-rail summary indexes sequentially without blocking the event loop."""
+    """Build summary and detail contexts sequentially without blocking the event loop."""
     total_started = time.perf_counter()
     try:
         seasons = await run_in_threadpool(supported_seasons)
@@ -255,28 +255,35 @@ async def _warm_player_summary_cache() -> None:
     WARM_CACHE_LOG.info("warm_cache_started contexts=%s", len(contexts))
     for season, mode, scope, competition in contexts:
         started = time.perf_counter()
+        phase = "summary_index"
         try:
             await run_in_threadpool(
                 _v2_player_summary_index, season, mode, scope, competition,
             )
+            phase = "detail_context"
+            detail_started = time.perf_counter()
+            await run_in_threadpool(
+                build_v2_players, season, mode, scope, competition,
+            )
+            detail_ms = round((time.perf_counter() - detail_started) * 1000.0, 2)
         except asyncio.CancelledError:
             elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
             WARM_CACHE_LOG.info(
-                "warm_cache_cancelled season=%s mode=%s scope=%s competition=%s elapsed_ms=%s",
-                season, mode, scope, competition, elapsed_ms,
+                "warm_cache_cancelled season=%s mode=%s scope=%s competition=%s phase=%s elapsed_ms=%s",
+                season, mode, scope, competition, phase, elapsed_ms,
             )
             raise
         except Exception:
             elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
             WARM_CACHE_LOG.exception(
-                "warm_cache_context_failed season=%s mode=%s scope=%s competition=%s elapsed_ms=%s",
-                season, mode, scope, competition, elapsed_ms,
+                "warm_cache_context_failed season=%s mode=%s scope=%s competition=%s phase=%s elapsed_ms=%s",
+                season, mode, scope, competition, phase, elapsed_ms,
             )
         else:
             elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
             WARM_CACHE_LOG.info(
-                "warm_cache_context_complete season=%s mode=%s scope=%s competition=%s elapsed_ms=%s",
-                season, mode, scope, competition, elapsed_ms,
+                "warm_cache_context_complete season=%s mode=%s scope=%s competition=%s detail_ms=%s elapsed_ms=%s",
+                season, mode, scope, competition, detail_ms, elapsed_ms,
             )
     total_ms = round((time.perf_counter() - total_started) * 1000.0, 2)
     WARM_CACHE_LOG.info("warm_cache_complete contexts=%s total_ms=%s", len(contexts), total_ms)

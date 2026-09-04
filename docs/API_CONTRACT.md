@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·정적 검증 완료, 호스트 테스트·commit 대기 — 기동 예열에 상세 경로 `build_v2_players` 컨텍스트 추가 (2026-09-05 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-api-eventloop
+- 범위/결과: 기존 `_warm_player_summary_cache`가 동일 `(season, mode, scope, competition)`에서 `_v2_player_summary_index` 다음 `build_v2_players`를 각각 `run_in_threadpool`로 순차 호출하도록 추가했다. 성공 로그는 상세 컨텍스트 `detail_ms`와 컨텍스트 전체 `elapsed_ms`를, 실패·취소 로그는 `phase`와 `elapsed_ms`를, 최종 로그는 기존 `total_ms`를 남긴다. 기동 훅 즉시 반환·백그라운드 태스크·`sorted(seasons, reverse=True)`·실패 삼킴·`API_WARM_CACHE`를 정적으로 확인했고 `git diff --check`가 통과했다. 지정 명령 `python -m pytest tests/test_api.py tests/test_shotmap_contract.py -q`는 `python` 실행 파일 부재 `CommandNotFoundException`으로 시작되지 않았다. 작업 diff는 `api_server/main.py`와 이 계약서뿐이며 mechanical subagent gate 대상은 없다. HEAD `c524141e50c4eb5e4413078da2fde073a20a7b5c`, branch `agent/detail-warm-logging`, commit·push·PR·merge·deploy·기능 플래그 변경 없음. 선수별 상세 계산, `lru_cache` 크기, 점수·코호트 계산, 라이브러리는 변경하지 않았다.
+
 - 상태: 단계 2 로컬 구현·정적 검증 완료, 단계 1 계측·테스트·commit 차단 — 상세 경로 콜드 지연 구간 계측 및 `messi` 애플리케이션 로깅 활성화 (2026-09-05 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-api-eventloop
 - 범위/결과: `messi` 부모 로거에 `API_LOG_LEVEL`(기본 `INFO`)을 적용하고, 기존 핸들러가 없을 때만 포맷된 `StreamHandler`를 추가했으며 `propagate=False`로 uvicorn/루트 로거 중복을 차단했다. 동일 설정 함수를 두 번 호출해도 핸들러가 하나인 회귀 테스트를 추가했다. 단계 1은 `find_v2_player`까지의 컨텍스트/인덱스 경로와 이후 cohort·전술 세션·백분위·레이더·공간 분석의 선수별 경로로 계측 경계를 확인했으나, 샌드박스에 `python`·`python3`·`py` 및 대체 실행기가 없어 구간별 ms를 실행 측정하지 못했다. 지시된 pytest 명령은 `CommandNotFoundException`으로 실행되지 않았고 `git diff --check`와 금지 범위 정적 검사는 통과했다. 최종 diff는 `api_server/main.py`, `tests/test_api.py`, 이 계약서뿐이며 mechanical subagent gate 대상은 없다. `lru_cache` 크기, 점수·코호트 계산, Render 설정, 라이브러리, 데이터, push·merge·deploy·기능 플래그는 변경하지 않았다.
