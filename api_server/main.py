@@ -548,7 +548,10 @@ async def get_player(
         response.headers["X-Request-Id"] = request_id
         response.headers["Server-Timing"] = f"player-summary;dur={total_ms:.2f}"
         return PlayerEnvelope(data=player)
-    player = build_player_detail(player_id, season, mode, int(scope), competition)
+    # Offload to the threadpool like every sibling handler: build_player_detail is
+    # synchronous, so calling it inline froze this worker's event loop for its whole
+    # duration and stalled unrelated requests, /health included.
+    player = await run_in_threadpool(build_player_detail, player_id, season, mode, int(scope), competition)
     if player is None:
         raise HTTPException(status_code=404, detail="Player is not in the selected leaderboard")
     return PlayerDetailEnvelope(data=player)
