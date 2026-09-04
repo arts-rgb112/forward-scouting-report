@@ -38,6 +38,8 @@ DEFAULT_MAX_CODEX_RUNS_PER_THREAD = 3
 DEFAULT_MAX_OPINION_RESPONSES_PER_THREAD = 2
 DEFAULT_MAX_RESEARCH_RESPONSES_PER_THREAD = 1
 MAX_HUMAN_RESEARCH_APPROVALS_PER_THREAD = 10
+MAX_TICKET_GRANT_PER_REQUEST = 5
+MAX_TICKET_GRANT_PER_THREAD = 10
 MAX_SLACK_IMAGE_ATTACHMENTS = 3
 MAX_SLACK_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_THREAD_MESSAGES = 100
@@ -71,6 +73,8 @@ SLACK_MENTION_RE = re.compile(r"<@[A-Z0-9]+>", re.I)
 SLACK_ACTION_RE = re.compile(
     r"(?is)^\s*\[(PLAN|DISCUSS|ESCALATE|APPLY|REVISE|STOP|RESET)\]\s*(.*?)\s*$"
 )
+INSTRUCTION_ID_RE = re.compile(r"(?im)^\s*instruction_id\s*:\s*([^\s]+)\s*$")
+TICKET_ADDITION_RE = re.compile(r"(?is)^\s*\[\s*티켓\s*추가\s*(\d+)?\s*\]\s*$")
 BRAINSHOWER_BLOCK_RE = re.compile(
     r"(?is)^\s*\[BRAINSHOWER\]\s*\r?\n(.*?)\r?\n\[/BRAINSHOWER\]\s*$"
 )
@@ -622,11 +626,13 @@ class SlackAuditSink:
         bot_token: str = "",
         channel_id: str = "",
         webhook_url: str = "",
+        claude_user_id: str = "",
         required: bool = False,
     ) -> None:
         self.bot_token = bot_token
         self.channel_id = channel_id
         self.webhook_url = webhook_url
+        self.claude_user_id = claude_user_id
         self.required = required
         self.thread_ts: str | None = None
         self.disabled_reason: str | None = None
@@ -636,7 +642,13 @@ class SlackAuditSink:
         token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
         channel = os.environ.get("SLACK_CHANNEL_ID", "").strip()
         webhook = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
-        sink = cls(bot_token=token, channel_id=channel, webhook_url=webhook, required=required)
+        sink = cls(
+            bot_token=token,
+            channel_id=channel,
+            webhook_url=webhook,
+            claude_user_id=os.environ.get("SLACK_CLAUDE_USER_ID", "").strip(),
+            required=required,
+        )
         if bool(token) != bool(channel) and not webhook:
             sink.disabled_reason = "SLACK_BOT_TOKEN and SLACK_CHANNEL_ID must be set together"
         elif not sink.enabled:
@@ -756,6 +768,26 @@ class SlackAuditSink:
                 self._bot_post(message, root=root and index == 1)
             else:
                 self._webhook_post(message)
+
+    def post_codex_report(self, tag: str, title: str, body: str) -> None:
+        """Post one short Codex→Claude protocol envelope in the current thread."""
+        normalized = tag.strip().upper()
+        if normalized not in {"DONE", "FAIL", "BLOCKED", "ASK", "LIMIT", "NOTE"}:
+            raise AgentLoopError(f"unsupported Codex report tag: {tag}")
+        if self.required and not self.claude_user_id:
+            raise AgentLoopError("SLACK_CLAUDE_USER_ID is required for Codex protocol reports")
+        receiver = f"<@{self.claude_user_id}> " if self.claude_user_id else ""
+        message = f"{receiver}[{normalized}] 🔧 Codex — {redact_audit_text(title).strip()}"
+        safe_body = redact_audit_text(body).strip()
+        if safe_body:
+            message += f"\n\n{safe_body}"
+        message = "\n".join(message.splitlines()[:20])
+        if self.mode == "bot-thread":
+            self._bot_post(message, root=False)
+        elif self.mode == "incoming-webhook":
+            self._webhook_post(message)
+        elif self.required:
+            raise AgentLoopError(self.disabled_reason or "Slack audit is unavailable")
 
 
 class SlackOwnerDMSink:
@@ -1374,6 +1406,10 @@ class SlackSocketBridge:
         self,
         handler: Callable[[SlackCommand], int],
         opinion_handler: Callable[[SlackCommand], int] | None = None,
+        *,
+        envelope_handler: Callable[[dict[str, Any]], None] | None = None,
+        fallback_handler: Callable[[], None] | None = None,
+        stop_requested: Callable[[], bool] | None = None,
     ) -> None:
         websockets = self._websockets_module()
         self.bot_user_id = await asyncio.to_thread(self._resolve_bot_user_id)
@@ -1407,6 +1443,8 @@ class SlackSocketBridge:
         backoff = 1
         try:
             while True:
+                if stop_requested is not None and stop_requested():
+                    return
                 url = await asyncio.to_thread(self._socket_url)
                 try:
                     async with websockets.connect(
@@ -1422,8 +1460,20 @@ class SlackSocketBridge:
                             envelope_id = envelope.get("envelope_id")
                             if isinstance(envelope_id, str) and envelope_id:
                                 await socket.send(json.dumps({"envelope_id": envelope_id}))
+                            if envelope_handler is not None:
+                                try:
+                                    await asyncio.to_thread(envelope_handler, envelope)
+                                except Exception as exc:
+                                    print(
+                                        f"agent_loop: Slack observer failed: {type(exc).__name__}",
+                                        file=sys.stderr,
+                                    )
                             self.capture_context_from_envelope(envelope)
-                            command = self.command_from_envelope(envelope)
+                            command = (
+                                None
+                                if envelope.get("_slack_watcher_skip_command") is True
+                                else self.command_from_envelope(envelope)
+                            )
                             if command is not None:
                                 try:
                                     selected_handler = (
@@ -1447,6 +1497,15 @@ class SlackSocketBridge:
                         f"agent_loop: Slack socket reconnect after {type(exc).__name__}",
                         file=sys.stderr,
                     )
+                    if fallback_handler is not None:
+                        try:
+                            await asyncio.to_thread(fallback_handler)
+                        except Exception as fallback_exc:
+                            print(
+                                "agent_loop: Slack polling fallback failed: "
+                                f"{type(fallback_exc).__name__}",
+                                file=sys.stderr,
+                            )
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, 30)
         finally:
@@ -1925,6 +1984,61 @@ def write_report(payload: dict[str, Any], report_file: Path = DEFAULT_REPORT_FIL
     report_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _git_handoff_fields(files_changed: int, tests: str) -> str:
+    def git_value(*args: str) -> str:
+        completed = subprocess.run(
+            ["git", "-c", f"safe.directory={PROJECT_ROOT.parent}", *args],
+            cwd=PROJECT_ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return completed.stdout.strip() if completed.returncode == 0 else "unavailable"
+
+    return (
+        f"commit : {git_value('rev-parse', 'HEAD')}\n"
+        f"branch : {git_value('branch', '--show-current')}\n"
+        "push   : no\n"
+        f"tests  : {tests}\n"
+        f"files  : {files_changed}"
+    )
+
+
+def _reply_identity(text: str, reply_to_message_ts: str) -> str:
+    match = INSTRUCTION_ID_RE.search(text)
+    instruction_id = match.group(1) if match else "unprovided"
+    return f"instruction_id : {instruction_id}\nreply_to_message_ts : {reply_to_message_ts}"
+
+
+def _failure_evidence(test_result: TestResult) -> str:
+    lines = [line.strip() for line in test_result.output_tail.splitlines() if line.strip()]
+    first_cause = next(
+        (line for line in lines if re.search(r"error|fail|exception|traceback|timed?\s*out", line, re.I)),
+        lines[0] if lines else "unknown",
+    )
+    return (
+        f"실패 명령 : {' '.join(test_result.command)}\n"
+        f"종료코드 : {test_result.returncode}\n"
+        f"최초 원인 줄 : {first_cause[:500]}"
+    )
+
+
+def _test_handoff_summary(test_result: TestResult, accepted: bool, verdict: str) -> str:
+    passed_matches = re.findall(r"(?i)\b(\d+)\s+passed\b", test_result.output_tail)
+    passed_count = int(passed_matches[-1]) if passed_matches else None
+    failed_count = parse_failed_test_count(test_result.output_tail)
+    if passed_count is None:
+        count_summary = "—/—"
+    else:
+        count_summary = f"{passed_count}/{passed_count + (failed_count or 0)}"
+    regression_match = re.search(r"이번 턴이\s*(\d+)건\s*늘림", verdict)
+    regression = "0" if accepted else (regression_match.group(1) if regression_match else "—")
+    return f"{count_summary}, 기준선 대비 신규 회귀 {regression}건; {verdict}"
+
+
 def run_loop(
     task_file: Path,
     max_iterations: int,
@@ -1967,12 +2081,33 @@ def run_loop(
         event = {"applied": [asdict(change) for change in applied], "tests": asdict(test_result)}
         audit.post("TEST", json.dumps(event["tests"], ensure_ascii=False, indent=2))
         status = "complete" if accepted else "tests_failed"
-        audit.post("AGENT RUN → DONE" if accepted else "AGENT RUN → STOP", verdict)
+        report_body = (
+            f"{_reply_identity(task, audit.thread_ts or 'local-task')}\n"
+            f"{_git_handoff_fields(len(applied), _test_handoff_summary(test_result, accepted, verdict))}\n"
+            f"verdict : {verdict}"
+        )
+        if not test_result.passed:
+            report_body += f"\n{_failure_evidence(test_result)}"
+        audit.post_codex_report(
+            "DONE" if accepted else "FAIL",
+            "AGENT RUN → DONE" if accepted else "AGENT RUN → STOP",
+            with_acknowledgement_footer(report_body),
+        )
         write_report({"status": status, "runId": run_id, "slack": audit.status(), **event})
         return 0 if accepted else 2
     except Exception as exc:
         try:
-            audit.post("AGENT RUN → STOP", f"{type(exc).__name__}: {exc}")
+            audit.post_codex_report(
+                "FAIL",
+                "AGENT RUN → STOP",
+                with_acknowledgement_footer(
+                    f"{_reply_identity(task, audit.thread_ts or 'local-task')}\n"
+                    f"{_git_handoff_fields(0, 'not run; agent loop exception')}\n"
+                    "실패 명령 : codex exec / agent_loop\n"
+                    "종료코드 : 2\n"
+                    f"최초 원인 줄 : {type(exc).__name__}: {str(exc)[:500]}"
+                ),
+            )
         except Exception:
             pass
         raise
@@ -2042,6 +2177,109 @@ def _execution_limit() -> int:
     if value < 1 or value > 20:
         raise AgentLoopError("SLACK_MAX_CODEX_RUNS_PER_THREAD must be between 1 and 20")
     return value
+
+
+def parse_ticket_addition(text: str) -> int | None:
+    match = TICKET_ADDITION_RE.match(text)
+    if not match:
+        return None
+    return int(match.group(1) or "1")
+
+
+def _remember_budget_pending(
+    state: dict[str, Any], command: SlackCommand, *, mode: str
+) -> None:
+    state["pendingBudgetCommand"] = {
+        "mode": mode,
+        "eventId": command.event_id,
+        "userId": command.user_id,
+        "text": command.text,
+        "channelId": command.channel_id,
+        "threadTs": command.thread_ts,
+        "eventTs": command.event_ts,
+        "actorType": command.actor_type,
+    }
+
+
+def handle_ticket_addition(
+    command: SlackCommand,
+    *,
+    mode: str,
+    resume_handler: Callable[[SlackCommand], int] | None = None,
+    state_store: SlackThreadStore | None = None,
+    audit_sink: SlackAuditSink | None = None,
+    owner_user_id: str = "U0BU7BTNLJK",
+) -> int:
+    """Grant bounded per-thread budget and immediately resume a limit-stopped request."""
+    requested = parse_ticket_addition(command.text)
+    if requested is None:
+        return 0
+    if mode not in {"execution", "opinion"}:
+        raise AgentLoopError(f"unsupported ticket budget mode: {mode}")
+    audit = audit_sink or (
+        opinion_sink_from_environment()
+        if mode == "opinion"
+        else SlackAuditSink.from_environment(required=True)
+    )
+    audit.thread_ts = command.thread_ts
+    if command.actor_type != "human" or command.user_id != owner_user_id:
+        audit.post(
+            "AGENT LOOP · TICKET IGNORED",
+            f"author={command.actor_type}:{command.user_id}; only the project owner may add tickets.",
+        )
+        return 0
+
+    store = state_store or SlackThreadStore.from_environment()
+    state = store.load(command.channel_id, command.thread_ts)
+    processed_event_ids = state.setdefault("processedEventIds", [])
+    if command.event_id in processed_event_ids:
+        return 0
+    processed_event_ids.append(command.event_id)
+
+    previous_total = int(state.get("ticketGrantCount", 0))
+    request_grant = min(max(requested, 0), MAX_TICKET_GRANT_PER_REQUEST)
+    granted = min(request_grant, max(0, MAX_TICKET_GRANT_PER_THREAD - previous_total))
+    new_total = previous_total + granted
+    state["ticketGrantCount"] = new_total
+    used = int(state.get("opinionCount" if mode == "opinion" else "executionCount", 0))
+    base_limit = (
+        DEFAULT_MAX_OPINION_RESPONSES_PER_THREAD if mode == "opinion" else _execution_limit()
+    )
+    remaining = max(0, base_limit + new_total - used)
+    reasons: list[str] = []
+    if requested < 1:
+        reasons.append("요청량은 1 이상이어야 함")
+    if requested > MAX_TICKET_GRANT_PER_REQUEST:
+        reasons.append(f"1회 상한 {MAX_TICKET_GRANT_PER_REQUEST}")
+    if request_grant > granted:
+        reasons.append(f"스레드 누적 상한 {MAX_TICKET_GRANT_PER_THREAD}")
+    reason = ", ".join(reasons) if reasons else "상한 이내"
+    pending = state.pop("pendingBudgetCommand", None) if granted > 0 else None
+    SlackThreadStore.append_message(
+        state,
+        action="TICKET_ADDITION",
+        actor=f"human:{command.user_id}",
+        text=f"requested={requested}; granted={granted}; remaining={remaining}; reason={reason}",
+        event_ts=command.event_ts,
+    )
+    store.save(state)
+    audit.post(
+        "AGENT LOOP · TICKET ADDED",
+        f"요청 {requested}, 부여 {granted}, 남은 예산 {remaining}. 사유: {reason}.",
+    )
+
+    if not isinstance(pending, dict) or resume_handler is None:
+        return 0
+    resume = SlackCommand(
+        event_id=f"ticket-resume:{command.event_id}",
+        user_id=str(pending.get("userId") or command.user_id),
+        text=str(pending.get("text") or ""),
+        channel_id=command.channel_id,
+        thread_ts=command.thread_ts,
+        event_ts=command.event_ts,
+        actor_type=str(pending.get("actorType") or "human"),
+    )
+    return resume_handler(resume)
 
 
 def brainshower_context_pack() -> str:
@@ -2147,6 +2385,9 @@ def handle_opinion_command(
     )
 
     opinion_count = int(state.get("opinionCount", 0))
+    opinion_limit = DEFAULT_MAX_OPINION_RESPONSES_PER_THREAD + int(
+        state.get("ticketGrantCount", 0)
+    )
     research_count = int(state.get("researchCount", 0))
     approved_research_count = int(state.get("researchApprovalCount", 0))
     research_limit = DEFAULT_MAX_RESEARCH_RESPONSES_PER_THREAD + approved_research_count
@@ -2165,11 +2406,13 @@ def handle_opinion_command(
             "그렇지 않으면 결정 / 보류 / 자동사냥 이관 중 하나로 닫아 주세요.",
         )
         return 0
-    if not is_research and opinion_count >= DEFAULT_MAX_OPINION_RESPONSES_PER_THREAD:
+    if not is_research and opinion_count >= opinion_limit:
+        _remember_budget_pending(state, command, mode="opinion")
         store.save(state)
         audit.post(
             "BRAINSHOWER · OPINION LIMIT",
-            "자동 의견 2회를 사용했습니다. 추가 근거가 필요하면 사람이 `[조사] 질문`으로 1회만 요청할 수 있습니다. 그 뒤에는 결정 / 보류 / 자동사냥 이관으로 닫아 주세요.",
+            f"자동 의견 {opinion_count}/{opinion_limit}회를 사용했습니다. "
+            "발주자는 `[티켓추가 N]`으로 이 스레드 예산을 늘려 즉시 이어갈 수 있습니다.",
         )
         return 0
 
@@ -2207,6 +2450,7 @@ def handle_opinion_command(
                 image_paths=image_paths,
             )
         state["lastOpinion"] = {"status": "posted", "eventId": command.event_id}
+        state.pop("pendingBudgetCommand", None)
         store.save(state)
         audit.post("CODEX · READ-ONLY OPINION", with_acknowledgement_footer(response))
         return 0
@@ -2340,13 +2584,15 @@ def handle_slack_command(
         )
         return 0
 
-    limit = _execution_limit()
+    limit = _execution_limit() + int(state.get("ticketGrantCount", 0))
     execution_count = int(state.get("executionCount", 0))
     if execution_count >= limit:
+        _remember_budget_pending(state, command, mode="execution")
         store.save(state)
         audit.post(
             "AGENT LOOP · EXECUTION LIMIT",
-            f"{execution_count}/{limit} Codex turns used. A human [RESET] is required; no Codex call was made.",
+            f"{execution_count}/{limit} Codex turns used. "
+            "The project owner may send `[티켓추가 N]` to resume this request immediately.",
         )
         return 2
 
@@ -2453,11 +2699,20 @@ def handle_slack_command(
         state["lastExecution"] = execution
         state["status"] = "open"
         state.pop("executionStartedAt", None)
+        state.pop("pendingBudgetCommand", None)
         store.save(state)
         audit.post("TEST", json.dumps(execution["tests"], ensure_ascii=False, indent=2))
-        audit.post(
+        report_body = (
+            f"{_reply_identity(body, command.event_ts)}\n"
+            f"{_git_handoff_fields(len(applied), _test_handoff_summary(test_result, accepted, verdict))}\n"
+            f"verdict : Codex turns this trigger: 1; {verdict}"
+        )
+        if not test_result.passed:
+            report_body += f"\n{_failure_evidence(test_result)}"
+        audit.post_codex_report(
+            "DONE" if accepted else "FAIL",
             "AGENT RUN → DONE" if accepted else "AGENT RUN → STOP",
-            with_acknowledgement_footer(f"Codex turns this trigger: 1; {verdict}"),
+            with_acknowledgement_footer(report_body),
         )
         if accepted:
             audit.react(command.channel_id, command.event_ts, "white_check_mark")
@@ -2468,7 +2723,17 @@ def handle_slack_command(
         state["lastExecution"] = {"action": action, "error": type(exc).__name__}
         store.save(state)
         try:
-            audit.post("AGENT RUN → STOP", f"{type(exc).__name__}: {exc}")
+            audit.post_codex_report(
+                "FAIL",
+                "AGENT RUN → STOP",
+                with_acknowledgement_footer(
+                    f"{_reply_identity(body, command.event_ts)}\n"
+                    f"{_git_handoff_fields(0, 'not run; agent loop exception')}\n"
+                    "실패 명령 : codex exec / agent_loop\n"
+                    "종료코드 : 2\n"
+                    f"최초 원인 줄 : {type(exc).__name__}: {str(exc)[:500]}"
+                ),
+            )
         except Exception:
             pass
         raise
