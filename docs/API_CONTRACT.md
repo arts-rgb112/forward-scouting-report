@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 수정·정적 검증 완료, commit 차단 — 시즌 레일 컨텍스트 예열 순서를 최신 시즌 우선으로 결정화 (2026-09-04 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-api-eventloop
+- 범위/결과: 기존 백그라운드 순차 예열 구현은 유지하고, `supported_seasons()`의 `frozenset` 결과를 문자열 내림차순으로 정렬해 최신 시즌부터 처리하며 각 시즌 안에서는 기존 mode 튜플 순서대로 `league`를 `europe`보다 먼저 처리한다. 현재 시즌은 하드코딩하지 않았다. `git diff --check`와 변경 파일 gate(`api_server/main.py`, `docs/API_CONTRACT.md`만 해당)가 통과했다. `python -m pytest tests/test_api.py tests/test_shotmap_contract.py -q`는 이 샌드박스에 Python 실행 파일이 없어 `CommandNotFoundException`으로 실행되지 못했다. 커밋을 시도했으나 공유 Git 메타데이터 경로 `C:/Users/USER/Downloads/files/forward-scouting-report-GIT-METADATA-DO-NOT-DELETE/.git/worktrees/forward-scouting-report-api-eventloop/index.lock`에 대한 쓰기 권한이 없어 `Permission denied`로 차단됐다. 기존 미추적 `docs/CODEX_ORDER_WARM_CACHE.md`는 수정·커밋하지 않았고, 점수·코호트·데이터·공유 계산 모듈·push·PR·merge·deploy·기능 플래그는 변경하지 않았다.
+
 - 상태: 로컬 구현·검증 완료, commit 대기 — 공통 운영 규칙 통합 + Slack PART C-1/C-2 정리 (2026-09-03 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-slack-loop
 - 범위/결과: 최신 `messi-specs/CODEX_OPERATING_RULES.md` §1~§10을 레포 루트 `AGENTS.md`에 통합했다. `SLACK_AUDIT_REQUIRED`는 미설정만 기존 기본값을 유지하고, `true`/`false`는 대소문자·앞뒤 공백을 허용하며, 빈 문자열·`ture`·`1`은 시작 단계에서 `AgentLoopError`로 실패한다. 이 검사는 `--check`·listener 등 모든 모드 분기 전에 실행된다. `agent/slack-agent-loop`를 `origin/main`의 #308 병합 SHA `ccf7849` 위로 rebase해 히트맵·API·data diff를 제거했고, 최종 diff는 `AGENTS.md`, 계약/Slack 문서, `.gitignore`, `TASK_ORDER.md`, `agent_loop.py`, `test_agent_loop.py`뿐이다. `.agent-loop-state/` ignore를 확인했다. `test_agent_loop.py` 31/31, `py_compile`, `git diff --check`가 통과했다. push·PR·merge·deploy는 수행하지 않았다.
