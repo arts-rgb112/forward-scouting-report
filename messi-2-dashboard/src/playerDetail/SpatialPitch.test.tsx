@@ -135,8 +135,15 @@ describe("Three WebGL spatial pitch contract", () => {
     fireEvent.pointerUp(pitch, { pointerId: 2 });
     expect(pitch).not.toHaveAttribute("data-camera-position", walkedPosition);
     const draggedPosition = pitch.getAttribute("data-camera-position");
-    fireEvent.wheel(pitch, { deltaY: -100 });
+    const wheelUp = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 });
+    expect(fireEvent(pitch, wheelUp)).toBe(false);
+    expect(wheelUp.defaultPrevented).toBe(true);
     expect(pitch).not.toHaveAttribute("data-camera-position", draggedPosition);
+    const raisedPosition = pitch.getAttribute("data-camera-position");
+    const wheelDown = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 });
+    expect(fireEvent(pitch, wheelDown)).toBe(false);
+    expect(wheelDown.defaultPrevented).toBe(true);
+    expect(pitch).not.toHaveAttribute("data-camera-position", raisedPosition);
   });
 
   it("retains the 17-segment grid, both goals, 64x24 dot-matrix full density, and 32x22 CCA input", async () => {
@@ -155,6 +162,8 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(container.querySelector("[data-layer=heat]")).toHaveAttribute("data-blur-std-deviation", "0");
     expect(container.querySelector("[data-layer=heat]")).toHaveAttribute("data-density-mesh-builds", "1");
     expect(container.querySelector("[data-layer=cca-contour]")).toBeInTheDocument();
+    expect(container.querySelector("[data-spatial-activity-note]")).toHaveTextContent("full Tier 3 활동 좌표 1개 · 전술 구획은 시각 안내선이며 브라우저에서 점수나 구역 값을 새로 계산하지 않습니다.");
+    expect(container.querySelector("[data-spatial-shot-note]")).toHaveTextContent("슈팅 스냅샷 사용 불가 · 데이터 없음과 관측된 0은 구분합니다.");
   });
 
   it("exposes accessible markers and only source-backed goal-mouth trajectories", async () => {
