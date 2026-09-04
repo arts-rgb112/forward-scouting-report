@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 단계 2 로컬 구현·정적 검증 완료, 단계 1 계측·테스트·commit 차단 — 상세 경로 콜드 지연 구간 계측 및 `messi` 애플리케이션 로깅 활성화 (2026-09-05 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-api-eventloop
+- 범위/결과: `messi` 부모 로거에 `API_LOG_LEVEL`(기본 `INFO`)을 적용하고, 기존 핸들러가 없을 때만 포맷된 `StreamHandler`를 추가했으며 `propagate=False`로 uvicorn/루트 로거 중복을 차단했다. 동일 설정 함수를 두 번 호출해도 핸들러가 하나인 회귀 테스트를 추가했다. 단계 1은 `find_v2_player`까지의 컨텍스트/인덱스 경로와 이후 cohort·전술 세션·백분위·레이더·공간 분석의 선수별 경로로 계측 경계를 확인했으나, 샌드박스에 `python`·`python3`·`py` 및 대체 실행기가 없어 구간별 ms를 실행 측정하지 못했다. 지시된 pytest 명령은 `CommandNotFoundException`으로 실행되지 않았고 `git diff --check`와 금지 범위 정적 검사는 통과했다. 최종 diff는 `api_server/main.py`, `tests/test_api.py`, 이 계약서뿐이며 mechanical subagent gate 대상은 없다. `lru_cache` 크기, 점수·코호트 계산, Render 설정, 라이브러리, 데이터, push·merge·deploy·기능 플래그는 변경하지 않았다.
+
 - 상태: 로컬 구현·정적 검증 완료, 호스트 테스트 대기 — Slack 깨우기 목적지 및 진단 로그 정정 (2026-09-04 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-watcher
 - 범위/결과: `messi-2-dashboard/docs/CODEX_ORDER_SLACK_WATCHER.md` §14에 따라 `SlackWakeClient`의 `conversations.open` 및 Claude 봇 DM 의존성을 제거하고, `SLACK_OWNER_DM_CHANNEL_ID`로 직접 `chat.postMessage`하며 본문을 `@claude`로 시작하도록 수정했다. `SLACK_CLAUDE_USER_ID`는 선택적인 §11 정식 멘션 매칭 값으로만 남겼고, 미설정 상태에서도 구성이 성공함을 신규 테스트에 포함했다. wake queue·wake retry·eyes 실패 로그는 예외 클래스뿐 아니라 예외 문자열도 출력해 Slack API `error` 코드가 보존된다. direct post 및 `conversations.open` 미호출 회귀를 추가해 테스트는 17→18건이다. 이 환경에는 `python`과 `py` 실행 파일이 없어 테스트는 실행하지 못했으며 `git diff --check`와 잔존 호출 정적 검색은 통과했다. 변경 파일은 계약/지시서/감시기/테스트 4개뿐이고 mechanical subagent gate 대상은 없다. 커밋은 공유 Git 메타데이터의 `index.lock` 쓰기 권한 `Permission denied`로 차단됐고 HEAD는 `c9f0857d18187a2b2176c63d318e7abb0c126d3f`다. push·merge·deploy·기능 플래그 변경 없음.

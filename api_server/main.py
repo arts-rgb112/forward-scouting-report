@@ -74,6 +74,27 @@ METRIC_RANKS_POST_PATH = "/api/v2/metric-ranks"
 CONTEXTUAL_COMPARE_POST_PATH = "/api/v2/compare/contextual"
 PLAYER_SUMMARY_DEADLINE_SECONDS = 8.0
 _PLAYER_SUMMARY_INFLIGHT: dict[tuple[int, str, str, int, str], asyncio.Task[object]] = {}
+
+
+def configure_messi_logging() -> logging.Logger:
+    """Configure application logs without modifying uvicorn's logger tree."""
+    logger = logging.getLogger("messi")
+    configured_level = os.getenv("API_LOG_LEVEL", "INFO").strip().upper()
+    level = getattr(logging, configured_level, logging.INFO)
+    if not isinstance(level, int):
+        level = logging.INFO
+    logger.setLevel(level)
+    logger.propagate = False
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s %(message)s"
+        ))
+        logger.addHandler(handler)
+    return logger
+
+
+MESSI_LOG = configure_messi_logging()
 PLAYER_SUMMARY_LOG = logging.getLogger("messi.player_summary")
 WARM_CACHE_LOG = logging.getLogger("messi.warm_cache")
 WARM_CACHE_SCOPE = 8
