@@ -1,15 +1,39 @@
 import json
+import logging
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from api_server.main import app, cors_origin_regex, cors_origins
+from api_server.main import app, configure_messi_logging, cors_origin_regex, cors_origins
 from api_server import service
 from api_server.profiles import age_on, player_age
 from api_server.service import dataset_generated_at, tier_from_rank
 
 
 client = TestClient(app)
+
+
+def test_messi_logging_is_configurable_and_idempotent(monkeypatch):
+    logger = logging.getLogger("messi")
+    original_handlers = list(logger.handlers)
+    original_level = logger.level
+    original_propagate = logger.propagate
+    try:
+        logger.handlers.clear()
+        monkeypatch.setenv("API_LOG_LEVEL", "DEBUG")
+
+        configured = configure_messi_logging()
+        handler = configured.handlers[0]
+        configure_messi_logging()
+
+        assert configured.level == logging.DEBUG
+        assert configured.propagate is False
+        assert configured.handlers == [handler]
+        assert isinstance(handler, logging.StreamHandler)
+    finally:
+        logger.handlers[:] = original_handlers
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
 
 
 def test_age_is_calculated_as_of_the_reference_date():
