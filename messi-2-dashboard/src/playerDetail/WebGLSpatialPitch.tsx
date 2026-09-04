@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
@@ -506,10 +506,21 @@ export function WebGLSpatialPitch({
     }
     setZoom(clamped);
   };
-  const moveCamera = (forward = 0, right = 0, vertical = 0) => {
+  const moveCamera = useCallback((forward = 0, right = 0, vertical = 0) => {
     setCameraAngle(null);
     applyFreefly(moveFreeflyCamera(freeflyRef.current, { forward, right, vertical }));
-  };
+  }, [applyFreefly]);
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const wheel = (event: WheelEvent) => {
+      if (event.target !== host && event.target !== canvasRef.current) return;
+      event.preventDefault();
+      moveCamera(0, 0, -event.deltaY * 0.015);
+    };
+    host.addEventListener("wheel", wheel, { passive: false });
+    return () => host.removeEventListener("wheel", wheel);
+  }, [moveCamera]);
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
     if (event.key === "Escape") {
@@ -550,12 +561,6 @@ export function WebGLSpatialPitch({
     dragRef.current = null;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
-  const wheel = (event: WheelEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget && event.target !== canvasRef.current) return;
-    event.preventDefault();
-    moveCamera(0, 0, -event.deltaY * 0.015);
-  };
-
   const shotProjection = (group: PitchShotGroup) => projectWorld(
     runtimeRef.current,
     hostRef.current,
@@ -604,7 +609,7 @@ export function WebGLSpatialPitch({
     </div>
     <div ref={hostRef} role="img" tabIndex={0} onKeyDown={keyDown}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
-      onContextMenu={(event) => event.preventDefault()} onWheel={wheel}
+      onContextMenu={(event) => event.preventDefault()}
       aria-label={`3D 회랑 WebGL 피치. ${heatState}. ${shotState}. WASD 또는 화살표 키로 이동하고, 왼쪽 드래그로 시선을 돌리며, 오른쪽 드래그나 휠로 높이를 조절합니다.`}
       className="relative min-h-80 w-full overflow-hidden rounded-b-lg bg-[#050a08] outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
       data-webgl-renderer="three"
