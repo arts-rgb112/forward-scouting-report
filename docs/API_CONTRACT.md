@@ -9,6 +9,13 @@
 - 상태: 단계 2 로컬 구현·정적 검증 완료, 단계 1 계측·테스트·commit 차단 — 상세 경로 콜드 지연 구간 계측 및 `messi` 애플리케이션 로깅 활성화 (2026-09-05 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-api-eventloop
 - 범위/결과: `messi` 부모 로거에 `API_LOG_LEVEL`(기본 `INFO`)을 적용하고, 기존 핸들러가 없을 때만 포맷된 `StreamHandler`를 추가했으며 `propagate=False`로 uvicorn/루트 로거 중복을 차단했다. 동일 설정 함수를 두 번 호출해도 핸들러가 하나인 회귀 테스트를 추가했다. 단계 1은 `find_v2_player`까지의 컨텍스트/인덱스 경로와 이후 cohort·전술 세션·백분위·레이더·공간 분석의 선수별 경로로 계측 경계를 확인했으나, 샌드박스에 `python`·`python3`·`py` 및 대체 실행기가 없어 구간별 ms를 실행 측정하지 못했다. 지시된 pytest 명령은 `CommandNotFoundException`으로 실행되지 않았고 `git diff --check`와 금지 범위 정적 검사는 통과했다. 최종 diff는 `api_server/main.py`, `tests/test_api.py`, 이 계약서뿐이며 mechanical subagent gate 대상은 없다. `lru_cache` 크기, 점수·코호트 계산, Render 설정, 라이브러리, 데이터, push·merge·deploy·기능 플래그는 변경하지 않았다.
+- 상태: 로컬 수정·정적 검증 완료, 호스트 테스트 대기 — P0-8 SpatialPitch 하단 안내 문구 한국어 복원 및 영문 참고 문구 보관 (2026-09-05 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-watcher
+- 범위/결과: `messi-2-dashboard/src/playerDetail/SpatialPitch.tsx`의 이미 분리된 활동/슛 `<p>` 구조와 `data-spatial-activity-note`/`data-spatial-shot-note` 속성을 유지하고, 기존 한국어 `heatState`/`shotState` 뒤에 각각 원래 안내 문장을 결합했다. 회귀 기대값도 실제 한국어 두 문단으로 갱신했으며, 교체된 영어는 출처·대응 한국어와 함께 신규 `messi-2-dashboard/docs/EN_COPY_REFERENCE.md`에 보관했다. `git diff --check`는 통과했고 mechanical gate 대상은 없다. `messi-2-dashboard`의 `npm test`는 `vitest` 실행 파일 부재로 종료코드 1이라 테스트가 시작되지 않아 기존 17건 및 신규 회귀를 계측하지 못했다. 브랜치는 `agent/p0-bugs`, HEAD는 `16432970c030840b08d64894272d2e0795046e3d`이며 commit·push·merge·deploy·기능 플래그 변경 없음. 레이아웃·다른 컴포넌트 문구·점수·코호트·라이브러리는 변경하지 않았다.
+
+- 상태: 로컬 조사·구현 완료, 테스트·커밋 호스트 대기 — v3.0 1단계 P0-3a 휠 줌, P0-8 문자열 조합, P1-4 히트맵 호버 회귀 (2026-09-05 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-watcher
+- 범위/결과: 기준점 `main=a0335c8`의 `agent/p0-bugs`에서 P0-3a는 공용 `WebGLSpatialPitch`의 React `onWheel`을 제거하고 ref DOM에 `passive:false` native wheel listener와 cleanup을 등록해 전용 `/player/:id/3d` 및 동일 컴포넌트 임베드 경로에 함께 적용했다. P0-8은 과거 두 문장이 2열 grid에서 읽기 순서가 교차한 원인을 확인하고 활동/슛 문장을 각각 독립 DOM 문단으로 조립해 원문을 보존했다. P1-4는 `git log -S`와 reflog에서 삭제된 밀도-hover 핸들러가 없었고, 탭 분리 커밋 `35dc9217221e2794bf470a4af7109cee5fe71bda`가 `PitchDotMatrixHeatmap.tsx`를 처음 추가하면서 도트를 `pointerEvents="none"`으로 둔 사실을 확인해 지시대로 신규 구현하지 않았다. `git diff --check`는 통과했다. `npm test`는 `vitest` 실행 파일 부재로 종료코드 1이라 기존 17건/신규 회귀를 계측하지 못했다. 공유 Git 메타데이터 `index.lock` 쓰기 권한이 없어 버그별 commit도 생성하지 못했고 HEAD는 `a0335c8305994032e7bd8e9fe08c5a6d8c3b39ab`다. 레이아웃·점수·코호트·라이브러리·push·merge·deploy·기능 플래그 변경 없음.
 
 - 상태: 로컬 구현·정적 검증 완료, 호스트 테스트 대기 — Slack 깨우기 목적지 및 진단 로그 정정 (2026-09-04 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-watcher
