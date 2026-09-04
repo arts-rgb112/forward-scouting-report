@@ -1,0 +1,4 @@
+
+# pnpm content-addressable store — never commit
+.pnpm-store/
+messi-2-dashboard/.pnpm-store/

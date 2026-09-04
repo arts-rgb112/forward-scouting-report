@@ -3,10 +3,11 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const transport = vi.hoisted(() => ({ detail: vi.fn(), duelDetail: vi.fn(), detailReadouts: vi.fn(), comparison: vi.fn(), quadrant: vi.fn(), quality: vi.fn(), options: vi.fn() }));
+const transport = vi.hoisted(() => ({ detail: vi.fn(), duelDetail: vi.fn(), detailReadouts: vi.fn(), comparison: vi.fn(), quadrant: vi.fn(), quality: vi.fn(), options: vi.fn(), fullHeatmap: vi.fn() }));
 vi.mock("../api/env", () => ({ parseMessiApiConfig: vi.fn(() => ({ baseUrl: "https://api.example.test", season: "2025/2026", scope: 7, limit: 1000 })) }));
 vi.mock("../api/leaderboardsApi", () => ({ fetchPlayerDetail: transport.detail, fetchComparison: transport.comparison, fetchTacticalQuadrant: transport.quadrant, fetchLeaderboardOptions: transport.options }));
 vi.mock("../api/dataQualityApi", () => ({ fetchPlayerDataQuality: transport.quality, DataQualityIdentityError: class DataQualityIdentityError extends Error {} }));
+vi.mock("../api/fullActivityHeatmapApi", () => ({ fetchFullActivityHeatmap: transport.fullHeatmap, fullActivityHeatmapResourceKey: "full-activity-heatmap-v1" }));
 vi.mock("../api/duelPressApi", async (original) => ({ ...await original<typeof import("../api/duelPressApi")>(), fetchDuelPressDetail: transport.duelDetail }));
 vi.mock("../api/duelPressDetailReadoutApi", async (original) => ({ ...await original<typeof import("../api/duelPressDetailReadoutApi")>(), fetchDuelPressDetailReadouts: transport.detailReadouts }));
 
@@ -21,12 +22,24 @@ beforeEach(() => {
   vi.clearAllMocks();
   transport.detail.mockResolvedValue({ player: samplePlayers[0] });
   transport.detailReadouts.mockResolvedValue(detailReadoutFixture);
+  transport.fullHeatmap.mockResolvedValue({ data: { available: false, validPointCount: 0, cellCounts: [], source: "messi-static-cohort" } });
   transport.comparison.mockResolvedValue({ players: [], meta: {} });
   transport.quadrant.mockResolvedValue({}); transport.quality.mockRejectedValue(new Error("quality unavailable"));
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); cleanup(); });
 
 describe("scope-8 direct-route capability gate", () => {
+  it("loads the dedicated 3D route directly with the shared URL context intact", async () => {
+    window.history.replaceState(null, "", "/player/1/3d?season=2024%2F2025&mode=league&scope=7&utm_source=slack");
+    render(<StaticRoute />);
+    expect(await screen.findByRole("heading", { name: "Erling Haaland · 3D 회랑" })).toBeInTheDocument();
+    expect(document.querySelector('[data-layout="player-3d-route"]')).not.toBeNull();
+    expect(transport.detail).toHaveBeenCalledWith(expect.anything(), 1, expect.objectContaining({ season: "2024/2025", mode: "league", scope: 7, competition: "all" }), expect.any(AbortSignal));
+    expect(screen.getByRole("link", { name: "← 선수 상세" })).toHaveAttribute("href", "/players/1?season=2024%2F2025&mode=league&scope=7&utm_source=slack");
+    expect(window.location.search).toContain("season=2024%2F2025");
+    expect(window.location.search).toContain("scope=7");
+  });
+
   it("allows a direct player route only after authoritative options include scope 8", async () => {
     transport.options.mockResolvedValue(optionsWithScope8);
     window.history.replaceState(null, "", "/players/1?season=2025%2F2026&scope=8");

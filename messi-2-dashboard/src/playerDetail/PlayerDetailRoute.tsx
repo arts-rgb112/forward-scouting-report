@@ -10,7 +10,7 @@ import { DuelPressV2ApiError, fetchDuelPressV2DetailMetrics } from "../api/duelP
 import type { DuelPressV2DetailMetrics } from "../api/duelPressV2Contracts";
 import type { DuelPressModeContext } from "../api/duelPressTypes";
 import { fetchHistoryLeaderboardOptions, fetchPlayerSummary, type PlayerHistoryEntry } from "../api/playerHistoryApi";
-import { datasetHref } from "../dashboard/datasetRoute";
+import { dashboardQueryKeys, datasetHref, preserveExternalQuery } from "../dashboard/datasetRoute";
 import { metricIsImputed, qualityDisplay, type QualityDisplay } from "../dashboard/dataQualityViewModel";
 import { getScoreBand, resolveTierPresentation } from "../dashboard/scoutingConfig";
 import { TierBadge } from "../dashboard/components/TierBadge";
@@ -129,8 +129,6 @@ export function TacticalSummary({ player, analysis, quadrant, quality, config, d
   </section>;
 }
 
-export { SpatialPitch } from "./SpatialPitch";
-
 export function PercentileProfile({ player, analysis, quality, layout = "page" }: { player: Player; analysis?: PlayerAnalysis; quality: QualityDisplay; layout?: "page" | "rail" }) {
   const profileGridClass = layout === "rail" ? "mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2" : "mt-3 grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-3";
   return <section className={`${panel} six-sector-board`} aria-label="Percentile profile"><div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-sm font-black">Six-sector board</h2><p className="type-caption uppercase tracking-[0.16em] text-zinc-400">Server score + volume / ratio readouts</p></div><div data-layout="legacy-percentile-grid" className={profileGridClass}>{metricProfile(player, analysis, quality).map((metric) => {
@@ -153,17 +151,21 @@ export function Benchmark({ player, config, dataset }: { player: Player; config?
 /** Presentation-only composition: all score, spatial and radar values remain server supplied. */
 export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality, history, config, dataset, afterPanels, detailReadoutBoard, detailReadouts, renewedDetailRequested = false }: { player: Player; analysis?: PlayerAnalysis; quadrant?: TacticalQuadrant; quality: QualityDisplay; history: PlayerHistoryState; config?: MessiApiConfig; dataset: DatasetRouteState; afterPanels?: ReactNode; detailReadoutBoard?: ReactNode; detailReadouts?: DuelPressDetailReadoutEnvelope; renewedDetailRequested?: boolean }) {
   const spatialContextIdentity = `${player.id}|${dataset.season}|${dataset.mode}|${dataset.scope}|${dataset.competition}`;
+  const threeDHref = preserveExternalQuery(datasetHref(`/player/${player.id}/3d`, dataset), window.location.search, dashboardQueryKeys);
   const readoutSlot = detailReadoutBoard ?? <PercentileProfile player={player} analysis={analysis} quality={quality} layout="page"/>;
   return <>
     <PitchPenaltyProvider summaryShots={analysis?.spatial.shotmapPoints}>
       <div data-layout="detail-dossier-layout" className="mt-4 grid min-w-0 gap-4 xl:grid-cols-12 xl:items-start">
-        <div data-layout="dossier-season" className="min-w-0 xl:col-span-12"><PlayerProfileCard player={player} analysis={analysis} selected={dataset} history={history}/></div>
-        <section data-layout="tactical-spatial-workspace" className="min-w-0 rounded-xl border border-white/10 bg-[#0d1112] p-2 shadow-sm xl:col-span-8" aria-label="전술·공간 분석">
-          <PitchPenaltyToggle/>
+        <div data-layout="dossier-season" className="min-w-0 xl:col-span-3"><PlayerProfileCard player={player} analysis={analysis} selected={dataset} history={history}/></div>
+        <section data-layout="tactical-spatial-workspace" className="min-w-0 rounded-xl border border-white/10 bg-[#0d1112] p-2 shadow-sm xl:col-span-9" aria-label="전술·공간 분석">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <PitchPenaltyToggle/>
+            <a href={threeDHref} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded border border-lime-300/40 px-4 text-sm font-black text-lime-300 hover:bg-lime-300/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300">3D로 보기</a>
+          </div>
           <div data-layout="pitch-workspace-slot" className="mt-2 min-w-0"><PitchWorkspace analysis={analysis} contextIdentity={spatialContextIdentity} config={config} playerId={player.id} dataset={dataset}/></div>
         </section>
-        <div data-layout="tactical-summary-slot" className="min-w-0 xl:col-span-4"><TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/></div>
       </div>
+      <div data-layout="tactical-summary-slot" className="mt-4 min-w-0"><TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/></div>
     </PitchPenaltyProvider>
     {!analysis && <p className="mt-4 rounded border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">서버 분석을 제공할 수 없어 브라우저에서 대체 값을 만들지 않았습니다.</p>}
     <div data-layout="detail-board-slot" className="mt-4 min-w-0">{readoutSlot}</div>

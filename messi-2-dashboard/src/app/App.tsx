@@ -50,5 +50,6 @@ export default function App({ navigate = browserNavigate }: AppProps) {
     if (target) initialNavigate.current(target);
   }, []);
   const routed = pathname !== "/";
-  return <WatchlistV3Provider><GlobalNavigation pathname={pathname} /><DashboardErrorBoundary resetKey={resetKey} onReset={() => setResetKey((key) => key + 1)}>{routed ? <StaticRoute /> : <PlayersResourceContainer key={resetKey} />}</DashboardErrorBoundary></WatchlistV3Provider>;
+  const fullscreen3D = /^\/player\/[1-9]\d*\/3d\/?$/.test(pathname);
+  return <WatchlistV3Provider>{!fullscreen3D && <GlobalNavigation pathname={pathname} />}<DashboardErrorBoundary resetKey={resetKey} onReset={() => setResetKey((key) => key + 1)}>{routed ? <StaticRoute /> : <PlayersResourceContainer key={resetKey} />}</DashboardErrorBoundary></WatchlistV3Provider>;
 }

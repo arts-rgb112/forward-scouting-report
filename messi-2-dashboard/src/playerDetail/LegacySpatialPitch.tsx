@@ -160,7 +160,7 @@ export function LegacySpatialPitchFigure({ analysis, visibleOutcomes, markerLaye
     <figure aria-describedby={`${descriptionId} ${captionId}`}>
       <p id={descriptionId} className="sr-only">{description}</p>
       <div ref={markerScale.ref} className="relative isolate w-full overflow-hidden rounded bg-[#063525]" style={{ aspectRatio: "108 / 70.9" }}>
-        <HeatmapCanvas points={integrity.heat ? spatial!.heatmapPoints : []} enabled={layers.heatmap && integrity.heat && spatial!.heatmapPoints.length > 0}/>
+        {layers.heatmap && <HeatmapCanvas points={integrity.heat ? spatial!.heatmapPoints : []} enabled={integrity.heat && spatial!.heatmapPoints.length > 0}/>}
         <svg viewBox="-4 0 108 100" preserveAspectRatio="none" role="group" aria-label="Interactive two-dimensional shot markers" className="absolute inset-0 h-full w-full" data-layer="legacy-events">
           <GuardiolaPitchGuide showCorridors={showCorridors}/>
           {layers.cca && contour.length > 0 && <path aria-hidden="true" pointerEvents="none" data-layer="cca-contour" d={contour.map(([x1, y1, x2, y2]) => `M${x1.toFixed(4)} ${y1.toFixed(4)}L${x2.toFixed(4)} ${y2.toFixed(4)}`).join("")} fill="none" stroke={CCA_STYLE.stroke} strokeOpacity={CCA_STYLE.opacity} strokeWidth={CCA_STYLE.width} strokeDasharray={CCA_STYLE.dash} vectorEffect="non-scaling-stroke"/>}
