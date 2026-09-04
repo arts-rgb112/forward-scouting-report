@@ -42,6 +42,7 @@ from .service import (
     resolve_contextual_compare_sides,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
+    _v2_player_summary_index,
     resolve_metric_rank_entries,
     build_benchmark_radar_v2, build_ratio_benchmark, build_tactical_summary, build_tactical_summary_v2, build_volume_benchmark,
     build_final_third_shot_map, build_goal_mouth_baseline, build_six_lane_shooting_corridor, build_full_activity_heatmap,
@@ -74,6 +75,9 @@ CONTEXTUAL_COMPARE_POST_PATH = "/api/v2/compare/contextual"
 PLAYER_SUMMARY_DEADLINE_SECONDS = 8.0
 _PLAYER_SUMMARY_INFLIGHT: dict[tuple[int, str, str, int, str], asyncio.Task[object]] = {}
 PLAYER_SUMMARY_LOG = logging.getLogger("messi.player_summary")
+WARM_CACHE_LOG = logging.getLogger("messi.warm_cache")
+WARM_CACHE_SCOPE = 8
+WARM_CACHE_COMPETITION = "all"
 
 DUEL_PRESS_ERROR_RESPONSES = {
     404: {
@@ -211,6 +215,63 @@ app.add_middleware(
     allow_headers=["Content-Type"],
     max_age=600,
 )
+
+
+async def _warm_player_summary_cache() -> None:
+    """Build season-rail summary indexes sequentially without blocking the event loop."""
+    total_started = time.perf_counter()
+    try:
+        seasons = await run_in_threadpool(supported_seasons)
+    except Exception:
+        WARM_CACHE_LOG.exception("warm_cache_failed phase=supported_seasons")
+        return
+
+    contexts = [
+        (season, mode, WARM_CACHE_SCOPE, WARM_CACHE_COMPETITION)
+        for season in sorted(seasons, reverse=True)
+        for mode in ("league", "europe")
+    ]
+    WARM_CACHE_LOG.info("warm_cache_started contexts=%s", len(contexts))
+    for season, mode, scope, competition in contexts:
+        started = time.perf_counter()
+        try:
+            await run_in_threadpool(
+                _v2_player_summary_index, season, mode, scope, competition,
+            )
+        except asyncio.CancelledError:
+            elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
+            WARM_CACHE_LOG.info(
+                "warm_cache_cancelled season=%s mode=%s scope=%s competition=%s elapsed_ms=%s",
+                season, mode, scope, competition, elapsed_ms,
+            )
+            raise
+        except Exception:
+            elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
+            WARM_CACHE_LOG.exception(
+                "warm_cache_context_failed season=%s mode=%s scope=%s competition=%s elapsed_ms=%s",
+                season, mode, scope, competition, elapsed_ms,
+            )
+        else:
+            elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
+            WARM_CACHE_LOG.info(
+                "warm_cache_context_complete season=%s mode=%s scope=%s competition=%s elapsed_ms=%s",
+                season, mode, scope, competition, elapsed_ms,
+            )
+    total_ms = round((time.perf_counter() - total_started) * 1000.0, 2)
+    WARM_CACHE_LOG.info("warm_cache_complete contexts=%s total_ms=%s", len(contexts), total_ms)
+
+
+@app.on_event("startup")
+async def schedule_player_summary_cache_warmup() -> None:
+    """Schedule optional cache warmup and return immediately so the port can open."""
+    enabled = os.getenv("API_WARM_CACHE", "1").strip().lower() not in {"0", "false", "no", "off"}
+    if not enabled:
+        WARM_CACHE_LOG.info("warm_cache_disabled env=API_WARM_CACHE")
+        return
+    app.state.player_summary_warm_cache_task = asyncio.create_task(
+        _warm_player_summary_cache(), name="messi-player-summary-cache-warmup",
+    )
+    WARM_CACHE_LOG.info("warm_cache_scheduled background=true")
 
 
 @app.exception_handler(ShotmapContractViolation)
