@@ -54,6 +54,7 @@ class SlackWatcherTests(unittest.TestCase):
             brainshower_channel_ids=frozenset({"CBRAIN"}),
             claude_user_id="UCLAUDE",
             codex_recipient_id="UCODEX",
+            owner_dm_channel_id="DOWNER",
             claude_user_ids=frozenset({"UCLAUDE"}),
             claude_bot_ids=frozenset(),
             claude_app_ids=frozenset(),
@@ -80,6 +81,29 @@ class SlackWatcherTests(unittest.TestCase):
             ("FAIL", "broken"),
         )
         self.assertIsNone(slack_watcher.parse_tag("ordinary note", slack_watcher.REPORT_TAGS))
+
+    def test_wake_posts_directly_to_owner_dm_without_opening_claude_dm(self):
+        environment = {
+            "SLACK_WATCH_CHANNEL_IDS": "CEXEC",
+            "SLACK_CODEX_RECIPIENT_ID": "UCODEX",
+            "SLACK_OWNER_DM_CHANNEL_ID": "DOWNER",
+        }
+        with patch.dict("os.environ", environment, clear=True):
+            config = slack_watcher.WatchConfig.from_environment()
+        self.assertEqual(config.claude_user_id, "")
+
+        bridge = SlackSocketBridge(
+            app_token="xapp-test", bot_token="xoxb-test", channel_id="CEXEC"
+        )
+        wake = slack_watcher.SlackWakeClient(bridge, config.owner_dm_channel_id)
+        with patch.object(bridge, "_json_request", return_value={"ok": True, "ts": "1.2"}) as request:
+            self.assertEqual(wake.wake("watch summary"), "1.2")
+
+        request.assert_called_once_with(
+            "https://slack.com/api/chat.postMessage",
+            "xoxb-test",
+            {"channel": "DOWNER", "text": "@claude watch summary", "unfurl_links": False},
+        )
 
     def test_codex_report_envelope_is_tagged_mentioned_and_bounded(self):
         sink = agent_loop.SlackAuditSink(
@@ -132,6 +156,54 @@ class SlackWatcherTests(unittest.TestCase):
             self.assertIn("channel=CEXEC", wake.wakes[0])
             self.assertIn("channel=DM", wake.wakes[1])
             self.assertEqual(len(wake.eye_messages), 2)
+            self.assertEqual(len(watcher.state.data["seenMessageKeys"]), 2)
+
+    def test_poll_fallback_uses_get_query_helper_for_slack_read_methods(self):
+        with tempfile.TemporaryDirectory() as root:
+            watcher = self.make_watcher(root)
+            root_message = {
+                "user": "UOTHER",
+                "text": "routine message",
+                "ts": "20.1",
+                "reply_count": 1,
+            }
+            reply_message = {
+                "user": "UOTHER",
+                "text": "routine reply",
+                "ts": "20.2",
+                "thread_ts": "20.1",
+            }
+
+            def query(url, token, parameters):
+                self.assertEqual(token, "xoxb-test")
+                if url.endswith("conversations.list"):
+                    self.assertEqual(parameters, {"types": "im", "limit": 200})
+                    return {"ok": True, "channels": [{"id": "D123"}]}
+                if url.endswith("conversations.history"):
+                    messages = [root_message] if parameters["channel"] == "CEXEC" else []
+                    return {"ok": True, "messages": messages}
+                if url.endswith("conversations.replies"):
+                    self.assertEqual(parameters["channel"], "CEXEC")
+                    self.assertEqual(parameters["ts"], "20.1")
+                    return {"ok": True, "messages": [root_message, reply_message]}
+                self.fail(f"unexpected Slack read method: {url}")
+
+            with patch.object(watcher.bridge, "_query_request", side_effect=query) as get_request:
+                with patch.object(watcher.bridge, "_json_request") as post_request:
+                    watcher.poll_fallback()
+
+            self.assertEqual(get_request.call_count, 5)
+            self.assertEqual(
+                [call.args[0].rsplit("/", 1)[-1] for call in get_request.call_args_list],
+                [
+                    "conversations.list",
+                    "conversations.history",
+                    "conversations.history",
+                    "conversations.replies",
+                    "conversations.history",
+                ],
+            )
+            post_request.assert_not_called()
 
     def test_restart_does_not_repeat_an_alerted_message(self):
         with tempfile.TemporaryDirectory() as root:
