@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·정적 검증 완료, 테스트·commit 차단 — Slack 감시기 2차 보강 및 하드닝된 agent loop 보고 태그 재적용 (2026-09-04 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-watcher
+- 범위/결과: `agent/slack-watcher`의 최신 하드닝 `messi-2-dashboard/agent_loop.py` 위에 `audit.post_codex_report` 기반 `[DONE]`/`[FAIL]` 구조화 보고와 identity/Git/test/failure 증거를 재적용했다. 완료 판정은 `test_result.passed`가 아니라 #315의 `accepted`를 사용하며 verdict·확인 footer를 보존했다. `listen()`에는 기존 `opinion_handler`와 `try/finally` watch-task 취소를 유지한 채 `envelope_handler`·`fallback_handler`·`stop_requested`를 추가했다. 감시기는 §10 발주자 무표식 즉시 깨움, §11 정식/리터럴 Claude 호출, §12 정식/리터럴 Codex 호출과 리터럴-only 직접 중계·정식 멘션 중복 방지, §13 발주자 전용 티켓 증액(기본 1, 회당 5, 누적 10, 잔여량 답글, 봇 거부 기록, 한도 중단 요청 즉시 재개)을 구현했다. `test_slack_watcher.py`는 기존 8건에 8건을 추가해 16건이지만 `python -m unittest test_slack_watcher.py`와 `py -3 -m unittest test_slack_watcher.py` 모두 실행 파일 부재 `CommandNotFoundException`으로 실행하지 못했다. `git diff --check`는 통과했고 mechanical gate 대상은 없다. 테스트 미실행 때문에 새 commit은 만들지 않았으며 HEAD는 기존 `fbc4529`, push·PR·merge·deploy·기능 플래그 변경은 없다.
+
 - 상태: 로컬 수정·정적 검증 완료, commit 차단 — 시즌 레일 컨텍스트 예열 순서를 최신 시즌 우선으로 결정화 (2026-09-04 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-api-eventloop
 - 범위/결과: 기존 백그라운드 순차 예열 구현은 유지하고, `supported_seasons()`의 `frozenset` 결과를 문자열 내림차순으로 정렬해 최신 시즌부터 처리하며 각 시즌 안에서는 기존 mode 튜플 순서대로 `league`를 `europe`보다 먼저 처리한다. 현재 시즌은 하드코딩하지 않았다. `git diff --check`와 변경 파일 gate(`api_server/main.py`, `docs/API_CONTRACT.md`만 해당)가 통과했다. `python -m pytest tests/test_api.py tests/test_shotmap_contract.py -q`는 이 샌드박스에 Python 실행 파일이 없어 `CommandNotFoundException`으로 실행되지 못했다. 커밋을 시도했으나 공유 Git 메타데이터 경로 `C:/Users/USER/Downloads/files/forward-scouting-report-GIT-METADATA-DO-NOT-DELETE/.git/worktrees/forward-scouting-report-api-eventloop/index.lock`에 대한 쓰기 권한이 없어 `Permission denied`로 차단됐다. 기존 미추적 `docs/CODEX_ORDER_WARM_CACHE.md`는 수정·커밋하지 않았고, 점수·코호트·데이터·공유 계산 모듈·push·PR·merge·deploy·기능 플래그는 변경하지 않았다.

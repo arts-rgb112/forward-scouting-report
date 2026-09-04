@@ -20,9 +20,14 @@ from typing import Any, Callable, Iterable
 from agent_loop import (
     DEFAULT_CODEX_TIMEOUT_SECONDS,
     AgentLoopError,
+    SlackCommand,
     SlackSocketBridge,
     _csv_ids,
+    handle_opinion_command,
     handle_slack_command,
+    handle_ticket_addition,
+    parse_slack_action,
+    parse_ticket_addition,
     redact_audit_text,
 )
 
@@ -35,6 +40,8 @@ REPORT_TAGS = frozenset({"DONE", "FAIL", "BLOCKED", "ASK", "LIMIT", "NOTE"})
 URGENT_TAGS = frozenset({"FAIL", "BLOCKED", "ASK", "LIMIT"})
 INSTRUCTION_TAGS = frozenset({"APPLY", "PLAN", "REVISE"})
 MENTION_RE = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]+)?>", re.I)
+CLAUDE_LITERAL_RE = re.compile(r"(?<![A-Z0-9_])@claude\b", re.I)
+CODEX_LITERAL_RE = re.compile(r"(?<![A-Z0-9_])@codex\b", re.I)
 TAG_RE = re.compile(
     r"(?is)^\s*\*?\s*(?:<@[A-Z0-9]+(?:\|[^>]+)?>\s*)?"
     r"(?:`\s*)?\[([A-Z]+)\](?:\s*`)?(?:\s*\*?)\s*(.*)$"
@@ -71,6 +78,7 @@ class WatchConfig:
     state_file: Path
     stop_file: Path
     decisions_file: Path
+    owner_user_id: str = "U0BU7BTNLJK"
 
     @classmethod
     def from_environment(cls) -> "WatchConfig":
@@ -107,6 +115,8 @@ class WatchConfig:
             state_file=_env_path("SLACK_WATCH_STATE_FILE", DEFAULT_STATE_FILE),
             stop_file=_env_path("SLACK_WATCH_STOP_FILE", DEFAULT_STOP_FILE),
             decisions_file=_env_path("SLACK_BRAINSHOWER_DECISIONS_FILE", DEFAULT_DECISIONS_FILE),
+            owner_user_id=os.environ.get("SLACK_OWNER_USER_ID", "U0BU7BTNLJK").strip()
+            or "U0BU7BTNLJK",
         )
 
 
@@ -314,6 +324,8 @@ class SlackWatcher:
         wake_client: SlackWakeClient | None = None,
         clock: Callable[[], float] = time.time,
         command_handler: Callable[[Any], int] | None = None,
+        opinion_handler: Callable[[Any], int] | None = None,
+        ticket_handler: Callable[[Any, str], int] | None = None,
     ) -> None:
         self.config = config
         self.bridge = bridge
@@ -321,6 +333,8 @@ class SlackWatcher:
         self.wake_client = wake_client or SlackWakeClient(bridge, config.claude_user_id)
         self.clock = clock
         self.command_handler = command_handler or (lambda command: 0)
+        self.opinion_handler = opinion_handler or (lambda command: 0)
+        self.ticket_handler = ticket_handler or (lambda command, mode: 0)
         self.command_queue: queue.Queue[Any] = queue.Queue()
         self._command_worker_started = False
         self._state_lock = threading.RLock()
@@ -399,6 +413,14 @@ class SlackWatcher:
         self.command_queue.put((self.command_handler, command))
         return 0
 
+    def _enqueue_opinion(self, command: Any) -> int:
+        self.command_queue.put((self.opinion_handler, command))
+        return 0
+
+    def _enqueue_selected(self, handler: Callable[[Any], int], command: Any) -> int:
+        self.command_queue.put((handler, command))
+        return 0
+
     def _start_command_worker(self) -> None:
         if self._command_worker_started:
             return
@@ -418,7 +440,11 @@ class SlackWatcher:
             cause = ""
         mentioned_ids = set(MENTION_RE.findall(message.text))
         if self.config.codex_recipient_id and self.config.codex_recipient_id not in mentioned_ids:
-            cause = "멘션 누락"
+            cause = (
+                "리터럴 @codex 중계 후 루프 미기동 또는 미수신"
+                if CODEX_LITERAL_RE.search(message.text)
+                else "멘션 누락"
+            )
         elif not cause:
             cause = "루프 미기동 또는 Socket 미수신"
         self.state.data.setdefault("pendingReceipts", {})[message.thread_ts] = {
@@ -432,6 +458,43 @@ class SlackWatcher:
             "cause": cause,
             "tag": tag,
         }
+
+    def _command_for_message(self, message: WatchMessage, text: str, *, prefix: str) -> SlackCommand:
+        actor = self._actor(message)
+        is_bot = bool(message.bot_id or message.app_id or actor in {"claude", "codex"})
+        return SlackCommand(
+            event_id=f"{prefix}:{message.event_id}",
+            user_id=message.user_id,
+            text=text,
+            channel_id=message.channel_id,
+            thread_ts=message.thread_ts,
+            event_ts=message.event_ts,
+            actor_type="allowed_bot" if is_bot else "human",
+            bot_id=message.bot_id,
+            app_id=message.app_id,
+        )
+
+    def _relay_literal_codex(self, message: WatchMessage) -> bool:
+        if message.channel_id not in self.config.channel_ids:
+            return False
+        if not CODEX_LITERAL_RE.search(message.text):
+            return False
+        mentioned_ids = set(MENTION_RE.findall(message.text))
+        if self.config.codex_recipient_id in mentioned_ids:
+            return False
+        normalized = CODEX_LITERAL_RE.sub("", message.text).strip()
+        if parse_slack_action(normalized) is None:
+            return False
+        command = self._command_for_message(message, normalized, prefix="literal-codex")
+        if message.channel_id in self.config.brainshower_channel_ids:
+            self._enqueue_opinion(command)
+        else:
+            self._enqueue_command(command)
+        print(
+            f"slack_watcher: relayed literal @codex thread_ts={message.thread_ts}",
+            flush=True,
+        )
+        return True
 
     def _brainshower(self, message: WatchMessage) -> None:
         if message.channel_id not in self.config.brainshower_channel_ids:
@@ -459,8 +522,25 @@ class SlackWatcher:
             return
         actor = self._actor(message)
         self._receipt(message, actor)
-        if actor == "claude":
+        mentioned_ids = set(MENTION_RE.findall(message.text))
+        codex_called = (
+            self.config.codex_recipient_id in mentioned_ids
+            or bool(CODEX_LITERAL_RE.search(message.text))
+        )
+        if actor == "claude" or codex_called:
             self._watch_instruction(message)
+        ticket_request = parse_ticket_addition(message.text)
+        if ticket_request is not None and message.channel_id in self.config.channel_ids:
+            envelope["_slack_watcher_skip_command"] = True
+            mode = "opinion" if message.channel_id in self.config.brainshower_channel_ids else "execution"
+            command = self._command_for_message(message, message.text, prefix="ticket")
+            self._enqueue_selected(
+                lambda item, selected_mode=mode: self.ticket_handler(item, selected_mode),
+                command,
+            )
+        if self._relay_literal_codex(message):
+            envelope["_slack_watcher_skip_command"] = True
+        alerted_for_message = False
         if actor == "codex":
             parsed = parse_tag(message.text, REPORT_TAGS)
             tag, body = parsed if parsed is not None else ("NOTE", message.text)
@@ -472,16 +552,37 @@ class SlackWatcher:
                     "FAIL": "실패",
                 }[tag]
                 self._alert(f"report:{message.key}", message, f"[{tag}] {detector}")
+                alerted_for_message = True
             elif tag == "DONE":
                 missing = [name for name, pattern in DONE_FIELD_RE.items() if not pattern.search(body)]
                 status = "[DONE] 형식 미달" if missing else "[DONE] 검수 대기"
                 detail = f"누락: {', '.join(missing)}" if missing else "필수 5항목 확인"
                 self._alert(f"report:{message.key}", message, status, detail)
+                alerted_for_message = True
             try:
                 self.wake_client.eyes(message)
             except Exception as exc:
                 print(f"slack_watcher: eyes failed: {type(exc).__name__}", file=sys.stderr)
-        self._brainshower(message)
+        if message.channel_id in self.config.channel_ids and not alerted_for_message:
+            claude_called = (
+                self.config.claude_user_id in mentioned_ids
+                or bool(CLAUDE_LITERAL_RE.search(message.text))
+            )
+            owner_message = message.user_id == self.config.owner_user_id
+            if owner_message or claude_called:
+                signals = []
+                if owner_message:
+                    signals.append("발주자 메시지")
+                if claude_called:
+                    signals.append("@claude 호출")
+                self._alert(
+                    f"direct:{message.key}",
+                    message,
+                    " · ".join(signals),
+                )
+                alerted_for_message = True
+        if not alerted_for_message:
+            self._brainshower(message)
         self.state.save()
 
     def check_silent_failures(self) -> None:
@@ -585,6 +686,8 @@ class SlackWatcher:
         print("slack_watcher: polling fallback cycle complete process_alive=true", flush=True)
 
     def _dispatch_polled_command(self, envelope: dict[str, Any]) -> None:
+        if envelope.get("_slack_watcher_skip_command") is True:
+            return
         payload = envelope.get("payload")
         event = payload.get("event") if isinstance(payload, dict) else None
         if not isinstance(event, dict) or event.get("channel") != self.bridge.channel_id:
@@ -606,6 +709,7 @@ class SlackWatcher:
                 listener = asyncio.create_task(
                     self.bridge.listen(
                         self._enqueue_command,
+                        self._enqueue_opinion,
                         envelope_handler=self.process_envelope,
                         fallback_handler=self.poll_fallback,
                         stop_requested=self.stopped,
@@ -647,15 +751,28 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = parse_args(argv)
     config = WatchConfig.from_environment()
     bridge = SlackSocketBridge.from_environment()
+    execution_handler = lambda command: handle_slack_command(
+        command,
+        max_iterations=1,
+        test_timeout=args.test_timeout,
+        agent_timeout=args.agent_timeout,
+    )
+    opinion_handler = lambda command: handle_opinion_command(
+        command,
+        agent_timeout=args.agent_timeout,
+    )
+    ticket_handler = lambda command, mode: handle_ticket_addition(
+        command,
+        mode=mode,
+        resume_handler=opinion_handler if mode == "opinion" else execution_handler,
+        owner_user_id=config.owner_user_id,
+    )
     watcher = SlackWatcher(
         config,
         bridge,
-        command_handler=lambda command: handle_slack_command(
-            command,
-            max_iterations=1,
-            test_timeout=args.test_timeout,
-            agent_timeout=args.agent_timeout,
-        ),
+        command_handler=execution_handler,
+        opinion_handler=opinion_handler,
+        ticket_handler=ticket_handler,
     )
     if args.check:
         print(
