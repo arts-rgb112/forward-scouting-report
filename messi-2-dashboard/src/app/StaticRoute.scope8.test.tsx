@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const transport = vi.hoisted(() => ({ detail: vi.fn(), duelDetail: vi.fn(), detailReadouts: vi.fn(), comparison: vi.fn(), quadrant: vi.fn(), quality: vi.fn(), options: vi.fn(), fullHeatmap: vi.fn() }));
@@ -134,9 +134,12 @@ describe("scope-8 direct-route capability gate", () => {
     window.history.replaceState(null, "", "/players/1?season=2024%2F2025&mode=league&scope=5&competition=all&taxonomy=duel-press-v1");
     render(<StaticRoute />);
     expect(await screen.findByRole("heading", { name: samplePlayers[0].name })).toBeInTheDocument();
-    expect(await screen.findByRole("region", { name: "Duel press detailed stats board" })).toHaveTextContent("상세 스탯 보드");
+    await waitFor(() => expect(screen.getByRole("region", { name: "Duel press detailed stats board", hidden: true })).toBeInTheDocument());
+    const detailBoard = screen.getByRole("region", { name: "Duel press detailed stats board", hidden: true });
+    expect(detailBoard).toHaveTextContent("상세 스탯 보드");
     expect(screen.queryByRole("region", { name: "Duel and pressing companion" })).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Duel press detailed stats board" }).closest('[data-layout="detail-board-slot"]')).toBeInTheDocument();
+    expect(detailBoard.closest('[data-layout="detail-board-slot"]')).toBeInTheDocument();
+    expect(detailBoard.closest("details")).not.toHaveAttribute("open");
     expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
     expect(transport.detailReadouts).toHaveBeenCalledWith(expect.anything(), 1, { season: "2024/2025", mode: "league", scope: 5, competition: "all" }, expect.any(AbortSignal));
   });
@@ -180,7 +183,8 @@ describe("scope-8 direct-route capability gate", () => {
     window.history.replaceState(null, "", "/players/1?season=2024%2F2025&scope=5&taxonomy=duel-press-v1");
     view.rerender(<StaticRoute />);
     await waitFor(() => expect(transport.detailReadouts).toHaveBeenCalledTimes(2));
-    expect((await screen.findByRole("progressbar", { name: "박스 밖 슈팅 비교 백분위" })).getAttribute("aria-valuenow")).toBe("12");
+    fireEvent.click(await screen.findByText("상세 스탯 보드", { selector: "summary" }));
+    await waitFor(() => expect(screen.getByRole("progressbar", { name: "박스 밖 슈팅 비교 백분위" })).toHaveAttribute("aria-valuenow", "12"));
     await act(async () => { resolveStale(stale); await Promise.resolve(); });
     expect(screen.getByRole("progressbar", { name: "박스 밖 슈팅 비교 백분위" })).toHaveAttribute("aria-valuenow", "12");
   });

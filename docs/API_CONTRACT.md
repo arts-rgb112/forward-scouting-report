@@ -2,6 +2,16 @@
 
 ## 진행 중인 작업
 
+- 상태: 반려 수정·로컬 검증 완료, 호스트 커밋 대기 — P0-1 배치 유지 및 제품·3열·접근성 회귀 단언 복원 (2026-09-05 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b
+- 범위/결과: 승인된 전폭 섹션 순서와 기본 접힘은 유지했다. 선수 페이지 `Benchmark`를 import-compatible no-op으로 되돌리고 원래 테스트 이름과 `container` empty, volume/ratio/v2 hook 미호출 단언을 복원했다. 새 `category-summary-slot` 안의 `Percentile profile`에서 legacy grid의 `sm:grid-cols-2 lg:grid-cols-3` class 단언을 유지했고, `StaticRoute.scope8.test.tsx` 네 곳은 빈 `data-layout` 조회 대신 `region`/`Volume benchmark radar` 접근 가능한 이름 조회로 복원했다. 같은 파일의 접힌 상세 board는 `hidden: true`의 role/name으로 찾고, 백분위 bar는 상세를 펼친 뒤 role/name으로 찾도록 raw selector를 제거했다. 전체 `npm test`는 기존 기준선과 같은 555/572 통과·17 실패(종료코드 1), `npm run build`와 `git diff --check`는 통과했다(기존 500kB chunk 경고 및 line-ending 경고만). `origin/main..HEAD` committed diff가 비어 mechanical subagent gate는 비활성이다. branch `agent/p01-sections`, HEAD `ea435214a04f1074b99bb7a1d3b1b27566318be9`; commit·push·PR·merge·deploy·기능 플래그 변경 없음.
+
+- 상태: 로컬 구현·검증 완료, 호스트 커밋 대기 — v3.0 2단계 P0-1 히어로 하단 전폭 섹션 스택 배치 (2026-09-05 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b
+- 범위/결과: 기존 히어로 3:9는 유지하고 `player-detail-section-stack` 아래를 `tactical-summary-slot` → `category-summary-slot` → `category-detail-slot`(기본 접힘) → `radar-slot` → `data-quality-slot` 전폭 형제 순서로 배치했다. 6칸 보드는 테스트에서 자식 6개와 데스크톱 열 수 3을 확인했다. 변경 핵심 테스트 16/16, 전체 558/572 통과·기존 실패 14건(기준 17건 대비 신규 회귀 0), `npm run build` 및 `git diff --check` 통과. 기계적 감사 대상 diff는 없으며 점수·코호트·데이터·API·기능 플래그는 변경하지 않았다. branch `agent/p01-sections`, HEAD `ea43521`; commit·push·PR·merge·deploy 없음.
+
+## 진행 중인 작업
+
 - 상태: 로컬 구현·검증 완료, 호스트 commit 대기 — P1-4 3D 공간 구역 호버 레이캐스팅 전환 및 키보드 접근성 보존 (2026-09-05 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b
 - 범위/결과: `messi-2-dashboard/src/playerDetail/WebGLSpatialPitch.tsx`의 구역 button에서 보이는 슈팅 비중 숫자와 배경을 제거하고 빈 포커스 타깃·기존 focus/blur·aria-label·focus-visible 링을 유지했다. 유효한 6×5 positional grid 전 구역에 `colorWrite=false`·`opacity=0`·depth 비기록 평면 mesh를 별도 `zoneHitRoot`에 만들고, canvas 좌표의 `pointermove`를 `THREE.Raycaster`로 판정해 툴팁 상태를 설정하며 피치 밖에서는 해제한다. 슛 marker는 별도 overlay 그룹에 있어 레이 대상에 포함되지 않는다. 툴팁의 구역번호·슈팅 비중·활동·슛·득점·xG는 그대로다. 집중 `SpatialPitch.test.tsx`는 14/14 통과했고 전체 `npm test`는 기존 기준선과 동일한 555/572 통과·17 실패로 신규 회귀 0건이다. `npm run build` 통과(기존 500kB chunk 경고만), `git diff --check` 통과. diff는 이 계약서와 WebGL 컴포넌트·회귀 테스트뿐이라 mechanical subagent gate 대상이 없다. branch `agent/zone-raycast`, HEAD `7a42ffbf568780fa34b2cb46eecb83345e169b14`; commit·push·PR·merge·deploy·기능 플래그 변경 없음. 기존 미추적 파일 3개는 수정하지 않았다.

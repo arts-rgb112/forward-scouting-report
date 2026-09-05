@@ -58,17 +58,21 @@ describe("native player detail panels", () => {
   it("uses a 3:9 hero, then full-width tactical summary and detail sections", () => {
     window.history.replaceState(null, "", "/players/1?season=2025%2F2026&mode=league&scope=8&utm_source=slack");
     const { container } = render(<PlayerDetailDossierLayout player={player} analysis={analysis} quality={{ kind: "idle" }} history={{ loading: false, entries: [], failed: 0, requestedSeasons: 0 }} dataset={{season:"2025/2026",mode:"league",scope:8,competition:"all"}} />);
-    const outer = container.querySelector('[data-layout="detail-dossier-layout"]'); const dossierSeason = container.querySelector('[data-layout="dossier-season"]'); const slot = container.querySelector('[data-layout="detail-board-slot"]'); const tacticalSlot = container.querySelector('[data-layout="tactical-summary-slot"]');
+    const outer = container.querySelector('[data-layout="detail-dossier-layout"]'); const dossierSeason = container.querySelector('[data-layout="dossier-season"]'); const stack = container.querySelector('[data-layout="player-detail-section-stack"]'); const tacticalSlot = container.querySelector('[data-layout="tactical-summary-slot"]'); const summarySlot = container.querySelector('[data-layout="category-summary-slot"]'); const detailSlot = container.querySelector('[data-layout="category-detail-slot"]'); const radarSlot = container.querySelector('[data-layout="radar-slot"]'); const qualitySlot = container.querySelector('[data-layout="data-quality-slot"]');
     expect(outer).toHaveClass("min-w-0", "xl:grid-cols-12", "xl:items-start");
-    expect(dossierSeason).toHaveClass("min-w-0", "xl:col-span-3"); expect(dossierSeason?.querySelector('[data-layout="approved-profile-card"]')).toHaveClass("w-full"); expect(slot).toHaveClass("mt-4", "min-w-0");
+    expect(dossierSeason).toHaveClass("min-w-0", "xl:col-span-3"); expect(dossierSeason?.querySelector('[data-layout="approved-profile-card"]')).toHaveClass("w-full");
     const workspace = within(outer!).getByRole("region", { name: "전술·공간 분석" }); const tactical = within(tacticalSlot!).getByRole("region", { name: "Tactical summary" }); const pitch = within(workspace).getByRole("region", { name: "피치 분석" }); const pitchSlot = workspace.querySelector('[data-layout="pitch-workspace-slot"]');
     expect(workspace).toHaveClass("min-w-0", "xl:col-span-9"); expect(workspace).not.toContainElement(tactical); expect(workspace).toContainElement(pitch); expect(tacticalSlot).toHaveClass("mt-4", "min-w-0"); expect(within(pitch).getAllByRole("tab").length).toBeGreaterThanOrEqual(3); expect(within(pitch).getByRole("tab", { name: "2D 회랑" })).toHaveAttribute("aria-selected", "true");
     const threeDLink = within(workspace).getByRole("link", { name: "3D로 보기" });
     expect(threeDLink).toHaveAttribute("href", `/player/${player.id}/3d?season=2025%2F2026&mode=league&scope=8&utm_source=slack`); expect(threeDLink).toHaveAttribute("target", "_blank");
     expect(within(pitch).queryByRole("tab", { name: "3D 회랑" })).not.toBeInTheDocument();
     expect(pitchSlot).toContainElement(pitch); expect(tacticalSlot).toContainElement(tactical);
-    expect(workspace.compareDocumentPosition(tacticalSlot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(tacticalSlot!.compareDocumentPosition(slot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(slot!).getByRole("region", { name: "Percentile profile" }).querySelector('[data-layout="legacy-percentile-grid"]')).toHaveClass("sm:grid-cols-2", "lg:grid-cols-3");
+    expect(workspace.compareDocumentPosition(stack!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const orderedSlots = Array.from(stack!.children).map((node) => node.getAttribute("data-layout"));
+    expect(orderedSlots).toEqual(["tactical-summary-slot", "category-summary-slot", "category-detail-slot", "radar-slot", "data-quality-slot"]);
+    [tacticalSlot, summarySlot, detailSlot, radarSlot, qualitySlot].forEach((slot) => expect(slot).toHaveClass("min-w-0", "w-full"));
+    const profileGrid = within(summarySlot!).getByRole("region", { name: "Percentile profile" }).querySelector('[data-layout="legacy-percentile-grid"]')!;
+    expect(profileGrid).toHaveClass("sm:grid-cols-2", "lg:grid-cols-3"); expect(profileGrid).toHaveAttribute("data-desktop-columns", "3"); expect(profileGrid.children).toHaveLength(6);
   });
   it("separates shooting and movement layers between the pitch tabs", async () => {
     const layeredAnalysis = { ...analysis, spatial: { ...analysis.spatial, available: true, heatmapPointCount: 3, heatmapPoints: [{ x: 80, y: 40 }, { x: 81, y: 42 }, { x: 82, y: 44 }], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 80, y: 40, outcome: "goal", xg: .4, xgot: .6, trajectory: { schemaVersion: "shotmap-trajectory-v1", endpointKind: "goal_mouth", endX: 100, endY: 52, endZMeters: 1.2, source: "fotmob" } }], continuousCore: { available: true, thresholdOfPeak: .5 } } } as never;
