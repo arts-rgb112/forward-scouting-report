@@ -1586,7 +1586,16 @@ def apply_file_changes(response_text: str) -> list[AppliedChange]:
 
 def _git_status_porcelain() -> str:
     result = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=all"],
+        [
+            "git",
+            "-c",
+            f"safe.directory={PROJECT_ROOT}",
+            "-c",
+            f"safe.directory={PROJECT_ROOT.parent}",
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+        ],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
@@ -1618,6 +1627,15 @@ def snapshot_workspace() -> str:
     turn's actual file writes can be diffed afterward instead of parsed out of
     the model's response text."""
     return _git_status_porcelain()
+
+
+def worktree_cleanliness() -> tuple[list[str] | None, str]:
+    """Inspect the loop's target worktree without blocking an intentional continuation."""
+    try:
+        paths = sorted(_porcelain_changed_paths(_git_status_porcelain()))
+    except AgentLoopError as exc:
+        return None, str(exc)
+    return paths, ""
 
 
 def apply_workspace_changes(before_snapshot: str) -> list[AppliedChange]:
@@ -1878,6 +1896,7 @@ def call_agent(
     timeout_seconds: int,
     image_paths: Sequence[Path] = (),
     sandbox: str = "read-only",
+    process_started: Callable[[int], None] | None = None,
 ) -> str:
     """Run one non-interactive Codex turn using ChatGPT plan access.
 
@@ -1911,19 +1930,29 @@ def call_agent(
             argv.extend(["--image", str(image_path)])
         argv.append("-")
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 argv,
                 cwd=PROJECT_ROOT,
                 env=codex_environment(),
-                input=combined_prompt,
-                capture_output=True,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=timeout_seconds,
-                check=False,
             )
+            if process_started is not None:
+                try:
+                    process_started(process.pid)
+                except Exception:
+                    process.kill()
+                    process.communicate()
+                    raise
+            stdout, stderr = process.communicate(input=combined_prompt, timeout=timeout_seconds)
+            completed = subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
         except subprocess.TimeoutExpired as exc:
+            process.kill()
+            process.communicate()
             raise AgentLoopError(
                 f"Codex {role} timed out after {timeout_seconds}s"
             ) from exc
@@ -2596,6 +2625,19 @@ def handle_slack_command(
         )
         return 2
 
+    dirty_paths, cleanliness_error = worktree_cleanliness()
+    if dirty_paths is None:
+        audit.post(
+            "AGENT LOOP · WORKTREE CHECK WARNING",
+            f"대상 워크트리 청결 상태 확인 불가(실행은 계속): {cleanliness_error}",
+        )
+    elif dirty_paths:
+        audit.post(
+            "AGENT LOOP · WORKTREE DIRTY WARNING",
+            "대상 워크트리에 미커밋 변경이 있어도 승인된 연속 작업일 수 있으므로 실행은 계속합니다.\n"
+            + "\n".join(dirty_paths),
+        )
+
     try:
         runner, runner_status = build_codex_runner()
         if runner is None:
@@ -2617,7 +2659,14 @@ def handle_slack_command(
             state["executionCount"] = execution_count + 1
             state["status"] = "executing"
             state["executionStartedAt"] = f"{time.time():.6f}"
+            state["executionPhase"] = "codex"
+            state["loopPid"] = os.getpid()
             store.save(state)
+
+            def remember_codex_pid(pid: int) -> None:
+                state["codexPid"] = pid
+                store.save(state)
+
             attachment_summary = ", ".join(
                 f"{attachment.name} ({attachment.mimetype}, {attachment.size_bytes} bytes)"
                 for attachment in attachments
@@ -2650,7 +2699,11 @@ def handle_slack_command(
                 timeout_seconds=agent_timeout,
                 image_paths=image_paths,
                 sandbox="workspace-write",
+                process_started=remember_codex_pid,
             )
+            state["executionPhase"] = "post_codex"
+            state.pop("codexPid", None)
+            store.save(state)
         escalation = extract_brainshower_escalation(coder_text)
         if escalation is not None:
             # Escalating means no files should have been touched; the executor
@@ -2671,6 +2724,10 @@ def handle_slack_command(
                 root=True,
             )
             state["status"] = "brainshower_pending"
+            state.pop("executionStartedAt", None)
+            state.pop("executionPhase", None)
+            state.pop("loopPid", None)
+            state.pop("codexPid", None)
             state["lastExecution"] = {
                 "action": action,
                 "brainshower": "posted",
@@ -2699,6 +2756,9 @@ def handle_slack_command(
         state["lastExecution"] = execution
         state["status"] = "open"
         state.pop("executionStartedAt", None)
+        state.pop("executionPhase", None)
+        state.pop("loopPid", None)
+        state.pop("codexPid", None)
         state.pop("pendingBudgetCommand", None)
         store.save(state)
         audit.post("TEST", json.dumps(execution["tests"], ensure_ascii=False, indent=2))
@@ -2720,6 +2780,9 @@ def handle_slack_command(
     except Exception as exc:
         state["status"] = "open"
         state.pop("executionStartedAt", None)
+        state.pop("executionPhase", None)
+        state.pop("loopPid", None)
+        state.pop("codexPid", None)
         state["lastExecution"] = {"action": action, "error": type(exc).__name__}
         store.save(state)
         try:

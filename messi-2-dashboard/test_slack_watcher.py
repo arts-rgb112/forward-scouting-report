@@ -67,6 +67,8 @@ class SlackWatcherTests(unittest.TestCase):
             stop_file=Path(root) / "slack_watcher.stop",
             decisions_file=Path(root) / "BRAINSHOWER_DECISIONS.md",
             owner_user_id="UOWNER",
+            execution_timeout_seconds=900,
+            agent_state_dir=Path(root) / "agent-state",
         )
         bridge = SlackSocketBridge(
             app_token="xapp-test", bot_token="xoxb-test", channel_id="CEXEC"
@@ -104,6 +106,21 @@ class SlackWatcherTests(unittest.TestCase):
             "xoxb-test",
             {"channel": "DOWNER", "text": "@claude watch summary", "unfurl_links": False},
         )
+
+    def test_execution_timeout_is_configurable_and_defaults_to_fifteen_minutes(self):
+        required = {
+            "SLACK_WATCH_CHANNEL_IDS": "CEXEC",
+            "SLACK_CODEX_RECIPIENT_ID": "UCODEX",
+            "SLACK_OWNER_DM_CHANNEL_ID": "DOWNER",
+        }
+        with patch.dict("os.environ", required, clear=True):
+            self.assertEqual(slack_watcher.WatchConfig.from_environment().execution_timeout_seconds, 900)
+        with patch.dict(
+            "os.environ",
+            {**required, "SLACK_WATCH_EXECUTION_TIMEOUT_SECONDS": "1200"},
+            clear=True,
+        ):
+            self.assertEqual(slack_watcher.WatchConfig.from_environment().execution_timeout_seconds, 1200)
 
     def test_codex_report_envelope_is_tagged_mentioned_and_bounded(self):
         sink = agent_loop.SlackAuditSink(
@@ -279,6 +296,93 @@ class SlackWatcherTests(unittest.TestCase):
             now[0] = 191.0
             watcher.check_silent_failures()
             self.assertEqual(wake.wakes, [])
+
+    def test_stale_open_execution_reports_thread_count_elapsed_and_dead_codex(self):
+        with tempfile.TemporaryDirectory() as root:
+            now = [100.0]
+            wake = FakeWakeClient()
+            watcher = self.make_watcher(root, wake, clock=lambda: now[0])
+            watcher.config.agent_state_dir.mkdir(parents=True)
+            (watcher.config.agent_state_dir / "thread.json").write_text(
+                '{"channelId":"CEXEC","threadTs":"15.1","status":"open",'
+                '"executionCount":1,"lastExecution":null,"executionStartedAt":"100",'
+                '"loopPid":111,"codexPid":222,"messages":[]}',
+                encoding="utf-8",
+            )
+            now[0] = 1001.0
+            with patch.object(slack_watcher, "_process_alive", side_effect=lambda pid: pid == 111):
+                watcher.check_silent_failures()
+            self.assertEqual(len(wake.wakes), 1)
+            self.assertIn("thread_ts=15.1", wake.wakes[0])
+            self.assertIn("경과 15.0분", wake.wakes[0])
+            self.assertIn("executionCount=1", wake.wakes[0])
+            self.assertIn("codex 프로세스=없음", wake.wakes[0])
+            self.assertIn("실행 사망 감지", wake.wakes[0])
+
+    def test_stale_execution_still_warns_when_process_probe_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as root:
+            wake = FakeWakeClient()
+            watcher = self.make_watcher(root, wake, clock=lambda: 1001.0)
+            watcher.config.agent_state_dir.mkdir(parents=True)
+            (watcher.config.agent_state_dir / "thread.json").write_text(
+                '{"channelId":"CEXEC","threadTs":"15.2","status":"executing",'
+                '"executionCount":2,"executionStartedAt":"100","messages":[]}',
+                encoding="utf-8",
+            )
+            with patch.object(slack_watcher, "_process_alive", return_value=None):
+                watcher.check_silent_failures()
+            self.assertEqual(len(wake.wakes), 1)
+            self.assertIn("codex 프로세스=확인 불가", wake.wakes[0])
+            self.assertIn("실행 종결 신호 지연", wake.wakes[0])
+
+    def test_missing_agent_loop_pages_active_execution_before_timeout(self):
+        with tempfile.TemporaryDirectory() as root:
+            wake = FakeWakeClient()
+            watcher = self.make_watcher(root, wake, clock=lambda: 110.0)
+            watcher.config.agent_state_dir.mkdir(parents=True)
+            (watcher.config.agent_state_dir / "thread.json").write_text(
+                '{"channelId":"CEXEC","threadTs":"15.3","status":"executing",'
+                '"executionCount":1,"executionStartedAt":"100",'
+                '"loopPid":111,"codexPid":222,"messages":[]}',
+                encoding="utf-8",
+            )
+            with patch.object(slack_watcher, "_process_alive", side_effect=lambda pid: pid == 222):
+                watcher.check_silent_failures()
+            self.assertEqual(len(wake.wakes), 1)
+            self.assertIn("agent_loop 프로세스 사라짐", wake.wakes[0])
+            self.assertIn("끊겼을 수 있음", wake.wakes[0])
+
+    def test_terminal_signal_clears_tracked_agent_run(self):
+        with tempfile.TemporaryDirectory() as root:
+            now = [100.0]
+            wake = FakeWakeClient()
+            watcher = self.make_watcher(root, wake, clock=lambda: now[0])
+            watcher.process_envelope(
+                envelope("E15-run", channel="CEXEC", user="UCODEX", text="AGENT RUN · APPLY 1/3", ts="15.4")
+            )
+            watcher.process_envelope(
+                envelope("E15-done", channel="CEXEC", user="UCODEX", text="[DONE] AGENT RUN → DONE", ts="15.5", thread_ts="15.4")
+            )
+            wake.wakes.clear()
+            now[0] = 2000.0
+            watcher.check_silent_failures()
+            self.assertEqual(wake.wakes, [])
+
+    def test_failure_count_reduction_is_labeled_note_from_report_numbers(self):
+        with tempfile.TemporaryDirectory() as root:
+            wake = FakeWakeClient()
+            watcher = self.make_watcher(root, wake)
+            watcher.process_envelope(
+                envelope(
+                    "E15-note",
+                    channel="CEXEC",
+                    user="UCODEX",
+                    text="[DONE] tests: 558/572; 기존 실패 17건 → 14건으로 줄어듦",
+                    ts="15.6",
+                )
+            )
+            self.assertTrue(any("[NOTE] 테스트 실패 감소" in item for item in wake.wakes))
+            self.assertTrue(any("기준선 17건 → 보고 14건" in item for item in wake.wakes))
 
     def test_brainshower_closed_thread_reports_decision_file_gap(self):
         with tempfile.TemporaryDirectory() as root:
