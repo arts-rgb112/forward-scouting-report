@@ -179,38 +179,58 @@ export const label = "히트맵";
         self.assertIn("authenticated with an API key", status)
 
     def test_call_agent_uses_read_only_codex_exec_and_last_message(self):
-        def fake_run(argv, **kwargs):
-            output_path = Path(argv[argv.index("--output-last-message") + 1])
-            output_path.write_text("DONE\n", encoding="utf-8")
-            self.assertIn("--ephemeral", argv)
-            self.assertEqual(argv[argv.index("--sandbox") + 1], "read-only")
-            self.assertEqual(argv[-1], "-")
-            self.assertNotIn("OPENAI_API_KEY", kwargs["env"])
-            self.assertIn("ROLE: planner", kwargs["input"])
-            return CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
+        class FakeProcess:
+            pid = 4321
+            returncode = 0
 
-        with patch.object(agent_loop.subprocess, "run", side_effect=fake_run):
+            def __init__(self, argv, **kwargs):
+                self.argv = argv
+                output_path = Path(argv[argv.index("--output-last-message") + 1])
+                output_path.write_text("DONE\n", encoding="utf-8")
+                self.assertions = kwargs
+
+            def communicate(self, input=None, timeout=None):
+                self_outer.assertIn("--ephemeral", self.argv)
+                self_outer.assertEqual(self.argv[self.argv.index("--sandbox") + 1], "read-only")
+                self_outer.assertEqual(self.argv[-1], "-")
+                self_outer.assertNotIn("OPENAI_API_KEY", self.assertions["env"])
+                self_outer.assertIn("ROLE: planner", input)
+                return "", ""
+
+        self_outer = self
+        started = []
+        with patch.object(agent_loop.subprocess, "Popen", side_effect=FakeProcess):
             result = agent_loop.call_agent(
                 agent_loop.CodexCliRunner(executable="codex.exe"),
                 role="planner",
                 instructions="Plan only.",
                 prompt="Inspect the task.",
                 timeout_seconds=10,
+                process_started=started.append,
             )
         self.assertEqual(result, "DONE\n")
+        self.assertEqual(started, [4321])
 
     def test_call_agent_passes_private_reference_images_with_codex_image_flag(self):
-        def fake_run(argv, **kwargs):
-            output_path = Path(argv[argv.index("--output-last-message") + 1])
-            output_path.write_text("DONE\n", encoding="utf-8")
-            self.assertEqual(argv[argv.index("--image") + 1], str(image))
-            self.assertEqual(argv[-1], "-")
-            return CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
+        class FakeProcess:
+            pid = 4322
+            returncode = 0
 
+            def __init__(self, argv, **kwargs):
+                self.argv = argv
+                output_path = Path(argv[argv.index("--output-last-message") + 1])
+                output_path.write_text("DONE\n", encoding="utf-8")
+
+            def communicate(self, input=None, timeout=None):
+                self_outer.assertEqual(self.argv[self.argv.index("--image") + 1], str(image))
+                self_outer.assertEqual(self.argv[-1], "-")
+                return "", ""
+
+        self_outer = self
         with tempfile.TemporaryDirectory() as temp_dir:
             image = Path(temp_dir) / "reference.png"
             image.write_bytes(b"png")
-            with patch.object(agent_loop.subprocess, "run", side_effect=fake_run):
+            with patch.object(agent_loop.subprocess, "Popen", side_effect=FakeProcess):
                 result = agent_loop.call_agent(
                     agent_loop.CodexCliRunner(executable="codex.exe"),
                     role="executor",
@@ -858,6 +878,51 @@ export const label = "히트맵";
             # apart from "actually being worked on right now" at a glance.
             react.assert_any_call("C123", "2", "hammer")
             react.assert_any_call("C123", "2", "white_check_mark")
+
+    def test_dirty_worktree_is_reported_with_files_but_does_not_block_execution(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _init_git_repo(root)
+            store = agent_loop.SlackThreadStore(root / "state")
+            command = agent_loop.SlackCommand(
+                event_id="EvDirty",
+                user_id="U1",
+                text="[APPLY] continue approved work",
+                channel_id="C123",
+                thread_ts="200.21",
+                event_ts="2.1",
+            )
+            sink = agent_loop.SlackAuditSink(bot_token="xoxb-test", channel_id="C123")
+            passed = agent_loop.TestResult(["test"], 0, "1 passed", 0.1)
+
+            def write_one_directly(*args, **kwargs):
+                target = root / "src/new.ts"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("export const value = 1;", encoding="utf-8")
+                return "done"
+
+            posted = []
+            with patch.object(agent_loop, "PROJECT_ROOT", root):
+                with patch.object(agent_loop.SlackAuditSink, "from_environment", return_value=sink):
+                    with patch.object(sink, "_bot_post", side_effect=lambda text, **kwargs: posted.append(text)):
+                        with patch.object(agent_loop, "worktree_cleanliness", return_value=(["src/old.ts"], "")):
+                            with patch.object(
+                                agent_loop,
+                                "build_codex_runner",
+                                return_value=(agent_loop.CodexCliRunner("codex"), "ready"),
+                            ):
+                                with patch.object(agent_loop, "call_agent", side_effect=write_one_directly):
+                                    with patch.object(agent_loop, "run_tests", return_value=passed):
+                                        result = agent_loop.handle_slack_command(
+                                            command,
+                                            max_iterations=1,
+                                            test_timeout=1,
+                                            state_store=store,
+                                        )
+            self.assertEqual(result, 0)
+            self.assertTrue(any("WORKTREE DIRTY WARNING" in item for item in posted))
+            self.assertTrue(any("src/old.ts" in item for item in posted))
+            self.assertTrue((root / "src/new.ts").is_file())
 
     def test_apply_downloads_planned_images_only_before_codex_turn(self):
         with tempfile.TemporaryDirectory() as temp_dir:

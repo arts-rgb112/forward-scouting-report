@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·정적 검증 완료, 호스트 테스트 대기 — Slack 감시기 §15 실행 생존·루프 사망·테스트 실패 감소·발행 전 워크트리 청결 경고 (2026-09-05 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-watcher
+- 범위/결과: 상태파일과 `AGENT RUN` 메시지를 함께 추적하고 기본 900초(`SLACK_WATCH_EXECUTION_TIMEOUT_SECONDS`) 뒤 스레드 ts·경과·`executionCount`·codex 생존 여부를 owner DM에 남긴다. `agent_loop`/`codex exec` PID와 실행 단계를 원자 상태에 기록해 재기동 후 루프 소실을 즉시 알리고, 프로세스 확인 불가도 경고를 막지 않는다. 보고 본문의 기준선·현재 실패 수를 읽어 감소 시 `[NOTE]`로 알리되 의미 판정은 하지 않는다. 실행 직전 대상 워크트리 미커밋 파일을 전부 비차단 경고한다. `test_slack_watcher.py`는 18→24건, `test_agent_loop.py`는 52→53건으로 보강했다. 지정 첫 명령 `python -m unittest test_slack_watcher`는 `python` 실행 파일 부재 `CommandNotFoundException`(종료코드 1)로 시작되지 않았고, 같은 이유로 두 번째 지정 모듈도 실행하지 않았다. `git diff --check`는 기존 LF→CRLF 경고만 내고 통과했으며 `origin/main..HEAD` committed diff가 비어 mechanical subagent gate는 비활성이다. HEAD `c6b9104d45390e9199301ec1a3b877ddce244d89`, branch `agent/watcher-liveness`; commit·push·PR·merge·deploy·기능 플래그 변경 없음. 자동 응답·원인 판정·단언 약화 판정은 추가하지 않았다.
+
 - 상태: 반려 수정·로컬 검증 완료, 호스트 커밋 대기 — P0-1 배치 유지 및 제품·3열·접근성 회귀 단언 복원 (2026-09-05 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b
 - 범위/결과: 승인된 전폭 섹션 순서와 기본 접힘은 유지했다. 선수 페이지 `Benchmark`를 import-compatible no-op으로 되돌리고 원래 테스트 이름과 `container` empty, volume/ratio/v2 hook 미호출 단언을 복원했다. 새 `category-summary-slot` 안의 `Percentile profile`에서 legacy grid의 `sm:grid-cols-2 lg:grid-cols-3` class 단언을 유지했고, `StaticRoute.scope8.test.tsx` 네 곳은 빈 `data-layout` 조회 대신 `region`/`Volume benchmark radar` 접근 가능한 이름 조회로 복원했다. 같은 파일의 접힌 상세 board는 `hidden: true`의 role/name으로 찾고, 백분위 bar는 상세를 펼친 뒤 role/name으로 찾도록 raw selector를 제거했다. 전체 `npm test`는 기존 기준선과 같은 555/572 통과·17 실패(종료코드 1), `npm run build`와 `git diff --check`는 통과했다(기존 500kB chunk 경고 및 line-ending 경고만). `origin/main..HEAD` committed diff가 비어 mechanical subagent gate는 비활성이다. branch `agent/p01-sections`, HEAD `ea435214a04f1074b99bb7a1d3b1b27566318be9`; commit·push·PR·merge·deploy·기능 플래그 변경 없음.

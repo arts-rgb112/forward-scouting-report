@@ -35,6 +35,7 @@ from agent_loop import (
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_STATE_FILE = PROJECT_ROOT / ".agent-loop-state" / "slack_watch_alert_state.json"
 DEFAULT_STOP_FILE = PROJECT_ROOT / ".agent-loop-state" / "slack_watcher.stop"
+DEFAULT_AGENT_STATE_DIR = PROJECT_ROOT / ".agent-loop-state"
 DEFAULT_DECISIONS_FILE = PROJECT_ROOT.parent / "messi-specs" / "BRAINSHOWER_DECISIONS.md"
 REPORT_TAGS = frozenset({"DONE", "FAIL", "BLOCKED", "ASK", "LIMIT", "NOTE"})
 URGENT_TAGS = frozenset({"FAIL", "BLOCKED", "ASK", "LIMIT"})
@@ -54,6 +55,12 @@ CONCLUSION_RE = re.compile(r"합의|결론|확정|closed|resolved|마감", re.I)
 DISAGREEMENT_RE = re.compile(r"의견.{0,8}(갈|충돌)|합의.{0,8}(안|못)|쟁점|보류", re.I)
 WORKTREE_RE = re.compile(r"worktree|작업\s*폴더|워크트리", re.I)
 APPROVAL_RE = re.compile(r"승인|판단|결정|approve", re.I)
+AGENT_RUN_START_RE = re.compile(r"AGENT\s+RUN\s*[·.]\s*(?:APPLY|REVISE)\s+(\d+)(?:/\d+)?", re.I)
+AGENT_RUN_TERMINAL_RE = re.compile(r"AGENT\s+RUN\s*(?:→|->)\s*(?:DONE|STOP)", re.I)
+TEST_REDUCTION_RES = (
+    re.compile(r"(?:기존\s*)?실패\s*(\d+)\s*건?\s*(?:→|->)\s*(\d+)\s*건?[^\n]*줄", re.I),
+    re.compile(r"\b(\d+)\s*(?:→|->)\s*(\d+)\b[^\n]*(?:fail|실패)", re.I),
+)
 
 
 def _env_path(name: str, default: Path) -> Path:
@@ -80,6 +87,8 @@ class WatchConfig:
     stop_file: Path
     decisions_file: Path
     owner_user_id: str = "U0BU7BTNLJK"
+    execution_timeout_seconds: int = 900
+    agent_state_dir: Path = DEFAULT_AGENT_STATE_DIR
 
     @classmethod
     def from_environment(cls) -> "WatchConfig":
@@ -92,9 +101,10 @@ class WatchConfig:
         try:
             receipt_timeout = int(os.environ.get("SLACK_WATCH_RECEIPT_TIMEOUT_SECONDS", "90"))
             poll_interval = int(os.environ.get("SLACK_WATCH_POLL_INTERVAL_SECONDS", "45"))
+            execution_timeout = int(os.environ.get("SLACK_WATCH_EXECUTION_TIMEOUT_SECONDS", "900"))
         except ValueError as exc:
             raise AgentLoopError("Slack watcher timeout values must be integers") from exc
-        if receipt_timeout < 1 or poll_interval < 1:
+        if receipt_timeout < 1 or poll_interval < 1 or execution_timeout < 1:
             raise AgentLoopError("Slack watcher timeout values must be positive")
         claude_user_id = os.environ.get("SLACK_CLAUDE_USER_ID", "").strip()
         codex_recipient_id = os.environ.get("SLACK_CODEX_RECIPIENT_ID", "").strip()
@@ -122,6 +132,8 @@ class WatchConfig:
             decisions_file=_env_path("SLACK_BRAINSHOWER_DECISIONS_FILE", DEFAULT_DECISIONS_FILE),
             owner_user_id=os.environ.get("SLACK_OWNER_USER_ID", "U0BU7BTNLJK").strip()
             or "U0BU7BTNLJK",
+            execution_timeout_seconds=execution_timeout,
+            agent_state_dir=_env_path("AGENT_LOOP_STATE_DIR", DEFAULT_AGENT_STATE_DIR),
         )
 
 
@@ -161,6 +173,7 @@ class WatchState:
                 "notifiedThreadTs": {},
                 "pendingReceipts": {},
                 "pendingAlerts": {},
+                "pendingExecutions": {},
             }
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
@@ -176,11 +189,13 @@ class WatchState:
                 "notifiedThreadTs": dict(legacy.get("notifiedThreadTs", {})),
                 "pendingReceipts": dict(legacy.get("pendingReceipts", {})),
                 "pendingAlerts": {},
+                "pendingExecutions": {},
             }
         if data.get("schemaVersion") != 1:
             raise AgentLoopError("Slack watcher state schema is unsupported")
         data["commitSha"] = _git_sha()
         data.setdefault("pendingAlerts", {})
+        data.setdefault("pendingExecutions", {})
         return data
 
     def save(self) -> None:
@@ -227,7 +242,15 @@ class SlackWakeClient:
 
 def _git_sha() -> str:
     completed = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
+        [
+            "git",
+            "-c",
+            f"safe.directory={PROJECT_ROOT}",
+            "-c",
+            f"safe.directory={PROJECT_ROOT.parent}",
+            "rev-parse",
+            "HEAD",
+        ],
         cwd=PROJECT_ROOT,
         text=True,
         encoding="utf-8",
@@ -308,6 +331,37 @@ def _core(text: str) -> str:
     return " / ".join(lines[:2])[:320] or "(내용 없음)"
 
 
+def _process_alive(pid: Any) -> bool | None:
+    """Return process liveness, or None when this platform cannot decide."""
+    try:
+        numeric_pid = int(pid)
+    except (TypeError, ValueError):
+        return None
+    if numeric_pid <= 0:
+        return None
+    try:
+        os.kill(numeric_pid, 0)
+    except PermissionError:
+        return True
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return False
+    except (AttributeError, NotImplementedError):
+        return None
+    return True
+
+
+def _test_failure_reduction(text: str) -> tuple[int, int] | None:
+    for pattern in TEST_REDUCTION_RES:
+        match = pattern.search(text)
+        if match:
+            previous, current = int(match.group(1)), int(match.group(2))
+            if current < previous:
+                return previous, current
+    return None
+
+
 class SlackWatcher:
     def __init__(
         self,
@@ -382,6 +436,23 @@ class SlackWatcher:
         if item and (actor == "codex" or "SLACK → AGENT" in message.text):
             pending.pop(message.thread_ts, None)
             print(f"slack_watcher: receipt thread_ts={message.thread_ts}", flush=True)
+
+    def _track_execution_message(self, message: WatchMessage, actor: str) -> None:
+        pending = self.state.data.setdefault("pendingExecutions", {})
+        parsed = parse_tag(message.text, REPORT_TAGS) if actor == "codex" else None
+        tag = parsed[0] if parsed else ""
+        if tag in {"DONE", "FAIL", "BLOCKED", "LIMIT"} or AGENT_RUN_TERMINAL_RE.search(message.text):
+            pending.pop(message.thread_ts, None)
+            return
+        match = AGENT_RUN_START_RE.search(message.text)
+        if actor == "codex" and match:
+            pending[message.thread_ts] = {
+                "channelId": message.channel_id,
+                "channelType": message.channel_type,
+                "threadTs": message.thread_ts,
+                "startedAt": self.clock(),
+                "executionCount": int(match.group(1)),
+            }
 
     def _mark_command_received(self, thread_ts: str) -> None:
         with self._state_lock:
@@ -517,6 +588,7 @@ class SlackWatcher:
             return
         actor = self._actor(message)
         self._receipt(message, actor)
+        self._track_execution_message(message, actor)
         mentioned_ids = set(MENTION_RE.findall(message.text))
         codex_called = (
             self.config.codex_recipient_id in mentioned_ids
@@ -539,6 +611,15 @@ class SlackWatcher:
         if actor == "codex":
             parsed = parse_tag(message.text, REPORT_TAGS)
             tag, body = parsed if parsed is not None else ("NOTE", message.text)
+            reduction = _test_failure_reduction(body)
+            if reduction is not None:
+                previous, current = reduction
+                self._alert(
+                    f"test-reduction:{message.key}",
+                    message,
+                    "[NOTE] 테스트 실패 감소",
+                    f"기준선 {previous}건 → 보고 {current}건; 개선 여부는 diff 검수 필요",
+                )
             if tag in URGENT_TAGS:
                 detector = {
                     "LIMIT": "C 의견/턴 한도",
@@ -610,7 +691,95 @@ class SlackWatcher:
                 str(item.get("cause", "루프 미기동 또는 Socket 미수신")),
             )
             pending.pop(thread_ts, None)
+        self._check_execution_liveness_locked(now)
         self.state.save()
+
+    def _check_execution_liveness_locked(self, now: float) -> None:
+        pending = self.state.data.setdefault("pendingExecutions", {})
+        if self.config.agent_state_dir.is_dir():
+            for path in self.config.agent_state_dir.glob("*.json"):
+                try:
+                    item = json.loads(path.read_text(encoding="utf-8", errors="strict"))
+                except (OSError, UnicodeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(item, dict):
+                    continue
+                thread_ts = item.get("threadTs")
+                channel_id = item.get("channelId")
+                if not isinstance(thread_ts, str) or not isinstance(channel_id, str):
+                    continue
+                execution_count = int(item.get("executionCount", 0) or 0)
+                active = (
+                    item.get("status") == "executing"
+                    or bool(item.get("executionStartedAt"))
+                    or (
+                        item.get("status") == "open"
+                        and execution_count > 0
+                        and item.get("lastExecution") is None
+                    )
+                )
+                if not active:
+                    pending.pop(thread_ts, None)
+                    continue
+                current = pending.setdefault(thread_ts, {})
+                try:
+                    started_at = float(item.get("executionStartedAt") or current.get("startedAt"))
+                except (TypeError, ValueError):
+                    try:
+                        started_at = path.stat().st_mtime
+                    except OSError:
+                        started_at = now
+                current.update(
+                    {
+                        "channelId": channel_id,
+                        "channelType": "channel",
+                        "threadTs": thread_ts,
+                        "startedAt": started_at,
+                        "executionCount": execution_count,
+                        "executionPhase": item.get("executionPhase"),
+                        "codexPid": item.get("codexPid"),
+                        "loopPid": item.get("loopPid"),
+                    }
+                )
+
+        for thread_ts, item in list(pending.items()):
+            try:
+                started_at = float(item.get("startedAt"))
+            except (TypeError, ValueError):
+                started_at = now
+            elapsed = max(0.0, now - started_at)
+            channel_id = str(item.get("channelId", ""))
+            message = WatchMessage(
+                event_id=f"execution:{thread_ts}:{started_at}",
+                channel_id=channel_id,
+                channel_type=str(item.get("channelType", "channel")),
+                event_ts=thread_ts,
+                thread_ts=thread_ts,
+                text="AGENT RUN 실행 생존 감시",
+                user_id="",
+            )
+            phase = str(item.get("executionPhase") or "codex")
+            codex_alive = _process_alive(item.get("codexPid")) if phase == "codex" else None
+            loop_alive = _process_alive(item.get("loopPid"))
+            if phase != "codex":
+                process_label = "종료(후속 단계 진행)"
+            else:
+                process_label = "확인 불가" if codex_alive is None else ("생존" if codex_alive else "없음")
+            evidence = (
+                f"경과 {elapsed / 60:.1f}분, executionCount={int(item.get('executionCount', 0) or 0)}, "
+                f"codex 프로세스={process_label}"
+            )
+            execution_key = f"{thread_ts}:{started_at}"
+            if loop_alive is False:
+                self._alert(
+                    f"loop-dead:{execution_key}",
+                    message,
+                    "agent_loop 프로세스 사라짐",
+                    f"{evidence}; 재기동으로 진행 중 실행이 끊겼을 수 있음",
+                )
+            elif elapsed >= self.config.execution_timeout_seconds:
+                status = "실행 사망 감지" if codex_alive is False else "실행 종결 신호 지연"
+                self._alert(f"execution-stale:{execution_key}", message, status, evidence)
 
     def _retry_pending_alerts_locked(self) -> None:
         for key, summary in list(self.state.data.setdefault("pendingAlerts", {}).items()):
@@ -785,6 +954,8 @@ def main(argv: Iterable[str] | None = None) -> int:
                     "dmWatch": True,
                     "socketPrimary": True,
                     "pollingFallbackOnly": True,
+                    "executionTimeoutSeconds": config.execution_timeout_seconds,
+                    "agentStateDir": str(config.agent_state_dir),
                     "stateFile": str(config.state_file),
                 },
                 ensure_ascii=False,
