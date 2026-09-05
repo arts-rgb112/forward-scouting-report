@@ -194,6 +194,10 @@ describe("Three WebGL spatial pitch contract", () => {
     await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
     const zone = container.querySelector<HTMLButtonElement>("[data-zone-shot-share='50.00']")!;
     expect(zone).toBeInTheDocument();
+    expect(zone).toBeEmptyDOMElement();
+    expect(zone).toHaveAttribute("data-zone-keyboard-target");
+    expect(zone).toHaveAttribute("aria-label", "구역 1. 슈팅 비중 50.00%, 활동 16.67%.");
+    expect(screen.getByRole("img", { name: /3D 회랑 WebGL 피치/ })).toHaveAttribute("data-zone-hover-mode", "raycaster");
     fireEvent.focus(zone);
     expect(screen.getByRole("tooltip")).toHaveTextContent("슈팅 비중 50.00% · 활동 16.67%");
     expect(screen.getByRole("tooltip")).toHaveTextContent("슛 1 · 득점 1 · xG 0.30");

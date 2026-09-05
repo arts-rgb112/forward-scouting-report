@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료, 호스트 commit 대기 — P1-4 3D 공간 구역 호버 레이캐스팅 전환 및 키보드 접근성 보존 (2026-09-05 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b
+- 범위/결과: `messi-2-dashboard/src/playerDetail/WebGLSpatialPitch.tsx`의 구역 button에서 보이는 슈팅 비중 숫자와 배경을 제거하고 빈 포커스 타깃·기존 focus/blur·aria-label·focus-visible 링을 유지했다. 유효한 6×5 positional grid 전 구역에 `colorWrite=false`·`opacity=0`·depth 비기록 평면 mesh를 별도 `zoneHitRoot`에 만들고, canvas 좌표의 `pointermove`를 `THREE.Raycaster`로 판정해 툴팁 상태를 설정하며 피치 밖에서는 해제한다. 슛 marker는 별도 overlay 그룹에 있어 레이 대상에 포함되지 않는다. 툴팁의 구역번호·슈팅 비중·활동·슛·득점·xG는 그대로다. 집중 `SpatialPitch.test.tsx`는 14/14 통과했고 전체 `npm test`는 기존 기준선과 동일한 555/572 통과·17 실패로 신규 회귀 0건이다. `npm run build` 통과(기존 500kB chunk 경고만), `git diff --check` 통과. diff는 이 계약서와 WebGL 컴포넌트·회귀 테스트뿐이라 mechanical subagent gate 대상이 없다. branch `agent/zone-raycast`, HEAD `7a42ffbf568780fa34b2cb46eecb83345e169b14`; commit·push·PR·merge·deploy·기능 플래그 변경 없음. 기존 미추적 파일 3개는 수정하지 않았다.
+
 - 상태: 로컬 구현·정적 검증 완료, 호스트 테스트·commit 대기 — 기동 예열에 상세 경로 `build_v2_players` 컨텍스트 추가 (2026-09-05 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-api-eventloop
 - 범위/결과: 기존 `_warm_player_summary_cache`가 동일 `(season, mode, scope, competition)`에서 `_v2_player_summary_index` 다음 `build_v2_players`를 각각 `run_in_threadpool`로 순차 호출하도록 추가했다. 성공 로그는 상세 컨텍스트 `detail_ms`와 컨텍스트 전체 `elapsed_ms`를, 실패·취소 로그는 `phase`와 `elapsed_ms`를, 최종 로그는 기존 `total_ms`를 남긴다. 기동 훅 즉시 반환·백그라운드 태스크·`sorted(seasons, reverse=True)`·실패 삼킴·`API_WARM_CACHE`를 정적으로 확인했고 `git diff --check`가 통과했다. 지정 명령 `python -m pytest tests/test_api.py tests/test_shotmap_contract.py -q`는 `python` 실행 파일 부재 `CommandNotFoundException`으로 시작되지 않았다. 작업 diff는 `api_server/main.py`와 이 계약서뿐이며 mechanical subagent gate 대상은 없다. HEAD `c524141e50c4eb5e4413078da2fde073a20a7b5c`, branch `agent/detail-warm-logging`, commit·push·PR·merge·deploy·기능 플래그 변경 없음. 선수별 상세 계산, `lru_cache` 크기, 점수·코호트 계산, 라이브러리는 변경하지 않았다.

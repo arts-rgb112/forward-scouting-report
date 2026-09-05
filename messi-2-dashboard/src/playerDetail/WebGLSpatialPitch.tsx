@@ -20,6 +20,8 @@ import {
   FREEFLY_MOUSE_SENSITIVITY,
   FREEFLY_MOVE_STEP_METERS,
   GLB_PITCH_HALF_LENGTH_METERS,
+  GLB_PITCH_LENGTH_METERS,
+  GLB_PITCH_WIDTH_METERS,
   WEBGL_CAMERA_PRESETS,
   WEBGL_OVERLAY_Y_METERS,
   WEBGL_ZOOM,
@@ -78,6 +80,7 @@ type Runtime = {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   overlayRoot: THREE.Group;
+  zoneHitRoot: THREE.Group;
   render: () => void;
 };
 
@@ -187,6 +190,27 @@ function addTacticalGrid(root: THREE.Group) {
     pitchPercentToWorld({ x: 84.29, y: 50 }, 0.11),
     pitchPercentToWorld({ x: 100, y: 50 }, 0.11),
   ], 0xf8fafc, 0.38, true));
+}
+
+function addZoneHitMeshes(root: THREE.Group, zones: readonly ZoneOverlay[]) {
+  const material = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    depthTest: false,
+    depthWrite: false,
+    colorWrite: false,
+    side: THREE.DoubleSide,
+  });
+  for (const zone of zones) {
+    const depthSize = (DEPTH_BOUNDARIES[zone.cell.depth + 1] - DEPTH_BOUNDARIES[zone.cell.depth]) / 100 * GLB_PITCH_LENGTH_METERS;
+    const laneSize = (LANE_BOUNDARIES[zone.cell.lane + 1] - LANE_BOUNDARIES[zone.cell.lane]) / 100 * GLB_PITCH_WIDTH_METERS;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(laneSize, depthSize), material);
+    const centre = pitchPercentToWorld(zone.point, WEBGL_OVERLAY_Y_METERS + 0.01);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(centre.x, centre.y, centre.z);
+    mesh.userData.zoneKey = `${zone.cell.depth}-${zone.cell.lane}`;
+    root.add(mesh);
+  }
 }
 
 function addDotMatrixHeatmap(root: THREE.Group, dots: readonly WebglDensityDot[]) {
@@ -304,6 +328,7 @@ export function WebGLSpatialPitch({
     freeflyStateFromOrbit(DEFAULT_WEBGL_CAMERA, { x: 0, y: WEBGL_OVERLAY_Y_METERS, z: 0 }));
   const freeflyRef = useRef(freeflyState);
   const dragRef = useRef<{ button: number; x: number; y: number } | null>(null);
+  const raycasterRef = useRef<THREE.Raycaster | null>(null);
   const [zoom, setZoom] = useState(1);
   const [hoveredZone, setHoveredZone] = useState<ZoneOverlay | null>(null);
   const [activeShot, setActiveShot] = useState<string | null>(null);
@@ -342,9 +367,11 @@ export function WebGLSpatialPitch({
           x: (DEPTH_BOUNDARIES[cell.depth] + DEPTH_BOUNDARIES[cell.depth + 1]) / 2,
           y: (LANE_BOUNDARIES[cell.lane] + LANE_BOUNDARIES[cell.lane + 1]) / 2,
         },
-      }))
-      .filter((zone) => zone.summary.shots > 0);
+      }));
   }, [shotsValid, spatial]);
+  const zonesByKey = useMemo(() => new Map(
+    zones.map((zone) => [`${zone.cell.depth}-${zone.cell.lane}`, zone]),
+  ), [zones]);
 
   const renderRuntime = useCallback(() => {
     runtimeRef.current?.render();
@@ -390,8 +417,10 @@ export function WebGLSpatialPitch({
     scene.add(sun);
     const overlayRoot = new THREE.Group();
     scene.add(overlayRoot);
+    const zoneHitRoot = new THREE.Group();
+    scene.add(zoneHitRoot);
     const render = () => renderer.render(scene, camera);
-    const runtime = { scene, camera, renderer, overlayRoot, render };
+    const runtime = { scene, camera, renderer, overlayRoot, zoneHitRoot, render };
     runtimeRef.current = runtime;
 
     const resize = () => {
@@ -453,13 +482,16 @@ export function WebGLSpatialPitch({
     if (!runtime) return;
     disposeObject(runtime.overlayRoot);
     runtime.overlayRoot.clear();
+    disposeObject(runtime.zoneHitRoot);
+    runtime.zoneHitRoot.clear();
+    addZoneHitMeshes(runtime.zoneHitRoot, zones);
     addTacticalGrid(runtime.overlayRoot);
     if (layers.heatmap) addDotMatrixHeatmap(runtime.overlayRoot, densityDots);
     if (layers.cca) addContours(runtime.overlayRoot, spatial, legacyNormalized);
     if (layers.markers || layers.trajectories) addShots(runtime.overlayRoot, markerGroups, medianXg, layers, markerPlacements);
     runtime.render();
     setProjectionVersion((value) => value + 1);
-  }, [densityDots, layers, legacyNormalized, markerGroups, markerPlacements, medianXg, runtimeVersion, spatial]);
+  }, [densityDots, layers, legacyNormalized, markerGroups, markerPlacements, medianXg, runtimeVersion, spatial, zones]);
 
   const applyFreefly = useCallback((next: FreeflyCameraState, publicState?: OrbitCameraState) => {
     freeflyRef.current = next;
@@ -548,14 +580,36 @@ export function WebGLSpatialPitch({
   };
   const pointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    if (!drag) return;
-    const dx = event.clientX - drag.x;
-    const dy = event.clientY - drag.y;
-    dragRef.current = { ...drag, x: event.clientX, y: event.clientY };
-    setCameraAngle(null);
-    applyFreefly(drag.button === 0
-      ? rotateFreeflyCamera(freeflyRef.current, -dx * FREEFLY_MOUSE_SENSITIVITY, -dy * FREEFLY_MOUSE_SENSITIVITY)
-      : moveFreeflyCamera(freeflyRef.current, { vertical: -dy * 0.08 }));
+    if (drag) {
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      dragRef.current = { ...drag, x: event.clientX, y: event.clientY };
+      setCameraAngle(null);
+      applyFreefly(drag.button === 0
+        ? rotateFreeflyCamera(freeflyRef.current, -dx * FREEFLY_MOUSE_SENSITIVITY, -dy * FREEFLY_MOUSE_SENSITIVITY)
+        : moveFreeflyCamera(freeflyRef.current, { vertical: -dy * 0.08 }));
+    }
+    const runtime = runtimeRef.current;
+    const canvas = canvasRef.current;
+    if (!runtime || !canvas) {
+      setHoveredZone(null);
+      return;
+    }
+    const bounds = canvas.getBoundingClientRect();
+    if (!bounds.width || !bounds.height || event.clientX < bounds.left || event.clientX > bounds.right ||
+        event.clientY < bounds.top || event.clientY > bounds.bottom) {
+      setHoveredZone(null);
+      return;
+    }
+    const raycaster = raycasterRef.current ?? new THREE.Raycaster();
+    raycasterRef.current = raycaster;
+    raycaster.setFromCamera(new THREE.Vector2(
+      (event.clientX - bounds.left) / bounds.width * 2 - 1,
+      -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+    ), runtime.camera);
+    const hit = raycaster.intersectObjects(runtime.zoneHitRoot.children, false)[0];
+    const zoneKey = typeof hit?.object.userData.zoneKey === "string" ? hit.object.userData.zoneKey : null;
+    setHoveredZone(zoneKey ? zonesByKey.get(zoneKey) ?? null : null);
   };
   const pointerUp = (event: PointerEvent<HTMLDivElement>) => {
     dragRef.current = null;
@@ -609,6 +663,7 @@ export function WebGLSpatialPitch({
     </div>
     <div ref={hostRef} role="img" tabIndex={0} onKeyDown={keyDown}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
+      onPointerLeave={() => setHoveredZone(null)}
       onContextMenu={(event) => event.preventDefault()}
       aria-label={`3D 회랑 WebGL 피치. ${heatState}. ${shotState}. WASD 또는 화살표 키로 이동하고, 왼쪽 드래그로 시선을 돌리며, 오른쪽 드래그나 휠로 높이를 조절합니다.`}
       className="relative min-h-80 w-full overflow-hidden rounded-b-lg bg-[#050a08] outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
@@ -616,6 +671,7 @@ export function WebGLSpatialPitch({
       data-gltf-loader="GLTFLoader"
       data-gltf-url={MODEL_URL}
       data-webgl-state={loadState}
+      data-zone-hover-mode="raycaster"
       data-camera-mode="freefly"
       data-camera-azimuth={Number(cameraState.azimuth.toFixed(2))}
       data-camera-elevation={Number(cameraState.elevation.toFixed(2))}
@@ -686,14 +742,12 @@ export function WebGLSpatialPitch({
       {zones.map((zone) => {
         const projected = zoneProjection(zone);
         return <button key={`${zone.cell.depth}-${zone.cell.lane}`} type="button"
+          data-zone-keyboard-target=""
           data-zone-shot-share={zone.summary.shotSharePct.toFixed(2)}
           aria-label={`구역 ${zone.cell.depth * 5 + zone.cell.lane + 1}. 슈팅 비중 ${zone.summary.shotSharePct.toFixed(2)}%, 활동 ${zone.cell.occupancyPct.toFixed(2)}%.`}
           onFocus={() => setHoveredZone(zone)} onBlur={() => setHoveredZone(null)}
-          onPointerEnter={() => setHoveredZone(zone)} onPointerLeave={() => setHoveredZone(null)}
-          className="absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded bg-[#0a1f10]/75 px-1 text-[10px] font-extrabold text-white shadow-sm focus-visible:ring-2 focus-visible:ring-orange-200"
-          style={{ left: `${projected.left}%`, top: `${projected.top}%`, display: projected.visible ? undefined : "none" }}>
-          {zone.summary.shotSharePct.toFixed(2)}%
-        </button>;
+          className="pointer-events-none absolute z-10 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded bg-transparent text-transparent outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
+          style={{ left: `${projected.left}%`, top: `${projected.top}%`, display: projected.visible ? undefined : "none" }} />;
       })}
       {hoveredZone && (() => {
         const projected = zoneProjection(hoveredZone);
