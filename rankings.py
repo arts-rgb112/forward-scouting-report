@@ -62,6 +62,7 @@ def refresh_scoring_caches_if_needed() -> tuple[object, object]:
     get_league_metric_medians.cache_clear()
     get_tactical_matrix.cache_clear()
     get_top_leagues_shot_quality.cache_clear()
+    _league_percentile_population.cache_clear()
     _ACTIVE_SCORING_DATA_VERSION = current
     return current
 
@@ -937,145 +938,37 @@ def get_tactical_matrix(
     return pd.DataFrame(rows)
 
 
-def calculate_league_percentiles(
-    player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 1.0,
-    restrict_to_forwards: bool = True, minimum_final_third_ratio: int = 0,
-    comparison_scope: int = 0, role_override: str = "auto",
-) -> LeaguePercentiles:
-    if metrics.league_id is None:
-        return LeaguePercentiles(None, None, None, None, None, None, None, None, None, None, 0)
-    # Call sites retained ``minimum_xg=1.0`` for backward compatibility.
-    # Apply the competition-specific floor centrally so every bar, median,
-    # S.P.E.A.R. axis, rank and leaderboard shares the same population rule.
-    minimum_xg = max(float(minimum_xg), _minimum_xg_for_competition(metrics.league_id))
-    
-    season_name = f"20{season[:2]}/20{season[3:]}" if len(season) == 5 and "/" in season else season
-    player_key = str(player_id)
-    
-    duels_pct, duels_rk = None, None
-    aerials_pct, aerials_rk = None, None
-    peers, _ = _fetch_elite_dribbler_metrics(
-        metrics.league_id, season_name, restrict_to_forwards, minimum_final_third_ratio, comparison_scope,
-    )
-    # A selected player can be absent from an older static cohort snapshot
-    # even though the currently loaded session passes the report's eligibility
-    # rule. Include that exact session once so its score can be ranked against
-    # the same peer population instead of falling back to a partial average.
-    if (
-        player_key not in peers
-        and (metrics.xg or 0.0) >= minimum_xg
-        and (metrics.minutes_played or 0.0) >= _minimum_minutes_for_competition(metrics.league_id)
-    ):
-        peers = {**peers, player_key: metrics}
-    # One report must use one cohort.  The former implementation mixed the
-    # leaderboard's broad xG population with this filtered player cohort,
-    # which made a header such as "99 players" coexist with bars ranked /7.
-    cohort_count = len(peers)
+def _dribble_success_rate(metric: DecisionMetrics) -> Optional[float]:
+    successful = metric.dribbles_succeeded_per90
+    failed = metric.dribbles_failed_per90
+    if successful is None or failed is None or successful + failed <= 0:
+        return None
+    return 100.0 * successful / (successful + failed)
 
-    def cohort_rank(value: Optional[float], attr: str, *, reverse: bool = False) -> tuple[Optional[float], Optional[int]]:
-        population = [
-            _progression_value(peer) if attr == "net_progression_per90" else getattr(peer, attr, None)
-            for peer in peers.values()
-        ]
-        population = [item for item in population if item is not None]
-        if reverse:
-            return _rank_info(-value if value is not None else None, [-item for item in population])
-        return _rank_info(value, population)
 
-    # Every report value is derived directly from this one filtered cohort.
-    # Do not add a broad leaderboard population here: it caused the historic
-    # mismatch where a 99-player header coexisted with bars ranked out of 7.
-    goal_population = [peer.goals for peer in peers.values() if peer.goals is not None]
-    xg_population = [peer.xg for peer in peers.values() if peer.xg is not None]
-    shot_quality_population = [peer.shot_quality for peer in peers.values() if peer.shot_quality is not None]
-    overall_finishing_population = [peer.overall_finishing for peer in peers.values() if peer.overall_finishing is not None]
-    gk_impact_population = [peer.luck_or_gk_impact for peer in peers.values() if peer.luck_or_gk_impact is not None]
-    goals_median = float(pd.Series(goal_population).median()) if goal_population else None
-    shot_quality_median = float(pd.Series(shot_quality_population).median()) if shot_quality_population else None
-    overall_finishing_median = float(pd.Series(overall_finishing_population).median()) if overall_finishing_population else None
-    gk_impact_median = float(pd.Series(gk_impact_population).median()) if gk_impact_population else None
-    goals_pct, goals_rk = _rank_info(metrics.goals, goal_population)
-    xg_pct, xg_rk = _rank_info(metrics.xg, xg_population)
-    sq_pct, sq_rk = _rank_info(metrics.shot_quality, shot_quality_population)
-    of_pct, of_rk = _rank_info(metrics.overall_finishing, overall_finishing_population)
-    gk_pct, gk_rk = _rank_info(metrics.luck_or_gk_impact, gk_impact_population)
-    eligible_players_count = cohort_count
-
-    def dribble_success_rate(metric: DecisionMetrics) -> Optional[float]:
-        successful = metric.dribbles_succeeded_per90
-        failed = metric.dribbles_failed_per90
-        if successful is None or failed is None or successful + failed <= 0:
-            return None
-        return 100.0 * successful / (successful + failed)
-
-    dribble_rate_population = [
-        rate for peer in peers.values()
-        if (rate := dribble_success_rate(peer)) is not None
-    ]
-    dribbles_pct, dribbles_rk = _rank_info(
-        dribble_success_rate(metrics), dribble_rate_population,
-    )
-    dribbles_eligible = len(dribble_rate_population)
-
-    progression_percentiles = {
-        "cohort_count": cohort_count,
-        "success_pct": cohort_rank(metrics.dribbles_succeeded_per90, "dribbles_succeeded_per90")[0],
-        "success_rank": cohort_rank(metrics.dribbles_succeeded_per90, "dribbles_succeeded_per90")[1],
-        "failure_pct": cohort_rank(metrics.dribbles_failed_per90, "dribbles_failed_per90", reverse=True)[0],
-        "failure_rank": cohort_rank(metrics.dribbles_failed_per90, "dribbles_failed_per90", reverse=True)[1],
-        "duels_won_pct": cohort_rank(metrics.duels_won_per90, "duels_won_per90")[0],
-        "duels_won_rank": cohort_rank(metrics.duels_won_per90, "duels_won_per90")[1],
-        "duels_lost_pct": cohort_rank(metrics.duels_lost_per90, "duels_lost_per90", reverse=True)[0],
-        "duels_lost_rank": cohort_rank(metrics.duels_lost_per90, "duels_lost_per90", reverse=True)[1],
-        "aerials_won_pct": cohort_rank(metrics.aerial_duels_won_per90, "aerial_duels_won_per90")[0],
-        "aerials_won_rank": cohort_rank(metrics.aerial_duels_won_per90, "aerial_duels_won_per90")[1],
-        "aerials_lost_pct": cohort_rank(metrics.aerial_duels_lost_per90, "aerial_duels_lost_per90", reverse=True)[0],
-        "aerials_lost_rank": cohort_rank(metrics.aerial_duels_lost_per90, "aerial_duels_lost_per90", reverse=True)[1],
-        "dribble_margin_pct": cohort_rank(metrics.dribble_margin_per90, "dribble_margin_per90")[0],
-        "dribble_margin_rank": cohort_rank(metrics.dribble_margin_per90, "dribble_margin_per90")[1],
-        "duel_margin_pct": cohort_rank(metrics.duel_margin_per90, "duel_margin_per90")[0],
-        "duel_margin_rank": cohort_rank(metrics.duel_margin_per90, "duel_margin_per90")[1],
-        "aerial_margin_pct": cohort_rank(metrics.aerial_margin_per90, "aerial_margin_per90")[0],
-        "aerial_margin_rank": cohort_rank(metrics.aerial_margin_per90, "aerial_margin_per90")[1],
-        "xg_per90_pct": cohort_rank(metrics.xg_per90, "xg_per90")[0],
-        "xg_per90_rank": cohort_rank(metrics.xg_per90, "xg_per90")[1],
-        "net_pct": cohort_rank(_progression_value(metrics), "net_progression_per90")[0],
-        "net_rank": cohort_rank(_progression_value(metrics), "net_progression_per90")[1],
-        "net_count": cohort_count,
+def _build_league_percentile_population(
+    peers: dict[str, DecisionMetrics], league_name: str, season_name: str,
+) -> dict[str, object]:
+    """Build all player-independent distributions for one comparison context."""
+    peer_ids = tuple(peers)
+    raw_populations = {
+        attr: [getattr(peer, attr) for peer in peers.values() if getattr(peer, attr, None) is not None]
+        for attr in (
+            "goals", "xg", "shot_quality", "overall_finishing", "luck_or_gk_impact",
+            "in_box_finishing", "out_box_shot_quality", "shot_quality_per90",
+            "total_shots", "out_box_shots", "in_box_shots", "dribble_attempts",
+            "aerial_duel_attempts", "ground_duel_attempts",
+            "dribbles_succeeded_per90", "dribbles_failed_per90", "duels_won_per90",
+            "duels_lost_per90", "aerial_duels_won_per90", "aerial_duels_lost_per90",
+            "dribble_margin_per90", "duel_margin_per90", "aerial_margin_per90", "xg_per90",
+        )
     }
-    # Keep the S.P.E.A.R. shooting factor on the exact same xG>=1 cohort
-    # competition cohort as the other five radar axes.
-    spear_shot_quality_population = [
-        peer.shot_quality_per90 for peer in peers.values()
-        if peer.shot_quality_per90 is not None
+    raw_populations["net_progression_per90"] = [
+        value for peer in peers.values() if (value := _progression_value(peer)) is not None
     ]
-    spear_shot_scores = _scores_from_population({
-        peer_id: peer.shot_quality_per90
-        for peer_id, peer in peers.items() if peer.shot_quality_per90 is not None
-    })
-    spear_shot_quality = metrics.shot_quality_per90
-    if spear_shot_quality_population:
-        spear_sq_pct, spear_sq_rk = _rank_info(spear_shot_quality, spear_shot_quality_population)
-    else:
-        spear_sq_pct, spear_sq_rk = None, None
-    in_box_population = [peer.in_box_finishing for peer in peers.values() if peer.in_box_finishing is not None]
-    out_box_population = [peer.out_box_shot_quality for peer in peers.values() if peer.out_box_shot_quality is not None]
-    in_box_pct, in_box_rank = _rank_info(metrics.in_box_finishing, in_box_population)
-    out_box_pct, out_box_rank = _rank_info(metrics.out_box_shot_quality, out_box_population)
-    # The volume radar deliberately uses season totals, rather than /90 rates.
-    # Every population below is the exact competition xG>=1 cohort used
-    # by the ratio radar, so the two views remain directly comparable.
-    def volume_rank(attr: str) -> tuple[Optional[float], Optional[int]]:
-        population = [getattr(peer, attr) for peer in peers.values() if getattr(peer, attr, None) is not None]
-        return _rank_info(getattr(metrics, attr, None), population)
-
-    total_shots_pct, total_shots_rank = volume_rank("total_shots")
-    outside_box_shots_pct, outside_box_shots_rank = volume_rank("out_box_shots")
-    box_shots_pct, box_shots_rank = volume_rank("in_box_shots")
-    dribble_attempts_pct, dribble_attempts_rank = volume_rank("dribble_attempts")
-    aerial_attempts_pct, aerial_attempts_rank = volume_rank("aerial_duel_attempts")
-    ground_attempts_pct, ground_attempts_rank = volume_rank("ground_duel_attempts")
-    xg_volume_pct, xg_volume_rank = volume_rank("xg")
+    dribble_rate_population = [
+        rate for peer in peers.values() if (rate := _dribble_success_rate(peer)) is not None
+    ]
     volume_scores = {
         "outside_box": _scores_from_population({peer_id: peer.out_box_shots for peer_id, peer in peers.items() if peer.out_box_shots is not None}),
         "box": _scores_from_population({peer_id: peer.in_box_shots for peer_id, peer in peers.items() if peer.in_box_shots is not None}),
@@ -1084,57 +977,39 @@ def calculate_league_percentiles(
         "ground": _scores_from_population({peer_id: peer.ground_duel_attempts for peer_id, peer in peers.items() if peer.ground_duel_attempts is not None}),
     }
     recovery_scores = _scores_from_population({
-        peer_id: peer.recoveries_per90
-        for peer_id, peer in peers.items() if peer.recoveries_per90 is not None
+        peer_id: peer.recoveries_per90 for peer_id, peer in peers.items() if peer.recoveries_per90 is not None
     })
-    # `final_third_possessions_won_per90_*` remains a public per-90 readout.
-    # The unified forward-press sector instead uses a distinct, directional
-    # ratio score (final-third recoveries / all recoveries).
     final_third_press_per90_scores = _scores_from_population({
-        peer_id: peer.final_third_possessions_won_per90
-        for peer_id, peer in peers.items()
+        peer_id: peer.final_third_possessions_won_per90 for peer_id, peer in peers.items()
         if peer.final_third_possessions_won_per90 is not None
     })
     forward_press_concentration_scores = _scores_from_population({
-        peer_id: peer.forward_press_concentration
-        for peer_id, peer in peers.items()
+        peer_id: peer.forward_press_concentration for peer_id, peer in peers.items()
         if peer.forward_press_concentration is not None
     })
-
-    # S.P.E.A.R. 2.0 spatial factors are sourced only from the exact
-    # player/competition/season heatmap session.  A missing heatmap row stays
-    # missing: silently substituting another competition would contaminate the
-    # comparison cohort.
     spatial_rows = {
         peer_id: get_tactical_ratio_for_session(
-            peer_id, peer.league_name or metrics.league_name or "", season_name,
+            peer_id, peer.league_name or league_name or "", season_name,
         )
         for peer_id, peer in peers.items()
     }
-    player_spatial = get_tactical_ratio_for_session(
-        player_key, metrics.league_name or "", season_name,
-    )
-    micro_fields = ("box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio")
     def spatial_values(field: str) -> dict[str, float]:
         return {
-            peer_id: float(row[field])
-            for peer_id, row in spatial_rows.items()
+            peer_id: float(row[field]) for peer_id, row in spatial_rows.items()
             if row is not None and row.get(field) is not None
         }
-
     in_box_scores = _scores_from_population({
-        peer_id: peer.in_box_finishing_per90
-        for peer_id, peer in peers.items() if peer.in_box_finishing_per90 is not None
+        peer_id: peer.in_box_finishing_per90 for peer_id, peer in peers.items()
+        if peer.in_box_finishing_per90 is not None
     })
     dribble_scores = _scores_from_population({
-        peer_id: peer.dribble_margin_per90
-        for peer_id, peer in peers.items() if peer.dribble_margin_per90 is not None
+        peer_id: peer.dribble_margin_per90 for peer_id, peer in peers.items()
+        if peer.dribble_margin_per90 is not None
     })
     micro_values = {
         peer_id: float(values["deep_box_zone_score"])
         for peer_id, values in spatial_rows.items()
-        if values is not None
-        and values.get("deep_box_zone_score") is not None
+        if values is not None and values.get("deep_box_zone_score") is not None
         and sum(float(values.get(field) or 0.0) for field in (
             "box_six_yard_ratio", "box_penalty_spot_ratio", "box_wide_ratio",
         )) > 0.0
@@ -1142,97 +1017,44 @@ def calculate_league_percentiles(
     danger_values = spatial_values("danger_zone_density")
     cca_values = spatial_values("cca_area_pct")
     out_box_scores = _scores_from_population({
-        peer_id: peer.out_box_shot_quality
-        for peer_id, peer in peers.items() if peer.out_box_shot_quality is not None
+        peer_id: peer.out_box_shot_quality for peer_id, peer in peers.items()
+        if peer.out_box_shot_quality is not None
     })
     out_box_conversion_scores = _scores_from_population({
-        peer_id: peer.out_box_goal_conversion
-        for peer_id, peer in peers.items() if peer.out_box_goal_conversion is not None
+        peer_id: peer.out_box_goal_conversion for peer_id, peer in peers.items()
+        if peer.out_box_goal_conversion is not None
     })
-    out_box_ratio_scores = _combined_scores(
-        out_box_scores, out_box_conversion_scores, 0.50,
-    )
+    out_box_ratio_scores = _combined_scores(out_box_scores, out_box_conversion_scores, 0.50)
     micro_scores = _scores_from_population(micro_values)
     danger_scores = _scores_from_population(danger_values)
     cca_scores = _scores_from_population(cca_values)
     aerial_scores = _scores_from_population({
-        peer_id: peer.aerial_margin_per90
-        for peer_id, peer in peers.items() if peer.aerial_margin_per90 is not None
+        peer_id: peer.aerial_margin_per90 for peer_id, peer in peers.items()
+        if peer.aerial_margin_per90 is not None
     })
     duel_scores = _scores_from_population({
-        peer_id: peer.duel_margin_per90
-        for peer_id, peer in peers.items() if peer.duel_margin_per90 is not None
+        peer_id: peer.duel_margin_per90 for peer_id, peer in peers.items()
+        if peer.duel_margin_per90 is not None
     })
     combined_duel_volume_scores = _blend_volume_ratio_scores(
         volume_scores["ground"], volume_scores["aerial"], peers,
     )
-    combined_duel_efficiency_scores = _blend_volume_ratio_scores(
-        duel_scores, aerial_scores, peers,
-    )
+    combined_duel_efficiency_scores = _blend_volume_ratio_scores(duel_scores, aerial_scores, peers)
     deep_box_scores = {
         peer_id: round(0.70 * in_box_scores[peer_id] + 0.30 * micro_scores.get(peer_id, 0.0), 2)
-        for peer_id, row in spatial_rows.items()
-        if peer_id in in_box_scores and row is not None
+        for peer_id, row in spatial_rows.items() if peer_id in in_box_scores and row is not None
     }
-    base_deep_box_scores = dict(deep_box_scores)
-    # Danger-zone density belongs to space control alone.  On-ball
-    # progression is the directional dribble-margin score.
     danger_progression_scores = dribble_scores
     sector_scores = {
-        # Each M.E.S.S.I. sector is the exact pair visualised by the volume ×
-        # ratio grid: equal credit for repeated involvement and effectiveness.
         "outside_box": _blend_volume_ratio_scores(volume_scores["outside_box"], out_box_ratio_scores, peers),
-        "box": _blend_volume_ratio_scores(volume_scores["box"], base_deep_box_scores, peers),
+        "box": _blend_volume_ratio_scores(volume_scores["box"], deep_box_scores, peers),
         "danger": _blend_volume_ratio_scores(volume_scores["dribble"], danger_progression_scores, peers),
         "aerial": _blend_volume_ratio_scores(volume_scores["aerial"], aerial_scores, peers),
         "ground": _blend_volume_ratio_scores(volume_scores["ground"], duel_scores, peers),
         "space": _blend_volume_ratio_scores(cca_scores, danger_scores, peers),
-        "duel": _blend_volume_ratio_scores(
-            combined_duel_volume_scores, combined_duel_efficiency_scores, peers,
-        ),
-        "press": _blend_volume_ratio_scores(
-            recovery_scores, forward_press_concentration_scores, peers,
-        ),
+        "duel": _blend_volume_ratio_scores(combined_duel_volume_scores, combined_duel_efficiency_scores, peers),
+        "press": _blend_volume_ratio_scores(recovery_scores, forward_press_concentration_scores, peers),
     }
-    imputed_volume_attrs = tuple(
-        attr for attr, source in (
-            ("outside_box_shots_attempts_top_percent", volume_scores["outside_box"]),
-            ("box_shots_volume_top_percent", volume_scores["box"]),
-            ("dribble_attempts_volume_top_percent", volume_scores["dribble"]),
-            ("aerial_duel_attempts_volume_top_percent", volume_scores["aerial"]),
-            ("ground_duel_attempts_volume_top_percent", volume_scores["ground"]),
-            ("cca_area_top_percent", cca_scores),
-        ) if player_key not in source
-    )
-    imputed_ratio_attrs = tuple(
-        attr for attr, source in (
-            ("out_box_shot_quality_top_percent", out_box_ratio_scores),
-            ("micro_zoning_finishing_top_percent", base_deep_box_scores),
-            ("danger_zone_progression_top_percent", danger_progression_scores),
-            ("aerial_margin_per90_top_percent", aerial_scores),
-            ("duel_margin_per90_top_percent", duel_scores),
-            ("danger_zone_density_top_percent", danger_scores),
-        ) if player_key not in source
-    )
-    micro_pct, micro_rank = _rank_score(player_key, micro_scores)
-    deep_box_pct, deep_box_rank = _rank_score(player_key, deep_box_scores)
-    danger_pct, danger_rank = _rank_score(player_key, danger_progression_scores)
-    cca_pct, cca_rank = _rank_score(player_key, cca_scores)
-    danger_density_pct, danger_density_rank = _rank_score(player_key, danger_scores)
-    combined_duel_volume_pct, combined_duel_volume_rank = _rank_score(
-        player_key, combined_duel_volume_scores,
-    )
-    combined_duel_efficiency_pct, combined_duel_efficiency_rank = _rank_score(
-        player_key, combined_duel_efficiency_scores,
-    )
-    recoveries_pct, recoveries_rank = _rank_score(player_key, recovery_scores)
-    final_third_press_pct, final_third_press_rank = _rank_score(
-        player_key, final_third_press_per90_scores,
-    )
-    combined_duel_pct, combined_duel_rank = _rank_score(player_key, sector_scores["duel"])
-    forward_press_pct, forward_press_rank = _rank_score(player_key, sector_scores["press"])
-    # Role is descriptive only. Every player uses the same six-factor formula;
-    # Type B no longer receives a masked box score or a score shield.
     common_weights = (
         (sector_scores["box"], 0.30), (sector_scores["outside_box"], 0.20),
         (sector_scores["danger"], 0.15), (sector_scores["space"], 0.15),
@@ -1243,71 +1065,206 @@ def calculate_league_percentiles(
         (sector_scores["danger"], 0.15), (sector_scores["space"], 0.15),
         (sector_scores["duel"], 0.10), (sector_scores["press"], 0.10),
     )
-
-    def is_type_b(peer_id: str) -> bool:
-        row = spatial_rows.get(peer_id)
-        if row is None:
-            return False
-        return float(row.get("in_box_ratio") or 0.0) < 15.0
-
     def weighted_score(peer_id: str, weights) -> Optional[float]:
         values = []
         for scores, weight in weights:
-            if peer_id in scores:
-                values.append((scores[peer_id], weight))
-            else:
+            if peer_id not in scores:
                 return None
+            values.append((scores[peer_id], weight))
         return round(sum(value * weight for value, weight in values), 2)
-
-    original_spear_scores = {
-        peer_id: score
-        for peer_id in peers
-        if (score := weighted_score(peer_id, common_weights)) is not None
+    scores = {
+        "volume": volume_scores,
+        "recovery": recovery_scores,
+        "final_third_press": final_third_press_per90_scores,
+        "out_box_ratio": out_box_ratio_scores,
+        "deep_box": deep_box_scores,
+        "danger_progression": danger_progression_scores,
+        "cca": cca_scores,
+        "danger": danger_scores,
+        "aerial": aerial_scores,
+        "duel": duel_scores,
+        "combined_duel_volume": combined_duel_volume_scores,
+        "combined_duel_efficiency": combined_duel_efficiency_scores,
+        "sector": sector_scores,
+        "spear": {
+            peer_id: score for peer_id in peers
+            if (score := weighted_score(peer_id, common_weights)) is not None
+        },
+        "pressing_spear": {
+            peer_id: score for peer_id in peers
+            if (score := weighted_score(peer_id, pressing_weights)) is not None
+        },
     }
-    original_type_b = is_type_b(player_key)
-    active_type_b = original_type_b if role_override not in {"type_a", "type_b"} else role_override == "type_b"
-    spear_scores = dict(original_spear_scores)
-    active_score = weighted_score(player_key, common_weights)
-    if active_score is not None:
-        spear_scores[player_key] = active_score
-    # ``_rank_score`` returns ``100 - score`` for percentile-normalised single
-    # metrics.  A weighted M.E.S.S.I. total is not itself a percentile, so its
-    # visible top percentage must instead come from its actual rank and the
-    # full score cohort (e.g. 1st / 673 = top 0.1%, never 100 - 82.5 = 17.5%).
+    return {
+        "peer_ids": peer_ids,
+        "cohort_count": len(peers),
+        "raw": raw_populations,
+        "dribble_rates": dribble_rate_population,
+        "scores": scores,
+        "type_b": {
+            peer_id: float(row.get("in_box_ratio") or 0.0) < 15.0
+            for peer_id, row in spatial_rows.items() if row is not None
+        },
+        "medians": {
+            attr: float(pd.Series(raw_populations[attr]).median()) if raw_populations[attr] else None
+            for attr in (
+                "goals", "shot_quality", "overall_finishing", "luck_or_gk_impact",
+                "in_box_finishing", "out_box_shot_quality",
+            )
+        },
+    }
+
+
+@functools.lru_cache(maxsize=160)
+def _league_percentile_population(
+    season_name: str, league_id: int, league_name: str, minimum_xg: float,
+    restrict_to_forwards: bool, minimum_final_third_ratio: int,
+    comparison_scope: int, role_override: str,
+) -> dict[str, object]:
+    """Return the cached distribution for a player-independent report context."""
+    # minimum_xg and role_override are part of the public context contract even
+    # though the static cohort and common score formula currently ignore them.
+    _ = minimum_xg, role_override
+    peers, _successes = _fetch_elite_dribbler_metrics(
+        league_id, season_name, restrict_to_forwards,
+        minimum_final_third_ratio, comparison_scope,
+    )
+    return _build_league_percentile_population(peers, league_name, season_name)
+
+
+def calculate_league_percentiles(
+    player_id: str, season: str, metrics: DecisionMetrics, minimum_xg: float = 1.0,
+    restrict_to_forwards: bool = True, minimum_final_third_ratio: int = 0,
+    comparison_scope: int = 0, role_override: str = "auto",
+) -> LeaguePercentiles:
+    if metrics.league_id is None:
+        return LeaguePercentiles(None, None, None, None, None, None, None, None, None, None, 0)
+    minimum_xg = max(float(minimum_xg), _minimum_xg_for_competition(metrics.league_id))
+    season_name = f"20{season[:2]}/20{season[3:]}" if len(season) == 5 and "/" in season else season
+    player_key = str(player_id)
+    population = _league_percentile_population(
+        season_name, metrics.league_id, metrics.league_name or "", minimum_xg,
+        restrict_to_forwards, minimum_final_third_ratio, comparison_scope, role_override,
+    )
+    # Preserve the legacy subject-dependent exception outside the shared cache.
+    if (
+        player_key not in population["peer_ids"]
+        and (metrics.xg or 0.0) >= minimum_xg
+        and (metrics.minutes_played or 0.0) >= _minimum_minutes_for_competition(metrics.league_id)
+    ):
+        peers, _ = _fetch_elite_dribbler_metrics(
+            metrics.league_id, season_name, restrict_to_forwards,
+            minimum_final_third_ratio, comparison_scope,
+        )
+        population = _build_league_percentile_population(
+            {**peers, player_key: metrics}, metrics.league_name or "", season_name,
+        )
+    raw = population["raw"]
+    scores = population["scores"]
+    cohort_count = int(population["cohort_count"])
+    def cohort_rank(value: Optional[float], attr: str, *, reverse: bool = False):
+        values = raw[attr]
+        if reverse:
+            return _rank_info(-value if value is not None else None, [-item for item in values])
+        return _rank_info(value, values)
+    goals_pct, goals_rk = _rank_info(metrics.goals, raw["goals"])
+    xg_pct, xg_rk = _rank_info(metrics.xg, raw["xg"])
+    sq_pct, sq_rk = _rank_info(metrics.shot_quality, raw["shot_quality"])
+    of_pct, of_rk = _rank_info(metrics.overall_finishing, raw["overall_finishing"])
+    gk_pct, gk_rk = _rank_info(metrics.luck_or_gk_impact, raw["luck_or_gk_impact"])
+    dribbles_pct, dribbles_rk = _rank_info(_dribble_success_rate(metrics), population["dribble_rates"])
+    in_box_pct, in_box_rank = _rank_info(metrics.in_box_finishing, raw["in_box_finishing"])
+    out_box_pct, out_box_rank = _rank_info(metrics.out_box_shot_quality, raw["out_box_shot_quality"])
+    spear_sq_pct, spear_sq_rk = _rank_info(metrics.shot_quality_per90, raw["shot_quality_per90"])
+    def volume_rank(attr: str):
+        return _rank_info(getattr(metrics, attr, None), raw[attr])
+    total_shots_pct, total_shots_rank = volume_rank("total_shots")
+    outside_box_shots_pct, outside_box_shots_rank = volume_rank("out_box_shots")
+    box_shots_pct, box_shots_rank = volume_rank("in_box_shots")
+    dribble_attempts_pct, dribble_attempts_rank = volume_rank("dribble_attempts")
+    aerial_attempts_pct, aerial_attempts_rank = volume_rank("aerial_duel_attempts")
+    ground_attempts_pct, ground_attempts_rank = volume_rank("ground_duel_attempts")
+    xg_volume_pct, xg_volume_rank = volume_rank("xg")
+    def score_rank(name: str):
+        return _rank_score(player_key, scores[name])
+    deep_box_pct, deep_box_rank = score_rank("deep_box")
+    danger_pct, danger_rank = score_rank("danger_progression")
+    cca_pct, cca_rank = score_rank("cca")
+    danger_density_pct, danger_density_rank = score_rank("danger")
+    combined_duel_volume_pct, combined_duel_volume_rank = score_rank("combined_duel_volume")
+    combined_duel_efficiency_pct, combined_duel_efficiency_rank = score_rank("combined_duel_efficiency")
+    recoveries_pct, recoveries_rank = score_rank("recovery")
+    final_third_press_pct, final_third_press_rank = score_rank("final_third_press")
+    combined_duel_pct, combined_duel_rank = _rank_score(player_key, scores["sector"]["duel"])
+    forward_press_pct, forward_press_rank = _rank_score(player_key, scores["sector"]["press"])
+    spear_scores = scores["spear"]
     _, spear_score_rank = _rank_score(player_key, spear_scores)
     spear_score_top_percent = (
         round((spear_score_rank / len(spear_scores)) * 100.0, 1)
         if spear_score_rank is not None and spear_scores else None
     )
-    # Tier and rank use the same volume-and-ratio blended M.E.S.S.I. score.
-    spear_score = spear_scores.get(player_key)
-    pressing_spear_scores = {
-        peer_id: score
-        for peer_id in peers
-        if (score := weighted_score(peer_id, pressing_weights)) is not None
-    }
+    pressing_spear_scores = scores["pressing_spear"]
     _, spear_pressing_score_rank = _rank_score(player_key, pressing_spear_scores)
     spear_pressing_score_top_percent = (
         round((spear_pressing_score_rank / len(pressing_spear_scores)) * 100.0, 1)
         if spear_pressing_score_rank is not None and pressing_spear_scores else None
     )
-    spear_pressing_score = pressing_spear_scores.get(player_key)
+    volume_scores = scores["volume"]
+    imputed_volume_attrs = tuple(
+        attr for attr, source in (
+            ("outside_box_shots_attempts_top_percent", volume_scores["outside_box"]),
+            ("box_shots_volume_top_percent", volume_scores["box"]),
+            ("dribble_attempts_volume_top_percent", volume_scores["dribble"]),
+            ("aerial_duel_attempts_volume_top_percent", volume_scores["aerial"]),
+            ("ground_duel_attempts_volume_top_percent", volume_scores["ground"]),
+            ("cca_area_top_percent", scores["cca"]),
+        ) if player_key not in source
+    )
+    imputed_ratio_attrs = tuple(
+        attr for attr, source in (
+            ("out_box_shot_quality_top_percent", scores["out_box_ratio"]),
+            ("micro_zoning_finishing_top_percent", scores["deep_box"]),
+            ("danger_zone_progression_top_percent", scores["danger_progression"]),
+            ("aerial_margin_per90_top_percent", scores["aerial"]),
+            ("duel_margin_per90_top_percent", scores["duel"]),
+            ("danger_zone_density_top_percent", scores["danger"]),
+        ) if player_key not in source
+    )
     pressing_imputed_volume_attrs = tuple(
         attr for attr, source in (
-            ("combined_duel_volume_top_percent", combined_duel_volume_scores),
-            ("recoveries_per90_top_percent", recovery_scores),
+            ("combined_duel_volume_top_percent", scores["combined_duel_volume"]),
+            ("recoveries_per90_top_percent", scores["recovery"]),
         ) if player_key not in source
     )
     pressing_imputed_ratio_attrs = tuple(
         attr for attr, source in (
-            ("combined_duel_efficiency_top_percent", combined_duel_efficiency_scores),
-            ("final_third_possessions_won_per90_top_percent", final_third_press_per90_scores),
+            ("combined_duel_efficiency_top_percent", scores["combined_duel_efficiency"]),
+            ("final_third_possessions_won_per90_top_percent", scores["final_third_press"]),
         ) if player_key not in source
     )
-    progression_eligible = int(progression_percentiles["cohort_count"])
-    duels_eligible = progression_eligible
-    aerials_eligible = progression_eligible
-    
+    active_type_b = bool(population["type_b"].get(player_key, False))
+    if role_override in {"type_a", "type_b"}:
+        active_type_b = role_override == "type_b"
+    medians = population["medians"]
+    progression = {
+        "success": cohort_rank(metrics.dribbles_succeeded_per90, "dribbles_succeeded_per90"),
+        "failure": cohort_rank(metrics.dribbles_failed_per90, "dribbles_failed_per90", reverse=True),
+        "duels_won": cohort_rank(metrics.duels_won_per90, "duels_won_per90"),
+        "duels_lost": cohort_rank(metrics.duels_lost_per90, "duels_lost_per90", reverse=True),
+        "aerials_won": cohort_rank(metrics.aerial_duels_won_per90, "aerial_duels_won_per90"),
+        "aerials_lost": cohort_rank(metrics.aerial_duels_lost_per90, "aerial_duels_lost_per90", reverse=True),
+        "dribble_margin": cohort_rank(metrics.dribble_margin_per90, "dribble_margin_per90"),
+        "duel_margin": cohort_rank(metrics.duel_margin_per90, "duel_margin_per90"),
+        "aerial_margin": cohort_rank(metrics.aerial_margin_per90, "aerial_margin_per90"),
+        "xg_per90": cohort_rank(metrics.xg_per90, "xg_per90"),
+        "net": cohort_rank(_progression_value(metrics), "net_progression_per90"),
+    }
+    duels_pct, duels_rk = None, None
+    aerials_pct, aerials_rk = None, None
+    progression_eligible = cohort_count
+    duels_eligible = cohort_count
+    aerials_eligible = cohort_count
+
     return LeaguePercentiles(
         goals_top_percent=goals_pct,
         goals_rank=goals_rk,
@@ -1319,52 +1276,52 @@ def calculate_league_percentiles(
         overall_finishing_rank=of_rk,
         gk_impact_top_percent=gk_pct,
         gk_impact_rank=gk_rk,
-        eligible_players=eligible_players_count,
-        goals_median=goals_median,
-        shot_quality_median=shot_quality_median,
-        overall_finishing_median=overall_finishing_median,
-        gk_impact_median=gk_impact_median,
+        eligible_players=cohort_count,
+        goals_median=medians["goals"],
+        shot_quality_median=medians["shot_quality"],
+        overall_finishing_median=medians["overall_finishing"],
+        gk_impact_median=medians["luck_or_gk_impact"],
         in_box_finishing_top_percent=in_box_pct,
         in_box_finishing_rank=in_box_rank,
-        in_box_finishing_median=float(pd.Series(in_box_population).median()) if in_box_population else None,
+        in_box_finishing_median=medians["in_box_finishing"],
         out_box_shot_quality_top_percent=out_box_pct,
         out_box_shot_quality_rank=out_box_rank,
-        out_box_shot_quality_median=float(pd.Series(out_box_population).median()) if out_box_population else None,
+        out_box_shot_quality_median=medians["out_box_shot_quality"],
         duels_pct_top_percent=duels_pct,
         duels_pct_rank=duels_rk,
         duels_eligible=duels_eligible,
         dribbles_pct_top_percent=dribbles_pct,
         dribbles_pct_rank=dribbles_rk,
-        dribbles_eligible=dribbles_eligible,
+        dribbles_eligible=len(population["dribble_rates"]),
         aerials_pct_top_percent=aerials_pct,
         aerials_pct_rank=aerials_rk,
         aerials_eligible=aerials_eligible,
-        elite_dribbler_eligible=int(progression_percentiles["cohort_count"]),
-        dribbles_succeeded_per90_top_percent=progression_percentiles["success_pct"],
-        dribbles_succeeded_per90_rank=progression_percentiles["success_rank"],
-        dribbles_failed_per90_top_percent=progression_percentiles["failure_pct"],
-        dribbles_failed_per90_rank=progression_percentiles["failure_rank"],
-        dribbles_failed_eligible=int(progression_percentiles["cohort_count"]),
-        dribble_margin_per90_top_percent=progression_percentiles["dribble_margin_pct"],
-        dribble_margin_per90_rank=progression_percentiles["dribble_margin_rank"],
-        duels_won_per90_top_percent=progression_percentiles["duels_won_pct"],
-        duels_won_per90_rank=progression_percentiles["duels_won_rank"],
-        duels_lost_per90_top_percent=progression_percentiles["duels_lost_pct"],
-        duels_lost_per90_rank=progression_percentiles["duels_lost_rank"],
-        duel_margin_per90_top_percent=progression_percentiles["duel_margin_pct"],
-        duel_margin_per90_rank=progression_percentiles["duel_margin_rank"],
-        aerials_won_per90_top_percent=progression_percentiles["aerials_won_pct"],
-        aerials_won_per90_rank=progression_percentiles["aerials_won_rank"],
-        aerials_lost_per90_top_percent=progression_percentiles["aerials_lost_pct"],
-        aerials_lost_per90_rank=progression_percentiles["aerials_lost_rank"],
-        aerial_margin_per90_top_percent=progression_percentiles["aerial_margin_pct"],
-        aerial_margin_per90_rank=progression_percentiles["aerial_margin_rank"],
-        xg_per90_top_percent=progression_percentiles["xg_per90_pct"],
-        xg_per90_rank=progression_percentiles["xg_per90_rank"],
+        elite_dribbler_eligible=cohort_count,
+        dribbles_succeeded_per90_top_percent=progression["success"][0],
+        dribbles_succeeded_per90_rank=progression["success"][1],
+        dribbles_failed_per90_top_percent=progression["failure"][0],
+        dribbles_failed_per90_rank=progression["failure"][1],
+        dribbles_failed_eligible=cohort_count,
+        dribble_margin_per90_top_percent=progression["dribble_margin"][0],
+        dribble_margin_per90_rank=progression["dribble_margin"][1],
+        duels_won_per90_top_percent=progression["duels_won"][0],
+        duels_won_per90_rank=progression["duels_won"][1],
+        duels_lost_per90_top_percent=progression["duels_lost"][0],
+        duels_lost_per90_rank=progression["duels_lost"][1],
+        duel_margin_per90_top_percent=progression["duel_margin"][0],
+        duel_margin_per90_rank=progression["duel_margin"][1],
+        aerials_won_per90_top_percent=progression["aerials_won"][0],
+        aerials_won_per90_rank=progression["aerials_won"][1],
+        aerials_lost_per90_top_percent=progression["aerials_lost"][0],
+        aerials_lost_per90_rank=progression["aerials_lost"][1],
+        aerial_margin_per90_top_percent=progression["aerial_margin"][0],
+        aerial_margin_per90_rank=progression["aerial_margin"][1],
+        xg_per90_top_percent=progression["xg_per90"][0],
+        xg_per90_rank=progression["xg_per90"][1],
         progression_eligible=progression_eligible,
-        net_progression_top_percent=progression_percentiles["net_pct"],
-        net_progression_rank=progression_percentiles["net_rank"],
-        net_progression_eligible=int(progression_percentiles["net_count"]),
+        net_progression_top_percent=progression["net"][0],
+        net_progression_rank=progression["net"][1],
+        net_progression_eligible=cohort_count,
         total_shots_volume_top_percent=total_shots_pct,
         total_shots_volume_rank=total_shots_rank,
         outside_box_shots_attempts_top_percent=outside_box_shots_pct,
@@ -1379,7 +1336,7 @@ def calculate_league_percentiles(
         ground_duel_attempts_volume_rank=ground_attempts_rank,
         xg_volume_top_percent=xg_volume_pct,
         xg_volume_rank=xg_volume_rank,
-        spear_volume_eligible=len(peers),
+        spear_volume_eligible=cohort_count,
         micro_zoning_finishing_top_percent=deep_box_pct,
         micro_zoning_finishing_rank=deep_box_rank,
         danger_zone_progression_top_percent=danger_pct,
@@ -1402,7 +1359,7 @@ def calculate_league_percentiles(
         forward_press_rank=forward_press_rank,
         spear_shot_quality_top_percent=spear_sq_pct,
         spear_shot_quality_rank=spear_sq_rk,
-        spear_score=spear_score,
+        spear_score=spear_scores.get(player_key),
         spear_score_rank=spear_score_rank,
         spear_score_top_percent=spear_score_top_percent,
         spear_score_eligible=len(spear_scores),
@@ -1410,7 +1367,7 @@ def calculate_league_percentiles(
         spear_imputed_ratio_attrs=imputed_ratio_attrs,
         pressing_imputed_volume_attrs=pressing_imputed_volume_attrs,
         pressing_imputed_ratio_attrs=pressing_imputed_ratio_attrs,
-        spear_pressing_score=spear_pressing_score,
+        spear_pressing_score=pressing_spear_scores.get(player_key),
         spear_pressing_score_rank=spear_pressing_score_rank,
         spear_pressing_score_top_percent=spear_pressing_score_top_percent,
         spear_pressing_score_eligible=len(pressing_spear_scores),

@@ -523,6 +523,7 @@ class TacticalCoverageAuditTests(unittest.TestCase):
             rankings.get_league_metric_medians,
             rankings.get_tactical_matrix,
             rankings.get_top_leagues_shot_quality,
+            rankings._league_percentile_population,
         )
         clearers = [patch.object(function, "cache_clear") for function in cached_functions]
         mocks = [patcher.start() for patcher in clearers]
