@@ -2,6 +2,10 @@
 
 ## 진행 중인 작업
 
+- 상태: 로컬 구현·검증 완료, 호스트 커밋 대기 — 선수 상세 리그 백분위 모집단 캐시 성능 개선 (2026-09-05 KST)
+- 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-api-eventloop
+- 범위/결과: `rankings.calculate_league_percentiles`의 선수 비의존 모집단 계산을 별도 함수로 추출하고 `(season_name, league_id, league_name, minimum_xg, restrict_to_forwards, minimum_final_third_ratio, comparison_scope, role_override)` 키의 `lru_cache(maxsize=160)`로 캐시했다. 대상 선수가 정적 모집단에 없는 기존 보정 경로는 캐시 밖에 유지했고 데이터 버전 변경 시 새 캐시도 비운다. 기준 HEAD `c6b9104d45390e9199301ec1a3b877ddce244d89`의 원본 함수를 실행해 만든 12명·3컨텍스트·107필드 및 모집단 외 선수 1건의 `asdict` 고정값과 현재 결과를 정확 비교해 전부 일치했다. 집중 테스트 61건·subtest 3건 통과; 전체 `python -m pytest tests/ -q`는 396/404 및 subtest 3건 통과·기존 8건 실패이며, 기준 코드 동일 노드 비교와 격리 재검증상 신규 회귀는 0건이다. 동일 컨텍스트 상세 실측은 원본 첫 12100.833ms/후속 평균 4774.443ms, 수정 첫 12092.268ms/후속 평균 21.511ms였다. 예열 후 cProfile에서 백분위 함수는 5ms로 top 10 밖이며 리그 전체 전술 비율 반복은 사라지고 선택 선수 경로만 1회 호출됐다. 공유 모듈 의존성·사전·최종 동기화 감사 모두 GO. 외부 시그니처·반환 타입·산식·가중치·임계값·계산 순서·`build_player_detail` 캐시·예열·라이브러리는 변경하지 않았다. branch `agent/percentile-population-cache`, HEAD `c6b9104d45390e9199301ec1a3b877ddce244d89`; commit·push·PR·merge·deploy·기능 플래그 변경 없음.
+
 - 상태: 반려 수정·로컬 검증 완료, 호스트 커밋 대기 — P0-1 배치 유지 및 제품·3열·접근성 회귀 단언 복원 (2026-09-05 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-heatmap-b
 - 범위/결과: 승인된 전폭 섹션 순서와 기본 접힘은 유지했다. 선수 페이지 `Benchmark`를 import-compatible no-op으로 되돌리고 원래 테스트 이름과 `container` empty, volume/ratio/v2 hook 미호출 단언을 복원했다. 새 `category-summary-slot` 안의 `Percentile profile`에서 legacy grid의 `sm:grid-cols-2 lg:grid-cols-3` class 단언을 유지했고, `StaticRoute.scope8.test.tsx` 네 곳은 빈 `data-layout` 조회 대신 `region`/`Volume benchmark radar` 접근 가능한 이름 조회로 복원했다. 같은 파일의 접힌 상세 board는 `hidden: true`의 role/name으로 찾고, 백분위 bar는 상세를 펼친 뒤 role/name으로 찾도록 raw selector를 제거했다. 전체 `npm test`는 기존 기준선과 같은 555/572 통과·17 실패(종료코드 1), `npm run build`와 `git diff --check`는 통과했다(기존 500kB chunk 경고 및 line-ending 경고만). `origin/main..HEAD` committed diff가 비어 mechanical subagent gate는 비활성이다. branch `agent/p01-sections`, HEAD `ea435214a04f1074b99bb7a1d3b1b27566318be9`; commit·push·PR·merge·deploy·기능 플래그 변경 없음.
