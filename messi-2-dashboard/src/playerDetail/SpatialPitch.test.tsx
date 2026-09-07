@@ -10,7 +10,7 @@ import {
   DEFAULT_WEBGL_CAMERA, GLB_PITCH_HALF_LENGTH_METERS, GLB_PITCH_HALF_WIDTH_METERS,
   GLB_PITCH_LENGTH_METERS, GLB_PITCH_WIDTH_METERS, FREEFLY_BOUNDS, WEBGL_CAMERA_PRESETS,
   cameraPositionFromOrbit, clampWebglZoom, fifaPenaltySpotWorld, freeflyStateFromOrbit,
-  moveFreeflyCamera, pitchPercentToWorld,
+  moveFreeflyCamera, pitchPercentToWorld, pinchWebglZoom,
   providerPenaltyAlignmentErrorMeters, trajectoryWorldPoints, worldToPitchPercent,
 } from "./pitchWebglGeometry";
 
@@ -35,12 +35,29 @@ const fullHeatmap = (points: readonly { x: number; y: number }[]) => ({
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("footballpitchv3 coordinate contract", () => {
+  it("pinches relative to gesture start and clamps zoom without invalid-distance jumps", () => {
+    expect(pinchWebglZoom(1, 100, 200)).toBe(2);
+    expect(pinchWebglZoom(2, 100, 50)).toBe(1);
+    expect(pinchWebglZoom(2, 100, 400)).toBe(3);
+    expect(pinchWebglZoom(2, 0, 200)).toBe(2);
+    expect(pinchWebglZoom(2, 100, NaN)).toBe(2);
+  });
+  it("places provider right on camera-right when facing the attacking goal", () => {
+    const camera = { position: { x: 0, y: 4, z: 0 }, yaw: 180, pitch: 0 };
+    const rightStep = moveFreeflyCamera(camera, { right: 1 });
+    const providerRight = pitchPercentToWorld({ x: 80, y: 0 });
+    const providerLeft = pitchPercentToWorld({ x: 80, y: 100 });
+    // Compare independent camera movement basis, not just a forward/inverse roundtrip.
+    expect(providerRight.x * rightStep.position.x).toBeGreaterThan(0);
+    expect(providerLeft.x * rightStep.position.x).toBeLessThan(0);
+  });
   it("maps the measured 68 m by 105.38557 m Y-up model around world origin", () => {
     expect(pitchPercentToWorld({ x: 50, y: 50 })).toMatchObject({ x: 0, z: 0 });
     expect(pitchPercentToWorld({ x: 0, y: 50 }).z).toBeCloseTo(-GLB_PITCH_HALF_LENGTH_METERS, 8);
     expect(pitchPercentToWorld({ x: 100, y: 50 }).z).toBeCloseTo(GLB_PITCH_HALF_LENGTH_METERS, 8);
-    expect(pitchPercentToWorld({ x: 50, y: 0 }).x).toBeCloseTo(GLB_PITCH_HALF_WIDTH_METERS, 8);
-    expect(pitchPercentToWorld({ x: 50, y: 100 }).x).toBeCloseTo(-GLB_PITCH_HALF_WIDTH_METERS, 8);
+    // Facing the attacking goal (+Z), physical right is -X (forward cross up).
+    expect(pitchPercentToWorld({ x: 50, y: 0 }).x).toBeCloseTo(-GLB_PITCH_HALF_WIDTH_METERS, 8);
+    expect(pitchPercentToWorld({ x: 50, y: 100 }).x).toBeCloseTo(GLB_PITCH_HALF_WIDTH_METERS, 8);
     expect(GLB_PITCH_WIDTH_METERS).toBe(68);
     expect(GLB_PITCH_LENGTH_METERS).toBeCloseTo(105.3855703125, 10);
   });
@@ -178,7 +195,8 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(container.querySelectorAll("[data-shot-trajectory]")).toHaveLength(1);
     expect(container.querySelector("[data-shot-trajectory]")).toHaveAttribute("data-end-height-meters", "1.2");
     const marker = container.querySelector<HTMLButtonElement>("[data-shot-marker][data-shot-outcome='goal']")!;
-    expect(marker).toHaveAttribute("data-marker-renderer", "flat-disc");
+    expect(marker).toHaveAttribute("data-marker-renderer", "asset-football");
+    expect(marker).toHaveAttribute("data-marker-size", "0.11");
     expect(container.querySelectorAll("[data-shot-marker][tabindex='0']")).toHaveLength(1);
     fireEvent.click(marker);
     expect(screen.getByRole("tooltip")).toHaveTextContent("xG 0.40 · xGOT 0.60");

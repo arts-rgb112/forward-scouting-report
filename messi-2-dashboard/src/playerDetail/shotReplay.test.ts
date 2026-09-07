@@ -1,0 +1,34 @@
+import { describe, it, expect } from "vitest";
+import * as THREE from "three";
+import type { ShotmapPoint } from "../dashboard/types";
+import { canReplayGoal, cloneReplayBall, replayPosition } from "./shotReplay";
+import { pitchPercentToWorld } from "./pitchWebglGeometry";
+
+const goal = {x:87,y:48,outcome:"goal",trajectory:{endpointKind:"goal_mouth",endX:100,endY:51,endZMeters:.06}} as ShotmapPoint;
+describe("asset goal replay",()=>{
+ it("requires a goal with observed in-frame endpoint, never fabricates missing height",()=>{
+  expect(canReplayGoal(goal)).toBe(true);
+  expect(canReplayGoal({...goal,outcome:"blocked"})).toBe(false);
+  expect(canReplayGoal({...goal,trajectory:{...goal.trajectory!,endZMeters:null}})).toBe(false);
+  expect(canReplayGoal({...goal,trajectory:{...goal.trajectory!,endY:99}})).toBe(false);
+ });
+ it("preserves exact endpoint height including below legacy .15m clamp",()=>{
+  const end=pitchPercentToWorld({x:100,y:51},.06);
+  expect(replayPosition(goal,1).toArray()).toEqual([end.x,end.y,end.z]);
+  expect(replayPosition(goal,-5).toArray()).toEqual(replayPosition(goal,0).toArray());
+  expect(replayPosition(goal,4).toArray()).toEqual(replayPosition(goal,1).toArray());
+ });
+ it("does not mutate source observations",()=>{
+  const before=JSON.stringify(goal);
+  for(let i=0;i<=100;i++)expect(replayPosition(goal,i/100).toArray().every(Number.isFinite)).toBe(true);
+  expect(JSON.stringify(goal)).toBe(before);
+ });
+ it("uses named asset geometry and preserves source visibility and geometry",()=>{
+  const asset=new THREE.Group(),football=new THREE.Group();football.name="Football_13";football.visible=false;
+  const original=new THREE.Mesh(new THREE.SphereGeometry(10),new THREE.MeshStandardMaterial());football.add(original);asset.add(football);
+  const ball=cloneReplayBall(asset);ball.geometry.computeBoundingBox();
+  expect(ball.geometry.boundingBox!.getSize(new THREE.Vector3()).x).toBeCloseTo(.22);
+  expect(ball.geometry).not.toBe(original.geometry);expect(ball.visible).toBe(true);expect(football.visible).toBe(false);
+  expect(()=>cloneReplayBall(new THREE.Group())).toThrow();
+ });
+});

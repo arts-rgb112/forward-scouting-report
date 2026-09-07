@@ -33,10 +33,10 @@ export const FREEFLY_MOVE_STEP_METERS = 2.5;
 export const FREEFLY_HEIGHT_STEP_METERS = 1.5;
 export const FREEFLY_MOUSE_SENSITIVITY = 0.18;
 export const FREEFLY_BOUNDS = {
-  minX: -GLB_PITCH_HALF_WIDTH_METERS - 16,
-  maxX: GLB_PITCH_HALF_WIDTH_METERS + 16,
+  minX: -120,
+  maxX: 120,
   minY: GLB_PITCH_SURFACE_Y_METERS + 1.1,
-  maxY: 42,
+  maxY: 140,
   minZ: -GLB_PITCH_HALF_LENGTH_METERS - 20,
   maxZ: GLB_PITCH_HALF_LENGTH_METERS + 20,
 } as const;
@@ -45,11 +45,16 @@ export function clampWebglZoom(value: number) {
   return Math.min(WEBGL_ZOOM.maximum, Math.max(WEBGL_ZOOM.minimum, value));
 }
 
+export function pinchWebglZoom(initialZoom: number, initialDistance: number, distance: number) {
+  if (!Number.isFinite(initialDistance) || initialDistance <= 0 || !Number.isFinite(distance) || distance <= 0) return clampWebglZoom(initialZoom);
+  return clampWebglZoom(initialZoom * distance / initialDistance);
+}
+
 /**
  * Sports data is attack-relative (x length, y width, both 0..100). The loaded
  * glTF is already Y-up after its authored root transforms: width is world X,
  * length is world Z, and the line mesh is centred on the origin. y=0 remains
- * the player's right touchline, hence the intentional width-axis inversion.
+ * the player's right touchline. Facing +Z with +Y up, right is world -X.
  */
 export function pitchPercentToWorld(
   point: PitchPercentPoint,
@@ -58,7 +63,7 @@ export function pitchPercentToWorld(
   const xPct = Math.min(100, Math.max(0, point.x));
   const yPct = Math.min(100, Math.max(0, point.y));
   return {
-    x: ((50 - yPct) / 100) * GLB_PITCH_WIDTH_METERS,
+    x: ((yPct - 50) / 100) * GLB_PITCH_WIDTH_METERS,
     y: elevationMeters,
     z: ((xPct - 50) / 100) * GLB_PITCH_LENGTH_METERS,
   };
@@ -67,7 +72,7 @@ export function pitchPercentToWorld(
 export function worldToPitchPercent(point: Pick<WorldPoint, "x" | "z">): PitchPercentPoint {
   return {
     x: (point.z / GLB_PITCH_LENGTH_METERS) * 100 + 50,
-    y: 50 - (point.x / GLB_PITCH_WIDTH_METERS) * 100,
+    y: 50 + (point.x / GLB_PITCH_WIDTH_METERS) * 100,
   };
 }
 
