@@ -4,7 +4,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { PitchPenaltyProvider, PitchPenaltyToggle } from "./PitchPenaltyContext";
-import { clusterCorridorShotGroups, CORRIDOR_CLUSTER_DISTANCE, CORRIDOR_MARKER_RADIUS, SixLaneCorridorPitch } from "./SixLaneCorridorPitch";
+import { corridorContourPath, clusterCorridorShotGroups, CORRIDOR_CLUSTER_DISTANCE, CORRIDOR_MARKER_RADIUS, SixLaneCorridorPitch } from "./SixLaneCorridorPitch";
+import { legacyDensityGrid, normalizeDensity, marchingSquares } from './legacyHeatmap';
 import { groupPitchShots } from "./PitchShotMarker";
 import { DEFAULT_PITCH_LAYERS } from "./pitchLayers";
 
@@ -26,6 +27,23 @@ const analysis = {
 } as never;
 
 describe("SixLaneCorridorPitch", () => {
+  it('shrinks only the PK spot and guide, preserving their location', () => {
+    const { container } = render(<PitchPenaltyProvider><SixLaneCorridorPitch analysis={analysis} layers={DEFAULT_PITCH_LAYERS} /></PitchPenaltyProvider>);
+    expect(container.querySelector('[data-penalty-spot]')).toHaveAttribute('r', '.3');
+    expect(container.querySelector('[data-penalty-guide]')).toHaveAttribute('r', '1.2');
+    for (const circle of container.querySelectorAll('[data-penalty-spot],[data-penalty-guide]')) {
+      expect(circle).toHaveAttribute('cx', '93.999'); expect(circle).toHaveAttribute('cy', '34');
+    }
+  });
+  it('does not mirror screen-space CCA a second time', () => {
+    for (const sourceY of [20, 80]) {
+      const segments = marchingSquares(normalizeDensity(legacyDensityGrid([{x:80,y:sourceY}])), .5);
+      expect(segments.length).toBeGreaterThan(0);
+      const coordinates = [...corridorContourPath(segments).matchAll(/[ML]([\d.]+) ([\d.]+)/g)];
+      const meanY = coordinates.reduce((sum, point) => sum + Number(point[2]), 0) / coordinates.length;
+      expect(meanY).toBeCloseTo((100-sourceY)*.68, 0);
+    }
+  });
   it("uses the approved result-specific marker radii without resizing the pitch", () => {
     expect(CORRIDOR_MARKER_RADIUS).toEqual({ goal: .72, on_target: .56, off_target: .5, blocked: .5 });
   });

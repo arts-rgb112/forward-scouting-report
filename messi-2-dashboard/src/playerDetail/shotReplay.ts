@@ -7,6 +7,8 @@ export const SHOT_BALL_COLORS = { goal: 0xbef264, on_target: 0x38bdf8, off_targe
 
 /** Opaque textured footballs; selection uses a ring, never ghosted background balls. */
 export function styleShotBall(ball: THREE.Mesh, outcome: ShotmapPoint['outcome']) {
+  ball.castShadow = true;
+  ball.receiveShadow = true;
   const materials = Array.isArray(ball.material) ? ball.material : [ball.material];
   for (const material of materials) {
     material.transparent = false;
@@ -24,7 +26,7 @@ export function styleShotBall(ball: THREE.Mesh, outcome: ShotmapPoint['outcome']
 }
 export function canReplayGoal(shot: ShotmapPoint) {
   const end = shot.trajectory;
-  return shot.outcome === "goal" && end?.endpointKind === "goal_mouth" &&
+  return (shot.outcome === "goal" || shot.outcome === "on_target") && end?.endpointKind === "goal_mouth" &&
     Number.isFinite(shot.x) && shot.x >= 0 && shot.x <= 100 &&
     Number.isFinite(shot.y) && shot.y >= 0 && shot.y <= 100 &&
     end.endX === 100 && Number.isFinite(end.endY) &&
@@ -35,7 +37,7 @@ export function canReplayGoal(shot: ShotmapPoint) {
 
 /** Endpoint-backed schematic arc. Intermediate height/time are illustrative. */
 export function replayPosition(shot: ShotmapPoint, progress: number) {
-  if (!canReplayGoal(shot)) throw new Error("재생 가능한 득점 좌표가 없습니다.");
+  if (!canReplayGoal(shot)) throw new Error("재생 가능한 득점·유효슛 좌표가 없습니다.");
   const t = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
   const start = pitchPercentToWorld(shot, .11);
   const end = pitchPercentToWorld({ x: 100, y: shot.trajectory!.endY }, shot.trajectory!.endZMeters!);

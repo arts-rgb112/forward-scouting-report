@@ -182,8 +182,8 @@ describe("Three WebGL spatial pitch contract", () => {
       continuousCore: { available: true, definitionVersion: "continuous-hdr-50-v1", targetDensityPct: 50, achievedDensityPct: 50, coreAreaPct: 8, densityThreshold: .5, thresholdOfPeak: .5, gridColumns: 32, gridRows: 22 },
     })} fullActivityHeatmap={fullHeatmap([point])} />);
     await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
-    // Actual renderer: five depth + four lane + three custom box boundaries.
-    expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(12);
+    // Five depth + four existing lane lines + the PK centre axis; no duplicate box sides.
+    expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(10);
     expect(container.querySelectorAll("[data-goal]")).toHaveLength(2);
     expect(container.querySelectorAll("[data-density-dot]").length).toBeGreaterThan(0);
     expect(container.querySelectorAll("[data-density-dot]").length).toBeLessThanOrEqual(64 * 24);
@@ -230,8 +230,11 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(zone).toHaveAttribute("aria-label", "구역 1. 슈팅 비중 50.00%, 활동 16.67%.");
     expect(screen.getByRole("img", { name: /3D 회랑 WebGL 피치/ })).toHaveAttribute("data-zone-hover-mode", "raycaster");
     fireEvent.focus(zone);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("슈팅 비중 50.00% · 활동 16.67%");
-    expect(screen.getByRole("tooltip")).toHaveTextContent("슛 1 · 득점 1 · xG 0.30");
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("슈팅 비중");
+    expect(tooltip).toHaveTextContent("50.0%");
+    expect(tooltip).toHaveTextContent("활동 비중 16.7%");
+    expect(tooltip.querySelector('dl')).toHaveTextContent("슛1득점1xG0.30");
   });
 
   it("shares outcome visibility with markers and trajectories while keeping the raw event list", async () => {

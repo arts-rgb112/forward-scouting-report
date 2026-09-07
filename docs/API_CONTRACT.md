@@ -2,6 +2,50 @@
 
 ## 진행 중인 작업
 
+- PITCH-RELEASE-20260908: 발주자 현재근접품질로개선중단·라이브배포 및 2D PK점/원축소 승인. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 승인재질제품연결·2D표시크기만추가수정, 히트맵구역재설계보류/점수API불변. 독립검수→배포→라이브확인 후 선수상세메인복귀; 정본 OPEN_WORK.md.
+
+- TURF-DIRECTION-20260907 결과: glb-recovery 로컬 fibre/sheeen 거리보정(근접18m 보정0), 실제 Kane 2025/26 league scope8 heat1401점·119슛 결합시안 독립Terra PASS. 반복띠 canopy 후보폐기·선택공중복수정·고밀도accent복원.31tests/buildPASS·브라우저3뷰/재생완료확인. 원본GLB·API·점수·제품불변/미커밋·push·배포, 배경/항공미완별도. 정본 OPEN_WORK.md.
+
+- INFIELD-DISTANCE-20260907 결과: glb-recovery 로컬 18~42m blend로 기존원거리macro얼룩 제거/약한명암전환,18m 이내승인재질유지.15tests/buildPASS, 실제3구도·독립Terra 해당범위PASS. 항공균일함/배경왜곡은잔여. 제품/원본/데이터불변·미커밋/push/배포. 정본 OPEN_WORK.md.
+
+- INFIELD-PBR-20260907 결과: glb-recovery 로컬시안 Grass001 PBR/0.6m 근접 및 사선 before/after 실렌더 비교, buildPASS. 독립검수 개발후보 조건부PASS·기본교체/완성보류(어둡고 평평한 사선잔여). 원본GLB·배경·제품·데이터 불변, relief OFF, 미커밋/push/배포. 정본 OPEN_WORK.md.
+
+- TURF-RELIEF-20260907 결과: glb-recovery 로컬 2cm 잔디/거리축소/근접카메라 실험,16tests/buildPASS. 독립 시각검수 비용대비 개선미미로 기본적용 REJECT; relief=on 명시적 로컬실험만 보존/기본 OFF. 원본·데이터·제품·배경 불변, 미커밋/push/배포. 정본 OPEN_WORK.md.
+
+- INFIELD-FIRST-20260907: 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 로컬 공통 원본 잔디·낮은 예초 대비·월드좌표 색변화 구현, 동일카메라 전후/정면 검증.14tests/buildPASS, shader X4122 warning 잔존. 원본GLB/배경/제품/API/점수/데이터 불변, 미커밋/push/배포. 실사완성 아님, 독립검수 및 다음 잔디요철/라인접합 정본 OPEN_WORK.md.
+
+- EMPTY-PITCH 후속 결과: Meadow2 grounded HDRI/외곽경계 feather/Float32 로딩 적용. focused 13tests 및 build PASS, 실제 3뷰 캡처. 독립 검수 정면·사선 개선 확인, 항공 파노라마 왜곡으로 전체 REJECT 유지. shader X4122 warning 관측; 무오류 주장 안 함. 제품/API/점수불변·커밋/push/배포없음. 정본OPEN_WORK.md.
+
+- EMPTY-PITCH 결과미완: 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 로컬빈피치3뷰제작/빌드PASS, 독립원경접합REJECT2회. EXR범위warning추가확인. 제품반영/커밋/push/배포없음, 자산은dist제외. 정본OPEN_WORK.md EMPTY-PITCH-20260907, 승인완료주장금지.
+
+- EMPTY-PITCH-20260907: 발주자 빈피치 선승인 방식/재설계 착수 승인. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 별도 로컬 빈피치 시안, 원본맵/치수보존·원경/조명보강, 데이터/실제페이지변경없음. 정면/사선/항공검증후사용자판정. 정본OPEN_WORK.md.
+
+- INFIELD-COMPARE 결과: glb-recovery 원본맵보존·실내반사광교체·사선프리셋,24tests/buildPASS/실제정면사선확인. 독립개선PASS·전체시안완성REJECT(원경등잔여). 미커밋/push없음/미배포. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery, 정본OPEN_WORK.md.
+
+- INFIELD-COMPARE-20260907: 발주자 두 이미지 비교/보강 승인. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 원본잔디 보존, 실내환경광/낮광원/구도 대조 보강. 부위수치 생성금지·데이터불변·배포별도. 정본OPEN_WORK.md.
+
+- INFIELD-MATERIAL 결과: 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. procedural albedo덮어쓰기제거·원본잔디PBR맵복원,24tests/buildPASS 및 실제히트맵off/on 확인, 독립복원PASS. 전체레퍼런스완성판정아님. 미커밋/push없음/미배포. 정본OPEN_WORK.md INFIELD-MATERIAL-20260907.
+
+- INFIELD-MATERIAL-20260907: 발주자 노이즈 덮어쓰기 제거/실제 잔디 재질 복원 승인. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 원본 맵 검사 후 인필드 재질만 수정·히트맵off/on 브라우저 대조. 데이터·좌표·산식·기존dirty 보존, 배포별도. 정본OPEN_WORK.md.
+
+- TURF-REBUILD 로컬 검증: 잔디/하늘/외곽/접지그림자 재구성, 19focused/build PASS. 실제Kane통합 박스정면·브라우저오류출력없음. 독립 데이터UI융합PASS지만 실사목표미달, 원경/PBR/모바일검수 잔여. 데이터계약불변, 미배포. 증거와 잔여 정본OPEN_WORK.md.
+
+- TURF-REBUILD-20260907: 발주자 잔디/환경 전면개편 승인. glb-recovery 표시전용 잔디재질/외곽환경 개선; 피치실측/원천/산식/기존dirty 보존. 구현·검증진행, 배포별도. 정본OPEN_WORK.md.
+
+- PITCH-REFERENCE 1차: glb-recovery 잔디투과/광원/구역플로팅카드 변경,12tests/buildPASS 및 실제Kane카드표시확인. 생성시안 동일재현/독립최종QA전, 데이터불변. commit/push/deploy없음. 정본OPEN_WORK.md.
+
+- PITCH-REFERENCE-20260907: 발주자 생성시안 방향 승인 후 실제 표시계층 반영. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 잔디투과 밀도/자연광/플로팅 카드 개선, 계산·부위API·기존dirty 보존. 시안과 실제제품 비교 및 시각QA 전, 새배포 없음. 정본OPEN_WORK.md.
+
+- SILHOUETTE 시안: glb-recovery DEV전용 수동3종 실루엣/재생 연결, 실제Kane통합화면 모델ready/재생완주 및 buildPASS. 흰모델 독립시각REJECT후 남색인체 보강, 최종외형승인전. 실제부위API미연결, prod미활성, commit/push/deploy없음. 정본OPEN_WORK.md.
+
+- SHOT-SILHOUETTE 후속: Blender3종 초안 생성, 유효슛 재생5tests/buildPASS 및 박스중복선2개 제거. 데이터부위/이벤트ID 계약 미연결, 시각QA전. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 정본 OPEN_WORK.md 및 handoff shot-body-part-and-six-lane-2026-09-07.md. 지정 백엔드 전송 Invalid conversation 실패, 미접수. commit/push/deploy없음.
+
+- SHOT-SILHOUETTE-20260907: 발주자 Blender 실루엣 제작/클릭 모션 승인. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 부위 원천→API 전달 진단, Blender 도식 에셋 제작, 유효슛 재생 및 중복선 표시 보강. 실제 동작 복원 아님; 부위 부재시 추정 금지. 기존 2D dirty 보존, 배포 별도. 정본 OPEN_WORK.md.
+
+- 2D-ORIENTATION-20260907: 발주자 2D 반전 개선 요청. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. marchingSquares 화면Y를 world에서 다시 반전한 CCA 결함 교정. 원천/점수/슈팅 반경 불변, 테스트·실화면검증 전, 미배포. 이후 선수상세 메인 리뉴얼 정본 대조 예정.
+
+- 릴리스 완료 기록(로컬 후속 메모): PR326/main2297a35bf0bd43635f1bb18d6851f547d25b6736, Vercel production AZ1niZXJgPsa3rkqB3M4xw5TftLW success. messi.my 실제Kane통합3D에서 낮/구역/흰그물/네색공 확인. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 독립검수/34tests/buildPASS 및 증거 정본OPEN_WORK.md. 이 후속 메모는 제품 재배포 없이 로컬 보존.
+
 - DAYLIGHT/SHOT-COLOR 릴리스: 발주자 '배포까지진행해' 승인. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 낮 배경/구역 독립토글/흰그물/결과별불투명공, 2D/API/점수/원본자산 제외. 기존 빌드PASS, 독립 최종검수 및 PR/라이브 확인 진행. 정본 OPEN_WORK.md.
 
 - SHOT-COLOR-20260907: 발주 승인 슈팅 결과별 공 색상/불투명도 보완. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 3D 공만 결과색과 opacity1 적용, 재생시 비선택 공 .25 감쇠 제거. 2D/API/점수 불변. 로컬 테스트 중·미배포. 정본 OPEN_WORK.md.
