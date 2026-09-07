@@ -18,8 +18,11 @@ describe("asset goal replay",()=>{
    ball.geometry.dispose();material.dispose();map.dispose();
   }
  });
- it("requires a goal with observed in-frame endpoint, never fabricates missing height",()=>{
+ it("requires a goal or on-target shot with in-frame endpoint, never fabricates missing height",()=>{
   expect(canReplayGoal(goal)).toBe(true);
+  expect(canReplayGoal({...goal,outcome:"on_target"})).toBe(true);
+  expect(canReplayGoal({...goal,outcome:"off_target"})).toBe(false);
+  expect(canReplayGoal({...goal,outcome:"on_target",trajectory:{...goal.trajectory!,endZMeters:null}})).toBe(false);
   expect(canReplayGoal({...goal,outcome:"blocked"})).toBe(false);
   expect(canReplayGoal({...goal,trajectory:{...goal.trajectory!,endZMeters:null}})).toBe(false);
   expect(canReplayGoal({...goal,trajectory:{...goal.trajectory!,endY:99}})).toBe(false);

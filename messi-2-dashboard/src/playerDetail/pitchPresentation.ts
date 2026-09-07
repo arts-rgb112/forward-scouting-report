@@ -1,6 +1,8 @@
 import * as THREE from "three";
+import { applyNaturalTurf } from './turfMaterial';
 
 export const AERIAL_CAMERA = { position: { x: -76, y: 91, z: 0 }, yaw: 90, pitch: -50 };
+export const OBLIQUE_CAMERA = { position: { x: -24, y: 13, z: 15 }, yaw: 136, pitch: -20 };
 export const DAYLIGHT_BACKGROUND = 0xc8e4f2;
 
 /** Fab export contains all-zero UVs on these meshes. Reconstruct display UVs only. */
@@ -47,13 +49,7 @@ export function repairPitchUV(mesh: THREE.Mesh) {
 export function stylePitchMaterial(material: THREE.Material) {
   if (!(material instanceof THREE.MeshStandardMaterial)) return;
   if (/Grass/i.test(material.name)) {
-    material.color.set(/Dark/i.test(material.name) ? "#598363" : "#658e6e");
-    material.metalness = 0;
-    material.roughness = .95;
-    material.envMapIntensity = .12;
-    // Grass is diffuse; a zero-valued exported roughness texel otherwise makes a mirror.
-    material.roughnessMap = null;
-    material.metalnessMap = null;
+    applyNaturalTurf(material);
   } else if (/White|Football/i.test(material.name)) {
     material.metalness = 0;
     material.roughness = .72;

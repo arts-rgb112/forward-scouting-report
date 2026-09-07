@@ -108,8 +108,9 @@ function GuardiolaDepthGrid() {
   </g>;
 }
 
-const contourPath = (segments: readonly (readonly [number, number, number, number])[]) => segments.map(([x1, y1, x2, y2]) => {
-  const start = world({ x: x1, y: y1 }), end = world({ x: x2, y: y2 });
+export const corridorContourPath = (segments: readonly (readonly [number, number, number, number])[]) => segments.map(([x1, y1, x2, y2]) => {
+  // marchingSquares already returns screen Y (100 - provider Y).
+  const start = { x: x1 * 1.05, y: y1 * .68 }, end = { x: x2 * 1.05, y: y2 * .68 };
   return `M${start.x.toFixed(4)} ${start.y.toFixed(4)}L${end.x.toFixed(4)} ${end.y.toFixed(4)}`;
 }).join("");
 
@@ -180,9 +181,9 @@ export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap }: 
             <PitchLines />
             <GuardiolaDepthGrid />
             {LANES.slice(1).map((lane) => <path key={lane.id} d={`M0 ${lineY(lane.high)}H105`} stroke="#FFFFFF" strokeOpacity=".26" strokeWidth=".34" vectorEffect="non-scaling-stroke" />)}
-            {layers.cca && contour.length > 0 && <path data-layer="cca-contour" d={contourPath(contour)} fill="none" stroke={CCA_STYLE.stroke} strokeOpacity={CCA_STYLE.opacity} strokeWidth={CCA_STYLE.width} strokeDasharray={CCA_STYLE.dash} vectorEffect="non-scaling-stroke"/>}
-            <circle cx="93.999" cy="34" r="1.1" fill="#FFFFFF" fillOpacity=".8" />
-            <circle cx="93.999" cy="34" r="2.9" fill="none" stroke="#FBBF24" strokeOpacity=".9" strokeWidth=".45" strokeDasharray="1.2 .9" vectorEffect="non-scaling-stroke" />
+            {layers.cca && contour.length > 0 && <path data-layer="cca-contour" d={corridorContourPath(contour)} fill="none" stroke={CCA_STYLE.stroke} strokeOpacity={CCA_STYLE.opacity} strokeWidth={CCA_STYLE.width} strokeDasharray={CCA_STYLE.dash} vectorEffect="non-scaling-stroke"/>}
+            <circle data-penalty-spot cx="93.999" cy="34" r=".3" fill="#FFFFFF" fillOpacity=".8" />
+            <circle data-penalty-guide cx="93.999" cy="34" r="1.2" fill="none" stroke="#FBBF24" strokeOpacity=".9" strokeWidth=".3" strokeDasharray=".6 .45" vectorEffect="non-scaling-stroke" />
             {layers.trajectories && <g data-layer="shot-trajectories-2d" fill="none" pointerEvents="none">{displayedShots.map((shot, index) => shot.trajectory ? <path key={index} d={`M${world(shot).x.toFixed(4)} ${world(shot).y.toFixed(4)}L${(shot.trajectory.endX * 1.05).toFixed(4)} ${((100 - shot.trajectory.endY) * .68).toFixed(4)}`} stroke="#E2E8F0" strokeOpacity=".24" strokeWidth=".28" vectorEffect="non-scaling-stroke"/> : null)}</g>}
             {layers.markers && markerGroups.map((group) => {
               const point = world(group.shot);

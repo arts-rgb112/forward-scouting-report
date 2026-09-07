@@ -27,7 +27,7 @@ export function continuousGroundGeometry(counts: readonly number[]) {
     const strength = THREE.MathUtils.clamp((density - .035) / .965, 0, 1);
     const world = pitchPercentToWorld({ x, y }, GLB_PITCH_SURFACE_Y_METERS + .008);
     positions.push(world.x, world.y, world.z);
-    colors.push(color.r, color.g, color.b, .62 * Math.pow(strength, .65));
+    colors.push(color.r, color.g, color.b, .44 * Math.pow(strength, .8));
     if (row < GROUND_ROWS && column < GROUND_COLUMNS) {
       const a = row * (GROUND_COLUMNS + 1) + column, b = a + GROUND_COLUMNS + 1;
       indices.push(a, b, a + 1, a + 1, b, b + 1);

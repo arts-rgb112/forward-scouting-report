@@ -1,9 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { AERIAL_CAMERA, DAYLIGHT_BACKGROUND, repairPitchUV, stylePitchMaterial } from './pitchPresentation';
+import { AERIAL_CAMERA, OBLIQUE_CAMERA, DAYLIGHT_BACKGROUND, repairPitchUV, stylePitchMaterial } from './pitchPresentation';
 import { clampFreeflyCamera } from './pitchWebglGeometry';
 
 describe('3D presentation', () => {
+  it.each(['CheckGrass', 'LightGrass', 'DarkGrass', 'DarkGrass1'])('keeps %s source PBR maps through the actual styling entrypoint', name => {
+    const map = new THREE.Texture(), normalMap = new THREE.Texture(), roughnessMap = new THREE.Texture();
+    const material = new THREE.MeshPhysicalMaterial({ map, normalMap, roughnessMap });
+    material.name = name;
+    stylePitchMaterial(material);
+    expect(material.map).toBe(map); expect(material.normalMap).toBe(normalMap); expect(material.roughnessMap).toBe(roughnessMap);
+    expect(material.color.getHex()).toBe(0xffffff); expect(material.normalScale.x).toBeGreaterThan(0);
+    const shader = { fragmentShader: '#include <map_fragment>' };
+    material.onBeforeCompile(shader as Parameters<typeof material.onBeforeCompile>[0], {} as THREE.WebGLRenderer);
+    expect(shader.fragmentShader).toBe('#include <map_fragment>');
+    material.dispose(); map.dispose(); normalMap.dispose(); roughnessMap.dispose();
+  });
   it('uses a bright daylight background', () => {
     const colour = new THREE.Color(DAYLIGHT_BACKGROUND);
     expect(Math.min(colour.r, colour.g, colour.b)).toBeGreaterThan(.5);
@@ -38,6 +50,7 @@ describe('3D presentation', () => {
   });
   it('keeps aerial preset within freeflight bounds without a first-input jump', () => {
     expect(clampFreeflyCamera(AERIAL_CAMERA)).toEqual(AERIAL_CAMERA);
+    expect(clampFreeflyCamera(OBLIQUE_CAMERA)).toEqual(OBLIQUE_CAMERA);
   });
   it('preserves maps while correcting grass metal response and net depth', () => {
     const material = new THREE.MeshStandardMaterial({ map: new THREE.Texture() });

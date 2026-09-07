@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { AERIAL_CAMERA, DAYLIGHT_BACKGROUND, repairPitchUV, stylePitchMaterial } from "./pitchPresentation";
+import { AERIAL_CAMERA, OBLIQUE_CAMERA, DAYLIGHT_BACKGROUND, repairPitchUV, stylePitchMaterial } from "./pitchPresentation";
+import { loadPitchSurfaceAssets, PITCH_SURFACE_VERSION } from './pitchSurfaceAssets';
 import { loadPitchModelBytes } from "./loadPitchModel";
-import { buildGroundDensityDots, createGroundHeatmap, createContinuousGroundHeatmap, highDensityAccents, penaltyStripBoundaries } from "./groundHeatmap";
+import { buildGroundDensityDots, createGroundHeatmap, createContinuousGroundHeatmap, highDensityAccents } from "./groundHeatmap";
 import { canReplayGoal, cloneReplayBall, replayPosition, REPLAY_DURATION_MS, styleShotBall, SHOT_BALL_COLORS } from "./shotReplay";
 
 import type { FullActivityHeatmapData } from "../api/fullActivityHeatmapContracts";
@@ -193,7 +193,8 @@ function addTacticalGrid(root: THREE.Group) {
       pitchPercentToWorld({ x: 100, y: lane }, 0.095),
     ], color, 0.85, true));
   }
-  for (const y of penaltyStripBoundaries().slice(1, -1)) {
+  // Reuse the existing 37/63 lane lines; only the PK centre axis is additional.
+  for (const y of [50]) {
     root.add(line([
       pitchPercentToWorld({ x: 100 - 16.5 / GLB_PITCH_LENGTH_METERS * 100, y }, 0.095),
       pitchPercentToWorld({ x: 100, y }, 0.095),
@@ -322,6 +323,9 @@ export function WebGLSpatialPitch({
   const [hoveredZone, setHoveredZone] = useState<ZoneOverlay | null>(null);
   const [activeShot, setActiveShot] = useState<string | null>(null);
   const [replayIndex, setReplayIndex] = useState<number | null>(null);
+  const silhouettePreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("silhouettePreview") === "1";
+  const [previewMotion, setPreviewMotion] = useState("right_foot");
+  const [silhouetteState, setSilhouetteState] = useState("idle");
   const [playing, setPlaying] = useState(false);
   const [replayProgress, setReplayProgress] = useState(0);
   const [seekVersion, setSeekVersion] = useState(0);
@@ -387,6 +391,8 @@ export function WebGLSpatialPitch({
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFShadowMap;
     } catch (error) {
       setLoadState(typeof WebGLRenderingContext === "undefined" ? "unsupported" : "error");
       setLoadError(error instanceof Error ? error.message : "WebGL 초기화 실패");
@@ -395,16 +401,11 @@ export function WebGLSpatialPitch({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.95;
+    renderer.toneMappingExposure = 0.85;
     renderer.setClearColor(DAYLIGHT_BACKGROUND, 1);
 
     const scene = new THREE.Scene();
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const room = new RoomEnvironment();
-    const environment = pmrem.fromScene(room);
-    scene.environment = environment.texture;
-    scene.environmentIntensity = .8;
-    room.dispose(); pmrem.dispose();
+    let surface: Awaited<ReturnType<typeof loadPitchSurfaceAssets>> | undefined;
     const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.05, 420);
     const initial = AERIAL_CAMERA;
     freeflyRef.current = initial;
@@ -414,9 +415,14 @@ export function WebGLSpatialPitch({
     const initialTarget = freeflyLookTarget(initial);
     camera.lookAt(initialTarget.x, initialTarget.y, initialTarget.z);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x667566, 1.2));
-    const sun = new THREE.DirectionalLight(0xffffff, 2);
-    sun.position.set(-30, 70, -18);
+    scene.add(new THREE.HemisphereLight(0xcde5f4, 0x4a5231, .3));
+    const sun = new THREE.DirectionalLight(0xfff2d7, 1.4);
+    sun.position.set(-50, 48, -30);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048,2048);
+    Object.assign(sun.shadow.camera, {left:-80,right:80,top:90,bottom:-90,near:1,far:210});
+    sun.shadow.bias = -.0003;
+    sun.shadow.normalBias = .035;
     scene.add(sun);
     const overlayRoot = new THREE.Group();
     scene.add(overlayRoot);
@@ -449,7 +455,7 @@ export function WebGLSpatialPitch({
     const modelAbort = new AbortController();
     loadPitchModelBytes(MODEL_URL, modelAbort.signal)
       .then((bytes) => loader.parseAsync(bytes, new URL('.', new URL(MODEL_URL, window.location.href)).href))
-      .then((gltf) => {
+      .then(async (gltf) => {
         if (cancelled) {
           disposeObject(gltf.scene);
           return;
@@ -463,10 +469,19 @@ export function WebGLSpatialPitch({
           if (object instanceof THREE.Mesh) {
             repairPitchUV(object);
             (Array.isArray(object.material) ? object.material : [object.material]).forEach(stylePitchMaterial);
-            object.castShadow = false;
+            object.castShadow = (Array.isArray(object.material) ? object.material : [object.material]).some(m => /Fencing|White/.test(m.name));
             object.receiveShadow = true;
           }
         });
+        let loadedSurface: Awaited<ReturnType<typeof loadPitchSurfaceAssets>>;
+        try { loadedSurface = await loadPitchSurfaceAssets(); }
+        catch (error) { disposeObject(gltf.scene); throw error; }
+        if (cancelled) { disposeObject(gltf.scene); disposeObject(loadedSurface.surround); loadedSurface.dispose(); return; }
+        surface = loadedSurface;
+        surface.apply(gltf.scene);
+        scene.environment = surface.environment; scene.environmentIntensity = .65;
+        scene.add(surface.surround);
+        canvas.dataset.pitchSurface = PITCH_SURFACE_VERSION;
         scene.add(gltf.scene);
         runtime.asset = gltf.scene;
         setLoadState("ready");
@@ -486,7 +501,8 @@ export function WebGLSpatialPitch({
       resizeObserver?.disconnect();
       cancelAnimationFrame(resizeFrame);
       disposeObject(scene);
-      environment.dispose();
+      surface?.dispose();
+      delete canvas.dataset.pitchSurface;
       renderer.dispose();
       runtimeRef.current = null;
     };
@@ -500,6 +516,36 @@ export function WebGLSpatialPitch({
 
   useEffect(() => {
     const runtime = runtimeRef.current;
+    if (!silhouettePreview || !runtime || !replayShot || !layers.markers) return;
+    let cancelled = false, frame = 0;
+    let figure: THREE.Group | undefined;
+    let mixer: THREE.AnimationMixer | undefined;
+    setSilhouetteState("loading");
+    new GLTFLoader().load(`/assets/shot-silhouette/${previewMotion}.glb?v=2`, gltf => {
+      if (cancelled) { disposeObject(gltf.scene); return; }
+      figure = gltf.scene;
+      const start = replayPosition(replayShot, 0), end = replayPosition(replayShot, 1);
+      const direction = end.clone().sub(start); direction.y = 0; direction.normalize();
+      figure.position.copy(start).addScaledVector(direction, -.35);
+      figure.position.y = GLB_PITCH_SURFACE_Y_METERS;
+      figure.rotation.y = Math.atan2(-direction.x, -direction.z);
+      runtime.scene.add(figure);
+      mixer = new THREE.AnimationMixer(figure);
+      gltf.animations.forEach(clip => { const action = mixer!.clipAction(clip); action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; action.play(); });
+      setSilhouetteState("ready");
+      const draw = () => {
+        if (cancelled) return;
+        mixer!.setTime(Math.min(1, replayProgressRef.current / .4));
+        runtime.render();
+        frame = requestAnimationFrame(draw);
+      };
+      draw();
+    }, undefined, () => { if (!cancelled) setSilhouetteState("error"); });
+    return () => { cancelled = true; cancelAnimationFrame(frame); mixer?.stopAllAction(); if (figure) { runtime.scene.remove(figure); mixer?.uncacheRoot(figure); disposeObject(figure); } };
+  }, [silhouettePreview, previewMotion, replayShot, runtimeVersion, loadState, layers.markers]);
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
     if (!runtime?.asset || !layers.markers || !replayShot || !canReplayGoal(replayShot)) return;
     let ball: THREE.Mesh;
     try { ball = cloneReplayBall(runtime.asset); styleShotBall(ball, replayShot.outcome); setReplayError(""); }
@@ -509,7 +555,11 @@ export function WebGLSpatialPitch({
     ring.renderOrder = 20;
     runtime.scene.add(ring);
     const path = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(Array.from({ length: 49 }, (_, i) => replayPosition(replayShot, i / 48))), 64, .025, 6, false),
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(Array.from({ length: 49 }, (_, i) => {
+        const point = replayPosition(replayShot, i / 48);
+        if (silhouettePreview && previewMotion === "head") point.y += 1.55 * (1 - i / 48);
+        return point;
+      })), 64, .025, 6, false),
       new THREE.MeshBasicMaterial({ color: 0xd9ffff, toneMapped: false }),
     );
     runtime.scene.add(path);
@@ -520,7 +570,8 @@ export function WebGLSpatialPitch({
     const draw = (now: number) => {
       const progress = playing && !reduced ? Math.min(1, initial + (now - started) / REPLAY_DURATION_MS) : initial;
       replayProgressRef.current = progress; setReplayProgress(progress);
-      ball.position.copy(replayPosition(replayShot, progress));
+      ball.position.copy(replayPosition(replayShot, silhouettePreview ? Math.max(0, (progress - .24) / .76) : progress));
+      if (silhouettePreview && previewMotion === "head") ball.position.y += 1.55 * (1 - Math.max(0, (progress - .24) / .76));
       ring.position.copy(ball.position);
       ring.quaternion.copy(runtime.camera.quaternion);
       runtime.render();
@@ -536,7 +587,7 @@ export function WebGLSpatialPitch({
       disposeObject(path);
       runtime.render();
     };
-  }, [replayShot, playing, seekVersion, loadState, runtimeVersion, layers.markers]);
+  }, [replayShot, playing, seekVersion, loadState, runtimeVersion, layers.markers, silhouettePreview, previewMotion]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -745,15 +796,23 @@ export function WebGLSpatialPitch({
       <button type="button" aria-pressed={showTacticalZones} onClick={() => { setShowTacticalZones(value => !value); setHoveredZone(null); }} className="min-h-11 rounded border border-white/30 px-3 text-sm font-bold aria-pressed:bg-white aria-pressed:text-slate-900">전술 구역</button>
       <span className="text-sm">30구역 안내선 · 공격 박스 4분할 · CCA와 별도 표시</span>
     </div>
-    {layers.markers && <section aria-label="득점 모식 재생 시제품" className="border-b border-white/20 bg-slate-950 p-3 text-white">
-      <strong>득점 장면 시제품 · 기록 기반 모식 재생</strong>
+    {layers.markers && <section aria-label="득점·유효슛 모식 재생 시제품" className="border-b border-white/20 bg-slate-950 p-3 text-white">
+      <strong>득점·유효슛 장면 시제품 · 기록 기반 모식 재생</strong>
+      {silhouettePreview && <div data-silhouette-state={silhouetteState} className="my-2 rounded border border-amber-300 p-3 text-amber-200">
+        <strong>시안 전용 · 동작 수동 선택 / 실제 슛 부위와 무관</strong>
+        <label className="ml-3">실루엣 동작 <select aria-label="시안 실루엣 동작" className="bg-slate-800 p-2" value={previewMotion} onChange={e => { setPreviewMotion(e.target.value); setPlaying(false); replayProgressRef.current = 0; setReplayProgress(0); }}>
+          <option value="right_foot">오른발</option><option value="left_foot">왼발</option><option value="head">헤딩</option>
+        </select></label><span className="ml-3">모델: {silhouetteState}</span>
+        {silhouetteState === "error" && <p role="alert">실루엣 에셋 로딩 실패</p>}
+      </div>}
+      <p className="text-sm text-zinc-300">유효슛의 골문 좌표는 선방 위치를 뜻하지 않습니다. 골문 방향의 도식이며 실제 선방·리바운드는 재현하지 않습니다.</p>
       <p className="text-sm text-zinc-300">시작·골문 도달 좌표는 기록값입니다. 중간 포물선·2.4초 재생 시간은 연출이며 실제 속도·회전·비행 궤적이 아닙니다. 골라인 도달까지 표시합니다.</p>
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <label>득점 선택 <select aria-label="재생할 득점" value={replayIndex ?? ""} className="bg-slate-800 p-2" onChange={event => {
+        <label>슈팅 선택 <select aria-label="재생할 슈팅" value={replayIndex ?? ""} className="bg-slate-800 p-2" onChange={event => {
           setReplayIndex(event.target.value === "" ? null : Number(event.target.value));
           setPlaying(false); replayProgressRef.current = 0; setReplayProgress(0);
         }}><option value="">전체 슈팅 탐색</option>{shotsValid && spatial!.shotmapPoints.map((shot, index) => canReplayGoal(shot) ?
-          <option key={index} value={index}>득점 #{index + 1} · xG {formatShotMetric(shot.xg)} · ({shot.x.toFixed(1)}, {shot.y.toFixed(1)})</option> : null)}</select></label>
+          <option key={index} value={index}>{shot.outcome === "goal" ? "득점" : "유효슛"} #{index + 1} · xG {formatShotMetric(shot.xg)} · ({shot.x.toFixed(1)}, {shot.y.toFixed(1)})</option> : null)}</select></label>
         <button disabled={!replayShot || loadState !== "ready"} onClick={() => {
           if (replayProgressRef.current >= 1) { replayProgressRef.current = 0; setReplayProgress(0); }
           setPlaying(value => !value);
@@ -762,7 +821,8 @@ export function WebGLSpatialPitch({
         <button disabled={!replayShot} onClick={() => {
           if (!replayShot) return;
           const from = replayPosition(replayShot, 0); const target = replayPosition(replayShot, .45);
-          const position = { x: from.x + 14, y: 22, z: from.z - 8 };
+          if (silhouettePreview) target.copy(from).add(new THREE.Vector3(0, .85, 0));
+          const position = silhouettePreview ? { x: from.x + 4, y: 3, z: from.z - 5 } : { x: from.x + 14, y: 22, z: from.z - 8 };
           const dx = target.x - position.x, dy = target.y - position.y, dz = target.z - position.z;
           setCameraAngle(null); setZoomLevel(1);
           applyFreefly({ position, yaw: Math.atan2(dx, -dz) * 180 / Math.PI, pitch: Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI });
@@ -784,6 +844,10 @@ export function WebGLSpatialPitch({
           setCameraAngle(null); setZoomLevel(1);
           applyFreefly({ position: { x: 0, y: 4, z: 27 }, yaw: 180, pitch: -14 });
         }} className="min-h-9 rounded border border-cyan-300/40 px-3 font-bold">박스 정면 · 4m</button>
+        <button type="button" data-camera-preset="penaltyOblique" onClick={() => {
+          setCameraAngle(null); setZoomLevel(1);
+          applyFreefly(OBLIQUE_CAMERA);
+        }} className="min-h-9 rounded border border-cyan-300/40 px-3 font-bold">박스 사선 · 13m</button>
         {(Object.keys(WEBGL_CAMERA_PRESETS) as CameraAngle[]).map((angle) =>
           <button key={angle} type="button" data-camera-preset={angle} aria-pressed={cameraAngle === angle}
             onClick={() => applyCamera(WEBGL_CAMERA_PRESETS[angle], 1, angle)}
@@ -843,7 +907,7 @@ export function WebGLSpatialPitch({
           data-density-normalized={dot.density} data-density-radius-meters={dot.radiusMeters} />)}
       </div>}
       {layers.cca && legacyHeatValid && spatial?.continuousCore.available && spatial.continuousCore.thresholdOfPeak > 0 && <div hidden data-layer="cca-contour" data-contour-segments={marchingSquares(legacyNormalized, spatial.continuousCore.thresholdOfPeak).length} />}
-      {showTacticalZones && <div hidden data-layer="positional-grid" data-zone-count="30">{Array.from({ length: 12 }, (_, index) => <span key={index} data-grid-segment={index} />)}</div>}
+        {showTacticalZones && <div hidden data-layer="positional-grid" data-zone-count="30">{Array.from({ length: 10 }, (_, index) => <span key={index} data-grid-segment={index} />)}</div>}
       <div hidden data-layer="goals"><span data-goal="defending" data-goal-post-near-y="44.61764705882353" data-goal-post-far-y="55.38235294117647" data-goal-crossbar-height-meters="2.44" /><span data-goal="attacking" data-goal-post-near-y="44.61764705882353" data-goal-post-far-y="55.38235294117647" data-goal-crossbar-height-meters="2.44" /></div>
       {(layers.markers || layers.trajectories) && <div hidden data-layer="shots" id={markerLayerId} />}
 
@@ -904,11 +968,15 @@ export function WebGLSpatialPitch({
       })}
       {hoveredZone && (() => {
         const projected = zoneProjection(hoveredZone);
-        return <div data-zone-tooltip role="tooltip" className="pointer-events-none absolute z-30 w-48 -translate-x-1/2 -translate-y-[115%] rounded border border-white/25 bg-[#0b0e0f]/95 p-2 text-xs text-zinc-100"
-          style={{ left: `${Math.min(90, Math.max(10, projected.left))}%`, top: `${Math.min(90, Math.max(10, projected.top))}%` }}>
-          <strong>구역 {hoveredZone.cell.depth * 5 + hoveredZone.cell.lane + 1}</strong><br />
-          슈팅 비중 {hoveredZone.summary.shotSharePct.toFixed(2)}% · 활동 {hoveredZone.cell.occupancyPct.toFixed(2)}%<br />
-          슛 {hoveredZone.summary.shots} · 득점 {hoveredZone.summary.goals} · xG {hoveredZone.summary.xg.toFixed(2)}
+        if (!projected.visible && runtimeRef.current) return null;
+        return <div data-zone-tooltip role="tooltip" className="pointer-events-none absolute z-30 w-56 max-w-[calc(100%-16px)] rounded-2xl border border-white/30 bg-[#101c19]/85 p-4 text-zinc-100 shadow-xl backdrop-blur-md"
+          style={{ left: `clamp(8px, calc(${projected.left}% + 28px), calc(100% - 232px))`, top: `clamp(8px, calc(${projected.top}% - 192px), calc(100% - 216px))` }}>
+          <div className="flex items-center justify-between gap-3 text-xs text-white/65"><span className="rounded-full border border-white/20 px-2 py-1">구역 {hoveredZone.cell.depth * 5 + hoveredZone.cell.lane + 1}</span><span>슈팅 비중</span></div>
+          <p className="mt-2 font-mono text-3xl font-semibold tracking-tight">{hoveredZone.summary.shotSharePct.toFixed(1)}<span className="ml-1 text-base text-white/60">%</span></p>
+          <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-white/15 pt-3">
+            {[["슛", hoveredZone.summary.shots], ["득점", hoveredZone.summary.goals], ["xG", hoveredZone.summary.xg.toFixed(2)]].map(([label, value]) => <div key={label}><dt className="text-xs text-white/55">{label}</dt><dd className="mt-1 font-mono text-base font-semibold">{value}</dd></div>)}
+          </dl>
+          <p className="mt-3 text-xs text-white/60">활동 비중 <span className="float-right font-mono text-white/85">{hoveredZone.cell.occupancyPct.toFixed(1)}%</span></p>
         </div>;
       })()}
       <p className="sr-only">WebGL 장면 요약: 활동 좌표 {fullActivityHeatmap?.available ? fullActivityHeatmap.validPointCount : 0}개, 유효 슈팅 이벤트 {shotsValid ? spatial!.shotmapPoints.length : 0}개, 점유 라벨 {zones.length}개. 실제 GLTFLoader 모델과 Three.js 카메라를 사용합니다.</p>
