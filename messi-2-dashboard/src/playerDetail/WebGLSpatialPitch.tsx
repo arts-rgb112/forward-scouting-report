@@ -799,6 +799,9 @@ export function WebGLSpatialPitch({
     </div>
     <div ref={hostRef} role="img" tabIndex={0} onKeyDown={keyDown}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
+      onLostPointerCapture={(event) => {
+        if (event.pointerType !== "touch" || touchPoints.current.has(event.pointerId)) pointerUp(event);
+      }}
       onPointerLeave={() => setHoveredZone(null)}
       onContextMenu={(event) => event.preventDefault()}
       aria-label={`3D 회랑 WebGL 피치. ${heatState}. ${shotState}. WASD 또는 화살표 키로 이동하고, 왼쪽 드래그로 시선을 돌리며, 오른쪽 드래그나 휠로 높이를 조절합니다.`}
