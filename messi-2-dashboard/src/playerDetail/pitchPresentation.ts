@@ -1,6 +1,7 @@
 import * as THREE from "three";
 
 export const AERIAL_CAMERA = { position: { x: -76, y: 91, z: 0 }, yaw: 90, pitch: -50 };
+export const DAYLIGHT_BACKGROUND = 0xc8e4f2;
 
 /** Fab export contains all-zero UVs on these meshes. Reconstruct display UVs only. */
 export function repairPitchUV(mesh: THREE.Mesh) {
@@ -58,7 +59,21 @@ export function stylePitchMaterial(material: THREE.Material) {
     material.roughness = .72;
   }
   if (/Fencing/i.test(material.name)) {
+    // Keep the purchased net's alpha cutouts, but replace its black RGB albedo.
+    // Colour multiplication alone cannot turn black texture texels into white rope.
+    material.color.set('#ffffff');
     material.metalness = 0;
+    material.metalnessMap = null;
+    material.roughness = .85;
+    material.roughnessMap = null;
+    material.side = THREE.DoubleSide;
+    material.emissive.set('#ffffff');
+    material.emissiveIntensity = .15;
+    material.onBeforeCompile = shader => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>',
+        '#include <map_fragment>\n diffuseColor.rgb = vec3(0.92);');
+    };
+    material.customProgramCacheKey = () => 'white-net-preserve-alpha-v1';
     material.alphaTest = .4;
     material.transparent = false;
     material.depthWrite = true;

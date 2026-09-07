@@ -1,11 +1,23 @@
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
 import type { ShotmapPoint } from "../dashboard/types";
-import { canReplayGoal, cloneReplayBall, replayPosition } from "./shotReplay";
+import { canReplayGoal, cloneReplayBall, replayPosition, styleShotBall, SHOT_BALL_COLORS } from "./shotReplay";
 import { pitchPercentToWorld } from "./pitchWebglGeometry";
 
 const goal = {x:87,y:48,outcome:"goal",trajectory:{endpointKind:"goal_mouth",endX:100,endY:51,endZMeters:.06}} as ShotmapPoint;
 describe("asset goal replay",()=>{
+ it('uses distinct opaque outcome colours while preserving the football texture',()=>{
+  expect(new Set(Object.values(SHOT_BALL_COLORS)).size).toBe(4);
+  for(const outcome of Object.keys(SHOT_BALL_COLORS) as ShotmapPoint['outcome'][]){
+   const map=new THREE.Texture(),material=new THREE.MeshStandardMaterial({map,transparent:true,opacity:.25});
+   const ball=new THREE.Mesh(new THREE.SphereGeometry(),material);
+   styleShotBall(ball,outcome);
+   expect(material.color.getHex()).toBe(SHOT_BALL_COLORS[outcome]);
+   expect(material.opacity).toBe(1);expect(material.transparent).toBe(false);expect(material.depthWrite).toBe(true);
+   expect(material.map).toBe(map);
+   ball.geometry.dispose();material.dispose();map.dispose();
+  }
+ });
  it("requires a goal with observed in-frame endpoint, never fabricates missing height",()=>{
   expect(canReplayGoal(goal)).toBe(true);
   expect(canReplayGoal({...goal,outcome:"blocked"})).toBe(false);

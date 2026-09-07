@@ -163,14 +163,27 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(pitch).not.toHaveAttribute("data-camera-position", raisedPosition);
   });
 
-  it("retains the 17-segment grid, both goals, 64x24 dot-matrix full density, and 32x22 CCA input", async () => {
+  it("keeps tactical zones independently switchable with CCA disabled", async () => {
+    const { container } = render(<SpatialPitch analysis={analysisWith({})} layers={{ heatmap: true, markers: false, trajectories: false, cca: false }} />);
+    const toggle = await screen.findByRole('button', { name: '전술 구역' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(container.querySelector('[data-layer=positional-grid]')).toBeInTheDocument();
+    expect(container.querySelector('[data-layer=cca-contour]')).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(container.querySelector('[data-layer=positional-grid]')).not.toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(container.querySelector('[data-layer=positional-grid]')).toBeInTheDocument();
+  });
+
+  it("retains the tactical grid, both goals, full density, and 32x22 CCA input", async () => {
     const point = { x: 81, y: 46 };
     const { container } = render(<SpatialPitch analysis={analysisWith({
       heatmapPointCount: 1, heatmapPoints: [point],
       continuousCore: { available: true, definitionVersion: "continuous-hdr-50-v1", targetDensityPct: 50, achievedDensityPct: 50, coreAreaPct: 8, densityThreshold: .5, thresholdOfPeak: .5, gridColumns: 32, gridRows: 22 },
     })} fullActivityHeatmap={fullHeatmap([point])} />);
     await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
-    expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(17);
+    // Actual renderer: five depth + four lane + three custom box boundaries.
+    expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(12);
     expect(container.querySelectorAll("[data-goal]")).toHaveLength(2);
     expect(container.querySelectorAll("[data-density-dot]").length).toBeGreaterThan(0);
     expect(container.querySelectorAll("[data-density-dot]").length).toBeLessThanOrEqual(64 * 24);
