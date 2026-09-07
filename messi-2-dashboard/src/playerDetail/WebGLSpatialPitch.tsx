@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { AERIAL_CAMERA, repairPitchUV, stylePitchMaterial } from "./pitchPresentation";
+import { AERIAL_CAMERA, DAYLIGHT_BACKGROUND, repairPitchUV, stylePitchMaterial } from "./pitchPresentation";
 import { loadPitchModelBytes } from "./loadPitchModel";
 import { buildGroundDensityDots, createGroundHeatmap, createContinuousGroundHeatmap, highDensityAccents, penaltyStripBoundaries } from "./groundHeatmap";
-import { canReplayGoal, cloneReplayBall, replayPosition, REPLAY_DURATION_MS } from "./shotReplay";
+import { canReplayGoal, cloneReplayBall, replayPosition, REPLAY_DURATION_MS, styleShotBall, SHOT_BALL_COLORS } from "./shotReplay";
 
 import type { FullActivityHeatmapData } from "../api/fullActivityHeatmapContracts";
 import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
@@ -180,18 +180,18 @@ function line(
 }
 
 function addTacticalGrid(root: THREE.Group) {
-  const color = 0xb7e4c7;
+  const color = 0xf1f5f9;
   for (const depth of DEPTH_BOUNDARIES.slice(1, -1)) {
     root.add(line([
       pitchPercentToWorld({ x: depth, y: 0 }, 0.095),
       pitchPercentToWorld({ x: depth, y: 100 }, 0.095),
-    ], color, 0.65, true));
+    ], color, 0.85, true));
   }
   for (const lane of LANE_BOUNDARIES.slice(1, -1)) {
     root.add(line([
       pitchPercentToWorld({ x: 0, y: lane }, 0.095),
       pitchPercentToWorld({ x: 100, y: lane }, 0.095),
-    ], color, 0.65, true));
+    ], color, 0.85, true));
   }
   for (const y of penaltyStripBoundaries().slice(1, -1)) {
     root.add(line([
@@ -253,9 +253,7 @@ function addShots(
       const placement = placements.get(group.key);
       if (!placement) continue;
       const marker = cloneReplayBall(asset);
-      (Array.isArray(marker.material) ? marker.material : [marker.material]).forEach(material => {
-        material.transparent = dimmed; material.opacity = dimmed ? .25 : 1;
-      });
+      styleShotBall(marker, group.outcome);
       marker.position.set(placement.world.x, GLB_PITCH_SURFACE_Y_METERS + .11, placement.world.z);
       marker.renderOrder = 5;
       root.add(marker);
@@ -320,6 +318,7 @@ export function WebGLSpatialPitch({
   const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
   const raycasterRef = useRef<THREE.Raycaster | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [showTacticalZones, setShowTacticalZones] = useState(true);
   const [hoveredZone, setHoveredZone] = useState<ZoneOverlay | null>(null);
   const [activeShot, setActiveShot] = useState<string | null>(null);
   const [replayIndex, setReplayIndex] = useState<number | null>(null);
@@ -397,7 +396,7 @@ export function WebGLSpatialPitch({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.95;
-    renderer.setClearColor(0x080f13, 1);
+    renderer.setClearColor(DAYLIGHT_BACKGROUND, 1);
 
     const scene = new THREE.Scene();
     const pmrem = new THREE.PMREMGenerator(renderer);
@@ -503,7 +502,7 @@ export function WebGLSpatialPitch({
     const runtime = runtimeRef.current;
     if (!runtime?.asset || !layers.markers || !replayShot || !canReplayGoal(replayShot)) return;
     let ball: THREE.Mesh;
-    try { ball = cloneReplayBall(runtime.asset); setReplayError(""); }
+    try { ball = cloneReplayBall(runtime.asset); styleShotBall(ball, replayShot.outcome); setReplayError(""); }
     catch (error) { setReplayError(String(error)); setPlaying(false); return; }
     runtime.scene.add(ball);
     const ring = new THREE.Mesh(new THREE.RingGeometry(.3, .36, 32), new THREE.MeshBasicMaterial({ color: 0x75ffff, side: THREE.DoubleSide, toneMapped: false, depthTest: false }));
@@ -546,7 +545,7 @@ export function WebGLSpatialPitch({
     runtime.overlayRoot.clear();
     disposeObject(runtime.zoneHitRoot);
     runtime.zoneHitRoot.clear();
-    if (layers.cca) {
+    if (showTacticalZones) {
       addZoneHitMeshes(runtime.zoneHitRoot, zones);
       addTacticalGrid(runtime.overlayRoot);
     }
@@ -562,7 +561,7 @@ export function WebGLSpatialPitch({
       replayShot ? { ...layers, trajectories: false } : layers, markerPlacements, Boolean(replayShot), runtime.asset);
     runtime.render();
     setProjectionVersion((value) => value + 1);
-  }, [groundDots, fullActivityHeatmap, layers, legacyNormalized, markerGroups, markerPlacements, medianXg, runtimeVersion, spatial, zones, replayShot, loadState]);
+  }, [groundDots, fullActivityHeatmap, layers, showTacticalZones, legacyNormalized, markerGroups, markerPlacements, medianXg, runtimeVersion, spatial, zones, replayShot, loadState]);
 
   const applyFreefly = useCallback((next: FreeflyCameraState, publicState?: OrbitCameraState) => {
     freeflyRef.current = next;
@@ -739,6 +738,13 @@ export function WebGLSpatialPitch({
       spatial.shotmapPoints.length ? `슛 ${spatial.shotmapPoints.length}개` : "관측된 슛 0개";
 
   return <>
+    {layers.markers && <div aria-label="슈팅 공 색상 범례" className="flex flex-wrap gap-4 bg-slate-900 px-3 py-2 text-sm text-white">
+      {(Object.entries(SHOT_BALL_COLORS) as [ShotOutcome, number][]).map(([outcome, color]) => <span key={outcome} className="inline-flex items-center gap-2"><span aria-hidden="true" className="h-3 w-3 rounded-full" style={{ backgroundColor: `#${color.toString(16).padStart(6, '0')}` }} />{{ goal: '득점', on_target: '유효 슛', off_target: '빗나감', blocked: '블록' }[outcome]}</span>)}
+    </div>}
+    <div className="flex items-center gap-3 border-b border-white/15 bg-slate-900 px-3 py-2 text-white">
+      <button type="button" aria-pressed={showTacticalZones} onClick={() => { setShowTacticalZones(value => !value); setHoveredZone(null); }} className="min-h-11 rounded border border-white/30 px-3 text-sm font-bold aria-pressed:bg-white aria-pressed:text-slate-900">전술 구역</button>
+      <span className="text-sm">30구역 안내선 · 공격 박스 4분할 · CCA와 별도 표시</span>
+    </div>
     {layers.markers && <section aria-label="득점 모식 재생 시제품" className="border-b border-white/20 bg-slate-950 p-3 text-white">
       <strong>득점 장면 시제품 · 기록 기반 모식 재생</strong>
       <p className="text-sm text-zinc-300">시작·골문 도달 좌표는 기록값입니다. 중간 포물선·2.4초 재생 시간은 연출이며 실제 속도·회전·비행 궤적이 아닙니다. 골라인 도달까지 표시합니다.</p>
@@ -824,7 +830,7 @@ export function WebGLSpatialPitch({
       data-attacking-goal-width-pct={goalWidthPct.toFixed(2)}
       data-attacking-goal-height-pct={goalHeightPct.toFixed(2)}>
       <canvas ref={canvasRef} aria-hidden="true" className="block h-auto w-full touch-none" />
-      <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-white">{layers.cca ? "박스 4분할 · Soccerlab 자체 구획" : "개인 내 상대 밀도 · 청록 → 노랑 → 주황 | 표시 보간 192×124 · 원천 32×22"}</span>
+      <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-white">{showTacticalZones ? "30구역 · 박스 4분할 · Soccerlab 자체 구획 | 개인 내 상대 밀도" : "개인 내 상대 밀도 · 청록 → 노랑 → 주황 | 표시 보간 192×124 · 원천 32×22"}</span>
       {loadState === "loading" && <div role="status" className="absolute inset-0 grid place-items-center bg-[#050a08]/70 text-sm font-bold text-zinc-200">3D 피치 자산 로딩…</div>}
       {(loadState === "error" || loadState === "unsupported") && <div role="alert" className="absolute inset-0 grid place-items-center bg-[#050a08] p-6 text-center text-sm font-bold text-rose-200">{loadState === "unsupported" ? "WebGL 피치를 표시할 수 없습니다." : "경기장 모델을 불러오지 못했습니다."} {loadError}</div>}
 
@@ -837,7 +843,7 @@ export function WebGLSpatialPitch({
           data-density-normalized={dot.density} data-density-radius-meters={dot.radiusMeters} />)}
       </div>}
       {layers.cca && legacyHeatValid && spatial?.continuousCore.available && spatial.continuousCore.thresholdOfPeak > 0 && <div hidden data-layer="cca-contour" data-contour-segments={marchingSquares(legacyNormalized, spatial.continuousCore.thresholdOfPeak).length} />}
-      <div hidden data-layer="positional-grid" data-zone-count="30">{Array.from({ length: 17 }, (_, index) => <span key={index} data-grid-segment={index} />)}</div>
+      {showTacticalZones && <div hidden data-layer="positional-grid" data-zone-count="30">{Array.from({ length: 12 }, (_, index) => <span key={index} data-grid-segment={index} />)}</div>}
       <div hidden data-layer="goals"><span data-goal="defending" data-goal-post-near-y="44.61764705882353" data-goal-post-far-y="55.38235294117647" data-goal-crossbar-height-meters="2.44" /><span data-goal="attacking" data-goal-post-near-y="44.61764705882353" data-goal-post-far-y="55.38235294117647" data-goal-crossbar-height-meters="2.44" /></div>
       {(layers.markers || layers.trajectories) && <div hidden data-layer="shots" id={markerLayerId} />}
 
@@ -886,7 +892,7 @@ export function WebGLSpatialPitch({
           <strong>{outcomePresentation[selectedShot.outcome].label}</strong><br />xG {formatShotMetric(selectedShot.shot.xg)} · xGOT {formatShotMetric(selectedShot.shot.xgot)}
         </div>;
       })()}
-      {layers.cca && zones.map((zone) => {
+      {showTacticalZones && zones.map((zone) => {
         const projected = zoneProjection(zone);
         return <button key={`${zone.cell.depth}-${zone.cell.lane}`} type="button"
           data-zone-keyboard-target=""

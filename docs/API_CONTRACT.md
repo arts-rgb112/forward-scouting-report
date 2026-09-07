@@ -2,6 +2,14 @@
 
 ## 진행 중인 작업
 
+- DAYLIGHT/SHOT-COLOR 릴리스: 발주자 '배포까지진행해' 승인. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 낮 배경/구역 독립토글/흰그물/결과별불투명공, 2D/API/점수/원본자산 제외. 기존 빌드PASS, 독립 최종검수 및 PR/라이브 확인 진행. 정본 OPEN_WORK.md.
+
+- SHOT-COLOR-20260907: 발주 승인 슈팅 결과별 공 색상/불투명도 보완. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 3D 공만 결과색과 opacity1 적용, 재생시 비선택 공 .25 감쇠 제거. 2D/API/점수 불변. 로컬 테스트 중·미배포. 정본 OPEN_WORK.md.
+- 결과:22tests/buildPASS, 실제Kane통합 박스정면 색상/공 무늬 확인. 신규독립검수전·미커밋/push없음/미배포. 정본 SHOT-COLOR-20260907.
+
+- PITCH-DAYLIGHT-20260907: 발주 승인 전술 구역/낮 배경/그물 가독성 보완. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 3D 표시 계층만, 2D/API/점수/원본 자산 불변. 로컬 검증 중, 새 배포 없음. 정본 messi-specs/OPEN_WORK.md.
+- 후속 결과20:52KST: 33tests/production buildPASS, 실제Kane1401활동119슛·CCA-off 구역 토글·밝은 낮 배경·흰 그물 및 통합재생 pause16%→100% 확인. Terra scoped 코드/로컬시각PASS. HEAD3dd2003 위 미커밋/push없음/새배포없음. 증거·잔여·독립검토 정본 OPEN_WORK.md.
+
 - 3D 릴리스 준비: 발주자 2026-09-07 라이브반영 승인. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery, 기준6370a0016b18d1dc2d9e1adc793ebabf99a8736a. 2D/선수메인리뉴얼 제외. 실제런타임 footballpitchv3.glb 6,316,712bytes만포함, 원본116MB·비교용GLB·QA페이지제외. Fab StudioLab Football Pitch 구매자산(Standard License; 원본재판매/독립배포용아님), 모델은제품3D렌더에사용·AI학습에사용안함. 원본파일은로컬보존. npm run build 타입검사포함PASS. 터치독립검수및프리뷰/라이브검증별도게이트.
 
 - glb-recovery 20:22KST: 핀치줌누락보강(27tests/buildPASS),브라우저합성touch1→2→1확인. CCA/heat/shots동시실화면캡처. 실제휴대폰·신규터치독립검수전,원천/API/점수불변·미배포. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 정본OPEN_WORK.md.

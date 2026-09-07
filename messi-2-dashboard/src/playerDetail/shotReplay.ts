@@ -3,6 +3,25 @@ import type { ShotmapPoint } from "../dashboard/types";
 import { pitchPercentToWorld } from "./pitchWebglGeometry";
 
 export const REPLAY_DURATION_MS = 2400; // Presentation time, never measured ball speed.
+export const SHOT_BALL_COLORS = { goal: 0xbef264, on_target: 0x38bdf8, off_target: 0xfb923c, blocked: 0xc4b5fd } as const;
+
+/** Opaque textured footballs; selection uses a ring, never ghosted background balls. */
+export function styleShotBall(ball: THREE.Mesh, outcome: ShotmapPoint['outcome']) {
+  const materials = Array.isArray(ball.material) ? ball.material : [ball.material];
+  for (const material of materials) {
+    material.transparent = false;
+    material.opacity = 1;
+    material.depthWrite = true;
+    if (material instanceof THREE.MeshStandardMaterial) {
+      material.color.setHex(SHOT_BALL_COLORS[outcome]);
+      material.emissive.setHex(SHOT_BALL_COLORS[outcome]);
+      material.emissiveIntensity = .12;
+      material.metalness = 0;
+      material.roughness = .72;
+    }
+    material.needsUpdate = true;
+  }
+}
 export function canReplayGoal(shot: ShotmapPoint) {
   const end = shot.trajectory;
   return shot.outcome === "goal" && end?.endpointKind === "goal_mouth" &&
