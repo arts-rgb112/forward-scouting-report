@@ -25,6 +25,9 @@ export function Player3DRoute({ id, dataset, config: providedConfig }: {
   const [detail, setDetail] = useState<{ player: Player; analysis?: PlayerAnalysis }>();
   const [error, setError] = useState<"config" | "network" | "not-found">();
   const [retry, setRetry] = useState(0);
+  const [view, setView] = useState<"heat" | "shots" | "combined">("heat");
+  const [allTrajectories, setAllTrajectories] = useState(false);
+  const [analysisGrid, setAnalysisGrid] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const fullHeatmap = useFullActivityHeatmap(config, id, dataset);
   const fullActivityHeatmap = fullHeatmap.kind === "ready" ? fullHeatmap.data : undefined;
@@ -60,7 +63,13 @@ export function Player3DRoute({ id, dataset, config: providedConfig }: {
         <PitchPenaltyToggle/>
       </div>
       <div className="mx-auto mt-4 max-w-[1920px]">
-        <SpatialPitch analysis={detail.analysis} contextIdentity={contextIdentity} forcedMode="perspective" layers={DEFAULT_PITCH_LAYERS} fullActivityHeatmap={fullActivityHeatmap}/>
+        <div className="mb-3 flex flex-wrap items-center gap-3" role="group" aria-label="3D 표시 레이어">
+          {([['heat', '히트맵'], ['shots', '슈팅 장면'], ['combined', '통합']] as const).map(([key, label]) =>
+            <button key={key} aria-pressed={view === key} onClick={() => setView(key)} className="rounded-lg border border-white/20 px-5 py-2 aria-pressed:border-cyan-300 aria-pressed:bg-cyan-300/15 aria-pressed:text-cyan-200">{label}</button>)}
+          <label className="text-sm text-zinc-400"><input type="checkbox" checked={allTrajectories} onChange={e => setAllTrajectories(e.target.checked)}/> 전체 궤적</label>
+          <label className="text-sm text-zinc-400"><input type="checkbox" checked={analysisGrid} onChange={e => setAnalysisGrid(e.target.checked)}/> 분석 구획·CCA</label>
+        </div>
+        <SpatialPitch analysis={detail.analysis} contextIdentity={contextIdentity} forcedMode="perspective" layers={{ ...DEFAULT_PITCH_LAYERS, heatmap: view !== 'shots', markers: view !== 'heat', trajectories: view !== 'heat' && allTrajectories, cca: analysisGrid }} fullActivityHeatmap={fullActivityHeatmap}/>
       </div>
     </PitchPenaltyProvider>
   </main>;

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -34,13 +34,19 @@ beforeEach(() => {
 });
 
 describe("dedicated player 3D route", () => {
-  it("keeps every 3D layer active in non-embedded perspective mode", async () => {
+  it("starts with heat only and retains opt-in access to every 3D layer", async () => {
     render(<Player3DRoute id={1} dataset={dataset} config={config}/>);
     await waitFor(() => expect(mocks.fetchPlayerDetail).toHaveBeenCalledWith(config, 1, dataset, expect.any(AbortSignal)));
     const pitch = await screen.findByTestId("spatial-pitch");
     expect(pitch).toHaveAttribute("data-forced-mode", "perspective");
     expect(pitch).toHaveAttribute("data-embedded", "false");
+    expect(JSON.parse(pitch.getAttribute("data-layers")!)).toEqual({ heatmap: true, cca: false, trajectories: false, markers: false });
+    fireEvent.click(screen.getByRole('button', { name: '통합' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '전체 궤적' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '분석 구획·CCA' }));
     expect(JSON.parse(pitch.getAttribute("data-layers")!)).toEqual({ heatmap: true, cca: true, trajectories: true, markers: true });
+    fireEvent.click(screen.getByRole('button', { name: '슈팅 장면' }));
+    expect(JSON.parse(pitch.getAttribute("data-layers")!).heatmap).toBe(false);
     expect(pitch).toHaveAttribute("data-context-identity", "1|2024/2025|league|7|all");
     expect(pitch).toHaveAttribute("data-full-heatmap", "true");
     expect(screen.getByRole("link", { name: "← 선수 상세" })).toHaveAttribute("href", "/players/1?season=2024%2F2025&mode=league&scope=7&utm_source=slack");

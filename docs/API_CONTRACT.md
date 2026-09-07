@@ -2,6 +2,36 @@
 
 ## 진행 중인 작업
 
+- 3D 릴리스 준비: 발주자 2026-09-07 라이브반영 승인. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery, 기준6370a0016b18d1dc2d9e1adc793ebabf99a8736a. 2D/선수메인리뉴얼 제외. 실제런타임 footballpitchv3.glb 6,316,712bytes만포함, 원본116MB·비교용GLB·QA페이지제외. Fab StudioLab Football Pitch 구매자산(Standard License; 원본재판매/독립배포용아님), 모델은제품3D렌더에사용·AI학습에사용안함. 원본파일은로컬보존. npm run build 타입검사포함PASS. 터치독립검수및프리뷰/라이브검증별도게이트.
+
+- glb-recovery 20:22KST: 핀치줌누락보강(27tests/buildPASS),브라우저합성touch1→2→1확인. CCA/heat/shots동시실화면캡처. 실제휴대폰·신규터치독립검수전,원천/API/점수불변·미배포. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 정본OPEN_WORK.md.
+
+- PITCH-ORIENTATION 잔여확인20:09 KST: glb-recovery 새탭실클릭및season/mode/scope유지PASS,실제마우스360도90→-180→-90→0→90PASS. 독립Terra좌우계약PASS(CCA100-y복원유지). 라이브/모바일/CCA-on화면별도.신규커밋·push·배포없음. 정본OPEN_WORK.md.
+
+- PITCH-ORIENTATION-20260907: 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 계약y=0오른쪽에맞게 +Z공격3D의 width부호교정, 역변환동시수정. 원천/2D/API불변. 로컬검증중·라이브미반영. 정본OPEN_WORK.md.
+- 좌우교정 로컬26tests/buildPASS, 실제3D ready/W-S이동복귀/확대1→1.25확인. 새탭링크코드유지확인,360전체회전·독립검수·라이브검증미완. 신규commit/push/deploy없음.
+
+- PITCH-BLEND 주황보강(19:51 KST): 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 개인정규화밀도>.8 주황추가/면과도트공통팔레트/투명도보존.25tests/buildPASS·실제항공캡처확인. 원천/API/점수불변, 독립재검수전·미배포. 정본OPEN_WORK.md.
+
+- PITCH-BLEND-20260907: 연속 반투명 지면 밀도와 선택 슈팅 재생 동시 가독성 구현 중. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 원천32×22·점수·API·2D 불변. 새 항공/박스 정면 시각검증 전, 배포 없음. 정본 OPEN_WORK.md.
+- PITCH-BLEND 검증갱신: 실제항공/정면통합 캡처·pause14%→resume100%확인,35testsPASS/최종24tests재확인/buildPASS. Terra항공PASS·정면6°조건부PASS 후14°보강은독립재검수전. 신규commit/push/배포없음,ResizeObserver장시간검증·기존타입오류별도. 상세정본OPEN_WORK.md.
+
+- PITCH-REDESIGN-20260907: glb-recovery 3D 표시 보간·UV·재질·보기 전환 개선. 33tests/buildPASS·Terra 실제 heat/selected-replay 시각PASS. 원천32×22/점수/API 규범 불변. ResizeObserver 런타임경고·전체타입검사 실패 남음, 전체완료/배포 아님. 정본 messi-specs/OPEN_WORK.md 참조.
+
+- DOT-BALL-20260907: 발주 승인 지면 소도트/공 배치 구현·로컬검증. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 표시192×72(64×24의3×3분할, 원천32×22불변), 공에셋지름.22m·접지그림자.25tests/buildPASS·실데이터근접캡처확보. 재질/궤적혼잡/ResizeObserver경고 및 독립QA 남음. 정본OPEN_WORK.md. 원본/점수/배포불변.
+
+- SHOT-REPLAY-20260907: 발주자 승인 득점 1건 선택·공 에셋 모식 재생 시제품. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. Football_13 메시 확인, 실제 원본별 득점 선택·pause/seek/reset 및 연출 고지. 종료점/높이 미관측 재생 거부. 원본/API/점수/릴리스 불변. 전체 슈팅맵 재개편 완료 아님.
+- 시제품 검증:25tests/buildPASS; 실제 득점#7 이동·pause14%유지·resume100%확인, 캡처확보. 공/그물 어두움·도트히트맵 재전환·독립QA 남음. 영상ffmpeg부재로실패. 상세 정본 SHOT-REPLAY-20260907. 신규commit/push/deploy없음.
+
+- AERIAL-QA-20260907: 발주자 요청으로 케인 실제 2025/26 선수 3D 페이지 고각도/드론 및 히트맵+슛 통합 캡처 진행. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. API GET만 사용, 자산 후보를 로컬 MODEL_URL에 복사(미추적·미확정). 제품 데이터/산식/릴리스 불변.
+- 캡처 완료: 실제 8개 리그 컨텍스트,1401활동/119슛,GLTF ready. 고각80도/사선40도 통합뷰를 glb-recovery-evidence/kane-{aerial,drone}-combined.png에 기록. 대비/궤적혼잡/그물 문제로 최종 시각PASS 아님. 정본 VISUAL-20260907 참조. 신규 제품 코드 변경·commit/push/deploy 없음.
+
+- VISUAL-20260907 진행 중: 같은 glb-recovery 작업트리에서 지면 셀 렌더링·낮 조명·구획 경계 및 기하 기반 Soccerlab 박스 4분할 구현. 기존 밀도/색 함수·슈팅 렌더러·2D 불변. 실제 브라우저 QA 및 독립 시각 검수 전 완료 아님.
+- 검증 중간결과: 집중21PASS/buildPASS. 합성 밀도 harness 실제 GLTF 저각도 캡처에서 지면 원근 확인. 그물 검은 면 잔존으로 시각 PASS 아님; 선수 페이지 전체·연속 움직임·독립 QA 남음. 상세 정본 VISUAL-20260907.
+
+- GLB-RECOVERY-20260907: 발주자 메인업무 재개 승인으로 자산 압축·로더 실패 처리 진행. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery, baseline6370a00/agent/glb-recovery. 원본116044984bytes 보존, 별도2048/1024 WebP후보 생성. 점수·데이터·슈팅마커 불변, 후보커밋·push·배포 금지. 화면 전후검증 전 완료아님. 정본 OPEN_WORK.md 참조.
+- 로컬 결과:1024WebP후보6316712bytes/기존확장3종·메시31·실알파보존, HTTP/HTML/GLB 검증 로더18focusedPASS 및buildPASS. 동일각도 원본/후보GLTF실로드캡처 확보. 기존야간원본도그물검은면이라최종시각PASS아님, 다음시각교정별도. commit/push/deploy없음, 정본GLB-RECOVERY-20260907.
+
 - 상태: 로컬 구현·검증 완료, 호스트 커밋 대기 — 선수 상세 리그 백분위 모집단 캐시 성능 개선 (2026-09-05 KST)
 - 작업 폴더: C:/Users/USER/Downloads/files/forward-scouting-report-api-eventloop
 - 범위/결과: `rankings.calculate_league_percentiles`의 선수 비의존 모집단 계산을 별도 함수로 추출하고 `(season_name, league_id, league_name, minimum_xg, restrict_to_forwards, minimum_final_third_ratio, comparison_scope, role_override)` 키의 `lru_cache(maxsize=160)`로 캐시했다. 대상 선수가 정적 모집단에 없는 기존 보정 경로는 캐시 밖에 유지했고 데이터 버전 변경 시 새 캐시도 비운다. 기준 HEAD `c6b9104d45390e9199301ec1a3b877ddce244d89`의 원본 함수를 실행해 만든 12명·3컨텍스트·107필드 및 모집단 외 선수 1건의 `asdict` 고정값과 현재 결과를 정확 비교해 전부 일치했다. 집중 테스트 61건·subtest 3건 통과; 전체 `python -m pytest tests/ -q`는 396/404 및 subtest 3건 통과·기존 8건 실패이며, 기준 코드 동일 노드 비교와 격리 재검증상 신규 회귀는 0건이다. 동일 컨텍스트 상세 실측은 원본 첫 12100.833ms/후속 평균 4774.443ms, 수정 첫 12092.268ms/후속 평균 21.511ms였다. 예열 후 cProfile에서 백분위 함수는 5ms로 top 10 밖이며 리그 전체 전술 비율 반복은 사라지고 선택 선수 경로만 1회 호출됐다. 공유 모듈 의존성·사전·최종 동기화 감사 모두 GO. 외부 시그니처·반환 타입·산식·가중치·임계값·계산 순서·`build_player_detail` 캐시·예열·라이브러리는 변경하지 않았다. branch `agent/percentile-population-cache`, HEAD `c6b9104d45390e9199301ec1a3b877ddce244d89`; commit·push·PR·merge·deploy·기능 플래그 변경 없음.

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { AERIAL_CAMERA, repairPitchUV, stylePitchMaterial } from "./pitchPresentation";
+import { loadPitchModelBytes } from "./loadPitchModel";
+import { buildGroundDensityDots, createGroundHeatmap, createContinuousGroundHeatmap, highDensityAccents, penaltyStripBoundaries } from "./groundHeatmap";
+import { canReplayGoal, cloneReplayBall, replayPosition, REPLAY_DURATION_MS } from "./shotReplay";
 
 import type { FullActivityHeatmapData } from "../api/fullActivityHeatmapContracts";
 import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
@@ -22,10 +27,12 @@ import {
   GLB_PITCH_HALF_LENGTH_METERS,
   GLB_PITCH_LENGTH_METERS,
   GLB_PITCH_WIDTH_METERS,
+  GLB_PITCH_SURFACE_Y_METERS,
   WEBGL_CAMERA_PRESETS,
   WEBGL_OVERLAY_Y_METERS,
   WEBGL_ZOOM,
   clampWebglZoom,
+  pinchWebglZoom,
   freeflyLookTarget,
   freeflyStateFromOrbit,
   moveFreeflyCamera,
@@ -50,7 +57,6 @@ import {
   WEBGL_DOTMATRIX_ROWS,
   buildWebglDensityDots,
   layoutWebglShotMarkers,
-  type WebglDensityDot,
   type WebglShotPlacement,
 } from "./webglDotMatrix";
 
@@ -76,6 +82,7 @@ type ZoneSummary = { shots: number; goals: number; xg: number; shotSharePct: num
 type ZoneOverlay = { cell: OccupancyCell; summary: ZoneSummary; point: PitchPercentPoint };
 type ProjectedPoint = { left: number; top: number; visible: boolean };
 type Runtime = {
+  asset?: THREE.Object3D;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
@@ -147,7 +154,7 @@ function disposeObject(root: THREE.Object3D) {
       materials.forEach((material) => {
         if (!material) return;
         Object.values(material).forEach((value) => {
-          if (value instanceof THREE.Texture) value.dispose();
+          if (value instanceof THREE.Texture && !material.userData.sharedAssetTextures) value.dispose();
         });
         material.dispose();
       });
@@ -178,18 +185,20 @@ function addTacticalGrid(root: THREE.Group) {
     root.add(line([
       pitchPercentToWorld({ x: depth, y: 0 }, 0.095),
       pitchPercentToWorld({ x: depth, y: 100 }, 0.095),
-    ], color, 0.28, true));
+    ], color, 0.65, true));
   }
   for (const lane of LANE_BOUNDARIES.slice(1, -1)) {
     root.add(line([
       pitchPercentToWorld({ x: 0, y: lane }, 0.095),
       pitchPercentToWorld({ x: 100, y: lane }, 0.095),
-    ], color, 0.28, true));
+    ], color, 0.65, true));
   }
-  root.add(line([
-    pitchPercentToWorld({ x: 84.29, y: 50 }, 0.11),
-    pitchPercentToWorld({ x: 100, y: 50 }, 0.11),
-  ], 0xf8fafc, 0.38, true));
+  for (const y of penaltyStripBoundaries().slice(1, -1)) {
+    root.add(line([
+      pitchPercentToWorld({ x: 100 - 16.5 / GLB_PITCH_LENGTH_METERS * 100, y }, 0.095),
+      pitchPercentToWorld({ x: 100, y }, 0.095),
+    ], 0xf8fafc, 0.8, true));
+  }
 }
 
 function addZoneHitMeshes(root: THREE.Group, zones: readonly ZoneOverlay[]) {
@@ -213,35 +222,6 @@ function addZoneHitMeshes(root: THREE.Group, zones: readonly ZoneOverlay[]) {
   }
 }
 
-function addDotMatrixHeatmap(root: THREE.Group, dots: readonly WebglDensityDot[]) {
-  if (!dots.length) return;
-  const positions = new Float32Array(dots.length * 3);
-  const colors = new Float32Array(dots.length * 4);
-  const sizes = new Float32Array(dots.length);
-  dots.forEach((dot, index) => {
-    positions.set([dot.world.x, dot.world.y, dot.world.z], index * 3);
-    colors.set([dot.color[0] / 255, dot.color[1] / 255, dot.color[2] / 255, dot.color[3]], index * 4);
-    sizes[index] = dot.radiusMeters;
-  });
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("aColor", new THREE.BufferAttribute(colors, 4));
-  geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
-  const material = new THREE.ShaderMaterial({
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    vertexShader: `attribute vec4 aColor; attribute float aSize; varying vec4 vColor;
-      void main() { vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); vColor = aColor;
-      gl_PointSize = clamp(aSize * 2800.0 / max(1.0, -mvPosition.z), 2.0, 28.0);
-      gl_Position = projectionMatrix * mvPosition; }`,
-    fragmentShader: `varying vec4 vColor; void main() { vec2 centre = gl_PointCoord - vec2(.5);
-      if (dot(centre, centre) > .25) discard; gl_FragColor = vColor; }`,
-  });
-  const points = new THREE.Points(geometry, material);
-  points.renderOrder = 2;
-  root.add(points);
-}
 
 function addContours(
   root: THREE.Group,
@@ -265,19 +245,27 @@ function addShots(
   medianXg: number | null,
   layers: PitchLayerVisibility,
   placements: ReadonlyMap<string, WebglShotPlacement>,
+  dimmed = false,
+  asset?: THREE.Object3D,
 ) {
   for (const group of groups) {
-    if (layers.markers) {
+    if (layers.markers && asset) {
       const placement = placements.get(group.key);
       if (!placement) continue;
-      const marker = new THREE.Mesh(
-        new THREE.CircleGeometry(placement.radiusMeters, 18),
-        new THREE.MeshBasicMaterial({ color: markerColors[group.outcome], transparent: true, opacity: group.outcome === "goal" ? .98 : .82, depthTest: false, depthWrite: false, side: THREE.DoubleSide }),
-      );
-      marker.rotation.x = -Math.PI / 2;
-      marker.position.set(placement.world.x, placement.world.y, placement.world.z);
+      const marker = cloneReplayBall(asset);
+      (Array.isArray(marker.material) ? marker.material : [marker.material]).forEach(material => {
+        material.transparent = dimmed; material.opacity = dimmed ? .25 : 1;
+      });
+      marker.position.set(placement.world.x, GLB_PITCH_SURFACE_Y_METERS + .11, placement.world.z);
       marker.renderOrder = 5;
       root.add(marker);
+      const shadow = new THREE.Mesh(new THREE.CircleGeometry(.14, 16), new THREE.MeshBasicMaterial({
+        color: 0x101810, transparent: true, opacity: dimmed ? .1 : .3, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+      }));
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.set(placement.world.x, GLB_PITCH_SURFACE_Y_METERS + .007, placement.world.z);
+      root.add(shadow);
     }
     const trajectory = group.shot.trajectory;
     if (layers.trajectories && trajectory?.endpointKind === "goal_mouth" && typeof trajectory.endZMeters === "number") {
@@ -328,10 +316,19 @@ export function WebGLSpatialPitch({
     freeflyStateFromOrbit(DEFAULT_WEBGL_CAMERA, { x: 0, y: WEBGL_OVERLAY_Y_METERS, z: 0 }));
   const freeflyRef = useRef(freeflyState);
   const dragRef = useRef<{ button: number; x: number; y: number } | null>(null);
+  const touchPoints = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
   const raycasterRef = useRef<THREE.Raycaster | null>(null);
   const [zoom, setZoom] = useState(1);
   const [hoveredZone, setHoveredZone] = useState<ZoneOverlay | null>(null);
   const [activeShot, setActiveShot] = useState<string | null>(null);
+  const [replayIndex, setReplayIndex] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [replayProgress, setReplayProgress] = useState(0);
+  const [seekVersion, setSeekVersion] = useState(0);
+  const [replayError, setReplayError] = useState("");
+  const replayProgressRef = useRef(0);
+  const replayShot = replayIndex == null ? undefined : spatial?.shotmapPoints[replayIndex];
 
   const legacyHeatValid = Boolean(spatial?.available &&
     spatial.heatmapPointCount === spatial.heatmapPoints.length &&
@@ -343,6 +340,7 @@ export function WebGLSpatialPitch({
     fullActivityHeatmap.cellCounts.every((value) => Number.isInteger(value) && value >= 0) &&
     fullActivityHeatmap.cellCounts.reduce((sum, value) => sum + value, 0) === fullActivityHeatmap.validPointCount);
   const densityDots = useMemo(() => heatValid ? buildWebglDensityDots(fullActivityHeatmap!.cellCounts) : [], [fullActivityHeatmap, heatValid]);
+  const groundDots = useMemo(() => heatValid ? buildGroundDensityDots(fullActivityHeatmap!.cellCounts) : [], [fullActivityHeatmap, heatValid]);
   const pivot = useMemo(() => deriveWebglPivot(spatial, legacyNormalized), [legacyNormalized, spatial]);
   const pivotWorld = useMemo(() => pitchPercentToWorld(pivot, WEBGL_OVERLAY_Y_METERS), [pivot]);
   const shotsValid = shotIntegrity(spatial);
@@ -399,20 +397,26 @@ export function WebGLSpatialPitch({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.95;
-    renderer.setClearColor(0x050a08, 1);
+    renderer.setClearColor(0x080f13, 1);
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x050a08, 0.0065);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    const environment = pmrem.fromScene(room);
+    scene.environment = environment.texture;
+    scene.environmentIntensity = .8;
+    room.dispose(); pmrem.dispose();
     const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.05, 420);
-    const initial = freeflyStateFromOrbit(DEFAULT_WEBGL_CAMERA, pivotWorld);
+    const initial = AERIAL_CAMERA;
     freeflyRef.current = initial;
     setFreeflyState(initial);
+    setCameraState({ azimuth: initial.yaw, elevation: -initial.pitch, distance: DEFAULT_WEBGL_CAMERA.distance });
     camera.position.set(initial.position.x, initial.position.y, initial.position.z);
     const initialTarget = freeflyLookTarget(initial);
     camera.lookAt(initialTarget.x, initialTarget.y, initialTarget.z);
 
-    scene.add(new THREE.HemisphereLight(0xdfffea, 0x102219, 2.2));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.4);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x667566, 1.2));
+    const sun = new THREE.DirectionalLight(0xffffff, 2);
     sun.position.set(-30, 70, -18);
     scene.add(sun);
     const overlayRoot = new THREE.Group();
@@ -420,25 +424,33 @@ export function WebGLSpatialPitch({
     const zoneHitRoot = new THREE.Group();
     scene.add(zoneHitRoot);
     const render = () => renderer.render(scene, camera);
-    const runtime = { scene, camera, renderer, overlayRoot, zoneHitRoot, render };
+    const runtime: Runtime = { scene, camera, renderer, overlayRoot, zoneHitRoot, render };
     runtimeRef.current = runtime;
 
+    let lastWidth = 0;
     const resize = () => {
       const width = Math.max(1, host.clientWidth);
+      if (width === lastWidth) return;
+      lastWidth = width;
       const height = Math.max(320, Math.round(width * 0.59));
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderRuntime();
     };
-    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+    let resizeFrame = 0;
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(resize);
+    });
     resizeObserver?.observe(host);
     resize();
     const loader = new GLTFLoader();
     let cancelled = false;
-    loader.load(
-      MODEL_URL,
-      (gltf) => {
+    const modelAbort = new AbortController();
+    loadPitchModelBytes(MODEL_URL, modelAbort.signal)
+      .then((bytes) => loader.parseAsync(bytes, new URL('.', new URL(MODEL_URL, window.location.href)).href))
+      .then((gltf) => {
         if (cancelled) {
           disposeObject(gltf.scene);
           return;
@@ -447,29 +459,35 @@ export function WebGLSpatialPitch({
           const extra = gltf.scene.getObjectByName(hiddenName);
           if (extra) extra.visible = false;
         }
+        gltf.scene.updateMatrixWorld(true);
         gltf.scene.traverse((object) => {
           if (object instanceof THREE.Mesh) {
+            repairPitchUV(object);
+            (Array.isArray(object.material) ? object.material : [object.material]).forEach(stylePitchMaterial);
             object.castShadow = false;
             object.receiveShadow = true;
           }
         });
         scene.add(gltf.scene);
+        runtime.asset = gltf.scene;
         setLoadState("ready");
         renderRuntime();
-      },
-      undefined,
-      (error) => {
+      })
+      .catch((error: unknown) => {
         if (cancelled) return;
+        console.error("경기장 모델을 불러오지 못했습니다", error);
         setLoadState("error");
         setLoadError(error instanceof Error ? error.message : "3D 피치 자산 로드 실패");
-      },
-    );
+      });
     setRuntimeVersion((value) => value + 1);
     render();
     return () => {
       cancelled = true;
+      modelAbort.abort();
       resizeObserver?.disconnect();
+      cancelAnimationFrame(resizeFrame);
       disposeObject(scene);
+      environment.dispose();
       renderer.dispose();
       runtimeRef.current = null;
     };
@@ -478,20 +496,73 @@ export function WebGLSpatialPitch({
   }, [contextIdentity]);
 
   useEffect(() => {
+    setReplayIndex(null); setPlaying(false); setReplayProgress(0); replayProgressRef.current = 0;
+  }, [contextIdentity]);
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime?.asset || !layers.markers || !replayShot || !canReplayGoal(replayShot)) return;
+    let ball: THREE.Mesh;
+    try { ball = cloneReplayBall(runtime.asset); setReplayError(""); }
+    catch (error) { setReplayError(String(error)); setPlaying(false); return; }
+    runtime.scene.add(ball);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(.3, .36, 32), new THREE.MeshBasicMaterial({ color: 0x75ffff, side: THREE.DoubleSide, toneMapped: false, depthTest: false }));
+    ring.renderOrder = 20;
+    runtime.scene.add(ring);
+    const path = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(Array.from({ length: 49 }, (_, i) => replayPosition(replayShot, i / 48))), 64, .025, 6, false),
+      new THREE.MeshBasicMaterial({ color: 0xd9ffff, toneMapped: false }),
+    );
+    runtime.scene.add(path);
+    let frame = 0;
+    const initial = replayProgressRef.current;
+    const started = performance.now();
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const draw = (now: number) => {
+      const progress = playing && !reduced ? Math.min(1, initial + (now - started) / REPLAY_DURATION_MS) : initial;
+      replayProgressRef.current = progress; setReplayProgress(progress);
+      ball.position.copy(replayPosition(replayShot, progress));
+      ring.position.copy(ball.position);
+      ring.quaternion.copy(runtime.camera.quaternion);
+      runtime.render();
+      if (playing && !reduced && progress < 1) frame = requestAnimationFrame(draw);
+      else if (playing) setPlaying(false);
+    };
+    draw(started);
+    return () => {
+      cancelAnimationFrame(frame); runtime.scene.remove(ball, path, ring);
+      ring.geometry.dispose(); ring.material.dispose();
+      ball.geometry.dispose();
+      (Array.isArray(ball.material) ? ball.material : [ball.material]).forEach(m => m.dispose());
+      disposeObject(path);
+      runtime.render();
+    };
+  }, [replayShot, playing, seekVersion, loadState, runtimeVersion, layers.markers]);
+
+  useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
     disposeObject(runtime.overlayRoot);
     runtime.overlayRoot.clear();
     disposeObject(runtime.zoneHitRoot);
     runtime.zoneHitRoot.clear();
-    addZoneHitMeshes(runtime.zoneHitRoot, zones);
-    addTacticalGrid(runtime.overlayRoot);
-    if (layers.heatmap) addDotMatrixHeatmap(runtime.overlayRoot, densityDots);
+    if (layers.cca) {
+      addZoneHitMeshes(runtime.zoneHitRoot, zones);
+      addTacticalGrid(runtime.overlayRoot);
+    }
+    if (layers.heatmap && groundDots.length) {
+      runtime.overlayRoot.add(createContinuousGroundHeatmap(fullActivityHeatmap!.cellCounts));
+      const accents = createGroundHeatmap(highDensityAccents(groundDots));
+      accents.renderOrder = 3;
+      runtime.overlayRoot.add(accents);
+    }
     if (layers.cca) addContours(runtime.overlayRoot, spatial, legacyNormalized);
-    if (layers.markers || layers.trajectories) addShots(runtime.overlayRoot, markerGroups, medianXg, layers, markerPlacements);
+    if (layers.markers || layers.trajectories) addShots(runtime.overlayRoot,
+      replayShot ? markerGroups.filter(group => !group.sourceIndexes.includes(replayIndex!)) : markerGroups, medianXg,
+      replayShot ? { ...layers, trajectories: false } : layers, markerPlacements, Boolean(replayShot), runtime.asset);
     runtime.render();
     setProjectionVersion((value) => value + 1);
-  }, [densityDots, layers, legacyNormalized, markerGroups, markerPlacements, medianXg, runtimeVersion, spatial, zones]);
+  }, [groundDots, fullActivityHeatmap, layers, legacyNormalized, markerGroups, markerPlacements, medianXg, runtimeVersion, spatial, zones, replayShot, loadState]);
 
   const applyFreefly = useCallback((next: FreeflyCameraState, publicState?: OrbitCameraState) => {
     freeflyRef.current = next;
@@ -525,8 +596,10 @@ export function WebGLSpatialPitch({
   const resetCamera = useCallback(() => {
     setActiveShot(null);
     setHoveredZone(null);
-    applyCamera(DEFAULT_WEBGL_CAMERA, 1, null);
-  }, [applyCamera]);
+    applyFreefly(AERIAL_CAMERA);
+    setCameraAngle(null); setZoom(1);
+    if (runtimeRef.current) { runtimeRef.current.camera.zoom = 1; runtimeRef.current.camera.updateProjectionMatrix(); renderRuntime(); }
+  }, [applyFreefly, renderRuntime]);
 
   const setZoomLevel = (next: number) => {
     const clamped = clampWebglZoom(next);
@@ -573,12 +646,32 @@ export function WebGLSpatialPitch({
   const pointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget && event.target !== canvasRef.current) return;
     if (event.button !== 0 && event.button !== 2) return;
+    if (event.pointerType === "touch") {
+      touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touchPoints.current.size >= 2) {
+        const [a, b] = [...touchPoints.current.values()];
+        pinchRef.current = { distance: Math.hypot(a.x - b.x, a.y - b.y), zoom };
+        dragRef.current = null;
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+        return;
+      }
+    }
     dragRef.current = { button: event.button, x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture?.(event.pointerId);
     event.currentTarget.focus();
     event.preventDefault();
   };
   const pointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch" && touchPoints.current.has(event.pointerId)) {
+      touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touchPoints.current.size >= 2 && pinchRef.current) {
+        const [a, b] = [...touchPoints.current.values()];
+        setZoomLevel(pinchWebglZoom(pinchRef.current.zoom, pinchRef.current.distance, Math.hypot(a.x - b.x, a.y - b.y)));
+        event.preventDefault();
+        return;
+      }
+    }
     const drag = dragRef.current;
     if (drag) {
       const dx = event.clientX - drag.x;
@@ -613,7 +706,13 @@ export function WebGLSpatialPitch({
   };
   const pointerUp = (event: PointerEvent<HTMLDivElement>) => {
     dragRef.current = null;
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    touchPoints.current.delete(event.pointerId);
+    pinchRef.current = null;
+    if (touchPoints.current.size === 1) {
+      const remaining = [...touchPoints.current.values()][0];
+      dragRef.current = { button: 0, ...remaining };
+    }
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
   const shotProjection = (group: PitchShotGroup) => projectWorld(
     runtimeRef.current,
@@ -640,8 +739,45 @@ export function WebGLSpatialPitch({
       spatial.shotmapPoints.length ? `슛 ${spatial.shotmapPoints.length}개` : "관측된 슛 0개";
 
   return <>
+    {layers.markers && <section aria-label="득점 모식 재생 시제품" className="border-b border-white/20 bg-slate-950 p-3 text-white">
+      <strong>득점 장면 시제품 · 기록 기반 모식 재생</strong>
+      <p className="text-sm text-zinc-300">시작·골문 도달 좌표는 기록값입니다. 중간 포물선·2.4초 재생 시간은 연출이며 실제 속도·회전·비행 궤적이 아닙니다. 골라인 도달까지 표시합니다.</p>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <label>득점 선택 <select aria-label="재생할 득점" value={replayIndex ?? ""} className="bg-slate-800 p-2" onChange={event => {
+          setReplayIndex(event.target.value === "" ? null : Number(event.target.value));
+          setPlaying(false); replayProgressRef.current = 0; setReplayProgress(0);
+        }}><option value="">전체 슈팅 탐색</option>{shotsValid && spatial!.shotmapPoints.map((shot, index) => canReplayGoal(shot) ?
+          <option key={index} value={index}>득점 #{index + 1} · xG {formatShotMetric(shot.xg)} · ({shot.x.toFixed(1)}, {shot.y.toFixed(1)})</option> : null)}</select></label>
+        <button disabled={!replayShot || loadState !== "ready"} onClick={() => {
+          if (replayProgressRef.current >= 1) { replayProgressRef.current = 0; setReplayProgress(0); }
+          setPlaying(value => !value);
+        }} className="rounded border px-3 py-2 disabled:opacity-40">{playing ? "일시정지" : "재생"}</button>
+        <button disabled={!replayShot} onClick={() => { setPlaying(false); replayProgressRef.current = 0; setReplayProgress(0); setSeekVersion(v => v + 1); }} className="rounded border px-3 py-2 disabled:opacity-40">처음으로</button>
+        <button disabled={!replayShot} onClick={() => {
+          if (!replayShot) return;
+          const from = replayPosition(replayShot, 0); const target = replayPosition(replayShot, .45);
+          const position = { x: from.x + 14, y: 22, z: from.z - 8 };
+          const dx = target.x - position.x, dy = target.y - position.y, dz = target.z - position.z;
+          setCameraAngle(null); setZoomLevel(1);
+          applyFreefly({ position, yaw: Math.atan2(dx, -dz) * 180 / Math.PI, pitch: Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI });
+        }} className="rounded border px-3 py-2 disabled:opacity-40">선택 슛 가까이</button>
+        <label>재생 위치 <input aria-label="재생 위치" type="range" min="0" max="100" value={Math.round(replayProgress * 100)} disabled={!replayShot} onChange={event => {
+          setPlaying(false); replayProgressRef.current = Number(event.target.value) / 100; setReplayProgress(replayProgressRef.current); setSeekVersion(v => v + 1);
+        }}/></label>
+        <output data-replay-progress={replayProgress.toFixed(3)}>{Math.round(replayProgress * 100)}%</output>
+      </div>
+      {replayError && <p role="alert">{replayError}</p>}
+    </section>}
     <div className="space-y-2 border-b border-white/10 bg-black/25 px-2 py-2">
       <div role="group" aria-label="카메라 각도 프리셋" className="flex flex-wrap items-center gap-1">
+        <button type="button" onClick={() => {
+          setCameraAngle(null); setZoomLevel(1);
+          applyFreefly(AERIAL_CAMERA);
+        }} className="min-h-9 rounded border border-cyan-300/40 px-3 font-bold">항공 전체뷰</button>
+        <button type="button" data-camera-preset="penaltyFront" onClick={() => {
+          setCameraAngle(null); setZoomLevel(1);
+          applyFreefly({ position: { x: 0, y: 4, z: 27 }, yaw: 180, pitch: -14 });
+        }} className="min-h-9 rounded border border-cyan-300/40 px-3 font-bold">박스 정면 · 4m</button>
         {(Object.keys(WEBGL_CAMERA_PRESETS) as CameraAngle[]).map((angle) =>
           <button key={angle} type="button" data-camera-preset={angle} aria-pressed={cameraAngle === angle}
             onClick={() => applyCamera(WEBGL_CAMERA_PRESETS[angle], 1, angle)}
@@ -663,6 +799,9 @@ export function WebGLSpatialPitch({
     </div>
     <div ref={hostRef} role="img" tabIndex={0} onKeyDown={keyDown}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
+      onLostPointerCapture={(event) => {
+        if (event.pointerType !== "touch" || touchPoints.current.has(event.pointerId)) pointerUp(event);
+      }}
       onPointerLeave={() => setHoveredZone(null)}
       onContextMenu={(event) => event.preventDefault()}
       aria-label={`3D 회랑 WebGL 피치. ${heatState}. ${shotState}. WASD 또는 화살표 키로 이동하고, 왼쪽 드래그로 시선을 돌리며, 오른쪽 드래그나 휠로 높이를 조절합니다.`}
@@ -685,10 +824,12 @@ export function WebGLSpatialPitch({
       data-attacking-goal-width-pct={goalWidthPct.toFixed(2)}
       data-attacking-goal-height-pct={goalHeightPct.toFixed(2)}>
       <canvas ref={canvasRef} aria-hidden="true" className="block h-auto w-full touch-none" />
+      <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-white">{layers.cca ? "박스 4분할 · Soccerlab 자체 구획" : "개인 내 상대 밀도 · 청록 → 노랑 → 주황 | 표시 보간 192×124 · 원천 32×22"}</span>
       {loadState === "loading" && <div role="status" className="absolute inset-0 grid place-items-center bg-[#050a08]/70 text-sm font-bold text-zinc-200">3D 피치 자산 로딩…</div>}
-      {(loadState === "error" || loadState === "unsupported") && <div role="alert" className="absolute inset-0 grid place-items-center bg-[#050a08] p-6 text-center text-sm font-bold text-rose-200">WebGL 피치를 표시할 수 없습니다. {loadError}</div>}
+      {(loadState === "error" || loadState === "unsupported") && <div role="alert" className="absolute inset-0 grid place-items-center bg-[#050a08] p-6 text-center text-sm font-bold text-rose-200">{loadState === "unsupported" ? "WebGL 피치를 표시할 수 없습니다." : "경기장 모델을 불러오지 못했습니다."} {loadError}</div>}
 
       {layers.heatmap && <div hidden data-layer="heat" data-density-source="dot-matrix-64x24" data-density-input="full-tier3-32x22"
+        data-ground-dot-columns="192" data-ground-dot-rows="124" data-ground-dot-subdivision="bilinear-native-density" data-ground-palette="cyan-yellow-orange" data-ground-dot-count={groundDots.length}
         data-density-dot-columns={WEBGL_DOTMATRIX_COLUMNS} data-density-dot-rows={WEBGL_DOTMATRIX_ROWS}
         data-blur-std-deviation="0" data-density-mesh-builds="1">
         {densityDots.map((dot) => <span key={`${dot.row}-${dot.column}`} data-density-dot=""
@@ -706,12 +847,18 @@ export function WebGLSpatialPitch({
         return <button key={group.key} id={id} type="button" data-shot-marker="" data-shot-index={group.sourceIndexes[0]}
           data-shot-indexes={group.sourceIndexes.join(",")} data-shot-outcome={group.outcome}
           data-marker-symbol={outcomePresentation[group.outcome].symbol}
-          data-marker-renderer="flat-disc" data-marker-size={markerPlacements.get(group.key)?.radiusMeters ?? 0}
+          data-marker-renderer="asset-football" data-marker-size={.11}
           data-marker-count={group.count} data-pitch-x={group.shot.x} data-pitch-y={group.shot.y}
           data-marker-offset-meters={markerPlacements.get(group.key)?.offsetMeters.join(",") ?? "0,0"}
           tabIndex={activeShot === group.key || activeShot === null && index === 0 ? 0 : -1}
           aria-label={`${shotMarkerLabel(group.shot)}${group.count > 1 ? ` ${group.count} shots share this exact coordinate.` : ""}`}
-          onClick={() => setActiveShot(group.key)} onFocus={() => setActiveShot(group.key)} onBlur={() => setActiveShot(null)}
+          onClick={() => {
+            setActiveShot(group.key);
+            if (group.count === 1 && canReplayGoal(group.shot)) {
+              setReplayIndex(group.sourceIndexes[0]); setPlaying(false);
+              replayProgressRef.current = 0; setReplayProgress(0);
+            }
+          }} onFocus={() => setActiveShot(group.key)} onBlur={() => setActiveShot(null)}
           onPointerEnter={() => setActiveShot(group.key)} onPointerLeave={() => setActiveShot(null)}
           onKeyDown={(event) => {
             if (event.key !== "ArrowRight" && event.key !== "ArrowDown" && event.key !== "ArrowLeft" && event.key !== "ArrowUp") return;
@@ -739,7 +886,7 @@ export function WebGLSpatialPitch({
           <strong>{outcomePresentation[selectedShot.outcome].label}</strong><br />xG {formatShotMetric(selectedShot.shot.xg)} · xGOT {formatShotMetric(selectedShot.shot.xgot)}
         </div>;
       })()}
-      {zones.map((zone) => {
+      {layers.cca && zones.map((zone) => {
         const projected = zoneProjection(zone);
         return <button key={`${zone.cell.depth}-${zone.cell.lane}`} type="button"
           data-zone-keyboard-target=""
