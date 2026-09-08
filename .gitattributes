@@ -1,0 +1,5 @@
+# These exact bytes are pinned by the native pitch snapshot and release fixtures.
+/data/tactical_3zone_ratio.csv text eol=lf
+/data/pitch-native-v2/index.json text eol=lf
+/api_server/pitch_snapshot_provider.py text eol=lf
+/docs/fixtures/native_pitch_release_v1/*.json text eol=lf

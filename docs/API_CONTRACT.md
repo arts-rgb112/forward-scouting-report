@@ -2,6 +2,8 @@
 
 ## 진행 중인 작업
 
+- CSV 배포 바이트 핫픽스(2026-09-09): 라이브500 원인은 CRLF 로컬 CSV pin과 LF Git blob 불일치. 원본행/값과runtime엄격SHA검증은 유지, GitLF바이트로 index/provenance 재고정 및 .gitattributes 명시. exporter CRLF거부와 필수Gitblob회귀 추가; 독립검수/재배포/라이브재검증 전 완료아님. 정본 OPEN_WORK.md.
+
 - 최종 회귀: backend330PASS/4SKIP, 필수 shipped fixture PASS; FE376PASS/1기존계약실패(schema/test/fixture baseline diff없음), app/node tsc 및 production build PASS. release 2D desktop/mobile errors[]. tests/test_native_body_part_router.py production factory 전환 독립재검수 진행. Render messiflick 선택 완료/2GiB 확인, 이전 선택대기 기록은 해소됨. 배포 전 게이트 유지, 정본 OPEN_WORK.md.
 
 - 운영자원 확인: 발주자messiflick선택승인 후 Render실제runtime1c-2g/memory_limit약2GiB 확인(기존512MiB참고기준폐기). currentlive377bcb60,healthCheckPath빈값,main자동배포. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-pitch-release-20260908, 요금/설정/배포미변경. local636MiB peak 및warm시각GO를현재자원으로재대조하며 production새API미배포. 정본 OPEN_WORK.md.

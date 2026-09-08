@@ -104,6 +104,8 @@ def export_snapshot(source_root, mapping_csv, output, *, dry_run=True):
     mapping_csv = Path(mapping_csv).resolve(strict=True)
     output = Path(output).resolve()
     mapping_bytes = mapping_csv.read_bytes()
+    if b"\r" in mapping_bytes:
+        raise ValueError("Mapping CSV must use the committed LF bytes before snapshot export")
     rows = list(csv.DictReader(mapping_bytes.decode("utf-8-sig").splitlines()))
     groups = {}
     for row in rows:

@@ -37,7 +37,7 @@ def setup(tmp_path, *, missing_manifest=False, invalid=False, aliases=False, hea
     if aliases:
         rows.append({**row(), "fotmob_player_id": "99", "heatmap_key": "99:35:77333"})
     with mapping.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, list(row()))
+        writer = csv.DictWriter(handle, list(row()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     base = tmp_path / "harvest"
@@ -62,6 +62,22 @@ def setup(tmp_path, *, missing_manifest=False, invalid=False, aliases=False, hea
 def rewrite_index(root, index):
     index["sourceRevision"] = hashlib.sha256(canonical({key: index[key] for key in ("mappingCsvSha256", "native", "heatmaps")})).hexdigest()
     write(root / "pitch-native-v2/index.json", index)
+
+
+def test_export_rejects_non_deployable_crlf_mapping(tmp_path):
+    setup(tmp_path)
+    mapping = tmp_path / "tactical_3zone_ratio.csv"
+    mapping.write_bytes(mapping.read_bytes().replace(b"\n", b"\r\n"))
+    with pytest.raises(ValueError, match="committed LF bytes"):
+        export_snapshot(tmp_path, mapping, tmp_path / "rejected", dry_run=True)
+
+
+def test_runtime_still_rejects_mapping_byte_changes(tmp_path):
+    setup(tmp_path)
+    mapping = tmp_path / "tactical_3zone_ratio.csv"
+    mapping.write_bytes(mapping.read_bytes().replace(b"\n", b"\r\n"))
+    with pytest.raises(ValueError, match="mapping SHA"):
+        PitchSnapshotProvider(tmp_path, lookup)
 
 
 def test_deterministic_complete_sources_and_pk_null_geometry_parity(tmp_path):
