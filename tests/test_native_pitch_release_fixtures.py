@@ -1,6 +1,22 @@
 """Mandatory self-contained production regression; missing shipped artifacts fail."""
 import importlib.util
+import hashlib
+import json
+import subprocess
 from pathlib import Path
+
+
+def test_snapshot_mapping_pin_matches_git_deployment_bytes():
+    root = Path(__file__).resolve().parents[1]
+    committed = subprocess.run(
+        ["git", "-c", f"safe.directory={root.as_posix()}", "show", "HEAD:data/tactical_3zone_ratio.csv"],
+        cwd=root, check=True, capture_output=True,
+    ).stdout
+    actual = (root / "data/tactical_3zone_ratio.csv").read_bytes()
+    assert b"\r" not in committed
+    assert actual == committed, "Checkout bytes must equal deployment bytes"
+    index = json.loads((root / "data/pitch-native-v2/index.json").read_bytes())
+    assert index["mappingCsvSha256"] == hashlib.sha256(committed).hexdigest()
 
 
 def test_shipped_v2_production_pitch_matches_pinned_release_fixtures():
