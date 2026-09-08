@@ -43,7 +43,13 @@ describe("native player detail panels", () => {
   it("uses one responsive Three perspective pitch with an exact positional grid and no synthetic shots", async () => {
     render(<SpatialPitch analysis={analysis} />); const section = screen.getByRole("region", { name: "3D 회랑" });
     const pitch = await within(section).findByRole("img", { name: /3D 회랑 WebGL/ });
-    expect(pitch).toHaveAttribute("data-webgl-renderer", "three"); expect(pitch).toHaveAttribute("data-gltf-loader", "GLTFLoader"); expect(section.querySelectorAll("canvas")).toHaveLength(1); expect(section.querySelectorAll("svg")).toHaveLength(0); expect(section.querySelectorAll("[data-grid-segment]")).toHaveLength(17); expect(section.querySelectorAll("[data-zone-label]")).toHaveLength(0); expect(section.querySelectorAll("[data-goal]")).toHaveLength(2); expect(section.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
+    expect(pitch).toHaveAttribute("data-webgl-renderer", "three"); expect(pitch).toHaveAttribute("data-gltf-loader", "GLTFLoader"); expect(section.querySelectorAll("canvas")).toHaveLength(1);
+    // No fake 2D pitch fallback inside the actual WebGL canvas host — this
+    // does NOT forbid the (legitimate, external-sibling) anatomical-figure
+    // SVG in the info dock, so it must be scoped to the host itself, not
+    // the whole "3D 회랑" section.
+    expect(pitch.querySelectorAll("svg")).toHaveLength(0);
+    expect(section.querySelectorAll("[data-grid-segment]")).toHaveLength(10); expect(section.querySelectorAll("[data-zone-label]")).toHaveLength(0); expect(section.querySelectorAll("[data-goal]")).toHaveLength(2); expect(section.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
   });
   it("renders a six-sector, server-readout board with accessible non-fabricated score bars", () => {
     render(<PercentileProfile player={player} analysis={analysis} quality={{ kind: "idle" }} />); const section = screen.getByRole("region", { name: "Percentile profile" });
@@ -62,10 +68,12 @@ describe("native player detail panels", () => {
     expect(outer).toHaveClass("min-w-0", "xl:grid-cols-12", "xl:items-start");
     expect(dossierSeason).toHaveClass("min-w-0", "xl:col-span-3"); expect(dossierSeason?.querySelector('[data-layout="approved-profile-card"]')).toHaveClass("w-full");
     const workspace = within(outer!).getByRole("region", { name: "전술·공간 분석" }); const tactical = within(tacticalSlot!).getByRole("region", { name: "Tactical summary" }); const pitch = within(workspace).getByRole("region", { name: "피치 분석" }); const pitchSlot = workspace.querySelector('[data-layout="pitch-workspace-slot"]');
-    expect(workspace).toHaveClass("min-w-0", "xl:col-span-9"); expect(workspace).not.toContainElement(tactical); expect(workspace).toContainElement(pitch); expect(tacticalSlot).toHaveClass("mt-4", "min-w-0"); expect(within(pitch).getAllByRole("tab").length).toBeGreaterThanOrEqual(3); expect(within(pitch).getByRole("tab", { name: "2D 회랑" })).toHaveAttribute("aria-selected", "true");
+    expect(workspace).toHaveClass("min-w-0", "xl:col-span-9"); expect(workspace).not.toContainElement(tactical); expect(workspace).toContainElement(pitch); expect(tacticalSlot).toHaveClass("mt-4", "min-w-0"); expect(within(pitch).getAllByRole("tab").length).toBeGreaterThanOrEqual(2); expect(within(pitch).getByRole("tab", { name: "2D 회랑" })).toHaveAttribute("aria-selected", "true");
     const threeDLink = within(workspace).getByRole("link", { name: "3D로 보기" });
     expect(threeDLink).toHaveAttribute("href", `/player/${player.id}/3d?season=2025%2F2026&mode=league&scope=8&utm_source=slack`); expect(threeDLink).toHaveAttribute("target", "_blank");
     expect(within(pitch).queryByRole("tab", { name: "3D 회랑" })).not.toBeInTheDocument();
+    expect(within(pitch).queryByRole("tab", { name: "히트맵" })).not.toBeInTheDocument();
+    expect(within(pitch).getAllByRole("tab")).toHaveLength(2);
     expect(pitchSlot).toContainElement(pitch); expect(tacticalSlot).toContainElement(tactical);
     expect(workspace.compareDocumentPosition(stack!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const orderedSlots = Array.from(stack!.children).map((node) => node.getAttribute("data-layout"));

@@ -2,6 +2,16 @@
 
 ## 진행 중인 작업
 
+- 최종 회귀: backend330PASS/4SKIP, 필수 shipped fixture PASS; FE376PASS/1기존계약실패(schema/test/fixture baseline diff없음), app/node tsc 및 production build PASS. release 2D desktop/mobile errors[]. tests/test_native_body_part_router.py production factory 전환 독립재검수 진행. Render messiflick 선택 완료/2GiB 확인, 이전 선택대기 기록은 해소됨. 배포 전 게이트 유지, 정본 OPEN_WORK.md.
+
+- 운영자원 확인: 발주자messiflick선택승인 후 Render실제runtime1c-2g/memory_limit약2GiB 확인(기존512MiB참고기준폐기). currentlive377bcb60,healthCheckPath빈값,main자동배포. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-pitch-release-20260908, 요금/설정/배포미변경. local636MiB peak 및warm시각GO를현재자원으로재대조하며 production새API미배포. 정본 OPEN_WORK.md.
+
+- NATIVE-PITCH-RELEASE 검수결과: 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-pitch-release-20260908. v2 코드/원천 독립GO(64tests+동시초기화1), 자급식fixture5응답 독립1PASS, 아래규범 독립GO. 실제warm모바일 기능PASS, desktopfavicon404 외 기능통과이나 전체cold/메모리gate미완. Render workspace선택사용자확인대기, commit/push/deploy없음. 상세증거 OPEN_WORK.md.
+
+- NATIVE-PITCH-RELEASE 메모리 재검수: 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-pitch-release-20260908. v2 원문 보존 heatpack 최대2,096,888B 및 구현자35tests PASS 보고 수신, 실제 production cold/concurrent RSS·health와 독립 코드 검수 진행. 기존 점수/원천/운영 불변, v1은 비교용 로컬 보존이며 두 버전 동시 출하 금지. 정본 messi-specs/OPEN_WORK.md.
+
+- NATIVE-PITCH-RELEASE-20260908: 발주자 배포·연결 및 임시release worktree1개 예외 승인. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-pitch-release-20260908, baseline origin/main377bcb60d07271e1870dc6c2a996d484cf05cc00. 검수된 피치 allowlist만 이전, 기존 agent-config/수집/점수dirty 불변. native/box runtime원천은 ignoredharvest 의존을 제거할 별도 검증 배포물 준비 후 기존main에 좁게 연결. 기존 full-activity/API/CORS/score 보존. 독립코드·데이터·프리뷰·라이브 검수 전 완료아님. 정본 messi-specs/OPEN_WORK.md.
+
 - PITCH-RELEASE-20260908: 발주자 현재근접품질로개선중단·라이브배포 및 2D PK점/원축소 승인. 작업폴더 C:/Users/USER/Downloads/files/forward-scouting-report-glb-recovery. 승인재질제품연결·2D표시크기만추가수정, 히트맵구역재설계보류/점수API불변. 독립검수→배포→라이브확인 후 선수상세메인복귀; 정본 OPEN_WORK.md.
 
 - TURF-DIRECTION-20260907 결과: glb-recovery 로컬 fibre/sheeen 거리보정(근접18m 보정0), 실제 Kane 2025/26 league scope8 heat1401점·119슛 결합시안 독립Terra PASS. 반복띠 canopy 후보폐기·선택공중복수정·고밀도accent복원.31tests/buildPASS·브라우저3뷰/재생완료확인. 원본GLB·API·점수·제품불변/미커밋·push·배포, 배경/항공미완별도. 정본 OPEN_WORK.md.
@@ -345,6 +355,24 @@
 - 동시편집 메모: 이 항목을 백엔드 오케스트레이터가 거의 동시에 갱신하려다 충돌 발생(Edit 도구가 안전하게 차단, 데이터 유실 없음). "각자 적는다" 방식의 실제 리스크 사례로 기록.
 - 검증 메모: duel/press 확장 회귀 59건은 통과했으며 별도 source-audit 1건은 assertion 실패가 아니라 Windows `%TEMP%\\pytest-of-USER`의 `tmp_path` 생성 PermissionError로 실행 불가; historical fixture 범위와 무관
 - 검증 메모: 원격은 main만 존재(e541704); 24개 worktree/23개 linked admin dir와 .git 포인터 정상, prune dry-run 대상 없음, fsck connectivity 통과; final-third-goalmouth-v3는 소유권 차단으로 별도 접근 처리 필요
+
+## Native pitch release API — normative additive contract
+
+Production composition is `api_server.main:app` → `create_pitch_router`; the three routes below are additive. Existing leaderboard, full-activity-heatmap, score, CORS and feature-flag behavior is unchanged. Deployment SHA and live activation are pending; local mounting is not deployment evidence.
+
+| GET player route suffix | Response schema | Source and penalty policy |
+| --- | --- | --- |
+| `native-pitch-events` | `native-pitch-events-v1` | SportsAPI same-event markers, body parts and native box; `includePenalties` defaults true. |
+| `body-part-shooting-stats` | `native-body-part-stats-v2` | SportsAPI recorded body parts and paired shooting quality; same penalty parameter. |
+| `box-subregion-stats` | `box-subregion-stats-v1` | Explicit FotMob shots plus SportsAPI full activity; regions and non-PK denominator exclude exact legacy penalty coordinates, while accounting retains source and penalty totals. No penalty query parameter. |
+
+All prefixes are `/api/v2/players/{playerId}/`; playerId is a positive FotMob lookup identifier, not a SportsAPI event identifier. Common query fields are `season` (default `2025/2026`, consecutive year pair), `mode=league|europe` (default league), `scope=3|5|7|8` (league default8), `competition=all|ucl|uel|uecl` (default all). Europe forbids an explicit scope; league requires competition=all. Unknown/duplicate/invalid query fields return422; unsupported season or player outside the selected cohort returns404. Internal source/schema/context failures return sanitized500, never an unavailable success. Successful responses are `Cache-Control: no-store`.
+
+The strict models in `native_pitch_events_contract.py`, `native_body_part_contract.py`, `box_subregion_contract.py` define the complete nested field types and forbid extra fields. The native envelope includes exact context, provider, source-derived `snapshotRevision`, penalty filter, coordinate/trajectory definitions, deterministically ordered unique events, reconciled `bodyParts` and `box`. Native event identity contains source mapping, player, match and shot identifiers. No proximity/time/count-based FotMob–SportsAPI event join is permitted. Source coverage and metric-pair coverage are distinct; missing is not zero. Body taxonomy is exactly head/leftFoot/rightFoot/other/unknown. Quality uses paired records: `xgSum=round(sum(paired raw xG),4)`, `xgotSum=round(sum(paired raw xGOT),4)`, `delta=round(xgotSum-xgSum,4)`. Each parent aggregates raw records independently; rounded child totals are never its source.
+
+Native plotting uses `sportsapi-draw-pitch-display-v1`: origin `(100-start.y,100-start.x)`, goal-plane destination `(100,100-end.x)`, block destination `(100-block.y,100-block.x)`. Canonical x increases toward attack, y0 is player-right. `observedHeightMeters` is null; `source-planar-schematic-height-v1` replay/GLB poses are schematic, not measured trajectories. Native PK is recorded situation, not guessed coordinates. The native box always uses selected non-PK shots (including when pitch markers include PK), with x>=84.29 and visual order L4/박스 좌 [63,78.18), L3L/박스 중좌 [50,63), L3R/박스 중우 [37,50), L2/박스 우 [21.82,37). Legacy box is a separately labeled source, not a replacement for native counts.
+
+Runtime source is `data/pitch-native-v2` / `native-pitch-source-snapshot-v2`, exact-release-CSV-pinned, SHA/size/coverage-verified. Native season payloads retain full decoded originals; heatmap exact-key routing selects deterministic packs capped at2MiB decoded. Original missing source keys remain missing; corrupt/missing required artifacts fail closed. There is no live provider fetch or raw-harvest fallback. Source read/build and cold provider construction are serialized only for these three sync routes. Existing endpoints are not covered by this lock. Actual memory/readiness and desktop/mobile verification remain release gates.
 
 ## Backend orchestration guardrails
 

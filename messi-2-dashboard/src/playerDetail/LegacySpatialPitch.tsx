@@ -8,6 +8,8 @@ import { usePitchPenalty } from "./PitchPenaltyContext";
 import { excludePenaltyShots } from "./pitchPenalties";
 import { CCA_STYLE, PATH_STYLE, pkAxisLines, pitchMarkings, zone20Lines, type Projection as GeometryProjection } from "./pitchGeometry";
 import { formatShotMetric, outcomeOrder, outcomePresentation, outcomeSummary, OutcomeControls, shotIntegrity, shotMarkerLabel, type ShotOutcome, useShotOutcomeVisibility } from "./shotOutcomeVisibility";
+import { BoxSubregionPanel } from "./BoxSubregionPanel";
+import type { BoxSubregionStatsState } from "./useBoxSubregionStats";
 
 const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
 const TWO_D_COPY = {
@@ -119,8 +121,8 @@ function states(spatial: Spatial | undefined, integrity: Integrity) {
   return { heat, shots };
 }
 
-export function LegacySpatialPitchFigure({ analysis, visibleOutcomes, markerLayerId: suppliedMarkerLayerId, showCounts = true, layers = DEFAULT_PITCH_LAYERS, corridors = false }: {
-  analysis?: PlayerAnalysis; visibleOutcomes?: ReadonlySet<ShotOutcome>; markerLayerId?: string; showCounts?: boolean; layers?: PitchLayerVisibility; corridors?: boolean;
+export function LegacySpatialPitchFigure({ analysis, visibleOutcomes, markerLayerId: suppliedMarkerLayerId, showCounts = true, layers = DEFAULT_PITCH_LAYERS, corridors = false, boxSubregion }: {
+  analysis?: PlayerAnalysis; visibleOutcomes?: ReadonlySet<ShotOutcome>; markerLayerId?: string; showCounts?: boolean; layers?: PitchLayerVisibility; corridors?: boolean; boxSubregion?: BoxSubregionStatsState;
 }) {
   const spatial = analysis?.spatial;
   const integrity = spatialIntegrity(spatial);
@@ -171,6 +173,7 @@ export function LegacySpatialPitchFigure({ analysis, visibleOutcomes, markerLaye
       </div>
       <figcaption id={captionId} className="mt-2 text-base text-zinc-400">{state.heat} · {state.shots} · 득점 ◇ · 유효 슛 ● · 빗나감 × · 블록 ■</figcaption>
     </figure>
+    {boxSubregion && <div className="mt-3"><BoxSubregionPanel state={boxSubregion} /></div>}
     {corridors && <section data-layout="six-lane-corridor-summary" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3" aria-label="6레인 회랑 요약"><div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-base"><thead className="text-zinc-400"><tr><th className="py-2">레인</th><th>슛</th><th>득점</th><th>xG</th><th>활동</th></tr></thead><tbody>{CORRIDOR_LABELS.map((label) => <tr key={label} className="border-t border-white/10"><th className="py-2 font-medium text-zinc-200">{label}</th><td>—</td><td>—</td><td>—</td><td>—</td></tr>)}</tbody></table></div><p role="status" className="mt-3 text-base text-amber-200">{TWO_D_COPY.unavailable}</p><p className="mt-1 text-base text-zinc-400">{TWO_D_COPY.corridorNote}</p></section>}
     {showCounts && integrity.shots && <ul className="mt-2 flex flex-wrap gap-x-3 text-base text-zinc-400"><li>Goals {counts.goal}</li><li>On target {counts.on_target}</li><li>Off target {counts.off_target}</li><li>Blocked {counts.blocked}</li></ul>}
   </>;

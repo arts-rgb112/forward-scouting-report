@@ -8,6 +8,9 @@ import { CCA_STYLE, ZONE20 } from "./pitchGeometry";
 import { groupPitchShots, stackCompositionLabel, type PitchShotGroup } from "./PitchShotMarker";
 import type { PitchLayerVisibility } from "./pitchLayers";
 import { usePitchPenalty } from "./PitchPenaltyContext";
+import { BoxSubregionPanel } from "./BoxSubregionPanel";
+import type { BoxSubregionStatsState } from "./useBoxSubregionStats";
+import { BOX_SUBREGION_BOUNDS, BOX_SUBREGION_ORDER, resolveBoxSubregionId, type BoxSubregionRegion } from "../api/boxSubregionContracts";
 import { excludePenaltyShots, isPenaltyShot } from "./pitchPenalties";
 import { shotIntegrity } from "./shotOutcomeVisibility";
 
@@ -35,6 +38,43 @@ const LANES = [
 
 const world = (shot: Pick<ShotmapPoint, "x" | "y">) => ({ x: shot.x * 1.05, y: (100 - shot.y) * .68 });
 const lineY = (sourceY: number) => (100 - sourceY) * .68;
+// The <svg viewBox="-2 -2 109 72"> below is NOT the same aspect ratio as the
+// 105×68 pitch it draws (109/72 ≈ 1.514 vs 105/68 ≈ 1.544), so the browser's
+// default preserveAspectRatio="xMidYMid meet" letterboxes it — the rendered
+// content occupies less than the full element box on one axis, centred.
+// A click handler that just divides (clientX-left) by the element's full
+// width therefore drifts from the real pitch coordinate by the letterbox
+// margin. This reproduces exactly what the browser does, from the same
+// constants the markup itself uses, so it works under both real layout and
+// a stubbed getBoundingClientRect() in tests — no getScreenCTM dependency,
+// which jsdom does not implement.
+export const CORRIDOR_VIEW_BOX = { x: -2, y: -2, width: 109, height: 72 } as const;
+function svgPointFromClient(svg: SVGSVGElement, clientX: number, clientY: number): { x: number; y: number } | null {
+  const rect = svg.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const scale = Math.min(rect.width / CORRIDOR_VIEW_BOX.width, rect.height / CORRIDOR_VIEW_BOX.height);
+  const offsetX = (rect.width - CORRIDOR_VIEW_BOX.width * scale) / 2;
+  const offsetY = (rect.height - CORRIDOR_VIEW_BOX.height * scale) / 2;
+  return {
+    x: (clientX - rect.left - offsetX) / scale + CORRIDOR_VIEW_BOX.x,
+    y: (clientY - rect.top - offsetY) / scale + CORRIDOR_VIEW_BOX.y,
+  };
+}
+
+/** The exact forward transform (pitch-percent → real screen point), given a
+ * concrete element rect — the inverse of the letterbox-aware math above.
+ * Exported purely so tests can synthesize a real click position without
+ * duplicating (and silently drifting from) that math by hand. */
+export function corridorClientPointForPitchPercent(rect: { left: number; top: number; width: number; height: number }, x: number, y: number) {
+  const scale = Math.min(rect.width / CORRIDOR_VIEW_BOX.width, rect.height / CORRIDOR_VIEW_BOX.height);
+  const offsetX = (rect.width - CORRIDOR_VIEW_BOX.width * scale) / 2;
+  const offsetY = (rect.height - CORRIDOR_VIEW_BOX.height * scale) / 2;
+  const local = world({ x, y });
+  return {
+    clientX: rect.left + offsetX + (local.x - CORRIDOR_VIEW_BOX.x) * scale,
+    clientY: rect.top + offsetY + (local.y - CORRIDOR_VIEW_BOX.y) * scale,
+  };
+}
 /** Disabled: the approved small marker set remains readable without proximity merging. */
 export const CORRIDOR_CLUSTER_DISTANCE = 0;
 export const CORRIDOR_MARKER_RADIUS = {
@@ -44,6 +84,24 @@ export const CORRIDOR_MARKER_RADIUS = {
   blocked: .5,
 } as const;
 export type CorridorShotCluster = PitchShotGroup & { shots: readonly ShotmapPoint[] };
+export type SelectedCorridorZone = { kind: "legacy"; label: string } | { kind: "box"; id: (typeof BOX_SUBREGION_ORDER)[number] };
+
+/** Renders the exact selected server box record — real xG/quality/shares,
+ * never a browser-computed stand-in — or an honest unavailable state keyed
+ * to the box's own fixed label/bounds while the route is still 404ing. */
+function BoxZoneInspector({ id, boxSubregion }: { id: (typeof BOX_SUBREGION_ORDER)[number]; boxSubregion?: BoxSubregionStatsState }) {
+  const bounds = BOX_SUBREGION_BOUNDS[id];
+  const region: BoxSubregionRegion | undefined = boxSubregion?.kind === "ready" ? boxSubregion.data.regions.find((candidate) => candidate.id === id) : undefined;
+  if (!region || region.shots === null) return <p data-corridor-box-zone={id} data-corridor-box-zone-state="unavailable">{COPY.zoneInfo} · {bounds.label} · 박스 구역 통계를 사용할 수 없습니다.</p>;
+  return <div data-corridor-box-zone={id} data-corridor-box-zone-state="ready">
+    <p>{COPY.zoneInfo} · {region.label}</p>
+    <p className="mt-1">슛 {region.shots} · 득점 {region.goals} · xG {region.xg === null ? "—" : region.xg.toFixed(2)}</p>
+    <p className="mt-1">활동 {region.activitySharePct === null ? "—" : `${region.activitySharePct.toFixed(1)}%`} · 슈팅 {region.shootingSharePct === null ? "—" : `${region.shootingSharePct.toFixed(1)}%`}</p>
+    <p className="mt-1" data-corridor-box-zone-quality={region.quality.state}>
+      {region.quality.state === "unavailable" ? "xGOT−xG —" : `xGOT−xG ${region.quality.delta! >= 0 ? "+" : ""}${region.quality.delta!.toFixed(2)} · 적격 ${region.quality.eligible}/${region.shots}`}
+    </p>
+  </div>;
+}
 
 /**
  * First preserve exact raw-coordinate stacks, then deterministically merge
@@ -96,7 +154,14 @@ function CorridorShotMarker({ group }: { group: PitchShotGroup }) {
       : shot.outcome === "off_target"
         ? <path data-marker-radius={radius} d={`M${-radius} ${-radius}L${radius} ${radius}M${radius} ${-radius}L${-radius} ${radius}`} fill="none" stroke="#94A3B8" strokeOpacity=".55" strokeWidth="1.1" vectorEffect="non-scaling-stroke"/>
         : <circle data-marker-radius={radius} r={radius} fill="none" stroke="#E2E8F0" strokeOpacity=".6" strokeWidth="1.1" vectorEffect="non-scaling-stroke"/>;
-  return <>{marker}{count > 1 && <g data-corridor-shot-stack aria-hidden="true" transform={`translate(${radius * .8} ${-radius * .8})`}><circle r="1.45" fill="#0A1F10" stroke="#F8FAFC" strokeWidth=".32" vectorEffect="non-scaling-stroke"/><text transform="scale(.18)" y="2.3" textAnchor="middle" fill="#F8FAFC" fontSize="12" fontWeight="900">×{count}</text></g>}</>;
+  return <>
+    {/* Painted first (so it sits behind the marker/badge) and outline-only
+        (fill="none"): even at opacity 1 it frames the cluster, it never
+        fills over the ×N count or a neighbouring shot. */}
+    <circle className="corridor-focus-ring" r={radius + 1.1} fill="none" stroke="#F8FAFC" strokeWidth="1" vectorEffect="non-scaling-stroke" pointerEvents="none" />
+    {marker}
+    {count > 1 && <g data-corridor-shot-stack aria-hidden="true" transform={`translate(${radius * .8} ${-radius * .8}) scale(.5)`}><circle r="1.45" fill="#0A1F10" stroke="#F8FAFC" strokeWidth=".32" vectorEffect="non-scaling-stroke"/><text transform="scale(.18)" y="2.3" textAnchor="middle" fill="#F8FAFC" fontSize="12" fontWeight="900">×{count}</text></g>}
+  </>;
 }
 
 function GuardiolaDepthGrid() {
@@ -114,7 +179,7 @@ export const corridorContourPath = (segments: readonly (readonly [number, number
   return `M${start.x.toFixed(4)} ${start.y.toFixed(4)}L${end.x.toFixed(4)} ${end.y.toFixed(4)}`;
 }).join("");
 
-export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap }: { analysis?: PlayerAnalysis; layers: PitchLayerVisibility; fullActivityHeatmap?: FullActivityHeatmapData }) {
+export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap, boxSubregion }: { analysis?: PlayerAnalysis; layers: PitchLayerVisibility; fullActivityHeatmap?: FullActivityHeatmapData; boxSubregion?: BoxSubregionStatsState }) {
   const spatial = analysis?.spatial;
   const shots = spatial?.shotmapPoints;
   const { includePenalties } = usePitchPenalty();
@@ -126,7 +191,7 @@ export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap }: 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [selectedCluster, setSelectedCluster] = useState<CorridorShotCluster | null>(null);
-  const [selectedZone, setSelectedZone] = useState<string | null>(null);
+  const [selectedZone, setSelectedZone] = useState<SelectedCorridorZone | null>(null);
   const validShots = Boolean(shots && shotIntegrity(analysis?.spatial));
   const validHeat = Boolean(spatial?.available && spatial.heatmapPointCount === spatial.heatmapPoints.length && spatial.heatmapPoints.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y) && point.x >= 0 && point.x <= 100 && point.y >= 0 && point.y <= 100));
   const displayedShots = useMemo(() => validShots ? excludePenaltyShots(shots!, includePenalties) : [], [includePenalties, shots, validShots]);
@@ -156,13 +221,25 @@ export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap }: 
   }, [zoom]);
   const zoneAt = (event: ReactMouseEvent<SVGSVGElement>) => {
     if (event.defaultPrevented) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    if (!bounds.width || !bounds.height) return;
-    const x = Math.min(100, Math.max(0, ((event.clientX - bounds.left) / bounds.width) * 100));
-    const y = Math.min(100, Math.max(0, 100 - ((event.clientY - bounds.top) / bounds.height) * 100));
+    const point = svgPointFromClient(event.currentTarget, event.clientX, event.clientY);
+    if (!point) return;
+    const x = Math.min(100, Math.max(0, point.x / 1.05));
+    const y = Math.min(100, Math.max(0, 100 - point.y / 0.68));
+    // A genuine field/region click always replaces a previously-selected
+    // shot stack — otherwise the inspector kept showing the old stack's
+    // detail (it takes priority over selectedZone) even after this click
+    // resolved a real box/lane region. Marker clicks never reach here at
+    // all (they stopPropagation before the event bubbles to this handler).
+    setSelectedCluster(null);
+    // The box endpoint's own boundary is authoritative inside the box; the
+    // generic 6-lane depth grid below it is a visual guide only and must
+    // never stand in for that exact server region once inside it. Shared
+    // with the 3D ray-hit resolver so the two can never disagree at an edge.
+    const boxId = resolveBoxSubregionId(x, y);
+    if (boxId) { setSelectedZone({ kind: "box", id: boxId }); return; }
     const lane = LANES.find((candidate) => y >= candidate.low && y < candidate.high) ?? LANES[LANES.length - 1];
     const depth = Math.min(6, Math.max(1, Math.ceil(x / (100 / 6))));
-    setSelectedZone(`${lane.id} · 깊이 ${depth}`);
+    setSelectedZone({ kind: "legacy", label: `${lane.id} · 깊이 ${depth}` });
   };
   const finishPointer = (pointerId: number) => { touchPoints.current.delete(pointerId); if (touchPoints.current.size < 2) pinch.current = null; if (drag.current?.pointerId === pointerId) drag.current = null; };
 
@@ -173,6 +250,19 @@ export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap }: 
           <div data-zoom-pan className="absolute inset-0 origin-center" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
           {layers.heatmap && <HeatmapCanvas cellCounts={fullActivityHeatmap?.available ? fullActivityHeatmap.cellCounts : undefined} enabled={Boolean(fullActivityHeatmap?.available)}/>}
           <svg viewBox="-2 -2 109 72" role="img" aria-label={`${COPY.fieldLabel}. ${markerDescription}`} className="h-full w-full" onClick={(event) => { if (!moved.current) zoneAt(event); moved.current = false; }} onPointerDown={(event) => { if (event.pointerType === "touch") { touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (touchPoints.current.size === 2) { const points = [...touchPoints.current.values()]; pinch.current = { gap: Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y), zoom }; } } if (zoom > 1 && !(event.target instanceof Element && event.target.closest("[data-corridor-shot-marker]"))) drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, pan }; event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { if (event.pointerType === "touch" && touchPoints.current.has(event.pointerId)) { touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pinch.current && touchPoints.current.size === 2) { const points = [...touchPoints.current.values()]; const gap = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y); if (gap > 0) changeZoom(pinch.current.zoom * gap / pinch.current.gap); return; } } const start = drag.current; if (!start || start.pointerId !== event.pointerId) return; const dx = event.clientX - start.x, dy = event.clientY - start.y; if (Math.abs(dx) + Math.abs(dy) > 2) moved.current = true; setPan(clampPan({ x: start.pan.x + dx, y: start.pan.y + dy })); }} onPointerUp={(event) => finishPointer(event.pointerId)} onPointerCancel={(event) => finishPointer(event.pointerId)}>
+            {/* A plain-tabindex SVG <g> picks up the browser's default auto
+                focus ring, which at this marker's tiny on-screen scale can
+                paint as an oversized halo that covers the marker's own ×N
+                stack badge (2026-09-08 real-capture review: Enter/Space
+                selection was already correct, only the focus PAINT hid the
+                count). Suppress the native ring and draw an explicit thin
+                one sized to the marker itself instead — same opacity-toggle
+                technique already used by AnatomicalShotFigure's .asf-focus. */}
+            <style>{`
+              .corridor-shot-target { outline: none; }
+              .corridor-focus-ring { opacity: 0; }
+              .corridor-shot-target:focus-visible .corridor-focus-ring { opacity: 1; }
+            `}</style>
             {LANES.map((lane) => {
               const y = lineY(lane.high);
               const height = lineY(lane.low) - y;
@@ -188,7 +278,7 @@ export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap }: 
             {layers.markers && markerGroups.map((group) => {
               const point = world(group.shot);
               const composition = group.count > 1 ? ` · ${stackCompositionLabel(group.outcomeCounts)}` : "";
-              return <g key={group.key} data-corridor-shot-marker data-corridor-shot-count={group.count} data-corridor-cluster={group.count > 1 ? "true" : "false"} transform={`translate(${point.x.toFixed(4)} ${point.y.toFixed(4)})`} role="button" tabIndex={0} aria-label={`${group.shot.outcome} 슛 상세${group.count > 1 ? `, 묶음 ${group.count}발${composition}` : ""}`} onClick={(event) => { event.stopPropagation(); setSelectedCluster(group); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedCluster(group); } }}><CorridorShotMarker group={group}/></g>;
+              return <g key={group.key} className="corridor-shot-target" data-corridor-shot-marker data-corridor-shot-count={group.count} data-corridor-cluster={group.count > 1 ? "true" : "false"} transform={`translate(${point.x.toFixed(4)} ${point.y.toFixed(4)})`} role="button" tabIndex={0} aria-label={`${group.shot.outcome} 슛 상세${group.count > 1 ? `, 묶음 ${group.count}발${composition}` : ""}`} onClick={(event) => { event.stopPropagation(); setSelectedCluster(group); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedCluster(group); } }}><CorridorShotMarker group={group}/></g>;
             })}
           </svg>
           </div>
@@ -202,7 +292,8 @@ export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap }: 
         <p role="status" className="mt-3 type-caption text-amber-200">{COPY.pending}</p>
       </aside>
     </div>
-    {(selectedCluster || selectedZone) && <aside data-layout="corridor-inspector" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-base text-zinc-300" aria-label={selectedCluster ? "슈팅 상세" : COPY.zoneInfo}>{selectedCluster ? <><p>슛 상세{selectedCluster.count > 1 ? ` · 묶음 ${selectedCluster.count}발` : ""}</p><ol aria-label="묶음 슈팅 이벤트" className="mt-2 space-y-1">{selectedCluster.shots.map((shot, index) => <li key={`${shot.x}:${shot.y}:${index}`}>#{index + 1} · {shot.outcome} · xG {typeof shot.xg === "number" ? shot.xg.toFixed(2) : "—"} · xGOT {typeof shot.xgot === "number" ? shot.xgot.toFixed(2) : "—"}</li>)}</ol></> : <>{COPY.zoneInfo} · {selectedZone} · 슛 — · 득점 — · xG — · 히트맵 점유 —</>}</aside>}
+    {boxSubregion && <div className="mt-3"><BoxSubregionPanel state={boxSubregion} activeRegionId={selectedZone?.kind === "box" ? selectedZone.id : null} /></div>}
+    {(selectedCluster || selectedZone) && <aside data-layout="corridor-inspector" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-base text-zinc-300" aria-label={selectedCluster ? "슈팅 상세" : COPY.zoneInfo}>{selectedCluster ? <><p>슛 상세{selectedCluster.count > 1 ? ` · 묶음 ${selectedCluster.count}발` : ""}</p><ol aria-label="묶음 슈팅 이벤트" className="mt-2 space-y-1">{selectedCluster.shots.map((shot, index) => <li key={`${shot.x}:${shot.y}:${index}`}>#{index + 1} · {shot.outcome} · xG {typeof shot.xg === "number" ? shot.xg.toFixed(2) : "—"} · xGOT {typeof shot.xgot === "number" ? shot.xgot.toFixed(2) : "—"}</li>)}</ol></> : selectedZone!.kind === "box" ? <BoxZoneInspector id={selectedZone!.id} boxSubregion={boxSubregion} /> : <>{COPY.zoneInfo} · {selectedZone!.label} · 슛 — · 득점 — · xG — · 히트맵 점유 —</>}</aside>}
     <div className="mt-3 border-t border-white/10 pt-3 text-base leading-6 text-zinc-300"><b className="text-zinc-100">판독</b> · {COPY.reading}</div>
   </section>;
 }

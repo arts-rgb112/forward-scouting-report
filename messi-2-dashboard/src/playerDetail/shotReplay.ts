@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { ShotmapPoint } from "../dashboard/types";
-import { pitchPercentToWorld } from "./pitchWebglGeometry";
+import { trajectoryArcPoint } from "./pitchWebglGeometry";
 
 export const REPLAY_DURATION_MS = 2400; // Presentation time, never measured ball speed.
 export const SHOT_BALL_COLORS = { goal: 0xbef264, on_target: 0x38bdf8, off_target: 0xfb923c, blocked: 0xc4b5fd } as const;
@@ -36,18 +36,13 @@ export function canReplayGoal(shot: ShotmapPoint) {
 }
 
 /** Endpoint-backed schematic arc. Intermediate height/time are illustrative. */
+/** Same arc as the static trajectory line (trajectoryArcPoint) — the ball and
+ * the line must never diverge for the same shot. */
 export function replayPosition(shot: ShotmapPoint, progress: number) {
   if (!canReplayGoal(shot)) throw new Error("재생 가능한 득점·유효슛 좌표가 없습니다.");
   const t = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
-  const start = pitchPercentToWorld(shot, .11);
-  const end = pitchPercentToWorld({ x: 100, y: shot.trajectory!.endY }, shot.trajectory!.endZMeters!);
-  if (t === 0) return new THREE.Vector3(start.x, start.y, start.z);
-  if (t === 1) return new THREE.Vector3(end.x, end.y, end.z);
-  return new THREE.Vector3(
-    start.x + (end.x - start.x) * t,
-    start.y + (end.y - start.y) * t + 4 * t * (1 - t) * 1.8,
-    start.z + (end.z - start.z) * t,
-  );
+  const point = trajectoryArcPoint(shot, shot.trajectory!.endY, shot.trajectory!.endZMeters, t);
+  return new THREE.Vector3(point.x, point.y, point.z);
 }
 
 /** Use the purchased football mesh, not a replacement procedural sphere. */

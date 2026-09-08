@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
@@ -38,7 +39,7 @@ from .service import (
     find_duel_press_detail_readouts,
     duel_press_v2_leaderboard_envelope, find_duel_press_v2_player,
     find_duel_press_detail_readouts_v2,
-    build_player_detail, build_tactical_quadrant_analysis, compare_players, find_v2_player_summary_timed, leaderboard_options,
+    build_player_detail, build_tactical_quadrant_analysis, compare_players, find_v2_player, find_v2_player_summary_timed, leaderboard_options,
     resolve_contextual_compare_sides,
     leaderboard_v21_envelope, leaderboard_v2_envelope, players_envelope,
     resolve_watchlist_data_quality, resolve_watchlist_entries, supported_seasons,
@@ -48,6 +49,10 @@ from .service import (
     build_final_third_shot_map, build_goal_mouth_baseline, build_six_lane_shooting_corridor, build_full_activity_heatmap,
     ShotmapContractViolation,
 )
+
+
+from .pitch_routes import create_pitch_router
+from .pitch_source_provider import ResolvedPitchPlayer
 
 
 DEFAULT_ORIGINS = (
@@ -236,6 +241,18 @@ app.add_middleware(
     allow_headers=["Content-Type"],
     max_age=600,
 )
+
+
+def _pitch_player_lookup(context):
+    player = find_v2_player(context.playerId, context.season, context.mode,
+                            context.scope if context.scope is not None else 8,
+                            context.competition or "all")
+    return None if player is None else ResolvedPitchPlayer(player.id, player.league.name)
+
+
+app.include_router(create_pitch_router(
+    Path(__file__).resolve().parents[1] / "data", _pitch_player_lookup, supported_seasons,
+))
 
 
 async def _warm_player_summary_cache() -> None:
