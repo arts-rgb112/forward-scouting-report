@@ -6,7 +6,6 @@ import type { FinalThirdShotMapV3Data } from "../api/finalThirdShotMapV3Contract
 import type { DatasetRouteState, PlayerAnalysis } from "../dashboard/types";
 import { useFullActivityHeatmap } from "./useFullActivityHeatmap";
 import { GoalMouthView } from "./GoalMouthView";
-import { PitchDotMatrixHeatmap } from "./PitchDotMatrixHeatmap";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { DEFAULT_PITCH_LAYERS, PITCH_LAYER_LABELS, type PitchLayerVisibility } from "./pitchLayers";
 import { excludePenaltyShots, summarizeShots } from "./pitchPenalties";
@@ -14,21 +13,21 @@ import { SixLaneCorridorPitch } from "./SixLaneCorridorPitch";
 import { shotIntegrity } from "./shotOutcomeVisibility";
 import { useFinalThirdShotMap } from "./useFinalThirdShotMap";
 import { useGoalMouthBaseline } from "./useGoalMouthBaseline";
+import { useBoxSubregionStats } from "./useBoxSubregionStats";
 
-// "heat" remains temporary until PLAYER_PAGE_V2_LAYOUT_SPEC.md absorbs it.
+// Standalone heat tab hidden by owner request; the dedicated 3D heat layer remains available.
 // The 3D corridor now lives at /player/:id/3d so its WebGL code is route-lazy.
 const WORKSPACE_COPY = {
   title: "피치 분석",
   tabs: {
     twoD: "2D 회랑",
     goalMouth: "골대맵",
-    heat: "히트맵",
   },
   unavailable: "골문 배치 데이터가 이 컨텍스트에서 제공되지 않습니다.",
   loading: "골문 배치 데이터를 불러오는 중입니다.",
 } as const;
 
-const TAB_IDS = ["twoD", "goalMouth", "heat"] as const;
+const TAB_IDS = ["twoD", "goalMouth"] as const;
 type WorkspaceTab = typeof TAB_IDS[number];
 type RenderableData = FinalThirdRenderableData | FinalThirdShotMapV3Data;
 
@@ -64,6 +63,7 @@ export function PitchWorkspace({ analysis, contextIdentity, config, playerId, da
   const finalThird = useFinalThirdShotMap(config, playerId, dataset);
   const fullHeatmap = useFullActivityHeatmap(config, playerId, dataset);
   const fullActivityHeatmap = fullHeatmap.kind === "ready" ? fullHeatmap.data : undefined;
+  const boxSubregion = useBoxSubregionStats(config, playerId, dataset);
   const { includePenalties } = usePitchPenalty();
   const baselineContext = useMemo(() => ({ playerId, season: dataset.season, mode: dataset.mode, scope: dataset.scope, competition: dataset.competition, includePenalties }), [dataset.competition, dataset.mode, dataset.scope, dataset.season, includePenalties, playerId]);
   const baseline = useGoalMouthBaseline(config, baselineContext);
@@ -97,9 +97,8 @@ export function PitchWorkspace({ analysis, contextIdentity, config, playerId, da
       {activeLayerKeys.map((layer) => <button key={layer} type="button" aria-pressed={layers[layer]} onClick={() => setLayers((current) => ({ ...current, [layer]: !current[layer] }))} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold aria-pressed:border-lime-300/60 aria-pressed:bg-lime-300/15 aria-pressed:text-lime-100">{PITCH_LAYER_LABELS[layer]}</button>)}
     </div>}
     <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${activeTab}`} className="mt-3">
-      {activeTab === "twoD" && <SixLaneCorridorPitch analysis={analysis} layers={layersForTab("twoD", layers)} fullActivityHeatmap={fullActivityHeatmap}/>}
+      {activeTab === "twoD" && <SixLaneCorridorPitch analysis={analysis} layers={layersForTab("twoD", layers)} fullActivityHeatmap={fullActivityHeatmap} boxSubregion={boxSubregion}/>}
       {activeTab === "goalMouth" && (goalData ? <GoalMouthView data={goalData} config={config} baselineResource={baseline.state}/> : <p role="status" aria-live="polite" className="rounded border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">{!current || finalThird.state.kind === "loading" ? WORKSPACE_COPY.loading : WORKSPACE_COPY.unavailable}</p>)}
-      {activeTab === "heat" && <PitchDotMatrixHeatmap analysis={analysis} fullHeatmap={fullHeatmap}/>}
     </div>
   </section>;
 }

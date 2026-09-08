@@ -171,25 +171,40 @@ export function freeflyLookTarget(state: FreeflyCameraState, distance = 100): Wo
   };
 }
 
+/**
+ * Single source of the shot arc. The static full/selected line, and the
+ * replay ball's frame-by-frame position, both call this so they never draw
+ * two different paths for the same shot.
+ *
+ * Heights here are schematic, not observed physics — never label them as
+ * reconstructed measurement. The arc leans low and direct toward the target
+ * rather than lofting, per design direction. `endHeightMeters` is used as-is
+ * when it's a real number (an observed low arrival like 0 or 0.1m stays low);
+ * only a missing value falls back to a schematic default.
+ */
+export function trajectoryArcPoint(
+  start: PitchPercentPoint,
+  endY: number,
+  endHeightMeters: number | null | undefined,
+  t: number,
+): WorldPoint {
+  const from = pitchPercentToWorld(start, WEBGL_OVERLAY_Y_METERS + 0.12);
+  const to = pitchPercentToWorld({ x: 100, y: endY }, endHeightMeters ?? 1.05);
+  const apex = Math.max(from.y, to.y) + Math.min(1.6, Math.max(0.35, (to.z - from.z) * 0.014));
+  const oneMinusT = 1 - t;
+  return {
+    x: from.x * oneMinusT + to.x * t,
+    y: oneMinusT * oneMinusT * from.y + 2 * oneMinusT * t * apex + t * t * to.y,
+    z: from.z * oneMinusT + to.z * t,
+  };
+}
+
 export function trajectoryWorldPoints(
   start: PitchPercentPoint,
   endY: number,
   endHeightMeters: number | null | undefined,
   segments = 24,
 ): WorldPoint[] {
-  const from = pitchPercentToWorld(start, WEBGL_OVERLAY_Y_METERS + 0.12);
-  const to = pitchPercentToWorld(
-    { x: 100, y: endY },
-    Math.max(0.15, endHeightMeters ?? 1.05),
-  );
-  const apex = Math.max(from.y, to.y) + Math.max(1.1, (to.z - from.z) * 0.035);
-  return Array.from({ length: segments + 1 }, (_, index) => {
-    const t = index / segments;
-    const oneMinusT = 1 - t;
-    return {
-      x: from.x * oneMinusT + to.x * t,
-      y: oneMinusT * oneMinusT * from.y + 2 * oneMinusT * t * apex + t * t * to.y,
-      z: from.z * oneMinusT + to.z * t,
-    };
-  });
+  return Array.from({ length: segments + 1 }, (_, index) =>
+    trajectoryArcPoint(start, endY, endHeightMeters, index / segments));
 }
