@@ -1,6 +1,7 @@
 import type { NativePitchEvent } from "../api/nativePitchEventsContracts";
 import type { NativePitchEventV2 } from "../api/nativePitchEventsV2Contracts";
 import { pitchPercentToWorld, WEBGL_OVERLAY_Y_METERS, type WorldPoint } from "./pitchWebglGeometry";
+import { shotSilhouetteYawRadians } from "./shotSilhouetteStyle";
 
 export const NATIVE_SCHEMATIC_PARAMETERS = Object.freeze({
   id: "native-low-arc-v1" as const,
@@ -20,7 +21,7 @@ export type NativePosePlacement = {
   key: string; provider: "sportsapi"; observedHeightMeters: null;
   motion: "head" | "left_foot" | "right_foot"; assetUrl: string;
   groundPosition: WorldPoint; yawRadians: number;
-  orientation: "schematic-attacking-goal-center";
+  orientation: "recorded-terminal-planar" | "schematic-attacking-goal-center";
 };
 const percent = (n: number | null): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 100;
 function located(event: NativePitchEvent | NativePitchEventV2) {
@@ -65,16 +66,26 @@ export function nativeReplayPolyline(geometry: NativeReplayGeometry, segments = 
   return Array.from({ length: segments + 1 }, (_, index) => nativeReplayPoint(geometry, index / segments));
 }
 
-/** Existing rigs face local −Z. Orientation is illustrative, never measured biomechanics. */
+function recordedPoseTarget(event: NativePitchEvent | NativePitchEventV2): WorldPoint | null {
+  // Keep exactly the same terminal admissibility as the replay. In particular,
+  // goal-mouth drawing coordinates for miss/post are not recorded endpoints.
+  return buildNativeReplayGeometry(event)?.to ?? null;
+}
+
+/**
+ * Pose direction uses the provider terminal point when it is present. When it
+ * is absent, only the pose may face the attacking goal as a labelled schematic
+ * fallback; no trajectory or endpoint is constructed for that event.
+ */
 export function nativePosePlacement(event: NativePitchEvent | NativePitchEventV2): NativePosePlacement | null {
   if (!located(event)) return null;
   const motion = event.bodyPart === "head" ? "head" : event.bodyPart === "leftFoot" ? "left_foot" : event.bodyPart === "rightFoot" ? "right_foot" : null;
   if (!motion) return null;
   const groundPosition = pitchPercentToWorld({ x: event.plot.x!, y: event.plot.y! }, WEBGL_OVERLAY_Y_METERS);
-  const goal = pitchPercentToWorld({ x: 100, y: 50 });
-  const dx = goal.x - groundPosition.x, dz = goal.z - groundPosition.z;
+  const recordedTarget = recordedPoseTarget(event);
+  const target = recordedTarget ?? pitchPercentToWorld({ x: 100, y: 50 }, WEBGL_OVERLAY_Y_METERS);
   return { key: event.key, provider: "sportsapi", observedHeightMeters: null, motion,
     assetUrl: `/assets/shot-silhouette/${motion}.glb?v=2`, groundPosition,
-    yawRadians: dx === 0 && dz === 0 ? Math.PI : Math.atan2(-dx, -dz),
-    orientation: "schematic-attacking-goal-center" };
+    yawRadians: shotSilhouetteYawRadians(groundPosition, target),
+    orientation: recordedTarget ? "recorded-terminal-planar" : "schematic-attacking-goal-center" };
 }

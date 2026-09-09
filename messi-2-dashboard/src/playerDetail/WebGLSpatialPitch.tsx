@@ -8,7 +8,7 @@ import { buildGroundDensityDots, createGroundHeatmap, createContinuousGroundHeat
 import { canReplayGoal, cloneReplayBall, replayPosition, REPLAY_DURATION_MS, styleShotBall, SHOT_BALL_COLORS } from "./shotReplay";
 import { buildNativeReplayGeometry, nativePosePlacement, nativeReplayPoint, nativeReplayPolyline } from "./nativePitchReplayGeometry";
 import { BodyPartShootingPanel } from "./BodyPartShootingPanel";
-import { styleShotSilhouette } from "./shotSilhouetteStyle";
+import { shotSilhouetteYawRadians, styleShotSilhouette } from "./shotSilhouetteStyle";
 import { BoxSubregionPanel } from "./BoxSubregionPanel";
 import type { BoxSubregionStatsState } from "./useBoxSubregionStats";
 import { BOX_SUBREGION_BOUNDS, BOX_SUBREGION_ORDER, BOX_SUBREGION_X_MIN_INCLUSIVE, resolveBoxSubregionId, type BoxSubregionRegion } from "../api/boxSubregionContracts";
@@ -836,7 +836,7 @@ export function WebGLSpatialPitch({
       const direction = end.clone().sub(start); direction.y = 0; direction.normalize();
       figure.position.copy(start).addScaledVector(direction, -.35);
       figure.position.y = GLB_PITCH_SURFACE_Y_METERS;
-      figure.rotation.y = Math.atan2(-direction.x, -direction.z);
+      figure.rotation.y = shotSilhouetteYawRadians(start, end);
       runtime.scene.add(figure);
       mixer = new THREE.AnimationMixer(figure);
       gltf.animations.forEach(clip => { const action = mixer!.clipAction(clip); action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; action.play(); });

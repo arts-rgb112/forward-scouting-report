@@ -6,6 +6,8 @@
 
 ## 진행 중인 작업
 
+- 실루엣 방향 보강(2026-09-09 사용자 추가 승인): 동일 detail-main worktree에서 실제3D 슈팅 포즈 정면축과 기록방향 검증·수정 중. provider좌표/점수불변, 골대강제보정 금지. 기존overview후보8ed9c02프리뷰만배포, production없음. OPEN_WORK.md 정본.
+
 - DETAIL-MAIN 후보 검수(2026-09-09): 동일 전용 worktree에서 root 관련42/42 PASS, 구현자 build PASS. 독립 detail_overview_review 코드+격리합성 시각 GO(독립25/25 PASS; preview-candidate-final1440/390, mobile354px, 숫자잘림해결). 실제API/전체화면/라이브 GO 아님. 발주자 승인된 비운영 브랜치 push/프리뷰로 실제 검증 예정. 정본 OPEN_WORK.md 및 DETAIL_MAIN_VERIFICATION_20260909.md.
 
 - DETAIL-MAIN 프리뷰 승인(2026-09-09): 발주자 브랜치 push/프리뷰 검증 승인, production 별도. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. 관련41테스트 PASS, 격리 모바일354px이나 숫자 잘림/회귀 양성검증 보강 중. 실데이터/프리뷰 미검증. 정본 messi-specs/OPEN_WORK.md.

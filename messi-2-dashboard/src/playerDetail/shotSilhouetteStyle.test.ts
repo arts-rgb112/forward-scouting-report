@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { styleShotSilhouette } from "./shotSilhouetteStyle";
+import { SHOT_SILHOUETTE_FORWARD_AXIS, shotSilhouetteYawRadians, styleShotSilhouette } from "./shotSilhouetteStyle";
 
 describe("recorded anatomical shot highlight", () => {
+  it.each([
+    [{ x: 0, z: 0 }, { x: 1, z: 0 }, 1, 0],
+    [{ x: 0, z: 0 }, { x: -1, z: 0 }, -1, 0],
+    [{ x: 0, z: 0 }, { x: 0, z: 1 }, 0, 1],
+    [{ x: 0, z: 0 }, { x: 0, z: -1 }, 0, -1],
+  ])("maps the authored local +Z front to each recorded planar direction", (from, to, expectedX, expectedZ) => {
+    expect(SHOT_SILHOUETTE_FORWARD_AXIS).toBe("+Z");
+    const yaw = shotSilhouetteYawRadians(from, to);
+    expect(Math.sin(yaw)).toBeCloseTo(expectedX);
+    expect(Math.cos(yaw)).toBeCloseTo(expectedZ);
+  });
+
+  it("keeps neutral yaw for a recorded point with no planar heading", () => {
+    expect(shotSilhouetteYawRadians({ x: 4, z: -2 }, { x: 4, z: -2 })).toBe(0);
+    expect(() => shotSilhouetteYawRadians({ x: NaN, z: 0 }, { x: 0, z: 0 })).toThrow(RangeError);
+  });
+
   it.each([
     ["leftFoot", ["left_boot", "left_joint", "left_shin"]],
     ["rightFoot", ["right_boot", "right_joint", "right_shin"]],

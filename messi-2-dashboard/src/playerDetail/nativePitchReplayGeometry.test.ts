@@ -1,11 +1,27 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { nativePitchEventsEnvelopeSchema, type NativePitchEvent } from "../api/nativePitchEventsContracts";
+import { nativePitchEventsV2EnvelopeSchema } from "../api/nativePitchEventsV2Contracts";
 import { buildNativeReplayGeometry, nativeReplayPoint, nativeReplayPolyline, nativePosePlacement } from "./nativePitchReplayGeometry";
 import { worldToPitchPercent } from "./pitchWebglGeometry";
 
 const fixture = nativePitchEventsEnvelopeSchema.parse(JSON.parse(readFileSync(new URL("../../../../messi-specs/evidence/native-pitch-http-20260908-canonical-v2/included.json", import.meta.url), "utf8")));
+const v2Fixture = nativePitchEventsV2EnvelopeSchema.parse(JSON.parse(readFileSync(new URL("../../../docs/fixtures/native_pitch_v2/canonical_response.json", import.meta.url), "utf8")));
 const shot = (id = 5473386): NativePitchEvent => structuredClone(fixture.events.find(e => e.identity.shotId === id)!);
+
+function expectPoseToFaceTarget(
+  pose: NonNullable<ReturnType<typeof nativePosePlacement>>,
+  target: { x: number; z: number },
+) {
+  const dx = target.x - pose.groundPosition.x;
+  const dz = target.z - pose.groundPosition.z;
+  const length = Math.hypot(dx, dz);
+  expect(length).toBeGreaterThan(0);
+  // A local +Z point becomes (sin(yaw), cos(yaw)) in world X/Z after Y yaw.
+  expect(Math.sin(pose.yawRadians)).toBeCloseTo(dx / length);
+  expect(Math.cos(pose.yawRadians)).toBeCloseTo(dz / length);
+}
+
 describe("same-native schematic geometry", () => {
   it.each([
     [5473386, 92, 62.2, 45.7, "left_foot"],
@@ -21,10 +37,8 @@ describe("same-native schematic geometry", () => {
     const pose = nativePosePlacement(e)!;
     expect(pose.motion).toBe(motion); expect(pose.assetUrl).toContain(`${motion}.glb`);
     expect(pose.observedHeightMeters).toBeNull();
-    expect(pose.orientation).toBe("schematic-attacking-goal-center");
-    // Existing rig's local -Z rotates toward the actual attacking goal center.
-    expect(-Math.sin(pose.yawRadians)).toBeLessThan(0);
-    expect(-Math.cos(pose.yawRadians)).toBeGreaterThan(0);
+    expect(pose.orientation).toBe("recorded-terminal-planar");
+    expectPoseToFaceTarget(pose, g.to);
   });
   it("uses identical static and moving samples for every located source event", () => {
     for (const e of fixture.events) {
@@ -37,31 +51,48 @@ describe("same-native schematic geometry", () => {
       expect(nativeReplayPoint(g, 2)).toEqual(g.to);
     }
   });
+  it("uses each v2 source terminal rather than the goal-center fallback", () => {
+    for (const event of v2Fixture.events.filter((entry) => entry.destination.kind !== "unavailable")) {
+      const geometry = buildNativeReplayGeometry(event)!;
+      const pose = nativePosePlacement(event)!;
+      expect(pose.orientation).toBe("recorded-terminal-planar");
+      expectPoseToFaceTarget(pose, geometry.to);
+    }
+  });
   it("requires the recorded block endpoint, never a goal target", () => {
     const e = shot(); e.shotType = "block"; e.outcome = "blocked";
     expect(buildNativeReplayGeometry(e)).toBeNull();
     e.destination = { kind: "block_projection", x: 95, y: 52, observedHeightMeters: null, reason: null };
-    const target = worldToPitchPercent(buildNativeReplayGeometry(e)!.to);
+    const geometry = buildNativeReplayGeometry(e)!;
+    const target = worldToPitchPercent(geometry.to);
     expect(target.x).toBeCloseTo(95); expect(target.y).toBeCloseTo(52);
+    const pose = nativePosePlacement(e)!;
+    expect(pose.orientation).toBe("recorded-terminal-planar");
+    expectPoseToFaceTarget(pose, geometry.to);
   });
   it("uses the save interruption point instead of extending a header to the goal line", () => {
     const e = shot(6390845);
     expect(e.shotType).toBe("save");
     expect(buildNativeReplayGeometry(e)).toBeNull(); // Old v1 goal-plane projection is rejected.
     e.destination = { kind: "block_projection", x: 97.5, y: 50.4, observedHeightMeters: null, reason: null };
-    const target = worldToPitchPercent(buildNativeReplayGeometry(e)!.to);
+    const geometry = buildNativeReplayGeometry(e)!;
+    const target = worldToPitchPercent(geometry.to);
     expect(target.x).toBeCloseTo(97.5);
     expect(target.y).toBeCloseTo(50.4);
-    expect(nativePosePlacement(e)!.motion).toBe("head");
+    const pose = nativePosePlacement(e)!;
+    expect(pose.motion).toBe("head");
+    expect(pose.orientation).toBe("recorded-terminal-planar");
+    expectPoseToFaceTarget(pose, geometry.to);
   });
   it.each(["miss", "post"] as const)("never sends %s to an assumed goal-plane endpoint", (shotType) => {
     const e = shot(); e.shotType = shotType; e.outcome = "off_target";
     expect(buildNativeReplayGeometry(e)).toBeNull();
-    expect(nativePosePlacement(e)).not.toBeNull();
+    expect(nativePosePlacement(e)?.orientation).toBe("schematic-attacking-goal-center");
   });
   it("permits an honest goal-facing pose without inventing an unavailable endpoint", () => {
     const e = shot(); e.destination = { kind: "unavailable", x: null, y: null, observedHeightMeters: null, reason: "missing" };
-    expect(buildNativeReplayGeometry(e)).toBeNull(); expect(nativePosePlacement(e)).not.toBeNull();
+    expect(buildNativeReplayGeometry(e)).toBeNull();
+    expect(nativePosePlacement(e)?.orientation).toBe("schematic-attacking-goal-center");
   });
   it.each(["unknown", "other"] as const)("does not invent a %s pose", part => {
     const e = shot(); e.bodyPart = part; expect(nativePosePlacement(e)).toBeNull();

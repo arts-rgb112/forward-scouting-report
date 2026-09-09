@@ -1,6 +1,28 @@
 import * as THREE from "three";
 
 type RecordedPart = "head" | "leftFoot" | "rightFoot" | "other" | "unknown";
+
+export type PlanarPoint = Readonly<{ x: number; z: number }>;
+
+/**
+ * The Blender source authors the boot/toe toward Blender -Y.  The glTF export
+ * maps that authored forward offset to local +Z (see the `*_boot` node
+ * translation), so a silhouette's visual front is +Z in Three.js.
+ */
+export const SHOT_SILHOUETTE_FORWARD_AXIS = "+Z" as const;
+
+/**
+ * Rotates the authored +Z silhouette front onto a source-backed planar path.
+ * A zero-length planar vector has no recorded heading, so retain the asset's
+ * neutral yaw instead of manufacturing a direction.
+ */
+export function shotSilhouetteYawRadians(from: PlanarPoint, to: PlanarPoint): number {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  if (!Number.isFinite(dx) || !Number.isFinite(dz)) throw new RangeError("Finite silhouette direction required");
+  return dx === 0 && dz === 0 ? 0 : Math.atan2(dx, dz);
+}
+
 const PART_MESHES: Partial<Record<RecordedPart, readonly string[]>> = {
   head: ["head"],
   leftFoot: ["left_boot", "left_joint", "left_shin"],
