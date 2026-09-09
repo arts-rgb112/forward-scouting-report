@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { describe, it, expect } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, it, expect } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { nativeBodyPartEnvelopeSchema } from "../api/nativeBodyPartContracts";
@@ -22,8 +22,16 @@ const nullParts = () => Object.fromEntries(["head", "leftFoot", "rightFoot", "ot
 const nullTotals = { admittedShots: null, excludedPenaltyShots: null, excludedPenaltyGoals: null, shots: null, goals: null, quality: unavailableQuality };
 
 const readyState = (data = included): NativeBodyPartStatsState => ({ kind: "ready", key: "k", data });
+afterEach(cleanup);
 
 describe("body-part shooting panel — anatomical figure is the primary interface", () => {
+  it.each(["unknown", "other"] as const)("clears previous manual body selection for a %s shot", (part) => {
+    const { container, rerender } = render(<BodyPartShootingPanel hasSelectedShot={false} state={readyState()} />);
+    fireEvent.click(container.querySelector('[data-shot-part="leftFoot"]')!);
+    expect(container.querySelector('[data-shot-part="leftFoot"]')).toHaveAttribute("aria-pressed", "true");
+    rerender(<BodyPartShootingPanel hasSelectedShot selectedBodyPart={part} state={readyState()} />);
+    expect(container.querySelectorAll('[data-shot-part][aria-pressed="true"]')).toHaveLength(0);
+  });
   it("renders a real anatomical figure (not a decorative icon) with head/rightFoot/leftFoot all explicitly unavailable when no data has arrived", () => {
     const { container } = render(<BodyPartShootingPanel hasSelectedShot={false} />);
     const section = screen.getByRole("region", { name: "신체 부위 슈팅 분석" });

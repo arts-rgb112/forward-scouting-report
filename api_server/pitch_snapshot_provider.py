@@ -201,6 +201,22 @@ class PitchSnapshotProvider(PitchSourceProvider):
             result.append((row, copy.deepcopy(shard["manifest"]), {int(k): copy.deepcopy(v) for k, v in shard["payloads"].items()}))
         return result
 
+    def full_activity_sources(self, context):
+        """Return exact stored full-activity inputs, without display interpretation."""
+        rows = self.selected_rows(context)
+        if rows is None:
+            return None
+        result = []
+        for row in rows:
+            identity = self._identity(row)
+            key = f"{row['sportsapi_player_id']}:{row['tournament_id']}:{row['season_id']}"
+            pack_id = self.index["heatmaps"][identity]["keyToPack"].get(key)
+            payload = None
+            if pack_id is not None:
+                payload = self._load("heatmaps", identity, pack_id)["payloads"][key]
+            result.append((copy.deepcopy(row), copy.deepcopy(payload)))
+        return result
+
     def box(self, context):
         rows = self.selected_rows(context)
         if rows is None:

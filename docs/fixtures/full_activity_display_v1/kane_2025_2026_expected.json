@@ -1,0 +1,24 @@
+{
+  "context": {
+    "playerId": 194165,
+    "season": "2025/2026",
+    "mode": "league",
+    "scope": 8,
+    "competition": null
+  },
+  "fullSourceCca": {
+    "definitionVersion": "full-source-continuous-core-v1",
+    "formulaVersion": "fixed-n60-r20-v2",
+    "inputDefinition": "sportsapi-data-points-count-expanded-v1",
+    "heatmapDefinition": "full-tier3-count-weighted-histogram-32x22-v1",
+    "sourceRevision": "87b0d583a5d62b92abf2169476353032e5ef1a174faf04c07dc4a6d6eff2fbf0",
+    "expectedKeys": ["108579:35:77333"],
+    "validPointCount": 1401,
+    "densityThreshold": 3.54296875,
+    "thresholdOfPeak": 0.48658798,
+    "coreAreaPct": 15.483,
+    "standardizedTarget": 15.4759,
+    "containedMassPct": 37.1646,
+    "lowSample": false
+  }
+}

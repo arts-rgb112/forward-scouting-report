@@ -126,6 +126,20 @@ def test_aliases_preserve_mapping_rows_without_duplicate_raw_payloads(tmp_path):
     assert provider.native_sources(context())[0][0] == row()
 
 
+def test_full_activity_public_sources_are_exact_and_isolated(tmp_path):
+    _, provider = setup(tmp_path, heat=True)
+    selected = provider.full_activity_sources(context())
+    assert selected == [(row(), {"heatmap": [{"x": 70, "y": 45}]})]
+    selected[0][0]["sportsapi_player_id"] = "9"
+    selected[0][1]["heatmap"].clear()
+    assert provider.full_activity_sources(context()) == [(row(), {"heatmap": [{"x": 70, "y": 45}]})]
+
+
+def test_full_activity_public_sources_preserve_missing(tmp_path):
+    _, provider = setup(tmp_path)
+    assert provider.full_activity_sources(context()) == [(row(), None)]
+
+
 def test_cache_one_and_mutations_cannot_change_later_source(tmp_path):
     _, provider = setup(tmp_path, heat=True)
     selected = provider.native_sources(context())

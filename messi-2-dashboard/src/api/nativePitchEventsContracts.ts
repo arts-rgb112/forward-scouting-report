@@ -27,6 +27,7 @@ const identity = z.object({
   matchId: positiveInt,
   shotId: positiveInt,
 }).strict();
+export const nativePitchIdentitySchema = identity;
 
 const BODY_PARTS = ["head", "leftFoot", "rightFoot", "other", "unknown"] as const;
 const SHOT_TYPES = ["goal", "save", "miss", "post", "block"] as const;
@@ -49,6 +50,7 @@ const plot = z.object({
     ctx.addIssue({ code: "custom", message: "unlocated plot requires null coordinates and a nonempty reason" });
   }
 });
+export const nativePitchPlotSchema = plot;
 
 const destination = z.object({
   kind: z.enum(["goal_plane_projection", "block_projection", "unavailable"]),
@@ -123,7 +125,9 @@ const boxRegion = z.object({
   shootingSharePct: percent.nullable(),
 }).strict();
 
-const nativeDisplayBoxStats = z.object({
+// V2 embeds the unchanged server-owned native display box. Export the strict
+// schema rather than duplicating its shape in a second decoder.
+export const nativeDisplayBoxStatsSchema = z.object({
   definitionVersion: z.literal("native-display-box-subregion-v1"),
   coordinateDefinition: z.literal("sportsapi-draw-pitch-display-v1"),
   regionOrder: z.tuple([z.literal("L4"), z.literal("L3L"), z.literal("L3R"), z.literal("L2")]),
@@ -165,7 +169,7 @@ export const nativePitchEventsEnvelopeSchema = z.object({
   trajectoryDefinition: z.literal("source-planar-schematic-height-v1"),
   events: z.array(nativePitchEvent),
   bodyParts: nativeBodyPartEnvelopeSchema,
-  box: nativeDisplayBoxStats,
+  box: nativeDisplayBoxStatsSchema,
 }).strict().superRefine((value, ctx) => {
   const keys = value.events.map((event) => event.key);
   if (keys.length !== new Set(keys).size) ctx.addIssue({ code: "custom", message: "duplicate event key" });

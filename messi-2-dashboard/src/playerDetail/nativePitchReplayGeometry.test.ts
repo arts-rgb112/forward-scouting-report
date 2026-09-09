@@ -8,7 +8,6 @@ const fixture = nativePitchEventsEnvelopeSchema.parse(JSON.parse(readFileSync(ne
 const shot = (id = 5473386): NativePitchEvent => structuredClone(fixture.events.find(e => e.identity.shotId === id)!);
 describe("same-native schematic geometry", () => {
   it.each([
-    [6390845, 91.5, 56.6, 51.2, "head"],
     [5473386, 92, 62.2, 45.7, "left_foot"],
     [5473363, 85, 71.9, 45.8, "right_foot"],
   ] as const)("preserves actual event %i endpoints and pose", (id, x, y, endY, motion) => {
@@ -44,6 +43,21 @@ describe("same-native schematic geometry", () => {
     e.destination = { kind: "block_projection", x: 95, y: 52, observedHeightMeters: null, reason: null };
     const target = worldToPitchPercent(buildNativeReplayGeometry(e)!.to);
     expect(target.x).toBeCloseTo(95); expect(target.y).toBeCloseTo(52);
+  });
+  it("uses the save interruption point instead of extending a header to the goal line", () => {
+    const e = shot(6390845);
+    expect(e.shotType).toBe("save");
+    expect(buildNativeReplayGeometry(e)).toBeNull(); // Old v1 goal-plane projection is rejected.
+    e.destination = { kind: "block_projection", x: 97.5, y: 50.4, observedHeightMeters: null, reason: null };
+    const target = worldToPitchPercent(buildNativeReplayGeometry(e)!.to);
+    expect(target.x).toBeCloseTo(97.5);
+    expect(target.y).toBeCloseTo(50.4);
+    expect(nativePosePlacement(e)!.motion).toBe("head");
+  });
+  it.each(["miss", "post"] as const)("never sends %s to an assumed goal-plane endpoint", (shotType) => {
+    const e = shot(); e.shotType = shotType; e.outcome = "off_target";
+    expect(buildNativeReplayGeometry(e)).toBeNull();
+    expect(nativePosePlacement(e)).not.toBeNull();
   });
   it("permits an honest goal-facing pose without inventing an unavailable endpoint", () => {
     const e = shot(); e.destination = { kind: "unavailable", x: null, y: null, observedHeightMeters: null, reason: "missing" };

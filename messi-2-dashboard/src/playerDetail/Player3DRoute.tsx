@@ -6,12 +6,13 @@ import { fetchPlayerDetail } from "../api/leaderboardsApi";
 import { dashboardQueryKeys, datasetHref, preserveExternalQuery } from "../dashboard/datasetRoute";
 import type { DatasetRouteState, Player, PlayerAnalysis } from "../dashboard/types";
 import type { FullActivityHeatmapData } from "../api/fullActivityHeatmapContracts";
+import type { FullActivityDisplayEnvelope } from "../api/fullActivityDisplayContracts";
 import { DEFAULT_PITCH_LAYERS } from "./pitchLayers";
 import { PitchPenaltyProvider, PitchPenaltyToggle } from "./PitchPenaltyContext";
 import { SpatialPitch } from "./SpatialPitch";
-import { useFullActivityHeatmap } from "./useFullActivityHeatmap";
+import { useFullActivityDisplay } from "./useFullActivityDisplay";
 import { useBoxSubregionStats, type BoxSubregionStatsState } from "./useBoxSubregionStats";
-import { useNativePitchEvents } from "./useNativePitchEvents";
+import { useNativePitchEventsV2 as useNativePitchEvents } from "./useNativePitchEventsV2";
 
 const validId = (id: number) => Number.isSafeInteger(id) && id > 0;
 
@@ -21,13 +22,14 @@ const validId = (id: number) => Number.isSafeInteger(id) && id > 0;
  * state, not the context's default — a hook call in `Player3DRoute` itself
  * sits above the provider it renders and would only ever observe the default.
  */
-function Player3DBody({ config, id, dataset, analysis, contextIdentity, fullActivityHeatmap, boxSubregion, view, allTrajectories, analysisGrid }: {
+function Player3DBody({ config, id, dataset, analysis, contextIdentity, fullActivityHeatmap, fullActivityDisplay, boxSubregion, view, allTrajectories, analysisGrid }: {
   config?: MessiApiConfig;
   id: number;
   dataset: DatasetRouteState;
   analysis?: PlayerAnalysis;
   contextIdentity: string;
   fullActivityHeatmap?: FullActivityHeatmapData;
+  fullActivityDisplay?: FullActivityDisplayEnvelope;
   boxSubregion: BoxSubregionStatsState;
   view: "heat" | "shots" | "combined";
   allTrajectories: boolean;
@@ -36,7 +38,7 @@ function Player3DBody({ config, id, dataset, analysis, contextIdentity, fullActi
   const nativePitchEvents = useNativePitchEvents(config, id, dataset);
   return <SpatialPitch analysis={analysis} contextIdentity={contextIdentity} forcedMode="perspective"
     layers={{ ...DEFAULT_PITCH_LAYERS, heatmap: view !== "shots", markers: view !== "heat", trajectories: view !== "heat" && allTrajectories, cca: analysisGrid }}
-    fullActivityHeatmap={fullActivityHeatmap} boxSubregion={boxSubregion} nativePitchEvents={nativePitchEvents} />;
+    fullActivityHeatmap={fullActivityHeatmap} fullActivityDisplay={fullActivityDisplay} boxSubregion={boxSubregion} nativePitchEvents={nativePitchEvents} />;
 }
 
 export function Player3DRoute({ id, dataset, config: providedConfig }: {
@@ -56,9 +58,10 @@ export function Player3DRoute({ id, dataset, config: providedConfig }: {
   const [allTrajectories, setAllTrajectories] = useState(false);
   const [analysisGrid, setAnalysisGrid] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const fullHeatmap = useFullActivityHeatmap(config, id, dataset);
+  const fullHeatmap = useFullActivityDisplay(config, id, dataset);
   const boxSubregion = useBoxSubregionStats(config, id, dataset);
-  const fullActivityHeatmap = fullHeatmap.kind === "ready" ? fullHeatmap.data : undefined;
+  const fullActivityDisplay = "data" in fullHeatmap ? fullHeatmap.data : undefined;
+  const fullActivityHeatmap = fullActivityDisplay?.fullHeat;
   const contextIdentity = `${id}|${dataset.season}|${dataset.mode}|${dataset.scope}|${dataset.competition}`;
   const detailHref = preserveExternalQuery(datasetHref(`/players/${id}`, dataset), window.location.search, dashboardQueryKeys);
 
@@ -97,7 +100,7 @@ export function Player3DRoute({ id, dataset, config: providedConfig }: {
           <label className="text-sm text-zinc-400"><input type="checkbox" checked={allTrajectories} onChange={e => setAllTrajectories(e.target.checked)}/> 전체 궤적</label>
           <label className="text-sm text-zinc-400"><input type="checkbox" checked={analysisGrid} onChange={e => setAnalysisGrid(e.target.checked)}/> 분석 구획·CCA</label>
         </div>
-        <Player3DBody config={config} id={id} dataset={dataset} analysis={detail.analysis} contextIdentity={contextIdentity} fullActivityHeatmap={fullActivityHeatmap} boxSubregion={boxSubregion} view={view} allTrajectories={allTrajectories} analysisGrid={analysisGrid} />
+        <Player3DBody config={config} id={id} dataset={dataset} analysis={detail.analysis} contextIdentity={contextIdentity} fullActivityHeatmap={fullActivityHeatmap} fullActivityDisplay={fullActivityDisplay} boxSubregion={boxSubregion} view={view} allTrajectories={allTrajectories} analysisGrid={analysisGrid} />
       </div>
     </PitchPenaltyProvider>
   </main>;

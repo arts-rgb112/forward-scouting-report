@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { AERIAL_CAMERA, OBLIQUE_CAMERA, DAYLIGHT_BACKGROUND, repairPitchUV, stylePitchMaterial } from "./pitchPresentation";
+import { DAYLIGHT_BACKGROUND, repairPitchUV, stylePitchMaterial } from "./pitchPresentation";
 import { loadPitchSurfaceAssets, PITCH_SURFACE_VERSION } from './pitchSurfaceAssets';
 import { loadPitchModelBytes } from "./loadPitchModel";
 import { buildGroundDensityDots, createGroundHeatmap, createContinuousGroundHeatmap, highDensityAccents } from "./groundHeatmap";
 import { canReplayGoal, cloneReplayBall, replayPosition, REPLAY_DURATION_MS, styleShotBall, SHOT_BALL_COLORS } from "./shotReplay";
 import { buildNativeReplayGeometry, nativePosePlacement, nativeReplayPoint, nativeReplayPolyline } from "./nativePitchReplayGeometry";
 import { BodyPartShootingPanel } from "./BodyPartShootingPanel";
+import { styleShotSilhouette } from "./shotSilhouetteStyle";
 import { BoxSubregionPanel } from "./BoxSubregionPanel";
 import type { BoxSubregionStatsState } from "./useBoxSubregionStats";
 import { BOX_SUBREGION_BOUNDS, BOX_SUBREGION_ORDER, BOX_SUBREGION_X_MIN_INCLUSIVE, resolveBoxSubregionId, type BoxSubregionRegion } from "../api/boxSubregionContracts";
-import type { NativePitchEventsState } from "./useNativePitchEvents";
-import type { NativePitchEvent } from "../api/nativePitchEventsContracts";
+import type { NativePitchEventsV2State as NativePitchEventsState } from "./useNativePitchEventsV2";
+import type { NativePitchEventV2 as NativePitchEvent } from "../api/nativePitchEventsV2Contracts";
+import { NativePitchSelectionCard } from "./NativePitchSelectionCard";
 
 import type { FullActivityHeatmapData } from "../api/fullActivityHeatmapContracts";
+import type { FullActivityDisplayEnvelope, FullSourceCca } from "../api/fullActivityDisplayContracts";
 import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
 import {
   HEATMAP_COLUMNS,
@@ -28,18 +31,14 @@ import { groupPitchShots, medianObservedXg, type PitchShotGroup } from "./PitchS
 import type { PitchLayerVisibility } from "./pitchLayers";
 import {
   DEFAULT_WEBGL_CAMERA,
-  FREEFLY_HEIGHT_STEP_METERS,
   FREEFLY_MOUSE_SENSITIVITY,
   FREEFLY_MOVE_STEP_METERS,
   GLB_PITCH_HALF_LENGTH_METERS,
   GLB_PITCH_LENGTH_METERS,
   GLB_PITCH_WIDTH_METERS,
   GLB_PITCH_SURFACE_Y_METERS,
-  WEBGL_CAMERA_PRESETS,
   WEBGL_OVERLAY_Y_METERS,
-  WEBGL_ZOOM,
   clampWebglZoom,
-  pinchWebglZoom,
   freeflyLookTarget,
   freeflyStateFromOrbit,
   moveFreeflyCamera,
@@ -48,9 +47,7 @@ import {
   rotateFreeflyCamera,
   trajectoryWorldPoints,
   trajectoryArcPoint,
-  type CameraAngle,
   type FreeflyCameraState,
-  type OrbitCameraState,
   type PitchPercentPoint,
   type WorldPoint,
 } from "./pitchWebglGeometry";
@@ -70,6 +67,9 @@ import {
 } from "./webglDotMatrix";
 
 const MODEL_URL = "/assets/footballpitchv3.glb";
+const INITIAL_PITCH_CAMERA = freeflyStateFromOrbit(
+  { azimuth: -25, elevation: 20, distance: 45 }, pitchPercentToWorld({ x: 90, y: 50 }),
+);
 // Only head/leftFoot/rightFoot select a pose — other/unknown never silently
 // pick a preferred-foot pose (NATIVE_PITCH_EVENT_CONTRACT_20260908.md).
 const NATIVE_EVENT_MOTION: Partial<Record<NativePitchEvent["bodyPart"], string>> = { head: "head", leftFoot: "left_foot", rightFoot: "right_foot" };
@@ -77,7 +77,6 @@ const NATIVE_BODY_PART_LABEL: Record<NativePitchEvent["bodyPart"], string> = { h
 const NATIVE_OUTCOME_LABEL: Record<NativePitchEvent["outcome"], string> = { goal: "득점", on_target: "유효 슛", off_target: "빗나감", blocked: "블록" };
 const DEPTH_BOUNDARIES = [0, 16.67, 33.33, 50, 66.67, 83.33, 100] as const;
 const LANE_BOUNDARIES = [0, 21.82, 37, 63, 78.18, 100] as const;
-const END_ON_ANGLES = new Set<CameraAngle>(["goalFront", "goalBack"]);
 const markerColors: Record<ShotOutcome, number> = {
   goal: 0xbef264,
   on_target: 0x38bdf8,
@@ -91,19 +90,34 @@ export const BOX_ZONES: readonly BoxZoneOverlay[] = BOX_SUBREGION_ORDER.map((id)
   const bounds = BOX_SUBREGION_BOUNDS[id];
   return { id, point: { x: (bounds.xMinInclusive + 100) / 2, y: (bounds.yMinInclusive + bounds.yMaxExclusive) / 2 } };
 });
-const cameraLabels: Record<CameraAngle, string> = {
-  left: "좌측",
-  right: "우측",
-  goalFront: "골대 정면",
-  goalBack: "골대 뒤",
-};
-
 type OccupancyCell = { depth: number; lane: number; occupancyPct: number };
 type ZoneSummary = { shots: number; goals: number; xg: number; shotSharePct: number };
 type ZoneOverlay = { cell: OccupancyCell; summary: ZoneSummary; point: PitchPercentPoint };
 type BoxRegionId = (typeof BOX_SUBREGION_ORDER)[number];
 type BoxZoneOverlay = { id: BoxRegionId; point: PitchPercentPoint };
 type ProjectedPoint = { left: number; top: number; visible: boolean };
+export type PitchSelectedZone =
+  | { kind: "box"; id: BoxRegionId }
+  | { kind: "grid"; id: string };
+
+export function tacticalGridZoneId(depth: number, lane: number) {
+  return `depth${depth + 1}_lane${lane + 1}`;
+}
+
+export function shouldSelectZoneOnPointerUp({
+  button,
+  moved,
+  pinching,
+  cancelled,
+}: {
+  button: number;
+  moved: boolean;
+  pinching: boolean;
+  cancelled: boolean;
+}) {
+  return button === 0 && !moved && !pinching && !cancelled;
+}
+
 type Runtime = {
   asset?: THREE.Object3D;
   scene: THREE.Scene;
@@ -319,12 +333,11 @@ export function addBoxZoneHitMeshes(root: THREE.Group) {
 
 function addContours(
   root: THREE.Group,
-  spatial: PlayerAnalysis["spatial"] | undefined,
+  core: FullSourceCca | undefined,
   normalized: Float64Array,
 ) {
-  const core = spatial?.continuousCore;
   if (!core?.available || core.gridColumns !== HEATMAP_COLUMNS || core.gridRows !== HEATMAP_ROWS ||
-      !Number.isFinite(core.thresholdOfPeak) || core.thresholdOfPeak <= 0) return;
+      core.thresholdOfPeak === null || !Number.isFinite(core.thresholdOfPeak) || core.thresholdOfPeak <= 0) return;
   for (const [x1, y1, x2, y2] of marchingSquares(normalized, core.thresholdOfPeak)) {
     root.add(line([
       pitchPercentToWorld({ x: x1, y: 100 - y1 }, 0.16),
@@ -418,7 +431,9 @@ function addNativeShots(
     }
     const geometry = buildNativeReplayGeometry(event);
     if (layers.trajectories && geometry) {
-      root.add(line(nativeReplayPolyline(geometry), markerColors[event.outcome], event.outcome === "goal" ? .9 : .6));
+      const trajectory = line(nativeReplayPolyline(geometry), markerColors[event.outcome], event.outcome === "goal" ? .9 : .6);
+      trajectory.userData.nativeTrajectoryKey = event.key;
+      root.add(trajectory);
     }
   }
 }
@@ -430,28 +445,6 @@ export function nativeMarkerOriginWorld(event: NativePitchEvent): WorldPoint | n
   return pitchPercentToWorld({ x: event.plot.x, y: event.plot.y }, WEBGL_OVERLAY_Y_METERS + .11);
 }
 
-function NativeBoxPanel({ state }: { state?: NativePitchEventsState }) {
-  if (!state || state.kind === "loading") return <section data-native-box-state="loading" className="rounded border border-white/20 bg-[#101415] p-2.5 text-xs text-zinc-300">SportsAPI 박스 통계를 불러오는 중입니다.</section>;
-  if (state.kind !== "ready") return <section data-native-box-state="unavailable" className="rounded border border-amber-300/35 bg-[#101415] p-2.5 text-xs text-amber-100">SportsAPI 박스 통계를 사용할 수 없습니다. FotMob 수치로 대체하지 않습니다.</section>;
-  const box = state.data.box;
-  if (box.denominator === null) return <section data-native-box-state="unavailable" className="rounded border border-amber-300/35 bg-[#101415] p-2.5 text-xs text-amber-100">SportsAPI 박스 원천이 관측되지 않았습니다. 추정·0 대체 없음.</section>;
-  return <section aria-label="SportsAPI 박스 4구역" data-native-box-state="ready" className="rounded border border-white/20 bg-[#101415] p-2.5 text-zinc-100">
-    <h3 className="text-xs font-bold text-white/85">박스 4구역 · SportsAPI</h3>
-    <p className="mt-1 text-[10px] text-white/55">동일 원천 이벤트 · 비PK 관측 슛 {box.denominator}개</p>
-    <details className="mt-1 text-[10px] text-white/55"><summary className="cursor-pointer select-none text-white/70">4구역 상세 · 위치 미관측 {box.accounting.unlocated.shots ?? "—"}개 포함 분모</summary><div className="mt-2 grid grid-cols-2 gap-1.5">
-      {box.regionOrder.map((id) => {
-        const region = box.regions[id];
-        return <article key={id} data-native-box-region={id} className="rounded border border-white/10 bg-white/5 p-1.5">
-          <p className="text-[10px] text-white/60">{region.label}</p>
-          <p className="font-mono text-sm font-semibold">{region.quality.state === "unavailable" ? "—" : `${region.quality.delta! >= 0 ? "+" : ""}${region.quality.delta!.toFixed(2)}`}</p>
-          <p className="text-[10px] text-white/55">xGOT − xG · {region.shots ?? "—"}슛 / {region.goals ?? "—"}골</p>
-          <p className="text-[10px] text-white/55">xG {region.xg == null ? "—" : region.xg.toFixed(2)} · 슈팅 비중 {region.shootingSharePct == null ? "—" : `${region.shootingSharePct.toFixed(1)}%`}</p>
-          {region.quality.state !== "unavailable" && <p className="text-[10px] text-white/45">적격 {region.quality.eligible}/{region.shots}{region.quality.state === "partial" ? " · 일부" : ""}</p>}
-        </article>;
-      })}
-    </div></details>
-  </section>;
-}
 
 function projectWorld(runtime: Runtime | null, container: HTMLDivElement | null, point: WorldPoint): ProjectedPoint {
   if (!runtime || !container) return { left: 50, top: 50, visible: false };
@@ -470,6 +463,7 @@ export function WebGLSpatialPitch({
   contextIdentity,
   layers,
   fullActivityHeatmap,
+  fullActivityDisplay,
   boxSubregion,
   nativePitchEvents,
   shotSource,
@@ -481,6 +475,7 @@ export function WebGLSpatialPitch({
   contextIdentity: string;
   layers: PitchLayerVisibility;
   fullActivityHeatmap?: FullActivityHeatmapData;
+  fullActivityDisplay?: FullActivityDisplayEnvelope;
   boxSubregion?: BoxSubregionStatsState;
   nativePitchEvents?: NativePitchEventsState;
   shotSource: "sportsapi" | "fotmob";
@@ -493,19 +488,19 @@ export function WebGLSpatialPitch({
   const [projectionVersion, setProjectionVersion] = useState(0);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error" | "unsupported">("loading");
   const [loadError, setLoadError] = useState("");
-  const [cameraAngle, setCameraAngle] = useState<CameraAngle | null>(null);
-  const [cameraState, setCameraState] = useState(DEFAULT_WEBGL_CAMERA);
   const [freeflyState, setFreeflyState] = useState<FreeflyCameraState>(() =>
-    freeflyStateFromOrbit(DEFAULT_WEBGL_CAMERA, { x: 0, y: WEBGL_OVERLAY_Y_METERS, z: 0 }));
+    INITIAL_PITCH_CAMERA);
   const freeflyRef = useRef(freeflyState);
-  const dragRef = useRef<{ button: number; x: number; y: number } | null>(null);
+  const dragRef = useRef<{ button: number; x: number; y: number; startX: number; startY: number; moved: boolean } | null>(null);
   const touchPoints = useRef(new Map<number, { x: number; y: number }>());
-  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
+  const multiTouchRef = useRef(false);
+  const selectionBlockedPointersRef = useRef(new Set<number>());
   const raycasterRef = useRef<THREE.Raycaster | null>(null);
   const [zoom, setZoom] = useState(1);
   const [showTacticalZones, setShowTacticalZones] = useState(true);
   const [hoveredZone, setHoveredZone] = useState<ZoneOverlay | null>(null);
   const [hoveredBoxRegion, setHoveredBoxRegion] = useState<BoxRegionId | null>(null);
+  const [selectedZone, setSelectedZone] = useState<PitchSelectedZone | null>(null);
   const [activeShot, setActiveShot] = useState<string | null>(null);
   const [replayIndex, setReplayIndex] = useState<number | null>(null);
   const silhouettePreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("silhouettePreview") === "1";
@@ -538,6 +533,38 @@ export function WebGLSpatialPitch({
     ? { kind: "ready" as const, key: nativePitchEvents.key, data: nativePitchEvents.data.bodyParts }
     : nativePitchEvents ? { kind: nativePitchEvents.kind, key: nativePitchEvents.key } : undefined;
 
+  // A persistent zone is mutually exclusive with a selected shot: the dock
+  // must never combine a native event's body/quality with an aggregate zone.
+  // This one helper is intentionally the only zone-selection entry point so
+  // the click, keyboard, and future dock controls clear the same transient
+  // replay state.
+  const selectZone = useCallback((next: PitchSelectedZone | null) => {
+    setSelectedZone(next);
+    if (next === null) return;
+    setSelectedNativeEventKey(null);
+    setReplayIndex(null);
+    setActiveShot(null);
+    setPlaying(false);
+    replayProgressRef.current = 0;
+    setReplayProgress(0);
+  }, []);
+
+  const selectNativeShot = useCallback((key: string | null) => {
+    setSelectedZone(null);
+    setSelectedNativeEventKey(key);
+    setPlaying(false);
+    replayProgressRef.current = 0;
+    setReplayProgress(0);
+  }, []);
+
+  const selectLegacyShot = useCallback((index: number | null) => {
+    setSelectedZone(null);
+    setReplayIndex(index);
+    setPlaying(false);
+    replayProgressRef.current = 0;
+    setReplayProgress(0);
+  }, []);
+
   const legacyHeatValid = Boolean(spatial?.available &&
     spatial.heatmapPointCount === spatial.heatmapPoints.length &&
     spatial.heatmapPoints.every(validPitchPoint));
@@ -549,18 +576,15 @@ export function WebGLSpatialPitch({
     fullActivityHeatmap.cellCounts.reduce((sum, value) => sum + value, 0) === fullActivityHeatmap.validPointCount);
   const densityDots = useMemo(() => heatValid ? buildWebglDensityDots(fullActivityHeatmap!.cellCounts) : [], [fullActivityHeatmap, heatValid]);
   const groundDots = useMemo(() => heatValid ? buildGroundDensityDots(fullActivityHeatmap!.cellCounts) : [], [fullActivityHeatmap, heatValid]);
+  const fullNormalized = useMemo(() => fullActivityDisplay?.fullHeat.available ? normalizeDensity(fullActivityDensityGrid(fullActivityDisplay.fullHeat.cellCounts)) : new Float64Array(HEATMAP_COLUMNS * HEATMAP_ROWS), [fullActivityDisplay]);
   const pivot = useMemo(() => deriveWebglPivot(spatial, legacyNormalized), [legacyNormalized, spatial]);
-  const pivotWorld = useMemo(() => pitchPercentToWorld(pivot, WEBGL_OVERLAY_Y_METERS), [pivot]);
   const shotsValid = shotIntegrity(spatial);
   const visibleShots = useMemo(() => shotsValid ? spatial!.shotmapPoints
     .map((shot, sourceIndex) => ({ shot, sourceIndex }))
     .filter(({ shot }) => visibleOutcomes.has(shot.outcome)) : [], [shotsValid, spatial, visibleOutcomes]);
-  const endOnFrame = cameraAngle != null && END_ON_ANGLES.has(cameraAngle);
-  const framedShots = useMemo(() => endOnFrame ? visibleShots.filter(({ shot }) => shot.x >= 50) : visibleShots, [endOnFrame, visibleShots]);
-  const markerGroups = useMemo(() => groupPitchShots(framedShots), [framedShots]);
+  const markerGroups = useMemo(() => groupPitchShots(visibleShots), [visibleShots]);
   const medianXg = shotsValid ? medianObservedXg(spatial!.shotmapPoints) : null;
   const markerPlacements = useMemo(() => layoutWebglShotMarkers(markerGroups, medianXg), [markerGroups, medianXg]);
-  const offscreenShotCount = visibleShots.length - framedShots.length;
   const zones = useMemo(() => {
     if (!shotsValid) return [];
     return (spatial?.positionalGrid ?? [])
@@ -577,6 +601,9 @@ export function WebGLSpatialPitch({
   }, [shotsValid, spatial]);
   const zonesByKey = useMemo(() => new Map(
     zones.map((zone) => [`${zone.cell.depth}-${zone.cell.lane}`, zone]),
+  ), [zones]);
+  const zonesBySelectedId = useMemo(() => new Map(
+    zones.map((zone) => [tacticalGridZoneId(zone.cell.depth, zone.cell.lane), zone]),
   ), [zones]);
 
   const renderRuntime = useCallback(() => {
@@ -612,10 +639,9 @@ export function WebGLSpatialPitch({
     const scene = new THREE.Scene();
     let surface: Awaited<ReturnType<typeof loadPitchSurfaceAssets>> | undefined;
     const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.05, 420);
-    const initial = AERIAL_CAMERA;
+    const initial = INITIAL_PITCH_CAMERA;
     freeflyRef.current = initial;
     setFreeflyState(initial);
-    setCameraState({ azimuth: initial.yaw, elevation: -initial.pitch, distance: DEFAULT_WEBGL_CAMERA.distance });
     camera.position.set(initial.position.x, initial.position.y, initial.position.z);
     const initialTarget = freeflyLookTarget(initial);
     camera.lookAt(initialTarget.x, initialTarget.y, initialTarget.z);
@@ -718,12 +744,17 @@ export function WebGLSpatialPitch({
   useEffect(() => {
     setReplayIndex(null); setPlaying(false); setReplayProgress(0); replayProgressRef.current = 0;
     setSelectedNativeEventKey(null); // a native `key` from a stale context can never carry over into a new one
+    setSelectedZone(null);
   }, [contextIdentity]);
 
   // Also clear a selected native event the instant the PK toggle / dataset
   // context makes the underlying event list stale — `nativePitchEvents.key`
   // changes exactly when useNativePitchEvents' own resource key changes.
-  useEffect(() => { setSelectedNativeEventKey(null); }, [nativePitchEvents?.key]);
+  useEffect(() => { setSelectedNativeEventKey(null); setSelectedZone(null); }, [nativePitchEvents?.key]);
+
+  // Legacy box data has its own resource key (and its own source policy), so
+  // a persistent selection cannot survive an in-flight context replacement.
+  useEffect(() => { setSelectedZone(null); }, [boxSubregion?.key]);
 
   // A source switch is a data-model switch, not merely a different label for
   // the same selected object.  Clear both source-specific selections and the
@@ -738,6 +769,7 @@ export function WebGLSpatialPitch({
     setActiveShot(null);
     setHoveredZone(null);
     setHoveredBoxRegion(null);
+    setSelectedZone(null);
   }, [shotSource]);
 
   // Native pose is a schematic view of this exact SportsAPI event.  Placement
@@ -755,6 +787,7 @@ export function WebGLSpatialPitch({
       if (cancelled) { disposeObject(gltf.scene); return; }
       figure = gltf.scene;
       figure.position.set(placement.groundPosition.x, placement.groundPosition.y, placement.groundPosition.z);
+      styleShotSilhouette(figure, selectedNativeEvent!.bodyPart);
       figure.rotation.y = placement.yawRadians;
       runtime.scene.add(figure);
       mixer = new THREE.AnimationMixer(figure);
@@ -828,9 +861,6 @@ export function WebGLSpatialPitch({
     runtime.scene.add(ball);
     const path = line(nativeReplayPolyline(nativeReplay), markerColors[selectedNativeEvent.outcome], selectedNativeEvent.outcome === "goal" ? .95 : .68);
     runtime.scene.add(path);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(.3, .36, 32), new THREE.MeshBasicMaterial({ color: 0x75ffff, side: THREE.DoubleSide, toneMapped: false, depthTest: false }));
-    ring.renderOrder = 20;
-    runtime.scene.add(ring);
     let frame = 0;
     const initial = replayProgressRef.current;
     const started = performance.now();
@@ -841,8 +871,6 @@ export function WebGLSpatialPitch({
       setReplayProgress(progress);
       const point = nativeReplayPoint(nativeReplay, progress);
       ball.position.set(point.x, point.y, point.z);
-      ring.position.copy(ball.position);
-      ring.quaternion.copy(runtime.camera.quaternion);
       runtime.render();
       if (playing && !reduced && progress < 1) frame = requestAnimationFrame(draw);
       else if (playing) setPlaying(false);
@@ -850,9 +878,7 @@ export function WebGLSpatialPitch({
     draw(started);
     return () => {
       cancelAnimationFrame(frame);
-      runtime.scene.remove(ball, path, ring);
-      ring.geometry.dispose();
-      ring.material.dispose();
+      runtime.scene.remove(ball, path);
       ball.geometry.dispose();
       (Array.isArray(ball.material) ? ball.material : [ball.material]).forEach((material) => material.dispose());
       disposeObject(path);
@@ -921,7 +947,7 @@ export function WebGLSpatialPitch({
     runtime.overlayRoot.clear();
     disposeObject(runtime.zoneHitRoot);
     runtime.zoneHitRoot.clear();
-    if (showTacticalZones && !nativeMode) {
+    if (showTacticalZones) {
       addZoneHitMeshes(runtime.zoneHitRoot, zones);
       addTacticalGrid(runtime.overlayRoot);
     }
@@ -935,7 +961,7 @@ export function WebGLSpatialPitch({
       accents.renderOrder = 3;
       runtime.overlayRoot.add(accents);
     }
-    if (layers.cca) addContours(runtime.overlayRoot, spatial, legacyNormalized);
+    if (layers.cca) addContours(runtime.overlayRoot, fullActivityDisplay?.fullSourceCca, fullNormalized);
     // Markers stay excluded at group granularity: a group's whole marker/count
     // badge sits redundantly on top of the animated ball once that group's
     // shot is being replayed, so dropping the group is correct there.
@@ -948,13 +974,14 @@ export function WebGLSpatialPitch({
       if (nativePitchEvents?.kind === "ready") addNativeShots(runtime.overlayRoot, nativeEvents, layers, runtime.asset);
     } else if (layers.markers || layers.trajectories) addShots(runtime.overlayRoot,
       replayShot ? markerGroups.filter(group => !group.sourceIndexes.includes(replayIndex!)) : markerGroups,
-      excludeReplayingShot(framedShots, replayShot ? replayIndex : null),
+      excludeReplayingShot(visibleShots, replayShot ? replayIndex : null),
       medianXg, layers, markerPlacements, Boolean(replayShot), runtime.asset);
+    if (hostRef.current) hostRef.current.dataset.nativeTrajectoryCount = String(runtime.overlayRoot.children.filter(child => child.userData.nativeTrajectoryKey).length);
     runtime.render();
     setProjectionVersion((value) => value + 1);
-  }, [groundDots, fullActivityHeatmap, layers, showTacticalZones, nativeMode, nativePitchEvents, nativeEvents, legacyNormalized, markerGroups, framedShots, markerPlacements, medianXg, runtimeVersion, spatial, zones, replayShot, loadState]);
+  }, [groundDots, fullActivityHeatmap, fullActivityDisplay, fullNormalized, layers, showTacticalZones, nativeMode, nativePitchEvents, nativeEvents, legacyNormalized, markerGroups, visibleShots, markerPlacements, medianXg, runtimeVersion, spatial, zones, replayShot, loadState]);
 
-  const applyFreefly = useCallback((next: FreeflyCameraState, publicState?: OrbitCameraState) => {
+  const applyFreefly = useCallback((next: FreeflyCameraState) => {
     freeflyRef.current = next;
     setFreeflyState(next);
     const runtime = runtimeRef.current;
@@ -964,46 +991,21 @@ export function WebGLSpatialPitch({
       runtime.camera.lookAt(target.x, target.y, target.z);
       renderRuntime();
     }
-    setCameraState(publicState ?? {
-      azimuth: next.yaw,
-      elevation: -next.pitch,
-      distance: DEFAULT_WEBGL_CAMERA.distance,
-    });
   }, [renderRuntime]);
 
-  const applyCamera = useCallback((state: OrbitCameraState, nextZoom: number, angle: CameraAngle | null) => {
-    applyFreefly(freeflyStateFromOrbit(state, pivotWorld), state);
-    const runtime = runtimeRef.current;
-    if (runtime) {
-      runtime.camera.zoom = nextZoom;
-      runtime.camera.updateProjectionMatrix();
-      renderRuntime();
-    }
-    setZoom(nextZoom);
-    setCameraAngle(angle);
-  }, [applyFreefly, pivotWorld, renderRuntime]);
-
-  const resetCamera = useCallback(() => {
-    setActiveShot(null);
-    setHoveredZone(null);
-    setHoveredBoxRegion(null);
-    applyFreefly(AERIAL_CAMERA);
-    setCameraAngle(null); setZoom(1);
-    if (runtimeRef.current) { runtimeRef.current.camera.zoom = 1; runtimeRef.current.camera.updateProjectionMatrix(); renderRuntime(); }
-  }, [applyFreefly, renderRuntime]);
-
-  const setZoomLevel = (next: number) => {
-    const clamped = clampWebglZoom(next);
-    const runtime = runtimeRef.current;
-    if (runtime) {
-      runtime.camera.zoom = clamped;
-      runtime.camera.updateProjectionMatrix();
-      renderRuntime();
-    }
-    setZoom(clamped);
-  };
+  const setZoomLevel = useCallback((next: number | ((current: number) => number)) => {
+    setZoom((current) => {
+      const clamped = clampWebglZoom(typeof next === "function" ? next(current) : next);
+      const runtime = runtimeRef.current;
+      if (runtime) {
+        runtime.camera.zoom = clamped;
+        runtime.camera.updateProjectionMatrix();
+        renderRuntime();
+      }
+      return clamped;
+    });
+  }, [renderRuntime]);
   const moveCamera = useCallback((forward = 0, right = 0, vertical = 0) => {
-    setCameraAngle(null);
     applyFreefly(moveFreeflyCamera(freeflyRef.current, { forward, right, vertical }));
   }, [applyFreefly]);
   useEffect(() => {
@@ -1012,43 +1014,66 @@ export function WebGLSpatialPitch({
     const wheel = (event: WheelEvent) => {
       if (event.target !== host && event.target !== canvasRef.current) return;
       event.preventDefault();
-      moveCamera(0, 0, -event.deltaY * 0.015);
+      setZoomLevel((current) => current - event.deltaY * 0.0015);
     };
     host.addEventListener("wheel", wheel, { passive: false });
     return () => host.removeEventListener("wheel", wheel);
-  }, [moveCamera]);
+  }, [setZoomLevel]);
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      resetCamera();
-      return;
-    }
     const key = event.key.toLowerCase();
-    if (!["w", "a", "s", "d", "arrowleft", "arrowright", "arrowup", "arrowdown", "pageup", "pagedown"].includes(key)) return;
+    if (!["w", "a", "s", "d"].includes(key)) return;
     event.preventDefault();
     const step = FREEFLY_MOVE_STEP_METERS;
     moveCamera(
-      key === "w" || key === "arrowup" ? step : key === "s" || key === "arrowdown" ? -step : 0,
-      key === "d" || key === "arrowright" ? step : key === "a" || key === "arrowleft" ? -step : 0,
-      key === "pageup" ? FREEFLY_HEIGHT_STEP_METERS : key === "pagedown" ? -FREEFLY_HEIGHT_STEP_METERS : 0,
+      key === "w" ? step : key === "s" ? -step : 0,
+      key === "d" ? step : key === "a" ? -step : 0,
     );
   };
+  const resolveZoneAtPointer = (clientX: number, clientY: number): PitchSelectedZone | null => {
+    const runtime = runtimeRef.current;
+    const canvas = canvasRef.current;
+    if (!runtime || !canvas) return null;
+    const bounds = canvas.getBoundingClientRect();
+    if (!bounds.width || !bounds.height || clientX < bounds.left || clientX > bounds.right ||
+        clientY < bounds.top || clientY > bounds.bottom) return null;
+    const raycaster = raycasterRef.current ?? new THREE.Raycaster();
+    raycasterRef.current = raycaster;
+    raycaster.setFromCamera(new THREE.Vector2(
+      (clientX - bounds.left) / bounds.width * 2 - 1,
+      -((clientY - bounds.top) / bounds.height) * 2 + 1,
+    ), runtime.camera);
+    // The box surface has strict analytic precedence over the coarser grid.
+    // Its acquisition margin is intentionally not a fabricated box region:
+    // if it resolves null, the real grid mesh underneath remains eligible.
+    const hits = raycaster.intersectObjects(runtime.zoneHitRoot.children, false);
+    const boxHit = hits.find((candidate) => candidate.object.userData.isBoxHitSurface === true);
+    const boxRegionId = boxHit ? (() => {
+      const point = worldToPitchPercent(boxHit.point);
+      return resolveBoxSubregionId(point.x, point.y);
+    })() : null;
+    if (boxRegionId) return { kind: "box", id: boxRegionId };
+    const zoneHit = hits.find((candidate) => typeof candidate.object.userData.zoneKey === "string");
+    const zoneKey = zoneHit?.object.userData.zoneKey as string | undefined;
+    const zone = zoneKey ? zonesByKey.get(zoneKey) : undefined;
+    return zone ? { kind: "grid", id: tacticalGridZoneId(zone.cell.depth, zone.cell.lane) } : null;
+  };
+
   const pointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget && event.target !== canvasRef.current) return;
     if (event.button !== 0 && event.button !== 2) return;
     if (event.pointerType === "touch") {
       touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (touchPoints.current.size >= 2) {
-        const [a, b] = [...touchPoints.current.values()];
-        pinchRef.current = { distance: Math.hypot(a.x - b.x, a.y - b.y), zoom };
+        touchPoints.current.forEach((_, pointerId) => selectionBlockedPointersRef.current.add(pointerId));
+        multiTouchRef.current = true;
         dragRef.current = null;
         event.currentTarget.setPointerCapture?.(event.pointerId);
         event.preventDefault();
         return;
       }
     }
-    dragRef.current = { button: event.button, x: event.clientX, y: event.clientY };
+    dragRef.current = { button: event.button, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, moved: false };
     event.currentTarget.setPointerCapture?.(event.pointerId);
     event.currentTarget.focus();
     event.preventDefault();
@@ -1056,9 +1081,7 @@ export function WebGLSpatialPitch({
   const pointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "touch" && touchPoints.current.has(event.pointerId)) {
       touchPoints.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      if (touchPoints.current.size >= 2 && pinchRef.current) {
-        const [a, b] = [...touchPoints.current.values()];
-        setZoomLevel(pinchWebglZoom(pinchRef.current.zoom, pinchRef.current.distance, Math.hypot(a.x - b.x, a.y - b.y)));
+      if (touchPoints.current.size >= 2) {
         event.preventDefault();
         return;
       }
@@ -1067,75 +1090,44 @@ export function WebGLSpatialPitch({
     if (drag) {
       const dx = event.clientX - drag.x;
       const dy = event.clientY - drag.y;
-      dragRef.current = { ...drag, x: event.clientX, y: event.clientY };
-      setCameraAngle(null);
-      applyFreefly(drag.button === 0
+      dragRef.current = {
+        ...drag,
+        x: event.clientX,
+        y: event.clientY,
+        moved: drag.moved || Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 4,
+      };
+      if (event.pointerType !== "touch") applyFreefly(drag.button === 0
         ? rotateFreeflyCamera(freeflyRef.current, -dx * FREEFLY_MOUSE_SENSITIVITY, -dy * FREEFLY_MOUSE_SENSITIVITY)
         : moveFreeflyCamera(freeflyRef.current, { vertical: -dy * 0.08 }));
     }
-    const runtime = runtimeRef.current;
-    const canvas = canvasRef.current;
-    if (!runtime || !canvas) {
-      setHoveredZone(null);
-      setHoveredBoxRegion(null);
-      return;
-    }
-    const bounds = canvas.getBoundingClientRect();
-    if (!bounds.width || !bounds.height || event.clientX < bounds.left || event.clientX > bounds.right ||
-        event.clientY < bounds.top || event.clientY > bounds.bottom) {
-      setHoveredZone(null);
-      setHoveredBoxRegion(null);
-      return;
-    }
-    const raycaster = raycasterRef.current ?? new THREE.Raycaster();
-    raycasterRef.current = raycaster;
-    raycaster.setFromCamera(new THREE.Vector2(
-      (event.clientX - bounds.left) / bounds.width * 2 - 1,
-      -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
-    ), runtime.camera);
-    // The box hit surface is placed a touch higher than the legacy zone
-    // meshes so it always reports as the CLOSEST intersection wherever the
-    // two overlap — including its own acquisition margin (x∈[83.79,84.29)),
-    // where it correctly classifies to no region at all. Taking only that
-    // closest hit for everything then loses legacy hover across that whole
-    // margin strip: the box mesh was hit, resolves to null, but carries no
-    // `zoneKey`, so the old 30-zone tooltip silently disappeared there. The
-    // fix is to search the FULL intersection list for each purpose
-    // separately — the underlying legacy mesh is still in that list, just
-    // not the closest one.
-    const hits = raycaster.intersectObjects(runtime.zoneHitRoot.children, false);
-    const boxHit = hits.find((candidate) => candidate.object.userData.isBoxHitSurface === true);
-    // A hit box mesh only proves the ray landed somewhere in the box's
-    // hit-test footprint — the FINAL region id always comes from the exact
-    // analytic half-open resolver at the real hit point, never from whichever
-    // adjacent PlaneGeometry happened to report the closest intersection.
-    // Two coplanar meshes sharing an edge (y=37/50/63) can otherwise resolve
-    // to either side depending on insertion order or float rounding.
-    const boxRegionId = boxHit ? (() => {
-      const point = worldToPitchPercent(boxHit.point);
-      return resolveBoxSubregionId(point.x, point.y);
-    })() : null;
-    if (boxRegionId) {
-      setHoveredBoxRegion(boxRegionId);
+    const hovered = resolveZoneAtPointer(event.clientX, event.clientY);
+    if (hovered?.kind === "box") {
+      setHoveredBoxRegion(hovered.id);
       setHoveredZone(null);
     } else {
       setHoveredBoxRegion(null);
-      if (nativeMode) { setHoveredZone(null); return; }
-      const zoneHit = hits.find((candidate) => typeof candidate.object.userData.zoneKey === "string");
-      const zoneKey = zoneHit ? zoneHit.object.userData.zoneKey as string : null;
-      setHoveredZone(zoneKey ? zonesByKey.get(zoneKey) ?? null : null);
+      setHoveredZone(hovered?.kind === "grid" ? zonesBySelectedId.get(hovered.id) ?? null : null);
     }
   };
-  const pointerUp = (event: PointerEvent<HTMLDivElement>) => {
+  const finishPointer = (event: PointerEvent<HTMLDivElement>, cancelled: boolean) => {
+    const drag = dragRef.current;
+    const pinching = selectionBlockedPointersRef.current.has(event.pointerId) || multiTouchRef.current;
+    if (drag && shouldSelectZoneOnPointerUp({ button: drag.button, moved: drag.moved, pinching, cancelled })) {
+      const zone = resolveZoneAtPointer(event.clientX, event.clientY);
+      if (zone) selectZone(zone);
+    }
     dragRef.current = null;
     touchPoints.current.delete(event.pointerId);
-    pinchRef.current = null;
+    selectionBlockedPointersRef.current.delete(event.pointerId);
+    multiTouchRef.current = false;
     if (touchPoints.current.size === 1) {
       const remaining = [...touchPoints.current.values()][0];
-      dragRef.current = { button: 0, ...remaining };
+      dragRef.current = { button: 0, x: remaining.x, y: remaining.y, startX: remaining.x, startY: remaining.y, moved: false };
     }
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
+  const pointerUp = (event: PointerEvent<HTMLDivElement>) => finishPointer(event, false);
+  const pointerCancel = (event: PointerEvent<HTMLDivElement>) => finishPointer(event, true);
   const shotProjection = (group: PitchShotGroup) => projectWorld(
     runtimeRef.current,
     hostRef.current,
@@ -1193,11 +1185,11 @@ export function WebGLSpatialPitch({
     </div>}
     <div className="flex flex-wrap items-center gap-3 border-b border-white/15 bg-slate-900 px-3 py-2 text-white">
       <label className="text-sm">슈팅 데이터 원천 <select aria-label="슈팅 데이터 원천" value={shotSource} onChange={(event) => onShotSourceChange(event.target.value as "sportsapi" | "fotmob")} className="ml-2 rounded bg-slate-800 p-2"><option value="sportsapi">SportsAPI</option><option value="fotmob">FotMob</option></select></label>
-      {!nativeMode && <><button type="button" aria-pressed={showTacticalZones} onClick={() => { setShowTacticalZones(value => !value); setHoveredZone(null); }} className="min-h-11 rounded border border-white/30 px-3 text-sm font-bold aria-pressed:bg-white aria-pressed:text-slate-900">전술 구역</button>
-      <span className="text-sm">30구역 안내선 · 공격 박스 4분할 · CCA와 별도 표시</span></>}
+      <button type="button" aria-pressed={showTacticalZones} onClick={() => { setShowTacticalZones(value => !value); setHoveredZone(null); }} className="min-h-11 rounded border border-white/30 px-3 text-sm font-bold aria-pressed:bg-white aria-pressed:text-slate-900">전술 구역</button>
+      <span className="text-sm">30구역 안내선 · 공격 박스 4분할</span>
       {nativeMode && <span className="text-sm text-cyan-100">SportsAPI 동일 기록 이벤트 · 활동 히트맵은 별도 원천</span>}
     </div>
-    {layers.markers && <section aria-label="득점·유효슛 모식 재생 시제품" className="border-b border-white/20 bg-slate-950 p-3 text-white">
+    {!nativeMode && layers.markers && <section aria-label="득점·유효슛 모식 재생 시제품" className="border-b border-white/20 bg-slate-950 p-3 text-white">
       <strong>{nativeMode ? "SportsAPI 실제 기록 슛 · 모식 재생" : "득점·유효슛 장면 시제품 · 기록 기반 모식 재생"}</strong>
       {silhouettePreview && <div data-silhouette-state={silhouetteState} className="my-2 rounded border border-amber-300 p-3 text-amber-200">
         <strong>시안 전용 · 동작 수동 선택 / 실제 슛 부위와 무관</strong>
@@ -1214,9 +1206,8 @@ export function WebGLSpatialPitch({
       </details>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <label>슈팅 선택 <select aria-label="재생할 슈팅" value={nativeMode ? selectedNativeEventKey ?? "" : replayIndex ?? ""} className="bg-slate-800 p-2" onChange={event => {
-          if (nativeMode) setSelectedNativeEventKey(event.target.value === "" ? null : event.target.value);
-          else setReplayIndex(event.target.value === "" ? null : Number(event.target.value));
-          setPlaying(false); replayProgressRef.current = 0; setReplayProgress(0);
+          if (nativeMode) selectNativeShot(event.target.value === "" ? null : event.target.value);
+          else selectLegacyShot(event.target.value === "" ? null : Number(event.target.value));
         }}><option value="">전체 슈팅 탐색</option>{nativeMode ? nativeEvents.map((event) => <option key={event.key} value={event.key}>{NATIVE_OUTCOME_LABEL[event.outcome]} · {NATIVE_BODY_PART_LABEL[event.bodyPart]} · xG {formatShotMetric(event.xg)}{event.isPenalty ? " · PK" : ""}</option>) : shotsValid && spatial!.shotmapPoints.map((shot, index) => canReplayGoal(shot) ?
           <option key={index} value={index}>{shot.outcome === "goal" ? "득점" : "유효슛"} #{index + 1} · xG {formatShotMetric(shot.xg)} · ({shot.x.toFixed(1)}, {shot.y.toFixed(1)})</option> : null)}</select></label>
         <button disabled={!(nativeMode ? nativeReplay : replayShot) || loadState !== "ready"} onClick={() => {
@@ -1224,20 +1215,6 @@ export function WebGLSpatialPitch({
           setPlaying(value => !value);
         }} className="rounded border px-3 py-2 disabled:opacity-40">{playing ? "일시정지" : "재생"}</button>
         <button disabled={!(nativeMode ? nativeReplay : replayShot)} onClick={() => { setPlaying(false); replayProgressRef.current = 0; setReplayProgress(0); setSeekVersion(v => v + 1); }} className="rounded border px-3 py-2 disabled:opacity-40">처음으로</button>
-        <button disabled={!(nativeMode ? nativeReplay : replayShot)} onClick={() => {
-          if (nativeMode && nativeReplay) {
-            const from = nativeReplayPoint(nativeReplay, 0); const target = nativeReplayPoint(nativeReplay, .45);
-            const position = { x: from.x + 14, y: 22, z: from.z - 8 }; const dx = target.x - position.x, dy = target.y - position.y, dz = target.z - position.z;
-            setCameraAngle(null); setZoomLevel(1); applyFreefly({ position, yaw: Math.atan2(dx, -dz) * 180 / Math.PI, pitch: Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI }); return;
-          }
-          if (!replayShot) return;
-          const from = replayPosition(replayShot, 0); const target = replayPosition(replayShot, .45);
-          if (silhouettePreview) target.copy(from).add(new THREE.Vector3(0, .85, 0));
-          const position = silhouettePreview ? { x: from.x + 4, y: 3, z: from.z - 5 } : { x: from.x + 14, y: 22, z: from.z - 8 };
-          const dx = target.x - position.x, dy = target.y - position.y, dz = target.z - position.z;
-          setCameraAngle(null); setZoomLevel(1);
-          applyFreefly({ position, yaw: Math.atan2(dx, -dz) * 180 / Math.PI, pitch: Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI });
-        }} className="rounded border px-3 py-2 disabled:opacity-40">선택 슛 가까이</button>
         <label>재생 위치 <input aria-label="재생 위치" type="range" min="0" max="100" value={Math.round(replayProgress * 100)} disabled={!(nativeMode ? nativeReplay : replayShot)} onChange={event => {
           setPlaying(false); replayProgressRef.current = Number(event.target.value) / 100; setReplayProgress(replayProgressRef.current); setSeekVersion(v => v + 1);
         }}/></label>
@@ -1245,48 +1222,14 @@ export function WebGLSpatialPitch({
       </div>
       {replayError && <p role="alert">{replayError}</p>}
     </section>}
-    <div className="space-y-2 border-b border-white/10 bg-black/25 px-2 py-2">
-      <div role="group" aria-label="카메라 각도 프리셋" className="flex flex-wrap items-center gap-1">
-        <button type="button" onClick={() => {
-          setCameraAngle(null); setZoomLevel(1);
-          applyFreefly(AERIAL_CAMERA);
-        }} className="min-h-9 rounded border border-cyan-300/40 px-3 font-bold">항공 전체뷰</button>
-        <button type="button" data-camera-preset="penaltyFront" onClick={() => {
-          setCameraAngle(null); setZoomLevel(1);
-          applyFreefly({ position: { x: 0, y: 4, z: 27 }, yaw: 180, pitch: -14 });
-        }} className="min-h-9 rounded border border-cyan-300/40 px-3 font-bold">박스 정면 · 4m</button>
-        <button type="button" data-camera-preset="penaltyOblique" onClick={() => {
-          setCameraAngle(null); setZoomLevel(1);
-          applyFreefly(OBLIQUE_CAMERA);
-        }} className="min-h-9 rounded border border-cyan-300/40 px-3 font-bold">박스 사선 · 13m</button>
-        {(Object.keys(WEBGL_CAMERA_PRESETS) as CameraAngle[]).map((angle) =>
-          <button key={angle} type="button" data-camera-preset={angle} aria-pressed={cameraAngle === angle}
-            onClick={() => applyCamera(WEBGL_CAMERA_PRESETS[angle], 1, angle)}
-            className="min-h-9 rounded border border-white/15 px-3 text-base font-bold aria-pressed:bg-lime-300 aria-pressed:text-slate-950">
-            {cameraLabels[angle]}
-          </button>)}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label="화면 배율 조절" className="flex items-center gap-1">
-          <button type="button" aria-label="축소" disabled={zoom <= WEBGL_ZOOM.minimum}
-            onClick={() => setZoomLevel(zoom - WEBGL_ZOOM.step)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 font-bold disabled:opacity-40">−</button>
-          <button type="button" aria-label="확대" disabled={zoom >= WEBGL_ZOOM.maximum}
-            onClick={() => setZoomLevel(zoom + WEBGL_ZOOM.step)} className="min-h-9 min-w-9 rounded border border-white/15 px-2 font-bold disabled:opacity-40">+</button>
-          <button type="button" aria-label="기본 시점" onClick={resetCamera} className="min-h-9 rounded border border-white/15 px-3 text-base font-bold">초기화</button>
-        </div>
-        <p aria-live="polite" className="text-base text-zinc-300">{cameraState.azimuth.toFixed(0)}° · {cameraState.elevation.toFixed(0)}° · {zoom.toFixed(2)}배</p>
-        {endOnFrame && <p data-offscreen-shot-count={offscreenShotCount} className="rounded border border-amber-300/35 bg-amber-300/10 px-2 py-1 text-base font-bold text-amber-100">화면 밖 {offscreenShotCount}발</p>}
-      </div>
-    </div>
+    <p className="border-b border-white/10 bg-black/25 px-3 py-2 text-sm text-zinc-200">WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p>
     <div className="lg:grid lg:grid-cols-[1fr_20rem] lg:items-start lg:gap-3">
     <div ref={hostRef} role="img" tabIndex={0} onKeyDown={keyDown}
-      onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
-      onLostPointerCapture={(event) => {
-        if (event.pointerType !== "touch" || touchPoints.current.has(event.pointerId)) pointerUp(event);
-      }}
+      onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel}
+      onLostPointerCapture={pointerCancel}
       onPointerLeave={() => { setHoveredZone(null); setHoveredBoxRegion(null); }}
       onContextMenu={(event) => event.preventDefault()}
-      aria-label={`3D 회랑 WebGL 피치. ${heatState}. ${shotState}. WASD 또는 화살표 키로 이동하고, 왼쪽 드래그로 시선을 돌리며, 오른쪽 드래그나 휠로 높이를 조절합니다.`}
+      aria-label={`3D 회랑 WebGL 피치. ${heatState}. ${shotState}. WASD로 이동하고, 왼쪽 드래그로 앵글을 조절하며, 오른쪽 드래그로 높이를 조절하고, 휠로 확대·축소합니다.`}
       className="relative min-h-80 w-full overflow-hidden rounded-b-lg bg-[#050a08] outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
       data-webgl-renderer="three"
       data-shot-source={shotSource}
@@ -1300,14 +1243,16 @@ export function WebGLSpatialPitch({
       data-webgl-state={loadState}
       data-zone-hover-mode="raycaster"
       data-camera-mode="freefly"
-      data-camera-azimuth={Number(cameraState.azimuth.toFixed(2))}
-      data-camera-elevation={Number(cameraState.elevation.toFixed(2))}
+      data-selected-zone={selectedZone ? selectedZone.id : ""}
+      data-selected-zone-kind={selectedZone?.kind ?? ""}
+      data-camera-azimuth={Number(freeflyState.yaw.toFixed(2))}
+      data-camera-elevation={Number((-freeflyState.pitch).toFixed(2))}
       data-camera-distance={DEFAULT_WEBGL_CAMERA.distance}
       data-camera-zoom={zoom}
-      data-camera-frame-from-x={endOnFrame ? 50 : 0}
+      data-camera-frame-from-x={0}
       data-camera-pivot={`${(pivot.x * 1.05).toFixed(2)},${(pivot.y * 0.68).toFixed(2)},0`}
       data-camera-position={`${freeflyState.position.x.toFixed(2)},${freeflyState.position.y.toFixed(2)},${freeflyState.position.z.toFixed(2)}`}
-      data-visible-shot-count={nativeMode ? nativeMarkerEvents.length : framedShots.length}
+      data-visible-shot-count={nativeMode ? nativeMarkerEvents.length : visibleShots.length}
       data-total-shot-count={nativeMode ? nativeEvents.length : visibleShots.length}
       data-attacking-goal-width-pct={goalWidthPct.toFixed(2)}
       data-attacking-goal-height-pct={goalHeightPct.toFixed(2)}>
@@ -1324,8 +1269,8 @@ export function WebGLSpatialPitch({
           data-density-row={dot.row} data-density-column={dot.column}
           data-density-normalized={dot.density} data-density-radius-meters={dot.radiusMeters} />)}
       </div>}
-      {layers.cca && legacyHeatValid && spatial?.continuousCore.available && spatial.continuousCore.thresholdOfPeak > 0 && <div hidden data-layer="cca-contour" data-contour-segments={marchingSquares(legacyNormalized, spatial.continuousCore.thresholdOfPeak).length} />}
-        {!nativeMode && showTacticalZones && <div hidden data-layer="positional-grid" data-zone-count="30">{Array.from({ length: 10 }, (_, index) => <span key={index} data-grid-segment={index} />)}</div>}
+      {layers.cca && fullActivityDisplay?.fullSourceCca.available && fullActivityDisplay.fullSourceCca.thresholdOfPeak !== null && <div hidden data-layer="cca-contour" data-cca-definition={fullActivityDisplay.fullSourceCca.definitionVersion} data-cca-source-revision={fullActivityDisplay.fullSourceCca.sourceRevision} data-contour-segments={marchingSquares(fullNormalized, fullActivityDisplay.fullSourceCca.thresholdOfPeak).length} />}
+        {showTacticalZones && <div hidden data-layer="positional-grid" data-zone-count="30">{Array.from({ length: 10 }, (_, index) => <span key={index} data-grid-segment={index} />)}</div>}
       <div hidden data-layer="goals"><span data-goal="defending" data-goal-post-near-y="44.61764705882353" data-goal-post-far-y="55.38235294117647" data-goal-crossbar-height-meters="2.44" /><span data-goal="attacking" data-goal-post-near-y="44.61764705882353" data-goal-post-far-y="55.38235294117647" data-goal-crossbar-height-meters="2.44" /></div>
       {(layers.markers || layers.trajectories) && <div hidden data-layer="shots" id={markerLayerId} />}
 
@@ -1337,12 +1282,12 @@ export function WebGLSpatialPitch({
           data-pitch-x={event.plot.x ?? ""} data-pitch-y={event.plot.y ?? ""}
           tabIndex={selectedNativeEventKey === event.key || selectedNativeEventKey === null && index === 0 ? 0 : -1}
           aria-label={`${NATIVE_OUTCOME_LABEL[event.outcome]} · ${NATIVE_BODY_PART_LABEL[event.bodyPart]} · xG ${formatShotMetric(event.xg)}`}
-          onClick={() => { setSelectedNativeEventKey(event.key); setPlaying(false); replayProgressRef.current = 0; setReplayProgress(0); }}
+          onClick={() => selectNativeShot(event.key)}
           onKeyDown={(keyboard) => {
             if (!/^Arrow(Right|Left|Up|Down)$/.test(keyboard.key) || nativeMarkerEvents.length === 0) return;
             keyboard.preventDefault(); const direction = keyboard.key === "ArrowRight" || keyboard.key === "ArrowDown" ? 1 : -1;
             const next = nativeMarkerEvents[(index + direction + nativeMarkerEvents.length) % nativeMarkerEvents.length];
-            setSelectedNativeEventKey(next.key); document.getElementById(`webgl-native-shot-${next.key}`)?.focus();
+            selectNativeShot(next.key); document.getElementById(`webgl-native-shot-${next.key}`)?.focus();
           }}
           className="absolute z-20 min-h-6 min-w-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-transparent text-transparent outline-none focus-visible:ring-2 focus-visible:ring-white"
           style={{ left: `${projected.left}%`, top: `${projected.top}%`, display: projected.visible ? undefined : "none" }}><span className="sr-only">SportsAPI 기록 슛 선택</span></button>;
@@ -1359,10 +1304,10 @@ export function WebGLSpatialPitch({
           tabIndex={activeShot === group.key || activeShot === null && index === 0 ? 0 : -1}
           aria-label={`${shotMarkerLabel(group.shot)}${group.count > 1 ? ` ${group.count} shots share this exact coordinate.` : ""}`}
           onClick={() => {
+            setSelectedZone(null);
             setActiveShot(group.key);
             if (group.count === 1 && canReplayGoal(group.shot)) {
-              setReplayIndex(group.sourceIndexes[0]); setPlaying(false);
-              replayProgressRef.current = 0; setReplayProgress(0);
+              selectLegacyShot(group.sourceIndexes[0]);
             }
           }} onFocus={() => setActiveShot(group.key)} onBlur={() => setActiveShot(null)}
           onPointerEnter={() => setActiveShot(group.key)} onPointerLeave={() => setActiveShot(null)}
@@ -1396,16 +1341,21 @@ export function WebGLSpatialPitch({
         return <button key={zone.id} type="button"
           data-box-zone-keyboard-target={zone.id}
           aria-label={label}
+          onClick={() => selectZone({ kind: "box", id: zone.id })}
           onFocus={() => { setHoveredBoxRegion(zone.id); setHoveredZone(null); }} onBlur={() => setHoveredBoxRegion(null)}
           className="pointer-events-none absolute z-10 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded bg-transparent text-transparent outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
           style={{ left: `${projected.left}%`, top: `${projected.top}%`, display: projected.visible ? undefined : "none" }} />;
       })}
-      {!nativeMode && showTacticalZones && zones.map((zone) => {
+      {showTacticalZones && zones.map((zone) => {
         const projected = zoneProjection(zone);
+        const selectedId = tacticalGridZoneId(zone.cell.depth, zone.cell.lane);
         return <button key={`${zone.cell.depth}-${zone.cell.lane}`} type="button"
-          data-zone-keyboard-target=""
+          data-zone-keyboard-target={selectedId}
           data-zone-shot-share={zone.summary.shotSharePct.toFixed(2)}
-          aria-label={`구역 ${zone.cell.depth * 5 + zone.cell.lane + 1}. 슈팅 비중 ${zone.summary.shotSharePct.toFixed(2)}%, 활동 ${zone.cell.occupancyPct.toFixed(2)}%.`}
+          aria-label={nativeMode
+            ? `전술 구역 ${selectedId}. SportsAPI 선택은 해당 구역의 기하 위치만 사용합니다.`
+            : `구역 ${zone.cell.depth * 5 + zone.cell.lane + 1}. 슈팅 비중 ${zone.summary.shotSharePct.toFixed(2)}%, 활동 ${zone.cell.occupancyPct.toFixed(2)}%.`}
+          onClick={() => selectZone({ kind: "grid", id: selectedId })}
           onFocus={() => setHoveredZone(zone)} onBlur={() => setHoveredZone(null)}
           className="pointer-events-none absolute z-10 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded bg-transparent text-transparent outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
           style={{ left: `${projected.left}%`, top: `${projected.top}%`, display: projected.visible ? undefined : "none" }} />;
@@ -1424,33 +1374,36 @@ export function WebGLSpatialPitch({
         space beside the canvas instead — the existing ResizeObserver on
         `hostRef` already resizes the renderer/camera to whatever width that
         leaves it, so nothing overlaps at any breakpoint. */}
-    <div data-pitch-info-dock className="mt-3 flex w-full flex-col gap-2 lg:mt-0 lg:w-80">
+    <div data-pitch-info-dock className="mt-3 w-full lg:mt-0 lg:w-80">
+      {nativeMode ? nativePitchEvents?.kind === "ready" ? <NativePitchSelectionCard
+        key={`${nativePitchEvents.key}:${selectedNativeEvent?.key ?? selectedZone?.id ?? "overview"}`}
+        data={nativePitchEvents.data} event={selectedNativeEvent} zone={selectedZone}
+        onClose={() => { selectZone(null); selectNativeShot(null); }}
+        controls={<div className="space-y-2">
+          <select aria-label="재생할 슈팅" className="w-full rounded-lg border border-white/15 bg-[#202c40] p-2 text-xs"
+            value={selectedNativeEventKey ?? ""} onChange={event => selectNativeShot(event.target.value || null)}>
+            <option value="">전체 슈팅 탐색</option>
+            {nativeEvents.map(event => <option key={event.key} value={event.key}>{NATIVE_OUTCOME_LABEL[event.outcome]} · {NATIVE_BODY_PART_LABEL[event.bodyPart]} · xG {formatShotMetric(event.xg)}{event.isPenalty ? " · PK" : ""}</option>)}
+          </select>
+          {selectedNativeEvent && <div className="flex items-center gap-2">
+            <button aria-label={playing ? "일시정지" : "재생"} disabled={!nativeReplay || loadState !== "ready"}
+              className="h-10 w-10 shrink-0 rounded-full bg-[#f16d78] font-bold text-[#172131] disabled:opacity-30"
+              onClick={() => { if (replayProgressRef.current >= 1) { replayProgressRef.current = 0; setReplayProgress(0); } setPlaying(value => !value); }}>{playing ? "Ⅱ" : "▶"}</button>
+            <input aria-label="재생 위치" type="range" className="min-w-0 flex-1 accent-[#f16d78]" min="0" max="100"
+              value={Math.round(replayProgress * 100)} disabled={!nativeReplay} onChange={event => {
+                setPlaying(false); replayProgressRef.current = Number(event.target.value) / 100; setReplayProgress(replayProgressRef.current); setSeekVersion(v => v + 1);
+              }} />
+            <output className="text-xs" data-replay-progress={replayProgress.toFixed(3)}>{Math.round(replayProgress * 100)}%</output>
+          </div>}
+          {selectedNativeEvent && !nativeReplay && <p className="text-xs text-[#a9b8c9]">관측 종점 없음 · 궤적 미표시</p>}
+          {nativePoseState === "error" && <p role="alert" className="text-xs text-amber-200">신체 동작을 불러오지 못했습니다.</p>}
+          {replayError && <p role="alert" className="text-xs text-amber-200">{replayError}</p>}
+        </div>}
+      /> : <div role="status" className="rounded-2xl border border-white/15 bg-[#172131] p-4 text-sm text-slate-300">
+        {nativePitchEvents?.kind === "loading" ? "슈팅 정보를 불러오는 중…" : "슈팅 정보를 사용할 수 없습니다."}
+      </div> : <>
       <BodyPartShootingPanel hasSelectedShot={nativeMode ? Boolean(selectedNativeEvent) : Boolean(selectedShot)} selectedBodyPart={nativeMode ? selectedNativeEvent?.bodyPart : undefined} state={nativeBodyState} />
-      {nativeMode && nativePitchEvents?.kind === "ready" && (
-        <section aria-label="실제 기록 슛 재생" data-native-pitch-events-panel
-          className="rounded border border-white/20 bg-[#0b0e0f]/95 p-2.5 text-zinc-100">
-          <h3 className="text-xs font-bold text-white/85">실제 기록 슛 (SportsAPI native)</h3>
-          <p className="mt-1 text-[10px] leading-relaxed text-white/50">
-            선택 이벤트·신체 부위·박스 수치는 하나의 SportsAPI 응답에서 옵니다.
-          </p>
-          {selectedNativeEvent && (
-            <div className="mt-2 border-t border-white/15 pt-1.5 font-mono text-[11px] text-white/70" data-native-pitch-event-detail>
-              <p><strong data-native-pitch-event-bodypart>{NATIVE_BODY_PART_LABEL[selectedNativeEvent.bodyPart]} 확정</strong> — 이 슛 하나의 실제 기록 부위입니다.</p>
-              <p>{NATIVE_OUTCOME_LABEL[selectedNativeEvent.outcome]} · xG {formatShotMetric(selectedNativeEvent.xg)} · xGOT {formatShotMetric(selectedNativeEvent.xgot)}{selectedNativeEvent.isPenalty ? " · PK" : ""}</p>
-              {selectedNativeEvent.plot.state === "unlocated" ? (
-                <p className="mt-1 text-amber-200/80">위치 관측 불가: {selectedNativeEvent.plot.reason}</p>
-              ) : NATIVE_EVENT_MOTION[selectedNativeEvent.bodyPart] ? (
-                <p className="mt-1 text-white/50" data-native-pose-state={nativePoseState}>
-                  {nativePoseState === "loading" ? "동작 로딩 중…" : nativePoseState === "error" ? "동작 로딩 실패" : "모식 동작 표시 중 — 실제 비행 궤적 아님"}
-                </p>
-              ) : (
-                <p className="mt-1 text-white/50">기타·부위 미상은 동작을 임의로 선택하지 않습니다.</p>
-              )}
-            </div>
-          )}
-        </section>
-      )}
-      {nativeMode ? <NativeBoxPanel state={nativePitchEvents} /> : boxSubregion && <BoxSubregionPanel state={boxSubregion} activeRegionId={hoveredBoxRegion} />}
+      {boxSubregion && <BoxSubregionPanel state={boxSubregion} activeRegionId={hoveredBoxRegion} />}
       {!nativeMode && selectedShot && (() => {
         return <div role="tooltip" className="rounded border border-white/25 bg-[#0b0e0f]/95 p-2 text-xs text-zinc-100">
           <strong>{outcomePresentation[selectedShot.outcome].label}</strong><br />xG {formatShotMetric(selectedShot.shot.xg)} · xGOT {formatShotMetric(selectedShot.shot.xgot)}
@@ -1484,6 +1437,7 @@ export function WebGLSpatialPitch({
           </> : <p className="mt-2 text-xs text-amber-200/90">박스 구역 통계를 사용할 수 없습니다.</p>}
         </div>;
       })()}
+      </>}
     </div>
     </div>
   </>;

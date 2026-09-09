@@ -1,4 +1,5 @@
 import type { NativePitchEvent } from "../api/nativePitchEventsContracts";
+import type { NativePitchEventV2 } from "../api/nativePitchEventsV2Contracts";
 import { pitchPercentToWorld, WEBGL_OVERLAY_Y_METERS, type WorldPoint } from "./pitchWebglGeometry";
 
 export const NATIVE_SCHEMATIC_PARAMETERS = Object.freeze({
@@ -10,8 +11,8 @@ export const NATIVE_SCHEMATIC_PARAMETERS = Object.freeze({
 });
 export type NativeReplayGeometry = {
   key: string; provider: "sportsapi"; observedHeightMeters: null;
-  definition: "source-planar-schematic-height-v1";
-  destinationKind: "goal_plane_projection" | "block_projection";
+  definition: "source-planar-schematic-height-v1" | "source-validated-terminal-planar-schematic-v2";
+  destinationKind: "goal_plane_projection" | "block_projection" | "goal_plane" | "block";
   parameters: typeof NATIVE_SCHEMATIC_PARAMETERS;
   from: WorldPoint; to: WorldPoint;
 };
@@ -22,19 +23,27 @@ export type NativePosePlacement = {
   orientation: "schematic-attacking-goal-center";
 };
 const percent = (n: number | null): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 100;
-function located(event: NativePitchEvent) {
+function located(event: NativePitchEvent | NativePitchEventV2) {
   return event.plot.state === "projected" && event.plot.reason === null && percent(event.plot.x) && percent(event.plot.y);
 }
 
 /** Planar endpoints are recorded; ALL vertical coordinates are presentation parameters. */
-export function buildNativeReplayGeometry(event: NativePitchEvent): NativeReplayGeometry | null {
+export function buildNativeReplayGeometry(event: NativePitchEvent | NativePitchEventV2): NativeReplayGeometry | null {
   const d = event.destination;
   if (!located(event) || d.observedHeightMeters !== null || d.reason !== null || !percent(d.x) || !percent(d.y)) return null;
-  if (event.shotType === "block" ? d.kind !== "block_projection" : d.kind !== "goal_plane_projection" || d.x !== 100) return null;
+  if (event.shotType === "goal") {
+    if ((d.kind !== "goal_plane_projection" && d.kind !== "goal_plane") || d.x !== 100) return null;
+  } else if (event.shotType === "save" || event.shotType === "block") {
+    if (d.kind !== "block_projection" && d.kind !== "block") return null;
+  } else {
+    // A provider goal-mouth drawing coordinate is not an observed terminal
+    // point for a miss/post. Keep its marker and pose, never invent a path.
+    return null;
+  }
   const p = NATIVE_SCHEMATIC_PARAMETERS;
   return {
     key: event.key, provider: "sportsapi", observedHeightMeters: null,
-    definition: "source-planar-schematic-height-v1", destinationKind: d.kind as NativeReplayGeometry["destinationKind"], parameters: p,
+    definition: "quality" in event ? "source-validated-terminal-planar-schematic-v2" : "source-planar-schematic-height-v1", destinationKind: d.kind as NativeReplayGeometry["destinationKind"], parameters: p,
     from: pitchPercentToWorld({ x: event.plot.x!, y: event.plot.y! }, p.footContactMeters + (event.bodyPart === "head" ? p.headContactOffsetMeters : 0)),
     to: pitchPercentToWorld({ x: d.x, y: d.y }, p.endpointDisplayMeters),
   };
@@ -57,7 +66,7 @@ export function nativeReplayPolyline(geometry: NativeReplayGeometry, segments = 
 }
 
 /** Existing rigs face local −Z. Orientation is illustrative, never measured biomechanics. */
-export function nativePosePlacement(event: NativePitchEvent): NativePosePlacement | null {
+export function nativePosePlacement(event: NativePitchEvent | NativePitchEventV2): NativePosePlacement | null {
   if (!located(event)) return null;
   const motion = event.bodyPart === "head" ? "head" : event.bodyPart === "leftFoot" ? "left_foot" : event.bodyPart === "rightFoot" ? "right_foot" : null;
   if (!motion) return null;
