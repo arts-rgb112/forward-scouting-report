@@ -11,7 +11,6 @@
 - PITCH-FEEDBACK-20260909: 로컬 구현·독립 코드/계약/시각 검수 및 실제 브라우저 검증 완료. 조작 통합·선택형 신체 카드·30+4구역·종점 기반 궤적·동일원천 CCA·부위 직접 코랄 강조. production build/두 tsconfig PASS. 원본/점수/기존 변경 보존. 미배포, owner 릴리스 승인 대기. 정본 messi-specs/OPEN_WORK.md; 증거 coral-macro/context-final/controls-final.
 
 - 피치 릴리스 완료(2026-09-09): PR328/329 main6e8e13a0,RenderLIVE 및실제messi.my desktop/mobile2D·3D 검증과최종독립시각GO. 엄격SHA LF핫픽스/필수LinuxCI통과,5API/3GLB200,4구역·부위별품질·3pose·전체궤적·PK·2D개선확인. 초기실패증거와자동화잔여는 OPEN_WORK.md에분리보존. 데이터/점수의미변경없음.
-
 - CSV 배포 바이트 핫픽스(2026-09-09): 라이브500 원인은 CRLF 로컬 CSV pin과 LF Git blob 불일치. 원본행/값과runtime엄격SHA검증은 유지, GitLF바이트로 index/provenance 재고정 및 .gitattributes 명시. exporter CRLF거부와 필수Gitblob회귀 추가; 독립검수/재배포/라이브재검증 전 완료아님. 정본 OPEN_WORK.md.
 
 - 최종 회귀: backend330PASS/4SKIP, 필수 shipped fixture PASS; FE376PASS/1기존계약실패(schema/test/fixture baseline diff없음), app/node tsc 및 production build PASS. release 2D desktop/mobile errors[]. tests/test_native_body_part_router.py production factory 전환 독립재검수 진행. Render messiflick 선택 완료/2GiB 확인, 이전 선택대기 기록은 해소됨. 배포 전 게이트 유지, 정본 OPEN_WORK.md.
