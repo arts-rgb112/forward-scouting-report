@@ -1,7 +1,11 @@
 import * as THREE from "three";
+import { freeflyStateFromOrbit, pitchPercentToWorld } from "./pitchWebglGeometry";
 
 /** Authored display architecture, not a reconstruction of a real stadium. */
 export const ARENA_STUDIO_VERSION = "concrete-studio-v1";
+export const ARENA_INITIAL_CAMERA = freeflyStateFromOrbit(
+  { azimuth: 0, elevation: 21, distance: 48 }, pitchPercentToWorld({ x: 88, y: 50 }),
+);
 
 function concreteMaterial() {
   const material = new THREE.MeshStandardMaterial({ color: "#777874", roughness: .94, metalness: 0 });

@@ -1,10 +1,16 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { createArenaStudio, ARENA_STUDIO_VERSION } from "./arenaStudio";
-import { FREEFLY_BOUNDS, GLB_PITCH_SURFACE_Y_METERS } from "./pitchWebglGeometry";
+import { createArenaStudio, ARENA_STUDIO_VERSION, ARENA_INITIAL_CAMERA } from "./arenaStudio";
+import { FREEFLY_BOUNDS, GLB_PITCH_SURFACE_Y_METERS, freeflyLookTarget, pitchPercentToWorld } from "./pitchWebglGeometry";
 
 describe("arena studio display environment", () => {
+  it("starts inside the pitch looking toward the attacking goal, never behind it", () => {
+    const goal = pitchPercentToWorld({ x: 100, y: 50 });
+    expect(ARENA_INITIAL_CAMERA.position.z).toBeLessThan(goal.z - 11);
+    expect(ARENA_INITIAL_CAMERA.position.z).toBeGreaterThan(-goal.z);
+    expect(freeflyLookTarget(ARENA_INITIAL_CAMERA).z).toBeGreaterThan(ARENA_INITIAL_CAMERA.position.z);
+  });
   it("uses real concrete receivers and a single shadow light, without the training surround", () => {
     const scene = createArenaStudio();
     expect(scene.name).toBe(ARENA_STUDIO_VERSION);

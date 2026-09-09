@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DAYLIGHT_BACKGROUND, repairPitchUV, stylePitchMaterial } from "./pitchPresentation";
 import { loadPitchSurfaceAssets, PITCH_SURFACE_VERSION } from './pitchSurfaceAssets';
+import { ARENA_INITIAL_CAMERA } from "./arenaStudio";
 import { loadPitchModelBytes } from "./loadPitchModel";
 import { buildGroundDensityDots, createGroundHeatmap, createContinuousGroundHeatmap, highDensityAccents } from "./groundHeatmap";
 import { canReplayGoal, cloneReplayBall, replayPosition, REPLAY_DURATION_MS, styleShotBall, SHOT_BALL_COLORS } from "./shotReplay";
@@ -634,7 +635,7 @@ export function WebGLSpatialPitch({
     let surface: Awaited<ReturnType<typeof loadPitchSurfaceAssets>> | undefined;
     const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.05, 420);
     const initial = presentation === "arena"
-      ? freeflyStateFromOrbit({ azimuth: 180, elevation: 21, distance: 48 }, pitchPercentToWorld({ x: 88, y: 50 }))
+      ? ARENA_INITIAL_CAMERA
       : INITIAL_PITCH_CAMERA;
     freeflyRef.current = initial;
     setFreeflyState(initial);
