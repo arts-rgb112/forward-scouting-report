@@ -4,6 +4,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DAYLIGHT_BACKGROUND, repairPitchUV, stylePitchMaterial } from "./pitchPresentation";
 import { loadPitchSurfaceAssets, PITCH_SURFACE_VERSION } from './pitchSurfaceAssets';
 import { ARENA_INITIAL_CAMERA } from "./arenaStudio";
+import { createArenaActivityField } from "./arenaActivityField";
 import { loadPitchModelBytes } from "./loadPitchModel";
 import { buildGroundDensityDots, createGroundHeatmap, createContinuousGroundHeatmap, highDensityAccents } from "./groundHeatmap";
 import { canReplayGoal, cloneReplayBall, replayPosition, REPLAY_DURATION_MS, styleShotBall, SHOT_BALL_COLORS } from "./shotReplay";
@@ -588,8 +589,8 @@ export function WebGLSpatialPitch({
     fullActivityHeatmap.cellCounts.length === HEATMAP_COLUMNS * HEATMAP_ROWS &&
     fullActivityHeatmap.cellCounts.every((value) => Number.isInteger(value) && value >= 0) &&
     fullActivityHeatmap.cellCounts.reduce((sum, value) => sum + value, 0) === fullActivityHeatmap.validPointCount);
-  const densityDots = useMemo(() => heatValid ? buildWebglDensityDots(fullActivityHeatmap!.cellCounts) : [], [fullActivityHeatmap, heatValid]);
-  const groundDots = useMemo(() => heatValid ? buildGroundDensityDots(fullActivityHeatmap!.cellCounts) : [], [fullActivityHeatmap, heatValid]);
+  const densityDots = useMemo(() => heatValid && presentation !== "arena" ? buildWebglDensityDots(fullActivityHeatmap!.cellCounts) : [], [fullActivityHeatmap, heatValid, presentation]);
+  const groundDots = useMemo(() => heatValid && presentation !== "arena" ? buildGroundDensityDots(fullActivityHeatmap!.cellCounts) : [], [fullActivityHeatmap, heatValid, presentation]);
   const fullNormalized = useMemo(() => fullActivityDisplay?.fullHeat.available ? normalizeDensity(fullActivityDensityGrid(fullActivityDisplay.fullHeat.cellCounts)) : new Float64Array(HEATMAP_COLUMNS * HEATMAP_ROWS), [fullActivityDisplay]);
   const pivot = useMemo(() => deriveWebglPivot(spatial, legacyNormalized), [legacyNormalized, spatial]);
   const shotsValid = shotIntegrity(spatial);
@@ -715,7 +716,7 @@ export function WebGLSpatialPitch({
         surface.apply(gltf.scene);
         scene.environment = surface.environment; scene.environmentIntensity = .65;
         scene.add(surface.surround);
-        canvas.dataset.pitchSurface = PITCH_SURFACE_VERSION;
+        canvas.dataset.pitchSurface = presentation === "arena" ? "arena-olive-turf-v1" : PITCH_SURFACE_VERSION;
         scene.add(gltf.scene);
         runtime.asset = gltf.scene;
         setLoadState("ready");
@@ -964,11 +965,15 @@ export function WebGLSpatialPitch({
     // toggle — the box panel itself is always visible, so its 3D hover
     // target must not be hidden behind an unrelated grid preference.
     addBoxZoneHitMeshes(runtime.zoneHitRoot);
-    if (layers.heatmap && groundDots.length) {
+    if (layers.heatmap && heatValid && fullActivityHeatmap!.cellCounts.some(count => count > 0)) {
+      if (presentation === "arena") {
+        runtime.overlayRoot.add(createArenaActivityField(fullActivityHeatmap!.cellCounts));
+      } else {
       runtime.overlayRoot.add(createContinuousGroundHeatmap(fullActivityHeatmap!.cellCounts));
       const accents = createGroundHeatmap(highDensityAccents(groundDots));
       accents.renderOrder = 3;
       runtime.overlayRoot.add(accents);
+      }
     }
     if (layers.cca) addContours(runtime.overlayRoot, fullActivityDisplay?.fullSourceCca, fullNormalized);
     // Markers stay excluded at group granularity: a group's whole marker/count
@@ -988,7 +993,7 @@ export function WebGLSpatialPitch({
     if (hostRef.current) hostRef.current.dataset.nativeTrajectoryCount = String(runtime.overlayRoot.children.filter(child => child.userData.nativeTrajectoryKey).length);
     runtime.render();
     setProjectionVersion((value) => value + 1);
-  }, [groundDots, fullActivityHeatmap, fullActivityDisplay, fullNormalized, layers, showTacticalZones, nativeMode, nativePitchEvents, nativeEvents, legacyNormalized, markerGroups, visibleShots, markerPlacements, medianXg, runtimeVersion, spatial, selectedZone, zonesById, replayShot, loadState]);
+  }, [presentation, heatValid, groundDots, fullActivityHeatmap, fullActivityDisplay, fullNormalized, layers, showTacticalZones, nativeMode, nativePitchEvents, nativeEvents, legacyNormalized, markerGroups, visibleShots, markerPlacements, medianXg, runtimeVersion, spatial, selectedZone, zonesById, replayShot, loadState]);
 
   const applyFreefly = useCallback((next: FreeflyCameraState) => {
     freeflyRef.current = next;
@@ -1269,7 +1274,7 @@ export function WebGLSpatialPitch({
       {(loadState === "error" || loadState === "unsupported") && <div role="alert" className="absolute inset-0 grid place-items-center bg-[#050a08] p-6 text-center text-sm font-bold text-rose-200">{loadState === "unsupported" ? "WebGL 피치를 표시할 수 없습니다." : "경기장 모델을 불러오지 못했습니다."} {loadError}</div>}
 
       {layers.heatmap && <div hidden data-layer="heat" data-density-source="dot-matrix-64x24" data-density-input="full-tier3-32x22"
-        data-ground-dot-columns="192" data-ground-dot-rows="124" data-ground-dot-subdivision="bilinear-native-density" data-ground-palette="cyan-yellow-orange" data-ground-dot-count={groundDots.length}
+        data-ground-dot-columns="192" data-ground-dot-rows="124" data-ground-dot-subdivision="bilinear-native-density" data-ground-palette={presentation === "arena" ? "relative-density-contours" : "cyan-yellow-orange"} data-ground-dot-count={groundDots.length}
         data-density-dot-columns={WEBGL_DOTMATRIX_COLUMNS} data-density-dot-rows={WEBGL_DOTMATRIX_ROWS}
         data-blur-std-deviation="0" data-density-mesh-builds="1">
         {densityDots.map((dot) => <span key={`${dot.row}-${dot.column}`} data-density-dot=""

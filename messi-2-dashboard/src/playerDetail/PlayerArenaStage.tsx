@@ -62,7 +62,7 @@ function PlayerArenaBody({ player, analysis, history, config, dataset, data, cat
       <div data-layout="arena-season-rail" className="pointer-events-auto absolute bottom-3 left-3 z-20 hidden max-h-[min(15rem,calc(100%_-_6rem))] w-56 overflow-y-auto rounded-xl border border-white/15 bg-[#181a1b]/95 p-3 shadow-[0_12px_30px_rgba(0,0,0,.34)] backdrop-blur-md lg:block"><OverviewSeasonRail player={player} analysis={analysis} selected={dataset} history={history} /></div>
     </div>
     <div data-layout="arena-controls-footer" className="relative z-20 flex min-h-12 flex-col gap-2 border-t border-white/10 bg-[#232628]/95 px-3 py-2 text-zinc-200 sm:flex-row sm:items-center sm:justify-between">
-      <p data-arena-controls-help className="type-caption">WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p>
+      <div><p data-arena-controls-help className="type-caption">WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p><p className="mt-1 text-xs text-zinc-400">활동 등고선: 선수 내 상대 밀도 · 층 높이는 실제 위치 높이가 아닙니다.</p></div>
       <div className="shrink-0"><PitchPenaltyToggle /></div>
     </div>
     <div className="relative z-20 border-t border-white/10 bg-[#232628]/95 p-3 lg:hidden">

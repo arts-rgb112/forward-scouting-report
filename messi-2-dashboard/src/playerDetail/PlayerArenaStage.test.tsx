@@ -43,6 +43,7 @@ describe("PlayerArenaStage", () => {
   it("uses one presentation arena canvas and exchanges the category HUD for a renderer selection", () => {
     const { container } = render(<PlayerArenaStage player={samplePlayers[0]} config={config} dataset={first} history={{ loading: false, entries: [], failed: 0, requestedSeasons: 0 }} categoryState="unavailable"/>);
     fireEvent.click(screen.getByRole("button", { name: "상세 분석" }));
+    expect(screen.getByText("활동 등고선: 선수 내 상대 밀도 · 층 높이는 실제 위치 높이가 아닙니다.")).toBeVisible();
     expect(container.querySelectorAll("canvas")).toHaveLength(1);
     expect(screen.getByTestId("arena-pitch")).toHaveAttribute("data-presentation", "arena");
     expect(container.querySelector('[data-layout="arena-scene"]')).toHaveClass("min-h-[20rem]", "sm:min-h-[24rem]");

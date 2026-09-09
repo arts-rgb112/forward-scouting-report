@@ -6,6 +6,8 @@
 
 ## 진행 중인 작업
 
+- DETAIL-MAIN 새 시각 언어(2026-09-09): 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. 발주자 잔디·히트맵 재사용 폐기 지시로 arena만 신규 procedural olive turf/저채도 활동층·등고선으로 교체. 밀도 정규화/CCA/원본좌표/점수 불변, 표시높이는 실제높이 아님. 독립 검수·실제시각 QA 진행, full/production 보존. 정본 OPEN_WORK.md.
+
 - DETAIL-MAIN 전환 검증(2026-09-09): 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. 요약 foreground→상세 피치→복귀 동일 canvas, comparison taxonomy 보존 및 arena-only 정면 구도 보강. 독립 코드 GO, 실제 새 전환/구도·반응형 검증 진행 중. API/점수 의미·production 불변, 정본 OPEN_WORK.md.
 
 - DETAIL-MAIN-20260908 재개(2026-09-09): 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. 승인된 콘크리트 공간 대표 WebGL 장면 및 요약 오프닝→상세 피치 전환 구현·검증. 기존 계약/점수/원천 의미 불변, 생성 시안은 runtime 증거 아님. 정본 messi-specs/OPEN_WORK.md; 독립 검수·운영 배포 별도 게이트.

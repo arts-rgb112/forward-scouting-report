@@ -4,6 +4,7 @@ import { GroundedSkybox } from 'three/addons/objects/GroundedSkybox.js';
 import { createInfieldStudyMaterial } from './infieldStudy';
 import { createDesignSurround } from './pitchArtDirection';
 import { createArenaStudio } from './arenaStudio';
+import { createArenaTurf } from './arenaTurf';
 
 export const PITCH_SURFACE_VERSION = 'grass001-fibre-v1';
 const ROOT = '/assets/infield-v1/';
@@ -12,7 +13,7 @@ const ROOT = '/assets/infield-v1/';
 export async function loadPitchSurfaceAssets(presentation: 'full' | 'arena' = 'full') {
   const loader = new THREE.TextureLoader();
   const results = await Promise.allSettled([
-    ...['Color', 'NormalGL', 'Roughness', 'AmbientOcclusion'].map(name => loader.loadAsync(`${ROOT}${name}.webp`)),
+    ...(presentation === 'full' ? ['Color', 'NormalGL', 'Roughness', 'AmbientOcclusion'].map(name => loader.loadAsync(`${ROOT}${name}.webp`)) : []),
     ...(presentation === 'full' ? [new HDRLoader().setDataType(THREE.FloatType).loadAsync(`${ROOT}meadow-2-2k.hdr`)] : []),
   ]);
   const textures = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
@@ -22,15 +23,16 @@ export async function loadPitchSurfaceAssets(presentation: 'full' | 'arena' = 'f
   }
   const [map, normalMap, roughnessMap, aoMap, environment] = textures;
   for (const texture of [map, normalMap, roughnessMap, aoMap]) {
+    if (!texture) continue;
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.setScalar(2 / 1.4);
     texture.colorSpace = texture === map ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   }
   if (environment) environment.mapping = THREE.EquirectangularReflectionMapping;
   const source = new THREE.MeshPhysicalMaterial({ map, normalMap, roughnessMap, aoMap, aoMapIntensity: .5 });
-  const material = createInfieldStudyMaterial(source, true, true);
+  const material = presentation === 'arena' ? createArenaTurf() : createInfieldStudyMaterial(source, true, true);
   source.dispose();
-  material.color.setRGB(.80, .95, .70); material.normalScale.set(.55, .55);
+  if (presentation === 'full') { material.color.setRGB(.80, .95, .70); material.normalScale.set(.55, .55); }
   if (material instanceof THREE.MeshPhysicalMaterial) material.specularIntensity = .10;
   material.userData.sharedAssetTextures = true;
   const surround = presentation === 'arena' ? createArenaStudio() : createDesignSurround();
