@@ -102,6 +102,16 @@ export type PitchSelectedZone =
   | { kind: "box"; id: BoxRegionId }
   | { kind: "tactical20"; id: TacticalZone20["id"] };
 
+/** The arena is a viewport-sized first screen; the standalone route remains
+ * deliberately cinematic and width-led. Kept pure so the public presentation
+ * switch cannot accidentally inherit a stale renderer height. */
+export function webglRendererHeight(width: number, viewportHeight: number, presentation: "full" | "arena") {
+  const widthDrivenHeight = Math.max(320, Math.round(width * 0.59));
+  return presentation === "arena"
+    ? Math.min(widthDrivenHeight, Math.max(320, Math.round(viewportHeight * 0.62)))
+    : widthDrivenHeight;
+}
+
 export function shouldSelectZoneOnPointerUp({
   button,
   moved,
@@ -648,11 +658,16 @@ export function WebGLSpatialPitch({
     runtimeRef.current = runtime;
 
     let lastWidth = 0;
+    let lastHeight = 0;
     const resize = () => {
       const width = Math.max(1, host.clientWidth);
-      if (width === lastWidth) return;
+      // The standalone route retains its cinematic width-driven framing. The
+      // overview arena must leave room for the dossier controls in a normal
+      // desktop viewport, so only that opt-in presentation is viewport-bound.
+      const height = webglRendererHeight(width, window.innerHeight, presentation);
+      if (width === lastWidth && height === lastHeight) return;
       lastWidth = width;
-      const height = Math.max(320, Math.round(width * 0.59));
+      lastHeight = height;
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
@@ -664,6 +679,7 @@ export function WebGLSpatialPitch({
       resizeFrame = requestAnimationFrame(resize);
     });
     resizeObserver?.observe(host);
+    window.addEventListener("resize", resize);
     resize();
     const loader = new GLTFLoader();
     let cancelled = false;
@@ -714,6 +730,7 @@ export function WebGLSpatialPitch({
       cancelled = true;
       modelAbort.abort();
       resizeObserver?.disconnect();
+      window.removeEventListener("resize", resize);
       cancelAnimationFrame(resizeFrame);
       disposeObject(scene);
       surface?.dispose();
@@ -721,9 +738,10 @@ export function WebGLSpatialPitch({
       renderer.dispose();
       runtimeRef.current = null;
     };
-  // Runtime is intentionally rebuilt only for a player-context reset.
+  // Presentation owns renderer sizing, so mode changes rebuild one cleaned-up
+  // runtime instead of retaining the prior mode's resize closure.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextIdentity]);
+  }, [contextIdentity, presentation]);
 
   useEffect(() => {
     setReplayIndex(null); setPlaying(false); setReplayProgress(0); replayProgressRef.current = 0;
@@ -1210,7 +1228,6 @@ export function WebGLSpatialPitch({
       {replayError && <p role="alert">{replayError}</p>}
     </section>}</>}
     <div data-pitch-stage className="relative isolate">
-    <p data-pitch-controls-help className={presentation === "arena" ? "absolute bottom-3 left-3 z-20 rounded-lg border border-white/15 bg-[#232628]/95 px-3 py-2 type-caption text-zinc-200 shadow-lg" : "border-b border-white/10 bg-black/25 px-3 py-2 text-sm text-zinc-200"}>WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p>
     <div ref={hostRef} role="img" tabIndex={0} onKeyDown={keyDown}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel}
       onLostPointerCapture={pointerCancel}
@@ -1346,6 +1363,7 @@ export function WebGLSpatialPitch({
       })}
       <p className="sr-only">WebGL 장면 요약: 활동 좌표 {fullActivityHeatmap?.available ? fullActivityHeatmap.validPointCount : 0}개, 유효 슈팅 이벤트 {shotsValid ? spatial!.shotmapPoints.length : 0}개, 20구역 시각 가이드. 실제 GLTFLoader 모델과 Three.js 카메라를 사용합니다.</p>
     </div>
+    <p data-pitch-controls-help className={presentation === "arena" ? "relative z-20 border-t border-white/10 bg-[#232628]/95 px-3 py-2 type-caption text-zinc-200 lg:absolute lg:bottom-3 lg:right-[15rem] lg:rounded-lg lg:border lg:border-white/15 lg:shadow-lg" : "border-b border-white/10 bg-black/25 px-3 py-2 text-sm text-zinc-200"}>WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p>
     {/* Owner-requested in-pitch HUD: keep the canvas full width. The dock
         is a DOM sibling so its inputs never bubble into camera handlers.
         Small screens retain flow layout rather than clipping the body card. */}

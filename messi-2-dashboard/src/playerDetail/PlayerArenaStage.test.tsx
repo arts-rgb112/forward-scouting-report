@@ -33,6 +33,9 @@ describe("PlayerArenaStage", () => {
     const { container } = render(<PlayerArenaStage player={samplePlayers[0]} config={config} dataset={first} history={{ loading: false, entries: [], failed: 0, requestedSeasons: 0 }} categoryState="unavailable"/>);
     expect(container.querySelectorAll("canvas")).toHaveLength(1);
     expect(screen.getByTestId("arena-pitch")).toHaveAttribute("data-presentation", "arena");
+    expect(container.querySelector('[data-layout="arena-scene"]')).toHaveClass("min-h-[20rem]", "sm:min-h-[24rem]");
+    expect(container.querySelector('[data-layout="arena-category-hud"]')).toHaveClass("bg-[#181a1b]/95", "backdrop-blur-md");
+    expect(container.querySelector('[data-layout="arena-season-rail"]')).toHaveClass("bg-[#181a1b]/95", "max-h-[min(15rem,calc(100%_-_6rem))]");
     const seasonHeadingIds = [...container.querySelectorAll('h2[id^="overview-season-heading-"]')].map((heading) => heading.id);
     expect(seasonHeadingIds).toHaveLength(2);
     expect(new Set(seasonHeadingIds).size).toBe(seasonHeadingIds.length);
@@ -42,6 +45,7 @@ describe("PlayerArenaStage", () => {
     expect(container.querySelectorAll('[data-layout="overview-radar-card"]')).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "구역 선택" }));
     expect(container.querySelectorAll('[data-layout="overview-radar-card"]')).toHaveLength(0);
+    expect(container.querySelector('[data-layout="arena-category-hud"]')).not.toBeInTheDocument();
   });
 
   it("does not pass a prior box-subregion response into a different selected context", () => {

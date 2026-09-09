@@ -285,6 +285,7 @@ describe("Three WebGL spatial pitch contract", () => {
     const onArenaSelectionChange = vi.fn();
     const view = render(<SpatialPitch presentation="arena" forcedMode="perspective" analysis={analysisWith({})} onArenaSelectionChange={onArenaSelectionChange} />);
     await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
+    expect(document.querySelector("[data-pitch-controls-help]")).toHaveClass("relative", "lg:absolute", "lg:right-[15rem]");
     onArenaSelectionChange.mockClear();
     view.rerender(<SpatialPitch presentation="arena" forcedMode="plan" analysis={analysisWith({})} onArenaSelectionChange={onArenaSelectionChange} />);
     expect(onArenaSelectionChange).toHaveBeenLastCalledWith(null);
