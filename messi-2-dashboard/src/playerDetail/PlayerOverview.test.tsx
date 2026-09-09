@@ -74,7 +74,11 @@ describe("PlayerOverview", () => {
     const overview = container.querySelector('[data-layout="player-overview"]')!;
     expect(overview.firstElementChild).toHaveAttribute("aria-labelledby", "overview-profile-heading");
     expect(overview.children[1]).toHaveAttribute("data-layout", "overview-rail");
-    expect(overview.querySelector('[data-selected="true"]')).toHaveAttribute("data-season", "2025/2026");
+    const selectedSeason = overview.querySelector('[data-selected="true"]')!;
+    expect(selectedSeason).toHaveAttribute("data-season", "2025/2026");
+    expect(within(selectedSeason as HTMLElement).getByText("2025/2026")).toHaveAttribute("data-season-label", "true");
+    expect(within(selectedSeason as HTMLElement).getByText("2025/2026")).toHaveClass("whitespace-nowrap");
+    expect(within(selectedSeason as HTMLElement).getByText("현재")).toHaveClass("whitespace-nowrap");
     expect(overview.querySelectorAll('li[aria-hidden="true"]')).toHaveLength(5);
   });
 

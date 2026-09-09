@@ -28,7 +28,7 @@ import { DuelPressDetailReadoutBoard, DuelPressDetailReadoutUnavailable } from "
 import { DuelPressV2CategoryDetails, DuelPressV2CategorySummary, DuelPressV2DataAudit, DuelPressV2DetailReadoutUnavailable } from "./DuelPressV2DetailReadoutBoard";
 import { PlayerOverview } from "./PlayerOverview";
 
-const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow-sm";
+const panel = "min-w-0 rounded-xl border border-[#464a4c] bg-[#232628] p-4 shadow-sm";
 const ROUTE_COPY = { back: "리더보드로 돌아가기", retry: "다시 시도", loading: "선수 프로필", notFound: "선수를 찾을 수 없습니다", unavailable: "선수 상세를 불러올 수 없습니다", configUnavailable: "대시보드 API 설정을 사용할 수 없습니다.", contextUnavailable: "선택한 문맥에서 이 선수를 불러올 수 없습니다." } as const;
 const contextLabel = (context: DatasetRouteState) => context.mode === "league" ? `리그 · ${context.scope}개 리그` : `유럽대항전 · ${context.competition.toUpperCase()}`;
 const validId = (id: number) => Number.isSafeInteger(id) && id > 0;
@@ -38,7 +38,7 @@ export const v2ContextMatches = (value: DuelPressV2DetailMetrics, id: number, da
   && (dataset.mode === "league"
     ? value.context.scope === dataset.scope && value.context.competition === null
     : value.context.scope === null && value.context.competition === dataset.competition);
-const dossierGradient = (code: string) => ({ diamond: "from-violet-300/25 via-violet-950/25 to-[#101415]", emerald: "from-emerald-300/25 via-emerald-950/25 to-[#101415]", platinum: "from-cyan-300/25 via-cyan-950/25 to-[#101415]", gold: "from-amber-300/25 via-amber-950/25 to-[#101415]", silver: "from-slate-200/20 via-slate-800/30 to-[#101415]", bronze: "from-orange-300/25 via-orange-950/25 to-[#101415]" }[code] ?? "from-zinc-300/15 via-zinc-900/30 to-[#101415]");
+const dossierGradient = (code: string) => ({ diamond: "from-violet-300/25 via-violet-950/25 to-[#232628]", emerald: "from-emerald-300/25 via-emerald-950/25 to-[#232628]", platinum: "from-cyan-300/25 via-cyan-950/25 to-[#232628]", gold: "from-amber-300/25 via-amber-950/25 to-[#232628]", silver: "from-slate-200/20 via-slate-800/30 to-[#232628]", bronze: "from-orange-300/25 via-orange-950/25 to-[#232628]" }[code] ?? "from-zinc-300/15 via-zinc-900/30 to-[#232628]");
 export type PlayerHistoryState = { loading: boolean; entries: PlayerHistoryEntry[]; failed: number; requestedSeasons: number };
 export const HISTORY_SUMMARY_TIMEOUT_MS = 10_000;
 
@@ -162,8 +162,8 @@ export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality,
     <PitchPenaltyProvider summaryShots={analysis?.spatial.shotmapPoints}>
       <div data-layout="detail-dossier-layout" className="mt-4 min-w-0">
         <PlayerOverview player={player} analysis={analysis} selected={dataset} history={history} data={v2Readouts} categoryState={overviewCategoryState}/>
-        <details data-layout="tactical-summary-slot" className="group mt-3 min-w-0 w-full rounded-xl border border-white/10 bg-[#0d121a] shadow-sm"><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"><span>전술 분석 노트</span><span className="type-caption font-medium text-zinc-500 group-open:hidden">필요할 때 열기</span><span className="hidden type-caption font-medium text-zinc-500 group-open:inline">접기</span></summary><div className="border-t border-white/10 p-3"><TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/></div></details>
-        <section data-layout="tactical-spatial-workspace" className="mt-4 min-w-0 rounded-xl border border-white/10 bg-[#0d1112] p-2 shadow-sm" aria-label="전술·공간 분석">
+        <details data-layout="tactical-summary-slot" className="group mt-3 min-w-0 w-full rounded-xl border border-[#464a4c] bg-[#232628] shadow-sm"><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"><span>전술 분석 노트</span><span className="type-caption font-medium text-zinc-500 group-open:hidden">필요할 때 열기</span><span className="hidden type-caption font-medium text-zinc-500 group-open:inline">접기</span></summary><div className="border-t border-white/10 p-3"><TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/></div></details>
+        <section data-layout="tactical-spatial-workspace" className="mt-4 min-w-0 rounded-xl border border-[#464a4c] bg-[#181a1b] p-2 shadow-sm" aria-label="전술·공간 분석">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <PitchPenaltyToggle/>
             <a href={threeDHref} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded border border-lime-300/40 px-4 text-sm font-black text-lime-300 hover:bg-lime-300/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300">3D로 보기</a>

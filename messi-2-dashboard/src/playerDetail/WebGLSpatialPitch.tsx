@@ -1198,7 +1198,7 @@ export function WebGLSpatialPitch({
       {replayError && <p role="alert">{replayError}</p>}
     </section>}
     <p className="border-b border-white/10 bg-black/25 px-3 py-2 text-sm text-zinc-200">WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p>
-    <div className="lg:grid lg:grid-cols-[1fr_20rem] lg:items-start lg:gap-3">
+    <div data-pitch-stage className="relative isolate">
     <div ref={hostRef} role="img" tabIndex={0} onKeyDown={keyDown}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel}
       onLostPointerCapture={pointerCancel}
@@ -1334,19 +1334,10 @@ export function WebGLSpatialPitch({
       })}
       <p className="sr-only">WebGL 장면 요약: 활동 좌표 {fullActivityHeatmap?.available ? fullActivityHeatmap.validPointCount : 0}개, 유효 슈팅 이벤트 {shotsValid ? spatial!.shotmapPoints.length : 0}개, 20구역 시각 가이드. 실제 GLTFLoader 모델과 Three.js 카메라를 사용합니다.</p>
     </div>
-    {/* Below `lg` this sits in normal document flow BELOW the canvas — a
-        mobile canvas is short enough (~320px) that the old always-absolute
-        top-right dock (224px × up to ~580px of real content) got clipped by
-        the host's own overflow-hidden, hiding most of the body-part/box
-        stats. The old absolute overlay had a second defect even where it
-        wasn't clipped: it sat ON TOP of the canvas, so a wide enough dock to
-        stay readable (not breaking "9슛 · 2골 · xG 0.33" across lines)
-        necessarily covered pitch markers and the selected shot's path. A
-        dedicated grid column at `lg` (see the wrapper above) reserves real
-        space beside the canvas instead — the existing ResizeObserver on
-        `hostRef` already resizes the renderer/camera to whatever width that
-        leaves it, so nothing overlaps at any breakpoint. */}
-    <div data-pitch-info-dock className="mt-3 w-full lg:mt-0 lg:w-80">
+    {/* Owner-requested in-pitch HUD: keep the canvas full width. The dock
+        is a DOM sibling so its inputs never bubble into camera handlers.
+        Small screens retain flow layout rather than clipping the body card. */}
+    <div data-pitch-info-dock className="mt-3 w-full lg:absolute lg:right-4 lg:top-4 lg:z-20 lg:mt-0 lg:max-h-[calc(100%_-_2rem)] lg:w-80 lg:overflow-y-auto lg:overscroll-contain">
       {nativeMode ? nativePitchEvents?.kind === "ready" ? <>
         {selectedZone?.kind === "tactical20" && <TacticalZone20SelectionCard zone={zonesById.get(selectedZone.id)!} onClose={() => selectZone(null)} />}
         <NativePitchSelectionCard

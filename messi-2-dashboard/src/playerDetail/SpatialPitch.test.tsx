@@ -246,11 +246,9 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(tooltip).toHaveTextContent("기존 30구역에서 재사용하거나 브라우저에서 계산하지 않습니다");
     const dock = container.querySelector('[data-pitch-info-dock]');
     expect(dock).toContainElement(tooltip);
-    // Mobile-first, and never absolute-overlay at any breakpoint any more —
-    // a dedicated lg: grid column reserves real space beside the canvas
-    // instead (see the dedicated dock-placement test below for the full rationale).
+    // Desktop HUD floats above the full-width canvas; mobile stays in flow.
     expect(dock).toHaveClass('lg:w-80'); // ~320px, enough for a readable figure without shrinking type
-    expect(dock.className).not.toMatch(/\babsolute\b/);
+    expect(dock).toHaveClass('lg:absolute');
     expect(tooltip).not.toHaveTextContent("슈팅 비중");
     expect(tooltip).not.toHaveTextContent("활동 비중");
     expect(tooltip.querySelector("dl")).toBeNull();
@@ -339,7 +337,7 @@ describe("Three WebGL spatial pitch contract", () => {
 
   });
 
-  it("keeps the info dock as a sibling of the WebGL host, never absolutely overlapping it at any breakpoint", async () => {
+  it("floats the desktop info dock inside the full-width pitch stage while isolating camera events", async () => {
     const boxSubregion: BoxSubregionStatsState = { kind: "ready", key: "k", data: boxFixture };
     const { container } = render(<SpatialPitch analysis={analysisWith({})} boxSubregion={boxSubregion} />);
     await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
@@ -347,15 +345,12 @@ describe("Three WebGL spatial pitch contract", () => {
     const dock = container.querySelector('[data-pitch-info-dock]')!;
     expect(host.contains(dock)).toBe(false);
     expect(dock.parentElement).toBe(host.parentElement);
-    // Never absolute at any breakpoint any more — below `lg` the dock sits in
-    // normal document flow (full width, below the canvas); at `lg`+ its
-    // parent switches to a two-column grid (see the wrapper test below) that
-    // reserves the dock a real, non-overlapping column instead of stacking
-    // it on top of the canvas the way the old always-absolute overlay did
-    // (which is exactly what broke both the mobile clipping and the desktop
-    // "obscures the selected path" defect independent review reported).
-    expect(dock.className).not.toMatch(/\babsolute\b/);
-    expect(dock.parentElement!.className).toContain("lg:grid");
+    // Mobile remains readable in flow; desktop reserves no side column.
+    expect(dock.className.split(/\s+/)).not.toContain("absolute");
+    expect(dock.className).toContain("lg:absolute");
+    expect(dock.className).toContain("lg:overflow-y-auto");
+    expect(dock.parentElement).toHaveAttribute("data-pitch-stage");
+    expect(dock.parentElement!.className).not.toContain("lg:grid");
   });
 
   it("shows the box region as honestly unavailable while the route still 404s, keyed to its own static label", async () => {
