@@ -162,7 +162,7 @@ export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality,
     <PitchPenaltyProvider summaryShots={analysis?.spatial.shotmapPoints}>
       <div data-layout="detail-dossier-layout" className="mt-4 min-w-0">
         <PlayerOverview player={player} analysis={analysis} selected={dataset} history={history} data={v2Readouts} categoryState={overviewCategoryState}/>
-        <div data-layout="tactical-summary-slot" className="mt-4 min-w-0 w-full"><TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/></div>
+        <details data-layout="tactical-summary-slot" className="group mt-3 min-w-0 w-full rounded-xl border border-white/10 bg-[#0d121a] shadow-sm"><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"><span>전술 분석 노트</span><span className="type-caption font-medium text-zinc-500 group-open:hidden">필요할 때 열기</span><span className="hidden type-caption font-medium text-zinc-500 group-open:inline">접기</span></summary><div className="border-t border-white/10 p-3"><TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/></div></details>
         <section data-layout="tactical-spatial-workspace" className="mt-4 min-w-0 rounded-xl border border-white/10 bg-[#0d1112] p-2 shadow-sm" aria-label="전술·공간 분석">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <PitchPenaltyToggle/>

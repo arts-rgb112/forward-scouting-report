@@ -41,22 +41,24 @@ describe("PlayerOverview", () => {
 
   afterEach(() => cleanup());
 
-  it("uses only authoritative unified category scores for the radar and compact category rail", () => {
+  it("uses only authoritative unified category scores in one radar-and-vector card without a duplicate category rail", () => {
     const data = syntheticUnifiedDetail();
     const { container } = render(<PlayerOverview player={samplePlayers[0]} selected={selected} history={history} data={data} />);
     const overview = container.querySelector('[data-layout="player-overview"]')!;
     expect(within(overview as HTMLElement).getByRole("img", { name: "서버 제공 M.E.S.S.I. 6개 카테고리 레이더" })).toBeInTheDocument();
     expect(overview.querySelectorAll("polygon")).toHaveLength(5);
-    expect(within(overview as HTMLElement).getAllByText("박스 밖 슈팅")).toHaveLength(2);
-    expect(within(overview as HTMLElement).getAllByText("전방 압박")).toHaveLength(2);
-    expect(within(overview as HTMLElement).getByText("정본 점수")).toBeInTheDocument();
+    expect(within(overview as HTMLElement).getAllByText("박스 밖 슈팅")).toHaveLength(1);
+    expect(within(overview as HTMLElement).getAllByText("전방 압박")).toHaveLength(1);
+    expect(overview.querySelector('[data-layout="overview-category-vector"]')).toHaveAttribute("data-layout", "overview-category-vector");
+    expect(overview.querySelectorAll('[data-layout="overview-category-vector"] li')).toHaveLength(6);
+    expect(within(overview as HTMLElement).queryByRole("heading", { name: "카테고리 스탯" })).not.toBeInTheDocument();
   });
 
   it("keeps unavailable data distinct from zero and exposes a clear loading state", () => {
     const { rerender } = render(<PlayerOverview player={samplePlayers[0]} selected={selected} history={history} categoryState="loading" />);
     expect(screen.getByText("정본 카테고리 점수를 불러오는 중입니다.")).toBeInTheDocument();
     rerender(<PlayerOverview player={samplePlayers[0]} selected={selected} history={history} categoryState="unavailable" />);
-    expect(screen.getByText("선택된 문맥의 정본 카테고리 점수가 없습니다.")).toBeInTheDocument();
+    expect(screen.getByText("선택된 데이터 버전에서는 카테고리 정본 점수를 제공하지 않습니다.")).toBeInTheDocument();
   });
 
   it("uses readable compact minutes on a four-cell mobile summary while retaining the exact server value for assistive technology", () => {
@@ -101,7 +103,7 @@ describe("PlayerOverview", () => {
       categories[2].imputedComponents = ["synthetic-ui-fixture-only"];
     });
     const { container } = render(<PlayerOverview player={samplePlayers[0]} selected={selected} history={history} data={data} />);
-    const categoryList = screen.getByRole("heading", { name: "카테고리 스탯" }).parentElement!.parentElement!;
+    const categoryList = container.querySelector('[data-layout="overview-category-vector"]')!;
     expect(within(categoryList).getByText("0", { exact: true })).toBeInTheDocument();
     expect(within(categoryList).getByText("—", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("일부 카테고리에 서버 대체 구성요소가 포함되어 있습니다.")).toBeInTheDocument();

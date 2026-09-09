@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { shouldSelectZoneOnPointerUp, tacticalGridZoneId } from "./WebGLSpatialPitch";
+import { shouldSelectZoneOnPointerUp } from "./WebGLSpatialPitch";
+import { resolveTacticalZone20 } from "./pitchGeometry";
 
 describe("persistent WebGL zone selection helpers", () => {
-  it("uses one-based server-facing tactical grid ids", () => {
-    expect(tacticalGridZoneId(0, 0)).toBe("depth1_lane1");
-    expect(tacticalGridZoneId(5, 4)).toBe("depth6_lane5");
+  it("uses the shared 20-zone IDs rather than legacy 30-cell IDs", () => {
+    expect(resolveTacticalZone20(25, 70)?.id).toBe("6");
+    expect(resolveTacticalZone20(75, 30)?.id).toBe("15");
   });
 
   it("allows only an uncancelled primary click to persist a zone", () => {

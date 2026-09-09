@@ -10,11 +10,13 @@ import { buildNativeReplayGeometry, nativePosePlacement, nativeReplayPoint, nati
 import { BodyPartShootingPanel } from "./BodyPartShootingPanel";
 import { shotSilhouetteYawRadians, styleShotSilhouette } from "./shotSilhouetteStyle";
 import { BoxSubregionPanel } from "./BoxSubregionPanel";
+import { boxSubregionPresentationLabel } from "./boxSubregionPresentation";
 import type { BoxSubregionStatsState } from "./useBoxSubregionStats";
 import { BOX_SUBREGION_BOUNDS, BOX_SUBREGION_ORDER, BOX_SUBREGION_X_MIN_INCLUSIVE, resolveBoxSubregionId, type BoxSubregionRegion } from "../api/boxSubregionContracts";
 import type { NativePitchEventsV2State as NativePitchEventsState } from "./useNativePitchEventsV2";
 import type { NativePitchEventV2 as NativePitchEvent } from "../api/nativePitchEventsV2Contracts";
 import { NativePitchSelectionCard } from "./NativePitchSelectionCard";
+import { boxSubregionDividerSegments, TACTICAL_ZONE20, type TacticalZone20, zone20Segments } from "./pitchGeometry";
 
 import type { FullActivityHeatmapData } from "../api/fullActivityHeatmapContracts";
 import type { FullActivityDisplayEnvelope, FullSourceCca } from "../api/fullActivityDisplayContracts";
@@ -75,8 +77,6 @@ const INITIAL_PITCH_CAMERA = freeflyStateFromOrbit(
 const NATIVE_EVENT_MOTION: Partial<Record<NativePitchEvent["bodyPart"], string>> = { head: "head", leftFoot: "left_foot", rightFoot: "right_foot" };
 const NATIVE_BODY_PART_LABEL: Record<NativePitchEvent["bodyPart"], string> = { head: "헤더", leftFoot: "왼발", rightFoot: "오른발", other: "기타", unknown: "부위 미상" };
 const NATIVE_OUTCOME_LABEL: Record<NativePitchEvent["outcome"], string> = { goal: "득점", on_target: "유효 슛", off_target: "빗나감", blocked: "블록" };
-const DEPTH_BOUNDARIES = [0, 16.67, 33.33, 50, 66.67, 83.33, 100] as const;
-const LANE_BOUNDARIES = [0, 21.82, 37, 63, 78.18, 100] as const;
 const markerColors: Record<ShotOutcome, number> = {
   goal: 0xbef264,
   on_target: 0x38bdf8,
@@ -90,19 +90,17 @@ export const BOX_ZONES: readonly BoxZoneOverlay[] = BOX_SUBREGION_ORDER.map((id)
   const bounds = BOX_SUBREGION_BOUNDS[id];
   return { id, point: { x: (bounds.xMinInclusive + 100) / 2, y: (bounds.yMinInclusive + bounds.yMaxExclusive) / 2 } };
 });
-type OccupancyCell = { depth: number; lane: number; occupancyPct: number };
-type ZoneSummary = { shots: number; goals: number; xg: number; shotSharePct: number };
-type ZoneOverlay = { cell: OccupancyCell; summary: ZoneSummary; point: PitchPercentPoint };
 type BoxRegionId = (typeof BOX_SUBREGION_ORDER)[number];
 type BoxZoneOverlay = { id: BoxRegionId; point: PitchPercentPoint };
+type TacticalZoneOverlay = TacticalZone20 & { point: PitchPercentPoint };
+export const TACTICAL_ZONE20_OVERLAYS: readonly TacticalZoneOverlay[] = TACTICAL_ZONE20.map((zone) => ({
+  ...zone,
+  point: { x: (zone.xMinInclusive + zone.xMaxExclusive) / 2, y: (zone.yMinInclusive + zone.yMaxExclusive) / 2 },
+}));
 type ProjectedPoint = { left: number; top: number; visible: boolean };
 export type PitchSelectedZone =
   | { kind: "box"; id: BoxRegionId }
-  | { kind: "grid"; id: string };
-
-export function tacticalGridZoneId(depth: number, lane: number) {
-  return `depth${depth + 1}_lane${lane + 1}`;
-}
+  | { kind: "tactical20"; id: TacticalZone20["id"] };
 
 export function shouldSelectZoneOnPointerUp({
   button,
@@ -116,6 +114,17 @@ export function shouldSelectZoneOnPointerUp({
   cancelled: boolean;
 }) {
   return button === 0 && !moved && !pinching && !cancelled;
+}
+
+/** A selected 20-zone is deliberately descriptive only until its own server
+ * aggregate contract lands. Keeping this separate prevents an older grid
+ * response from being rendered as though it described this geometry. */
+function TacticalZone20SelectionCard({ zone, onClose }: { zone: TacticalZone20; onClose?: () => void }) {
+  return <section data-tactical-zone20-readout={zone.id} role="status" className="rounded-2xl border border-amber-200/30 bg-[#101c19]/85 p-4 text-zinc-100 shadow-xl backdrop-blur-md">
+    <div className="flex items-center justify-between gap-3"><span className="rounded-full border border-amber-100/30 px-2 py-1 text-xs text-amber-100">{zone.label}</span>{onClose && <button type="button" onClick={onClose} className="min-h-8 rounded border border-white/15 px-2 text-xs text-white/70">닫기</button>}</div>
+    <p className="mt-3 text-sm text-amber-100/90">서버 20구역 집계 준비 중</p>
+    <p className="mt-1 text-xs leading-5 text-white/60">슛·득점·xG·활동 수치는 기존 30구역에서 재사용하거나 브라우저에서 계산하지 않습니다.</p>
+  </section>;
 }
 
 type Runtime = {
@@ -167,21 +176,6 @@ export function deriveWebglPivot(
   return { x: 80, y: 50 };
 }
 
-function zoneSummary(shots: readonly ShotmapPoint[], cell: OccupancyCell): ZoneSummary {
-  const x0 = DEPTH_BOUNDARIES[cell.depth];
-  const x1 = DEPTH_BOUNDARIES[cell.depth + 1];
-  const y0 = LANE_BOUNDARIES[cell.lane];
-  const y1 = LANE_BOUNDARIES[cell.lane + 1];
-  const inCell = shots.filter((shot) =>
-    shot.x >= x0 && (cell.depth === 5 ? shot.x <= x1 : shot.x < x1) &&
-    shot.y >= y0 && (cell.lane === 4 ? shot.y <= y1 : shot.y < y1));
-  return {
-    shots: inCell.length,
-    goals: inCell.filter((shot) => shot.outcome === "goal").length,
-    xg: inCell.reduce((sum, shot) => sum + (typeof shot.xg === "number" && Number.isFinite(shot.xg) ? shot.xg : 0), 0),
-    shotSharePct: shots.length ? inCell.length / shots.length * 100 : 0,
-  };
-}
 
 function disposeObject(root: THREE.Object3D) {
   root.traverse((object) => {
@@ -239,28 +233,17 @@ function line(
 
 function addTacticalGrid(root: THREE.Group) {
   const color = 0xf1f5f9;
-  for (const depth of DEPTH_BOUNDARIES.slice(1, -1)) {
-    root.add(line([
-      pitchPercentToWorld({ x: depth, y: 0 }, 0.095),
-      pitchPercentToWorld({ x: depth, y: 100 }, 0.095),
-    ], color, 0.85, true));
-  }
-  for (const lane of LANE_BOUNDARIES.slice(1, -1)) {
-    root.add(line([
-      pitchPercentToWorld({ x: 0, y: lane }, 0.095),
-      pitchPercentToWorld({ x: 100, y: lane }, 0.095),
-    ], color, 0.85, true));
-  }
-  // Reuse the existing 37/63 lane lines; only the PK centre axis is additional.
-  for (const y of [50]) {
-    root.add(line([
-      pitchPercentToWorld({ x: 100 - 16.5 / GLB_PITCH_LENGTH_METERS * 100, y }, 0.095),
-      pitchPercentToWorld({ x: 100, y }, 0.095),
-    ], 0xf8fafc, 0.8, true));
-  }
+  for (const [x0, y0, x1, y1] of zone20Segments()) root.add(line([
+    pitchPercentToWorld({ x: x0, y: y0 }, 0.095), pitchPercentToWorld({ x: x1, y: y1 }, 0.095),
+  ], color, 0.85, true));
+  // The real physical box edge at x=84.29 comes from the GLB. Only its
+  // three inner stat dividers are added here, mirrored at the defending end.
+  for (const [x0, y0, x1, y1] of boxSubregionDividerSegments()) root.add(line([
+    pitchPercentToWorld({ x: x0, y: y0 }, 0.112), pitchPercentToWorld({ x: x1, y: y1 }, 0.112),
+  ], color, 0.72, true));
 }
 
-export function addZoneHitMeshes(root: THREE.Group, zones: readonly ZoneOverlay[]) {
+export function addZoneHitMeshes(root: THREE.Group, zones: readonly TacticalZoneOverlay[]) {
   const material = new THREE.MeshBasicMaterial({
     transparent: true,
     opacity: 0,
@@ -270,15 +253,24 @@ export function addZoneHitMeshes(root: THREE.Group, zones: readonly ZoneOverlay[
     side: THREE.DoubleSide,
   });
   for (const zone of zones) {
-    const depthSize = (DEPTH_BOUNDARIES[zone.cell.depth + 1] - DEPTH_BOUNDARIES[zone.cell.depth]) / 100 * GLB_PITCH_LENGTH_METERS;
-    const laneSize = (LANE_BOUNDARIES[zone.cell.lane + 1] - LANE_BOUNDARIES[zone.cell.lane]) / 100 * GLB_PITCH_WIDTH_METERS;
+    const depthSize = (zone.xMaxExclusive - zone.xMinInclusive) / 100 * GLB_PITCH_LENGTH_METERS;
+    const laneSize = (zone.yMaxExclusive - zone.yMinInclusive) / 100 * GLB_PITCH_WIDTH_METERS;
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(laneSize, depthSize), material);
     const centre = pitchPercentToWorld(zone.point, WEBGL_OVERLAY_Y_METERS + 0.01);
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.set(centre.x, centre.y, centre.z);
-    mesh.userData.zoneKey = `${zone.cell.depth}-${zone.cell.lane}`;
+    mesh.userData.tacticalZone20Id = zone.id;
     root.add(mesh);
   }
+}
+
+function addTacticalZoneSelectionOutline(root: THREE.Group, zone: TacticalZone20) {
+  const corners: PitchPercentPoint[] = [
+    { x: zone.xMinInclusive, y: zone.yMinInclusive }, { x: zone.xMaxExclusive, y: zone.yMinInclusive },
+    { x: zone.xMaxExclusive, y: zone.yMaxExclusive }, { x: zone.xMinInclusive, y: zone.yMaxExclusive },
+    { x: zone.xMinInclusive, y: zone.yMinInclusive },
+  ];
+  root.add(line(corners.map((point) => pitchPercentToWorld(point, 0.14)), 0xfde68a, 0.95));
 }
 
 // A tiny safety margin (pitch-percent units) the hit surface's near edge sits
@@ -287,24 +279,23 @@ export function addZoneHitMeshes(root: THREE.Group, zones: readonly ZoneOverlay[
 // lands ON the mesh instead of sometimes missing it by a hair (confirmed by
 // independent review: a real THREE ray at exactly 84.29 could report no hit
 // at all against a mesh whose edge was placed exactly there). The handful of
-// pitch-percent width this trims from the legacy 30-zone's outermost depth
-// band is inside that same coarse band either way, never crossing into the
-// next one, and the box's own half-open classification below still uses the
-// exact 84.29 threshold — this margin only affects hit ACQUISITION, never
-// which region (or "not the box at all") a hit resolves to.
+// pitch-percent width this adds to the 20-zone guide's box boundary is only
+// used to acquire the ray. The box's own half-open classification below uses
+// the exact 84.29 threshold, so it never changes the reported subregion (or
+// whether a point is classified as being in the box).
 const BOX_HIT_SURFACE_MARGIN = 0.5;
 
 /**
  * The exact server box endpoint's 4 regions, hit-tested independently of the
- * generic 30-zone grid above (whose middle lane merges L3L+L3R and whose
- * depth band starts at 83.33, not the box's real 84.29 boundary — neither
- * matches the box definition closely enough to stand in for it).
+ * generic 20-zone guide above. The guide's attack-box cell is intentionally
+ * descriptive only and cannot stand in for this server-defined four-region
+ * box breakdown.
  *
  * One single plane covers the whole box (not four separate ones) so there
  * are no internal seams at all at y=37/50/63 for a ray to fall between —
  * region classification never comes from which mesh was hit, only from the
  * exact analytic `resolveBoxSubregionId` at the real hit point. Placed a
- * touch higher than the legacy zone meshes so a raycast anywhere in the
+ * touch higher than the 20-zone guide meshes so a raycast anywhere in the
  * (margin-widened) box footprint always resolves through that exact
  * function, never the coarser generic cell it happens to overlap.
  */
@@ -498,7 +489,7 @@ export function WebGLSpatialPitch({
   const raycasterRef = useRef<THREE.Raycaster | null>(null);
   const [zoom, setZoom] = useState(1);
   const [showTacticalZones, setShowTacticalZones] = useState(true);
-  const [hoveredZone, setHoveredZone] = useState<ZoneOverlay | null>(null);
+  const [hoveredZone, setHoveredZone] = useState<TacticalZone20 | null>(null);
   const [hoveredBoxRegion, setHoveredBoxRegion] = useState<BoxRegionId | null>(null);
   const [selectedZone, setSelectedZone] = useState<PitchSelectedZone | null>(null);
   const [activeShot, setActiveShot] = useState<string | null>(null);
@@ -585,26 +576,7 @@ export function WebGLSpatialPitch({
   const markerGroups = useMemo(() => groupPitchShots(visibleShots), [visibleShots]);
   const medianXg = shotsValid ? medianObservedXg(spatial!.shotmapPoints) : null;
   const markerPlacements = useMemo(() => layoutWebglShotMarkers(markerGroups, medianXg), [markerGroups, medianXg]);
-  const zones = useMemo(() => {
-    if (!shotsValid) return [];
-    return (spatial?.positionalGrid ?? [])
-      .filter((cell) => Number.isInteger(cell.depth) && cell.depth >= 0 && cell.depth < 6 &&
-        Number.isInteger(cell.lane) && cell.lane >= 0 && cell.lane < 5 && Number.isFinite(cell.occupancyPct))
-      .map((cell) => ({
-        cell,
-        summary: zoneSummary(spatial!.shotmapPoints, cell),
-        point: {
-          x: (DEPTH_BOUNDARIES[cell.depth] + DEPTH_BOUNDARIES[cell.depth + 1]) / 2,
-          y: (LANE_BOUNDARIES[cell.lane] + LANE_BOUNDARIES[cell.lane + 1]) / 2,
-        },
-      }));
-  }, [shotsValid, spatial]);
-  const zonesByKey = useMemo(() => new Map(
-    zones.map((zone) => [`${zone.cell.depth}-${zone.cell.lane}`, zone]),
-  ), [zones]);
-  const zonesBySelectedId = useMemo(() => new Map(
-    zones.map((zone) => [tacticalGridZoneId(zone.cell.depth, zone.cell.lane), zone]),
-  ), [zones]);
+  const zonesById = useMemo(() => new Map(TACTICAL_ZONE20.map((zone) => [zone.id, zone])), []);
 
   const renderRuntime = useCallback(() => {
     runtimeRef.current?.render();
@@ -948,8 +920,12 @@ export function WebGLSpatialPitch({
     disposeObject(runtime.zoneHitRoot);
     runtime.zoneHitRoot.clear();
     if (showTacticalZones) {
-      addZoneHitMeshes(runtime.zoneHitRoot, zones);
+      addZoneHitMeshes(runtime.zoneHitRoot, TACTICAL_ZONE20_OVERLAYS);
       addTacticalGrid(runtime.overlayRoot);
+      if (selectedZone?.kind === "tactical20") {
+        const selected = zonesById.get(selectedZone.id);
+        if (selected) addTacticalZoneSelectionOutline(runtime.overlayRoot, selected);
+      }
     }
     // Box-region hit-testing stays available regardless of the 분석 구획·CCA
     // toggle — the box panel itself is always visible, so its 3D hover
@@ -979,7 +955,7 @@ export function WebGLSpatialPitch({
     if (hostRef.current) hostRef.current.dataset.nativeTrajectoryCount = String(runtime.overlayRoot.children.filter(child => child.userData.nativeTrajectoryKey).length);
     runtime.render();
     setProjectionVersion((value) => value + 1);
-  }, [groundDots, fullActivityHeatmap, fullActivityDisplay, fullNormalized, layers, showTacticalZones, nativeMode, nativePitchEvents, nativeEvents, legacyNormalized, markerGroups, visibleShots, markerPlacements, medianXg, runtimeVersion, spatial, zones, replayShot, loadState]);
+  }, [groundDots, fullActivityHeatmap, fullActivityDisplay, fullNormalized, layers, showTacticalZones, nativeMode, nativePitchEvents, nativeEvents, legacyNormalized, markerGroups, visibleShots, markerPlacements, medianXg, runtimeVersion, spatial, selectedZone, zonesById, replayShot, loadState]);
 
   const applyFreefly = useCallback((next: FreeflyCameraState) => {
     freeflyRef.current = next;
@@ -1053,10 +1029,9 @@ export function WebGLSpatialPitch({
       return resolveBoxSubregionId(point.x, point.y);
     })() : null;
     if (boxRegionId) return { kind: "box", id: boxRegionId };
-    const zoneHit = hits.find((candidate) => typeof candidate.object.userData.zoneKey === "string");
-    const zoneKey = zoneHit?.object.userData.zoneKey as string | undefined;
-    const zone = zoneKey ? zonesByKey.get(zoneKey) : undefined;
-    return zone ? { kind: "grid", id: tacticalGridZoneId(zone.cell.depth, zone.cell.lane) } : null;
+    const zoneHit = hits.find((candidate) => typeof candidate.object.userData.tacticalZone20Id === "string");
+    const zoneId = zoneHit?.object.userData.tacticalZone20Id as TacticalZone20["id"] | undefined;
+    return zoneId && zonesById.has(zoneId) ? { kind: "tactical20", id: zoneId } : null;
   };
 
   const pointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -1106,7 +1081,7 @@ export function WebGLSpatialPitch({
       setHoveredZone(null);
     } else {
       setHoveredBoxRegion(null);
-      setHoveredZone(hovered?.kind === "grid" ? zonesBySelectedId.get(hovered.id) ?? null : null);
+      setHoveredZone(hovered?.kind === "tactical20" ? zonesById.get(hovered.id) ?? null : null);
     }
   };
   const finishPointer = (event: PointerEvent<HTMLDivElement>, cancelled: boolean) => {
@@ -1137,7 +1112,7 @@ export function WebGLSpatialPitch({
     const origin = nativeMarkerOriginWorld(event);
     return origin ? projectWorld(runtimeRef.current, hostRef.current, origin) : { left: 50, top: 50, visible: false };
   };
-  const zoneProjection = (zone: ZoneOverlay) => projectWorld(
+  const zoneProjection = (zone: TacticalZoneOverlay) => projectWorld(
     runtimeRef.current,
     hostRef.current,
     pitchPercentToWorld(zone.point, 0.24),
@@ -1186,7 +1161,7 @@ export function WebGLSpatialPitch({
     <div className="flex flex-wrap items-center gap-3 border-b border-white/15 bg-slate-900 px-3 py-2 text-white">
       <label className="text-sm">슈팅 데이터 원천 <select aria-label="슈팅 데이터 원천" value={shotSource} onChange={(event) => onShotSourceChange(event.target.value as "sportsapi" | "fotmob")} className="ml-2 rounded bg-slate-800 p-2"><option value="sportsapi">SportsAPI</option><option value="fotmob">FotMob</option></select></label>
       <button type="button" aria-pressed={showTacticalZones} onClick={() => { setShowTacticalZones(value => !value); setHoveredZone(null); }} className="min-h-11 rounded border border-white/30 px-3 text-sm font-bold aria-pressed:bg-white aria-pressed:text-slate-900">전술 구역</button>
-      <span className="text-sm">30구역 안내선 · 공격 박스 4분할</span>
+      <span className="text-sm">20구역 안내선 · 박스 4분할</span>
       {nativeMode && <span className="text-sm text-cyan-100">SportsAPI 동일 기록 이벤트 · 활동 히트맵은 별도 원천</span>}
     </div>
     {!nativeMode && layers.markers && <section aria-label="득점·유효슛 모식 재생 시제품" className="border-b border-white/20 bg-slate-950 p-3 text-white">
@@ -1257,7 +1232,7 @@ export function WebGLSpatialPitch({
       data-attacking-goal-width-pct={goalWidthPct.toFixed(2)}
       data-attacking-goal-height-pct={goalHeightPct.toFixed(2)}>
       <canvas ref={canvasRef} aria-hidden="true" className="block h-auto w-full touch-none" />
-      <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-white">{nativeMode ? "SportsAPI 기록 슛 · 박스 4구역 / 활동 히트맵은 별도 원천" : showTacticalZones ? "30구역 · 박스 4분할 · Soccerlab 자체 구획 | 개인 내 상대 밀도" : "개인 내 상대 밀도 · 청록 → 노랑 → 주황 | 표시 보간 192×124 · 원천 32×22"}</span>
+      <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-white">{nativeMode ? "SportsAPI 기록 슛 · 박스 4구역 / 활동 히트맵은 별도 원천" : showTacticalZones ? "20구역 시각 가이드 · 박스 4분할 | 구역 수치 서버 집계 준비 중" : "개인 내 상대 밀도 · 청록 → 노랑 → 주황 | 표시 보간 192×124 · 원천 32×22"}</span>
       {loadState === "loading" && <div role="status" className="absolute inset-0 grid place-items-center bg-[#050a08]/70 text-sm font-bold text-zinc-200">3D 피치 자산 로딩…</div>}
       {(loadState === "error" || loadState === "unsupported") && <div role="alert" className="absolute inset-0 grid place-items-center bg-[#050a08] p-6 text-center text-sm font-bold text-rose-200">{loadState === "unsupported" ? "WebGL 피치를 표시할 수 없습니다." : "경기장 모델을 불러오지 못했습니다."} {loadError}</div>}
 
@@ -1270,7 +1245,7 @@ export function WebGLSpatialPitch({
           data-density-normalized={dot.density} data-density-radius-meters={dot.radiusMeters} />)}
       </div>}
       {layers.cca && fullActivityDisplay?.fullSourceCca.available && fullActivityDisplay.fullSourceCca.thresholdOfPeak !== null && <div hidden data-layer="cca-contour" data-cca-definition={fullActivityDisplay.fullSourceCca.definitionVersion} data-cca-source-revision={fullActivityDisplay.fullSourceCca.sourceRevision} data-contour-segments={marchingSquares(fullNormalized, fullActivityDisplay.fullSourceCca.thresholdOfPeak).length} />}
-        {showTacticalZones && <div hidden data-layer="positional-grid" data-zone-count="30">{Array.from({ length: 10 }, (_, index) => <span key={index} data-grid-segment={index} />)}</div>}
+        {showTacticalZones && <div hidden data-layer="positional-grid" data-zone-count="20" data-zone-taxonomy="guardiola-20-v1">{zone20Segments().map((_, index) => <span key={index} data-grid-segment={index} />)}</div>}
       <div hidden data-layer="goals"><span data-goal="defending" data-goal-post-near-y="44.61764705882353" data-goal-post-far-y="55.38235294117647" data-goal-crossbar-height-meters="2.44" /><span data-goal="attacking" data-goal-post-near-y="44.61764705882353" data-goal-post-far-y="55.38235294117647" data-goal-crossbar-height-meters="2.44" /></div>
       {(layers.markers || layers.trajectories) && <div hidden data-layer="shots" id={markerLayerId} />}
 
@@ -1335,9 +1310,10 @@ export function WebGLSpatialPitch({
         const bounds = BOX_SUBREGION_BOUNDS[zone.id];
         const region = nativeMode ? nativeBoxRegionAt(zone.id) : boxRegionAt(zone.id);
         const ready = region && region.shots !== null;
+        const presentationLabel = boxSubregionPresentationLabel(zone.id);
         const label = ready
-          ? `${region!.label}. 슛 ${region!.shots}개, 득점 ${region!.goals}개, xGOT − xG ${region!.quality.state === "unavailable" ? "미상" : region!.quality.delta!.toFixed(2)}.`
-          : `${bounds.label}. 박스 구역 통계를 사용할 수 없습니다.`;
+          ? `${presentationLabel}. 슛 ${region!.shots}개, 득점 ${region!.goals}개, xGOT − xG ${region!.quality.state === "unavailable" ? "미상" : region!.quality.delta!.toFixed(2)}.`
+          : `${presentationLabel}. 박스 구역 통계를 사용할 수 없습니다.`;
         return <button key={zone.id} type="button"
           data-box-zone-keyboard-target={zone.id}
           aria-label={label}
@@ -1346,21 +1322,17 @@ export function WebGLSpatialPitch({
           className="pointer-events-none absolute z-10 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded bg-transparent text-transparent outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
           style={{ left: `${projected.left}%`, top: `${projected.top}%`, display: projected.visible ? undefined : "none" }} />;
       })}
-      {showTacticalZones && zones.map((zone) => {
+      {showTacticalZones && TACTICAL_ZONE20_OVERLAYS.map((zone) => {
         const projected = zoneProjection(zone);
-        const selectedId = tacticalGridZoneId(zone.cell.depth, zone.cell.lane);
-        return <button key={`${zone.cell.depth}-${zone.cell.lane}`} type="button"
-          data-zone-keyboard-target={selectedId}
-          data-zone-shot-share={zone.summary.shotSharePct.toFixed(2)}
-          aria-label={nativeMode
-            ? `전술 구역 ${selectedId}. SportsAPI 선택은 해당 구역의 기하 위치만 사용합니다.`
-            : `구역 ${zone.cell.depth * 5 + zone.cell.lane + 1}. 슈팅 비중 ${zone.summary.shotSharePct.toFixed(2)}%, 활동 ${zone.cell.occupancyPct.toFixed(2)}%.`}
-          onClick={() => selectZone({ kind: "grid", id: selectedId })}
+        return <button key={zone.id} type="button"
+          data-zone-keyboard-target={zone.id}
+          aria-label={`${zone.label}. 서버 구역 집계 준비 중`}
+          onClick={() => selectZone({ kind: "tactical20", id: zone.id })}
           onFocus={() => setHoveredZone(zone)} onBlur={() => setHoveredZone(null)}
           className="pointer-events-none absolute z-10 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded bg-transparent text-transparent outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
           style={{ left: `${projected.left}%`, top: `${projected.top}%`, display: projected.visible ? undefined : "none" }} />;
       })}
-      <p className="sr-only">WebGL 장면 요약: 활동 좌표 {fullActivityHeatmap?.available ? fullActivityHeatmap.validPointCount : 0}개, 유효 슈팅 이벤트 {shotsValid ? spatial!.shotmapPoints.length : 0}개, 점유 라벨 {zones.length}개. 실제 GLTFLoader 모델과 Three.js 카메라를 사용합니다.</p>
+      <p className="sr-only">WebGL 장면 요약: 활동 좌표 {fullActivityHeatmap?.available ? fullActivityHeatmap.validPointCount : 0}개, 유효 슈팅 이벤트 {shotsValid ? spatial!.shotmapPoints.length : 0}개, 20구역 시각 가이드. 실제 GLTFLoader 모델과 Three.js 카메라를 사용합니다.</p>
     </div>
     {/* Below `lg` this sits in normal document flow BELOW the canvas — a
         mobile canvas is short enough (~320px) that the old always-absolute
@@ -1375,9 +1347,11 @@ export function WebGLSpatialPitch({
         `hostRef` already resizes the renderer/camera to whatever width that
         leaves it, so nothing overlaps at any breakpoint. */}
     <div data-pitch-info-dock className="mt-3 w-full lg:mt-0 lg:w-80">
-      {nativeMode ? nativePitchEvents?.kind === "ready" ? <NativePitchSelectionCard
+      {nativeMode ? nativePitchEvents?.kind === "ready" ? <>
+        {selectedZone?.kind === "tactical20" && <TacticalZone20SelectionCard zone={zonesById.get(selectedZone.id)!} onClose={() => selectZone(null)} />}
+        <NativePitchSelectionCard
         key={`${nativePitchEvents.key}:${selectedNativeEvent?.key ?? selectedZone?.id ?? "overview"}`}
-        data={nativePitchEvents.data} event={selectedNativeEvent} zone={selectedZone}
+        data={nativePitchEvents.data} event={selectedNativeEvent} zone={selectedZone?.kind === "box" ? selectedZone : null}
         onClose={() => { selectZone(null); selectNativeShot(null); }}
         controls={<div className="space-y-2">
           <select aria-label="재생할 슈팅" className="w-full rounded-lg border border-white/15 bg-[#202c40] p-2 text-xs"
@@ -1399,7 +1373,8 @@ export function WebGLSpatialPitch({
           {nativePoseState === "error" && <p role="alert" className="text-xs text-amber-200">신체 동작을 불러오지 못했습니다.</p>}
           {replayError && <p role="alert" className="text-xs text-amber-200">{replayError}</p>}
         </div>}
-      /> : <div role="status" className="rounded-2xl border border-white/15 bg-[#172131] p-4 text-sm text-slate-300">
+        />
+      </> : <div role="status" className="rounded-2xl border border-white/15 bg-[#172131] p-4 text-sm text-slate-300">
         {nativePitchEvents?.kind === "loading" ? "슈팅 정보를 불러오는 중…" : "슈팅 정보를 사용할 수 없습니다."}
       </div> : <>
       <BodyPartShootingPanel hasSelectedShot={nativeMode ? Boolean(selectedNativeEvent) : Boolean(selectedShot)} selectedBodyPart={nativeMode ? selectedNativeEvent?.bodyPart : undefined} state={nativeBodyState} />
@@ -1409,23 +1384,13 @@ export function WebGLSpatialPitch({
           <strong>{outcomePresentation[selectedShot.outcome].label}</strong><br />xG {formatShotMetric(selectedShot.shot.xg)} · xGOT {formatShotMetric(selectedShot.shot.xgot)}
         </div>;
       })()}
-      {!nativeMode && hoveredZone && <div data-zone-tooltip role="tooltip" className="rounded-2xl border border-white/30 bg-[#101c19]/85 p-4 text-zinc-100 shadow-xl backdrop-blur-md">
-          <div className="flex items-center justify-between gap-3 text-xs text-white/65"><span className="rounded-full border border-white/20 px-2 py-1">구역 {hoveredZone.cell.depth * 5 + hoveredZone.cell.lane + 1}</span><span>슈팅 퀄리티</span></div>
-          <p data-zone-shooting-quality="unavailable" className="mt-2 font-mono text-3xl font-semibold tracking-tight">—<span className="ml-2 text-xs text-white/60">xGOT − xG</span></p>
-          <p className="mt-1 text-xs text-amber-200/90">구역별 품질 데이터 미연결</p>
-          <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-white/15 pt-3">
-            {[["슛", hoveredZone.summary.shots], ["득점", hoveredZone.summary.goals], ["xG", hoveredZone.summary.xg.toFixed(2)]].map(([label, value]) => <div key={label}><dt className="text-xs text-white/55">{label}</dt><dd className="mt-1 font-mono text-base font-semibold">{value}</dd></div>)}
-          </dl>
-          <p className="mt-3 text-xs text-white/60">활동 비중 <span className="float-right font-mono text-white/85">{hoveredZone.cell.occupancyPct.toFixed(1)}%</span></p>
-          <p className="mt-2 text-xs text-white/60">슈팅 비중 <span className="float-right font-mono text-white/85">{hoveredZone.summary.shotSharePct.toFixed(1)}%</span></p>
-        </div>}
+      {!nativeMode && hoveredZone && <TacticalZone20SelectionCard zone={hoveredZone} />}
       {hoveredBoxRegion && (() => {
-        const bounds = BOX_SUBREGION_BOUNDS[hoveredBoxRegion];
         const region = nativeMode ? nativeBoxRegionAt(hoveredBoxRegion) : boxRegionAt(hoveredBoxRegion);
         const ready = region && region.shots !== null;
         const legacyActivityShare = !nativeMode && region ? (region as BoxSubregionRegion).activitySharePct : null;
         return <div data-box-zone-tooltip data-box-zone-id={hoveredBoxRegion} data-box-zone-state={ready ? "ready" : "unavailable"} role="tooltip" className="rounded-2xl border border-white/30 bg-[#101c19]/85 p-4 text-zinc-100 shadow-xl backdrop-blur-md">
-          <div className="flex items-center justify-between gap-3 text-xs text-white/65"><span className="rounded-full border border-white/20 px-2 py-1">{ready ? region!.label : bounds.label}</span><span>박스 구역 슈팅</span></div>
+          <div className="flex items-center justify-between gap-3 text-xs text-white/65"><span className="rounded-full border border-white/20 px-2 py-1">{boxSubregionPresentationLabel(hoveredBoxRegion)}</span><span>박스 구역 슈팅</span></div>
           {ready ? <>
             <p data-box-zone-quality={region!.quality.state} className="mt-2 font-mono text-3xl font-semibold tracking-tight">{region!.quality.state === "unavailable" ? "—" : `${region!.quality.delta! >= 0 ? "+" : ""}${region!.quality.delta!.toFixed(2)}`}<span className="ml-2 text-xs text-white/60">xGOT − xG</span></p>
             {region!.quality.state !== "unavailable" && <p className="mt-1 text-xs text-white/50">적격 {region!.quality.eligible}/{region!.shots}{region!.quality.state === "partial" && <span className="ml-1 text-amber-200/80">일부 표본</span>}</p>}

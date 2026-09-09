@@ -126,9 +126,65 @@ export const ZONE20 = {
 };
 export const SHOT_LANES = [0, 21.82, 37.0, 50.0, 63.0, 78.18, 100] as const;
 
+/**
+ * Presentation taxonomy for the owner-provided 20-zone guide.  This is
+ * deliberately geometry and naming only: there is no client-side aggregate
+ * attached to a zone until the separately versioned server contract exists.
+ * `x` increases toward the attacking goal and `y=0` is the player's right.
+ */
+export type TacticalZone20Id =
+  | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10"
+  | "11" | "12" | "13" | "14" | "15" | "16" | "17" | "18" | "19" | "20";
+export type TacticalZone20 = {
+  id: TacticalZone20Id;
+  label: string;
+  xMinInclusive: number;
+  xMaxExclusive: number;
+  yMinInclusive: number;
+  yMaxExclusive: number;
+};
+
+const z = (id: TacticalZone20Id, label: string, x0: number, x1: number, y0: number, y1: number): TacticalZone20 => ({
+  id, label, xMinInclusive: x0, xMaxExclusive: x1, yMinInclusive: y0, yMaxExclusive: y1,
+});
+
+/** Names follow the owner-approved attack-direction diagram, never camera direction. */
+export const TACTICAL_ZONE20: readonly TacticalZone20[] = [
+  z("1", "1 · 수비 좌 와이드", 0, 15.71, 78.18, 100),
+  z("2", "2 · 수비 박스", 0, 15.71, 21.82, 78.18),
+  z("3", "3 · 수비 우 와이드", 0, 15.71, 0, 21.82),
+  z("4", "4 · 수비 좌 와이드", 15.71, 32.5, 78.18, 100),
+  z("5", "5 · 수비 좌 와이드", 32.5, 50, 78.18, 100),
+  z("6", "6 · 수비 좌 하프스페이스", 15.71, 50, 63, 78.18),
+  z("7", "7 · 수비 중앙 채널", 15.71, 50, 37, 63),
+  z("8", "8 · 수비 우 하프스페이스", 15.71, 50, 21.82, 37),
+  z("9", "9 · 수비 우 와이드", 15.71, 32.5, 0, 21.82),
+  z("10", "10 · 수비 우 와이드", 32.5, 50, 0, 21.82),
+  z("11", "11 · 공격 좌 와이드", 50, 67.5, 78.18, 100),
+  z("12", "12 · 공격 좌 와이드", 67.5, 84.29, 78.18, 100),
+  z("13", "13 · 공격 좌 하프스페이스", 50, 84.29, 63, 78.18),
+  z("14", "14 · 공격 중앙 채널", 50, 84.29, 37, 63),
+  z("15", "15 · 공격 우 하프스페이스", 50, 84.29, 21.82, 37),
+  z("16", "16 · 공격 우 와이드", 50, 67.5, 0, 21.82),
+  z("17", "17 · 공격 우 와이드", 67.5, 84.29, 0, 21.82),
+  z("18", "18 · 공격 좌 와이드", 84.29, 100, 78.18, 100),
+  z("19", "19 · 공격 우 와이드", 84.29, 100, 0, 21.82),
+  z("20", "20 · 공격 박스", 84.29, 100, 21.82, 78.18),
+] as const;
+
+const includesUpperPitchEdge = (value: number, exclusiveMax: number) => value < exclusiveMax || (exclusiveMax === 100 && value === 100);
+/** One half-open resolver shared by 2D and 3D. The outer pitch edge belongs to its final cell. */
+export function resolveTacticalZone20(x: number, y: number): TacticalZone20 | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 100 || y < 0 || y > 100) return null;
+  return TACTICAL_ZONE20.find((zone) =>
+    x >= zone.xMinInclusive && includesUpperPitchEdge(x, zone.xMaxExclusive)
+    && y >= zone.yMinInclusive && includesUpperPitchEdge(y, zone.yMaxExclusive),
+  ) ?? null;
+}
+
 export type StrokedPath = { d: string; role: PathRole };
 export type PathRole =
-  | "turf" | "marking" | "zone-grid" | "pk-axis" | "goal-frame" | "goal-net" | "mini-box";
+  | "turf" | "marking" | "zone-grid" | "box-subregion" | "pk-axis" | "goal-frame" | "goal-net" | "mini-box";
 
 export const turfPath = (p: Projection) =>
   polyPath([p.pp(0, 0), p.pp(0, 100), p.pp(100, 100), p.pp(100, 0)]);
@@ -161,19 +217,37 @@ export function pitchMarkings(p: Projection): StrokedPath[] {
   return out;
 }
 
-export function zone20Lines(p: Projection): StrokedPath[] {
-  const out: StrokedPath[] = [];
+export type PitchPercentSegment = readonly [xStart: number, yStart: number, xEnd: number, yEnd: number];
+
+/** Common 20-zone guide segments. They are structural guide lines, not data cells. */
+export const zone20Segments = (): readonly PitchPercentSegment[] => {
+  const out: PitchPercentSegment[] = [];
   const [, l1, l2, l3, l4] = ZONE20.lanes;
-  out.push({ d: linePath(p.pp(l1, 0), p.pp(l1, 100)), role: "zone-grid" });
-  out.push({ d: linePath(p.pp(l4, 0), p.pp(l4, 100)), role: "zone-grid" });
-  out.push({ d: linePath(p.pp(l2, 15.71), p.pp(l2, 84.29)), role: "zone-grid" });
-  out.push({ d: linePath(p.pp(l3, 15.71), p.pp(l3, 84.29)), role: "zone-grid" });
+  out.push([0, l1, 100, l1], [0, l4, 100, l4]);
+  out.push([15.71, l2, 84.29, l2], [15.71, l3, 84.29, l3]);
   for (const x of ZONE20.depthWide.slice(1, -1)) {
-    out.push({ d: linePath(p.pp(0, x), p.pp(l1, x)), role: "zone-grid" });
-    out.push({ d: linePath(p.pp(l4, x), p.pp(100, x)), role: "zone-grid" });
+    if (x === 15.71 || x === 84.29) continue; // existing physical box rear edges
+    out.push([x, 0, x, l1], [x, l4, x, 100]);
   }
-  for (const x of [15.71, 50, 84.29]) out.push({ d: linePath(p.pp(l1, x), p.pp(l4, x)), role: "zone-grid" });
+  // x=15.71/84.29 are the existing physical penalty-box rear edges.
+  // Repainting either as a guide makes a visibly heavier double line, so
+  // only the non-physical centre split is drawn here.
+  out.push([50, l1, 50, l4]);
   return out;
+};
+
+/** Inner box dividers only: the physical 84.29 box line is never duplicated. */
+export const boxSubregionDividerSegments = (): readonly PitchPercentSegment[] => [
+  [84.29, 37, 100, 37], [84.29, 50, 100, 50], [84.29, 63, 100, 63],
+  [0, 37, 15.71, 37], [0, 50, 15.71, 50], [0, 63, 15.71, 63],
+];
+
+export function zone20Lines(p: Projection): StrokedPath[] {
+  return zone20Segments().map(([x0, y0, x1, y1]) => ({ d: linePath(p.pp(y0, x0), p.pp(y1, x1)), role: "zone-grid" }));
+}
+
+export function boxSubregionDividerLines(p: Projection): StrokedPath[] {
+  return boxSubregionDividerSegments().map(([x0, y0, x1, y1]) => ({ d: linePath(p.pp(y0, x0), p.pp(y1, x1)), role: "box-subregion" }));
 }
 
 export function pkAxisLines(p: Projection): StrokedPath[] {
@@ -221,6 +295,7 @@ export const PATH_STYLE: Record<PathRole, { stroke: string; width: number; opaci
   turf:         { stroke: "none",    width: 0,   opacity: 0 },
   marking:      { stroke: "#FFFFFF", width: 2.2, opacity: 0.5 },
   "zone-grid":  { stroke: "#FFFFFF", width: 1.0, opacity: 0.13 },
+  "box-subregion": { stroke: "#FFFFFF", width: 1.2, opacity: 0.34 },
   "pk-axis":    { stroke: "#7DD3FC", width: 2.0, opacity: 0.9, dash: "9 6" },
   "mini-box":   { stroke: "#FDE68A", width: 2.2, opacity: 0.85 },
   "goal-frame": { stroke: "#FFFFFF", width: 3.2, opacity: 0.95 },

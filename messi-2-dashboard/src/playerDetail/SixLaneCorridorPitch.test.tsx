@@ -168,11 +168,12 @@ describe("SixLaneCorridorPitch", () => {
     const boxSubregion: BoxSubregionStatsState = { kind: "ready", key: "k", data: boxFixture };
     const { container } = render(<SixLaneCorridorPitch analysis={analysis} layers={DEFAULT_PITCH_LAYERS} boxSubregion={boxSubregion} />);
     const svg = container.querySelector("svg")!;
-    // x=84.28 is just outside the box's xMinInclusive=84.29 — must fall back
-    // to the legacy generic lane/depth label, never a box region.
+    // x=84.28 is just outside the box's xMinInclusive=84.29 — it remains a
+    // visual-only approved 20-zone, never a box record.
     clickAtPitchPercent(svg, 84.28, 50);
     expect(within(container).getByLabelText("선택 구역 정보")).not.toHaveAttribute("data-corridor-box-zone");
-    expect(container.textContent).toContain("깊이");
+    expect(container.textContent).toContain("14 · 공격 중앙 채널");
+    expect(container.textContent).toContain("서버 20구역 집계 준비 중");
     // x=84.29, y=63 sits exactly on the L4/L3L boundary — half-open means 63 resolves to L4.
     clickAtPitchPercent(svg, 84.29, 63);
     expect(container.querySelector("[data-corridor-box-zone='L4']")).toBeInTheDocument();
@@ -196,6 +197,28 @@ describe("SixLaneCorridorPitch", () => {
     expect(container.querySelector("[data-corridor-box-zone='L3R']")).toHaveTextContent("슛 33 · 득점 11");
   });
 
+  it("keeps all 20 guide zones keyboard-selectable but gives a pointer inside the box to the exact server box record", () => {
+    const boxSubregion: BoxSubregionStatsState = { kind: "ready", key: "k", data: boxFixture };
+    const { container } = render(<SixLaneCorridorPitch analysis={analysis} layers={DEFAULT_PITCH_LAYERS} boxSubregion={boxSubregion} />);
+    const svg = container.querySelector("svg")!;
+    const rect = { left: 0, top: 0, width: 840, height: 480, right: 840, bottom: 480 };
+    Object.defineProperty(svg, "getBoundingClientRect", { configurable: true, value: () => rect });
+    expect(container.querySelectorAll("[data-tactical-zone20-target]")).toHaveLength(20);
+    expect(container.querySelectorAll("[data-corridor-box-keyboard-target]")).toHaveLength(4);
+    const boxGuide = container.querySelector('[data-tactical-zone20-target="20"]')!;
+    const insideBox = corridorClientPointForPitchPercent(rect, 90, 50);
+    fireEvent.click(boxGuide, insideBox);
+    expect(container.querySelector("[data-corridor-box-zone='L3L']")).toBeInTheDocument();
+    const centralGuide = container.querySelector('[data-tactical-zone20-target="14"]')!;
+    fireEvent.keyDown(centralGuide, { key: "Enter" });
+    expect(within(container).getByLabelText("선택 구역 정보")).toHaveTextContent("14 · 공격 중앙 채널");
+    expect(container.textContent).toContain("서버 20구역 집계 준비 중");
+    expect(container.textContent).not.toContain("14 · 공격 중앙 채널 · 슛");
+    const exactBoxKeyboardTarget = container.querySelector<SVGPathElement>("[data-corridor-box-keyboard-target='L3L']")!;
+    fireEvent.keyDown(exactBoxKeyboardTarget, { key: "Enter" });
+    expect(container.querySelector("[data-corridor-box-zone='L3L']")).toHaveTextContent("박스 좌중");
+  });
+
   it("maps a real (non-square) letterboxed rect back to the exact pitch percent it was hand-computed for — proof independent of the component's own inverse", () => {
     // Hand-derived, not reusing corridorClientPointForPitchPercent: viewBox
     // is 109×72 (aspect ≈1.514), the rect below is 900×500 (aspect 1.8) —
@@ -216,10 +239,9 @@ describe("SixLaneCorridorPitch", () => {
     const svg = container.querySelector("svg")!;
     Object.defineProperty(svg, "getBoundingClientRect", { configurable: true, value: () => rect });
     fireEvent.click(svg, { clientX, clientY });
-    // (52.5, 34) is outside the box (x<84.29) — legacy lane/depth label proves
-    // the click landed at pitch-centre, not at some letterbox-skewed point.
-    // y=34 falls in L2 [21.82,37); x=52.5 → ceil(52.5/(100/6))=4.
-    expect(within(container).getByLabelText("선택 구역 정보")).toHaveTextContent("L2 · 깊이 4");
+    // (52.5, 34) is outside the box (x<84.29) — zone 15 proves the click
+    // landed at pitch-centre, not at some letterbox-skewed point.
+    expect(within(container).getByLabelText("선택 구역 정보")).toHaveTextContent("15 · 공격 우 하프스페이스");
   });
 
   it("clears a previously-selected shot stack when a genuine field/box click lands, instead of leaving the stale stack inspector showing", () => {

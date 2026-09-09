@@ -6,6 +6,8 @@
 
 ## 진행 중인 작업
 
+- DETAIL-MAIN-20260908(2026-09-09) 디자인 전면 재개: 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. 발주자 기존 텍스트 중심 디자인 폐기 지시. 실제 API 값/스키마/점수 불변으로 athlete-first 첫 화면 재구성, 기존 기능 검수는 디자인 승인 아님. 독립 시각 재검수 예정, production 미변경. 정본 messi-specs/OPEN_WORK.md.
+
 - 실루엣 방향 보강(2026-09-09 사용자 추가 승인): 동일 detail-main worktree에서 실제3D 슈팅 포즈 정면축과 기록방향 검증·수정 중. provider좌표/점수불변, 골대강제보정 금지. 기존overview후보8ed9c02프리뷰만배포, production없음. OPEN_WORK.md 정본.
 
 - DETAIL-MAIN 후보 검수(2026-09-09): 동일 전용 worktree에서 root 관련42/42 PASS, 구현자 build PASS. 독립 detail_overview_review 코드+격리합성 시각 GO(독립25/25 PASS; preview-candidate-final1440/390, mobile354px, 숫자잘림해결). 실제API/전체화면/라이브 GO 아님. 발주자 승인된 비운영 브랜치 push/프리뷰로 실제 검증 예정. 정본 OPEN_WORK.md 및 DETAIL_MAIN_VERIFICATION_20260909.md.

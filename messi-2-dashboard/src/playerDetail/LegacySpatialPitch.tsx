@@ -6,7 +6,7 @@ import { groupPitchShots, medianObservedXg, pitchMarkerRadius, PitchShotMarker }
 import { DEFAULT_PITCH_LAYERS, type PitchLayerVisibility } from "./pitchLayers";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { excludePenaltyShots } from "./pitchPenalties";
-import { CCA_STYLE, PATH_STYLE, pkAxisLines, pitchMarkings, zone20Lines, type Projection as GeometryProjection } from "./pitchGeometry";
+import { boxSubregionDividerLines, CCA_STYLE, PATH_STYLE, pkAxisLines, pitchMarkings, zone20Lines, type Projection as GeometryProjection } from "./pitchGeometry";
 import { formatShotMetric, outcomeOrder, outcomePresentation, outcomeSummary, OutcomeControls, shotIntegrity, shotMarkerLabel, type ShotOutcome, useShotOutcomeVisibility } from "./shotOutcomeVisibility";
 import { BoxSubregionPanel } from "./BoxSubregionPanel";
 import type { BoxSubregionStatsState } from "./useBoxSubregionStats";
@@ -84,15 +84,18 @@ const planGeometryProjection: GeometryProjection = {
   scale: 1,
 };
 
-/** Visual-only Guardiola 20-zone guide. It never derives a zone metric client-side. */
-function GuardiolaPitchGuide({ showCorridors }: { showCorridors: boolean }) {
-  const markings = PATH_STYLE.marking, grid = PATH_STYLE["zone-grid"], pk = PATH_STYLE["pk-axis"];
+/** Visual-only owner-provided 20-zone guide. It never derives a zone metric client-side. */
+function OwnerProvided20ZoneGuide({ showCorridors }: { showCorridors: boolean }) {
+  const markings = PATH_STYLE.marking, grid = PATH_STYLE["zone-grid"], boxSubregion = PATH_STYLE["box-subregion"], pk = PATH_STYLE["pk-axis"];
   return <g data-layer="guardiola-20-zone-guide" fill="none" vectorEffect="non-scaling-stroke">
     <g data-layer="pitch-markings" stroke={markings.stroke} strokeOpacity={markings.opacity} strokeWidth={markings.width}>
       {pitchMarkings(planGeometryProjection).map((path, index) => <path key={index} d={path.d}/>) }
     </g>
     <g data-layer="positional-grid" stroke={grid.stroke} strokeOpacity={grid.opacity} strokeWidth={grid.width}>
       {zone20Lines(planGeometryProjection).map((path, index) => <path key={index} d={path.d}/>) }
+    </g>
+    <g data-layer="box-subregion-dividers" stroke={boxSubregion.stroke} strokeOpacity={boxSubregion.opacity} strokeWidth={boxSubregion.width}>
+      {boxSubregionDividerLines(planGeometryProjection).map((path, index) => <path key={index} d={path.d}/>) }
     </g>
     <g data-layer="pk-axis" stroke={pk.stroke} strokeOpacity={pk.opacity} strokeWidth={pk.width} strokeDasharray={pk.dash}>{pkAxisLines(planGeometryProjection).map((path, index) => <path key={index} d={path.d}/>)}</g>
     {showCorridors && <g data-layer="shot-corridors" stroke="#FFFFFF" strokeOpacity=".13" strokeWidth="1" strokeDasharray="3 4">{[21.82, 37, 50, 63, 78.18].map((edge) => <path key={`corridor-${edge}`} d={`M0 ${screenY(edge)}H100`}/>)}</g>}
@@ -164,7 +167,7 @@ export function LegacySpatialPitchFigure({ analysis, visibleOutcomes, markerLaye
       <div ref={markerScale.ref} className="relative isolate w-full overflow-hidden rounded bg-[#063525]" style={{ aspectRatio: "108 / 70.9" }}>
         {layers.heatmap && <HeatmapCanvas points={integrity.heat ? spatial!.heatmapPoints : []} enabled={integrity.heat && spatial!.heatmapPoints.length > 0}/>}
         <svg viewBox="-4 0 108 100" preserveAspectRatio="none" role="group" aria-label="Interactive two-dimensional shot markers" className="absolute inset-0 h-full w-full" data-layer="legacy-events">
-          <GuardiolaPitchGuide showCorridors={showCorridors}/>
+          <OwnerProvided20ZoneGuide showCorridors={showCorridors}/>
           {layers.cca && contour.length > 0 && <path aria-hidden="true" pointerEvents="none" data-layer="cca-contour" d={contour.map(([x1, y1, x2, y2]) => `M${x1.toFixed(4)} ${y1.toFixed(4)}L${x2.toFixed(4)} ${y2.toFixed(4)}`).join("")} fill="none" stroke={CCA_STYLE.stroke} strokeOpacity={CCA_STYLE.opacity} strokeWidth={CCA_STYLE.width} strokeDasharray={CCA_STYLE.dash} vectorEffect="non-scaling-stroke"/>}
           {layers.trajectories && <g data-layer="shot-trajectories-2d" fill="none" pointerEvents="none">{visibleShots.map(({ shot, sourceIndex }) => shot.trajectory ? <path key={sourceIndex} d={`M${shot.x} ${screenY(shot.y)}L${shot.trajectory.endX} ${screenY(shot.trajectory.endY)}`} stroke={outcomePresentation[shot.outcome].color} strokeOpacity=".32" strokeWidth=".65" vectorEffect="non-scaling-stroke"/> : null)}</g>}
           {layers.markers && <g id={markerLayerId}>{markerGroups.map((group, visibleIndex) => { const { shot } = group; const id = `${rawId}-legacy-shot-${group.key}`; const active = id === activeVisibleId; const radius = pitchMarkerRadius(shot.xg, medianXg); const composition = group.count > 1 ? ` Stack: ${group.outcomeCounts.goal} goals, ${group.outcomeCounts.on_target} on target, ${group.outcomeCounts.off_target} off target, ${group.outcomeCounts.blocked} blocked.` : ""; return <g key={id} ref={(element) => { if (element) markerRefs.current.set(id, element); else markerRefs.current.delete(id); }} id={id} role="img" tabIndex={active ? 0 : -1} aria-label={`${shotMarkerLabel(shot)}${group.count > 1 ? ` ${group.count} shots share this exact coordinate.` : ""}${composition}`} aria-describedby={tooltipId} data-shot-marker data-shot-index={group.sourceIndexes[0]} data-shot-indexes={group.sourceIndexes.join(",")} data-shot-outcome={group.outcome} data-marker-symbol={outcomePresentation[group.outcome].symbol} data-marker-size={radius * 2} data-marker-count={group.count} transform={`translate(${shot.x} ${100 - shot.y}) scale(${markerScale.x} ${markerScale.y})`} onFocus={() => { setActiveId(id); setTooltipIdState(id); }} onPointerEnter={() => { setActiveId(id); setTooltipIdState(id); }} onPointerLeave={(event) => { if (document.activeElement !== event.currentTarget) setTooltipIdState(null); }} onKeyDown={(event) => { if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); navigate(visibleIndex, 1); } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") { event.preventDefault(); navigate(visibleIndex, -1); } }}><g data-marker-visual><PitchShotMarker outcome={group.outcome} radius={radius} count={group.count} outcomeCounts={group.outcomeCounts} expandedStack={tooltipIdState === id}/></g><circle data-marker-hit r="12" fill="transparent" pointerEvents="all" /></g>; })}</g>}

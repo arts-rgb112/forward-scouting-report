@@ -34,6 +34,15 @@ describe("BoxSubregionPanel", () => {
     expect(l4.querySelector("[data-box-subregion-quality]")).toHaveTextContent("적격 9/9");
   });
 
+  it("uses the owner-requested four-box presentation names without changing the server IDs", () => {
+    const state: BoxSubregionStatsState = { kind: "ready", key: "k", data: fixture };
+    const { container } = render(<BoxSubregionPanel state={state} />);
+    expect(container.querySelector('[data-box-subregion-region="L4"]')).toHaveTextContent("박스 좌");
+    expect(container.querySelector('[data-box-subregion-region="L3L"]')).toHaveTextContent("박스 좌중");
+    expect(container.querySelector('[data-box-subregion-region="L3R"]')).toHaveTextContent("박스 우중");
+    expect(container.querySelector('[data-box-subregion-region="L2"]')).toHaveTextContent("박스 우");
+  });
+
   it("marks a partial-quality region (L3L: 30/31 eligible) without claiming complete", () => {
     const state: BoxSubregionStatsState = { kind: "ready", key: "k", data: fixture };
     const { container } = render(<BoxSubregionPanel state={state} />);

@@ -1,5 +1,6 @@
 import type { BoxSubregionRegion } from "../api/boxSubregionContracts";
 import type { BoxSubregionStatsState } from "./useBoxSubregionStats";
+import { boxSubregionPresentationLabel } from "./boxSubregionPresentation";
 
 /**
  * Shared between the 2D and 3D pitch views so the box breakdown never drifts
@@ -39,7 +40,7 @@ export function BoxSubregionPanel({ state, activeRegionId }: { state: BoxSubregi
         <>
           {activeRegion && (
             <div className="mt-2 rounded border border-orange-300/40 bg-orange-400/10 px-2 py-1.5" data-box-subregion-active-region={activeRegion.id}>
-              <p className="text-[10px] text-orange-200/80">선택 구역 · {activeRegion.label}</p>
+              <p className="text-[10px] text-orange-200/80">선택 구역 · {boxSubregionPresentationLabel(activeRegion.id)}</p>
               <RegionReadout region={activeRegion} />
             </div>
           )}
@@ -48,7 +49,7 @@ export function BoxSubregionPanel({ state, activeRegionId }: { state: BoxSubregi
             <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1.5">
               {ready.regions.map((region) => (
                 <div key={region.id} data-box-subregion-region={region.id}>
-                  <dt className="text-[10px] text-white/55">{region.label}</dt>
+                  <dt className="text-[10px] text-white/55">{boxSubregionPresentationLabel(region.id)}</dt>
                   <RegionReadout region={region} />
                 </div>
               ))}

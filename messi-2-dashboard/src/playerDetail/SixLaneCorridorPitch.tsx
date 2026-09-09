@@ -4,13 +4,14 @@ import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
 import type { FullActivityHeatmapData } from "../api/fullActivityHeatmapContracts";
 import { HeatmapCanvas } from "./LegacySpatialPitch";
 import { legacyDensityGrid, marchingSquares, normalizeDensity } from "./legacyHeatmap";
-import { CCA_STYLE, ZONE20 } from "./pitchGeometry";
+import { boxSubregionDividerSegments, CCA_STYLE, resolveTacticalZone20, TACTICAL_ZONE20, type TacticalZone20, zone20Segments } from "./pitchGeometry";
 import { groupPitchShots, stackCompositionLabel, type PitchShotGroup } from "./PitchShotMarker";
 import type { PitchLayerVisibility } from "./pitchLayers";
 import { usePitchPenalty } from "./PitchPenaltyContext";
 import { BoxSubregionPanel } from "./BoxSubregionPanel";
 import type { BoxSubregionStatsState } from "./useBoxSubregionStats";
-import { BOX_SUBREGION_BOUNDS, BOX_SUBREGION_ORDER, resolveBoxSubregionId, type BoxSubregionRegion } from "../api/boxSubregionContracts";
+import { BOX_SUBREGION_BOUNDS, BOX_SUBREGION_ORDER, BOX_SUBREGION_X_MIN_INCLUSIVE, resolveBoxSubregionId, type BoxSubregionRegion } from "../api/boxSubregionContracts";
+import { boxSubregionPresentationLabel } from "./boxSubregionPresentation";
 import { excludePenaltyShots, isPenaltyShot } from "./pitchPenalties";
 import { shotIntegrity } from "./shotOutcomeVisibility";
 
@@ -84,17 +85,17 @@ export const CORRIDOR_MARKER_RADIUS = {
   blocked: .5,
 } as const;
 export type CorridorShotCluster = PitchShotGroup & { shots: readonly ShotmapPoint[] };
-export type SelectedCorridorZone = { kind: "legacy"; label: string } | { kind: "box"; id: (typeof BOX_SUBREGION_ORDER)[number] };
+export type SelectedCorridorZone = { kind: "tactical20"; zone: TacticalZone20 } | { kind: "box"; id: (typeof BOX_SUBREGION_ORDER)[number] };
 
 /** Renders the exact selected server box record — real xG/quality/shares,
  * never a browser-computed stand-in — or an honest unavailable state keyed
  * to the box's own fixed label/bounds while the route is still 404ing. */
 function BoxZoneInspector({ id, boxSubregion }: { id: (typeof BOX_SUBREGION_ORDER)[number]; boxSubregion?: BoxSubregionStatsState }) {
-  const bounds = BOX_SUBREGION_BOUNDS[id];
   const region: BoxSubregionRegion | undefined = boxSubregion?.kind === "ready" ? boxSubregion.data.regions.find((candidate) => candidate.id === id) : undefined;
-  if (!region || region.shots === null) return <p data-corridor-box-zone={id} data-corridor-box-zone-state="unavailable">{COPY.zoneInfo} · {bounds.label} · 박스 구역 통계를 사용할 수 없습니다.</p>;
+  const label = boxSubregionPresentationLabel(id);
+  if (!region || region.shots === null) return <p data-corridor-box-zone={id} data-corridor-box-zone-state="unavailable">{COPY.zoneInfo} · {label} · 박스 구역 통계를 사용할 수 없습니다.</p>;
   return <div data-corridor-box-zone={id} data-corridor-box-zone-state="ready">
-    <p>{COPY.zoneInfo} · {region.label}</p>
+    <p>{COPY.zoneInfo} · {label}</p>
     <p className="mt-1">슛 {region.shots} · 득점 {region.goals} · xG {region.xg === null ? "—" : region.xg.toFixed(2)}</p>
     <p className="mt-1">활동 {region.activitySharePct === null ? "—" : `${region.activitySharePct.toFixed(1)}%`} · 슈팅 {region.shootingSharePct === null ? "—" : `${region.shootingSharePct.toFixed(1)}%`}</p>
     <p className="mt-1" data-corridor-box-zone-quality={region.quality.state}>
@@ -164,14 +165,42 @@ function CorridorShotMarker({ group }: { group: PitchShotGroup }) {
   </>;
 }
 
-function GuardiolaDepthGrid() {
-  const wide = ZONE20.depthWide.slice(1, -1);
-  const centre = [15.71, 50, 84.29];
-  return <g data-layer="positional-grid" fill="none" stroke="#FFFFFF" strokeOpacity=".13" strokeWidth=".34" vectorEffect="non-scaling-stroke">
-    {wide.map((depth) => <path key={`wide-${depth}`} d={`M${(depth * 1.05).toFixed(4)} 0V68`}/>)}
-    {centre.map((depth) => <path key={`centre-${depth}`} d={`M${(depth * 1.05).toFixed(4)} ${(lineY(78.18)).toFixed(4)}V${(lineY(21.82)).toFixed(4)}`}/>)}
-  </g>;
+const pitchSegmentPath = ([x0, y0, x1, y1]: readonly [number, number, number, number]) => {
+  const start = world({ x: x0, y: y0 });
+  const end = world({ x: x1, y: y1 });
+  return `M${start.x.toFixed(4)} ${start.y.toFixed(4)}L${end.x.toFixed(4)} ${end.y.toFixed(4)}`;
+};
+
+function OwnerProvided20ZoneGuide() {
+  return <>
+    <g data-layer="positional-grid" fill="none" stroke="#FFFFFF" strokeOpacity=".13" strokeWidth=".34" vectorEffect="non-scaling-stroke">
+      {zone20Segments().map((segment, index) => <path key={`zone20-${index}`} d={pitchSegmentPath(segment)}/>)}
+    </g>
+    {/* Only the three inner dividers are added. The physical 84.29 box edge
+        is already drawn by PitchLines, so this never creates a double line. */}
+    <g data-layer="box-subregion-dividers" fill="none" stroke="#FFFFFF" strokeOpacity=".34" strokeWidth=".42" vectorEffect="non-scaling-stroke">
+      {boxSubregionDividerSegments().map((segment, index) => <path key={`box4-${index}`} d={pitchSegmentPath(segment)}/>)}
+    </g>
+  </>;
 }
+
+const zone20Path = (zone: TacticalZone20) => {
+  const topLeft = world({ x: zone.xMinInclusive, y: zone.yMaxExclusive });
+  const bottomRight = world({ x: zone.xMaxExclusive, y: zone.yMinInclusive });
+  return `M${topLeft.x.toFixed(4)} ${topLeft.y.toFixed(4)}H${bottomRight.x.toFixed(4)}V${bottomRight.y.toFixed(4)}H${topLeft.x.toFixed(4)}Z`;
+};
+
+const boxSubregionPath = (id: (typeof BOX_SUBREGION_ORDER)[number]) => {
+  const bounds = BOX_SUBREGION_BOUNDS[id];
+  return zone20Path({
+    id: "20",
+    label: boxSubregionPresentationLabel(id),
+    xMinInclusive: BOX_SUBREGION_X_MIN_INCLUSIVE,
+    xMaxExclusive: 100,
+    yMinInclusive: bounds.yMinInclusive,
+    yMaxExclusive: bounds.yMaxExclusive,
+  });
+};
 
 export const corridorContourPath = (segments: readonly (readonly [number, number, number, number])[]) => segments.map(([x1, y1, x2, y2]) => {
   // marchingSquares already returns screen Y (100 - provider Y).
@@ -219,12 +248,7 @@ export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap, bo
     stage.addEventListener("wheel", onWheel, { passive: false });
     return () => stage.removeEventListener("wheel", onWheel);
   }, [zoom]);
-  const zoneAt = (event: ReactMouseEvent<SVGSVGElement>) => {
-    if (event.defaultPrevented) return;
-    const point = svgPointFromClient(event.currentTarget, event.clientX, event.clientY);
-    if (!point) return;
-    const x = Math.min(100, Math.max(0, point.x / 1.05));
-    const y = Math.min(100, Math.max(0, 100 - point.y / 0.68));
+  const selectZoneAtPitchPoint = (x: number, y: number) => {
     // A genuine field/region click always replaces a previously-selected
     // shot stack — otherwise the inspector kept showing the old stack's
     // detail (it takes priority over selectedZone) even after this click
@@ -237,9 +261,17 @@ export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap, bo
     // with the 3D ray-hit resolver so the two can never disagree at an edge.
     const boxId = resolveBoxSubregionId(x, y);
     if (boxId) { setSelectedZone({ kind: "box", id: boxId }); return; }
-    const lane = LANES.find((candidate) => y >= candidate.low && y < candidate.high) ?? LANES[LANES.length - 1];
-    const depth = Math.min(6, Math.max(1, Math.ceil(x / (100 / 6))));
-    setSelectedZone({ kind: "legacy", label: `${lane.id} · 깊이 ${depth}` });
+    const tacticalZone = resolveTacticalZone20(x, y);
+    if (tacticalZone) setSelectedZone({ kind: "tactical20", zone: tacticalZone });
+  };
+  const zoneAt = (event: ReactMouseEvent<SVGSVGElement>) => {
+    if (event.defaultPrevented) return;
+    const point = svgPointFromClient(event.currentTarget, event.clientX, event.clientY);
+    if (!point) return;
+    selectZoneAtPitchPoint(
+      Math.min(100, Math.max(0, point.x / 1.05)),
+      Math.min(100, Math.max(0, 100 - point.y / 0.68)),
+    );
   };
   const finishPointer = (pointerId: number) => { touchPoints.current.delete(pointerId); if (touchPoints.current.size < 2) pinch.current = null; if (drag.current?.pointerId === pointerId) drag.current = null; };
 
@@ -269,8 +301,34 @@ export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap, bo
               return <g key={lane.id} data-lane={lane.id}><rect x="0" y={y} width="105" height={height} fill={lane.fill} fillOpacity={lane.opacity}/></g>;
             })}
             <PitchLines />
-            <GuardiolaDepthGrid />
-            {LANES.slice(1).map((lane) => <path key={lane.id} d={`M0 ${lineY(lane.high)}H105`} stroke="#FFFFFF" strokeOpacity=".26" strokeWidth=".34" vectorEffect="non-scaling-stroke" />)}
+            <OwnerProvided20ZoneGuide />
+            {TACTICAL_ZONE20.map((zone) => {
+              const selected = selectedZone?.kind === "tactical20" && selectedZone.zone.id === zone.id;
+              return <path key={zone.id} data-tactical-zone20-target={zone.id} d={zone20Path(zone)}
+                role="button" tabIndex={0} fill="transparent" stroke={selected ? "#FDE68A" : "none"} strokeWidth={selected ? ".65" : "0"}
+                aria-label={`${zone.label}. 서버 구역 집계 준비 중`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const svg = event.currentTarget.ownerSVGElement;
+                  const point = svg && svgPointFromClient(svg, event.clientX, event.clientY);
+                  if (point) selectZoneAtPitchPoint(Math.min(100, Math.max(0, point.x / 1.05)), Math.min(100, Math.max(0, 100 - point.y / 0.68)));
+                  else { setSelectedCluster(null); setSelectedZone({ kind: "tactical20", zone }); }
+                }}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedCluster(null); setSelectedZone({ kind: "tactical20", zone }); } }} />;
+            })}
+            {BOX_SUBREGION_ORDER.map((id) => {
+              const selected = selectedZone?.kind === "box" && selectedZone.id === id;
+              const label = boxSubregionPresentationLabel(id);
+              return <path key={id} data-corridor-box-keyboard-target={id} d={boxSubregionPath(id)}
+                role="button" tabIndex={0} fill="transparent" stroke={selected ? "#FDE68A" : "none"} strokeWidth={selected ? ".65" : "0"}
+                aria-label={`${label}. 서버 박스 구역 통계 선택`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelectedCluster(null);
+                  setSelectedZone({ kind: "box", id });
+                }}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedCluster(null); setSelectedZone({ kind: "box", id }); } }} />;
+            })}
             {layers.cca && contour.length > 0 && <path data-layer="cca-contour" d={corridorContourPath(contour)} fill="none" stroke={CCA_STYLE.stroke} strokeOpacity={CCA_STYLE.opacity} strokeWidth={CCA_STYLE.width} strokeDasharray={CCA_STYLE.dash} vectorEffect="non-scaling-stroke"/>}
             <circle data-penalty-spot cx="93.999" cy="34" r=".3" fill="#FFFFFF" fillOpacity=".8" />
             <circle data-penalty-guide cx="93.999" cy="34" r="1.2" fill="none" stroke="#FBBF24" strokeOpacity=".9" strokeWidth=".3" strokeDasharray=".6 .45" vectorEffect="non-scaling-stroke" />
@@ -293,7 +351,7 @@ export function SixLaneCorridorPitch({ analysis, layers, fullActivityHeatmap, bo
       </aside>
     </div>
     {boxSubregion && <div className="mt-3"><BoxSubregionPanel state={boxSubregion} activeRegionId={selectedZone?.kind === "box" ? selectedZone.id : null} /></div>}
-    {(selectedCluster || selectedZone) && <aside data-layout="corridor-inspector" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-base text-zinc-300" aria-label={selectedCluster ? "슈팅 상세" : COPY.zoneInfo}>{selectedCluster ? <><p>슛 상세{selectedCluster.count > 1 ? ` · 묶음 ${selectedCluster.count}발` : ""}</p><ol aria-label="묶음 슈팅 이벤트" className="mt-2 space-y-1">{selectedCluster.shots.map((shot, index) => <li key={`${shot.x}:${shot.y}:${index}`}>#{index + 1} · {shot.outcome} · xG {typeof shot.xg === "number" ? shot.xg.toFixed(2) : "—"} · xGOT {typeof shot.xgot === "number" ? shot.xgot.toFixed(2) : "—"}</li>)}</ol></> : selectedZone!.kind === "box" ? <BoxZoneInspector id={selectedZone!.id} boxSubregion={boxSubregion} /> : <>{COPY.zoneInfo} · {selectedZone!.label} · 슛 — · 득점 — · xG — · 히트맵 점유 —</>}</aside>}
+    {(selectedCluster || selectedZone) && <aside data-layout="corridor-inspector" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-base text-zinc-300" aria-label={selectedCluster ? "슈팅 상세" : COPY.zoneInfo}>{selectedCluster ? <><p>슛 상세{selectedCluster.count > 1 ? ` · 묶음 ${selectedCluster.count}발` : ""}</p><ol aria-label="묶음 슈팅 이벤트" className="mt-2 space-y-1">{selectedCluster.shots.map((shot, index) => <li key={`${shot.x}:${shot.y}:${index}`}>#{index + 1} · {shot.outcome} · xG {typeof shot.xg === "number" ? shot.xg.toFixed(2) : "—"} · xGOT {typeof shot.xgot === "number" ? shot.xgot.toFixed(2) : "—"}</li>)}</ol></> : selectedZone!.kind === "box" ? <BoxZoneInspector id={selectedZone!.id} boxSubregion={boxSubregion} /> : <><strong>{selectedZone!.zone.label}</strong><p className="mt-1 text-amber-200/90">서버 20구역 집계 준비 중 — 슛·득점·xG·활동 수치를 표시하지 않습니다.</p></>}</aside>}
     <div className="mt-3 border-t border-white/10 pt-3 text-base leading-6 text-zinc-300"><b className="text-zinc-100">판독</b> · {COPY.reading}</div>
   </section>;
 }

@@ -7,10 +7,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { PlayerAnalysis } from "../dashboard/types";
 import { boxSubregionEnvelopeSchema } from "../api/boxSubregionContracts";
-import { nativePitchEventsEnvelopeSchema } from "../api/nativePitchEventsContracts";
+import { nativePitchEventsV2EnvelopeSchema as nativePitchEventsEnvelopeSchema } from "../api/nativePitchEventsV2Contracts";
 import { rawActivityHistogram } from "./legacyHeatmap";
 import type { BoxSubregionStatsState } from "./useBoxSubregionStats";
-import type { NativePitchEventsState } from "./useNativePitchEvents";
+import type { NativePitchEventsV2State as NativePitchEventsState } from "./useNativePitchEventsV2";
 import { SpatialPitch } from "./SpatialPitch";
 import { nativeMarkerOriginWorld } from "./WebGLSpatialPitch";
 import {
@@ -129,35 +129,28 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(pitch.querySelector("svg")).not.toBeInTheDocument();
   });
 
-  it("preserves all camera presets, zoom/reset, end-on framing, and shot counts", async () => {
+  it("uses the approved direct-control model without redundant camera presets", async () => {
     render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: true, shotmapPointCount: 2, shotmapPoints: [
       { x: 40, y: 40, outcome: "off_target" }, { x: 80, y: 60, outcome: "goal" },
     ] })} />);
     const pitch = await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
-    expect(screen.getAllByRole("button", { name: /좌측|우측|골대 정면|골대 뒤/ })).toHaveLength(4);
-    fireEvent.click(screen.getByRole("button", { name: "골대 정면" }));
-    expect(pitch).toHaveAttribute("data-camera-azimuth", "180");
-    expect(pitch).toHaveAttribute("data-camera-elevation", "27");
-    expect(pitch).toHaveAttribute("data-camera-frame-from-x", "50");
-    expect(pitch).toHaveAttribute("data-visible-shot-count", "1");
+    expect(screen.queryByRole("button", { name: /좌측|우측|골대 정면|골대 뒤|기본 시점|확대|축소/ })).not.toBeInTheDocument();
+    expect(pitch).toHaveAttribute("data-camera-mode", "freefly");
+    // Visibility is controlled by the outcome filter, not by the camera
+    // frame. Both selected outcome records remain available to assistive
+    // technology even if a renderer later clips one visually.
+    expect(pitch).toHaveAttribute("data-visible-shot-count", "2");
     expect(pitch).toHaveAttribute("data-total-shot-count", "2");
-    expect(screen.getByText("화면 밖 1발")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "확대" }));
-    expect(pitch).toHaveAttribute("data-camera-zoom", "1.25");
-    fireEvent.click(screen.getByRole("button", { name: "기본 시점" }));
-    expect(pitch).toHaveAttribute("data-camera-zoom", "1");
-    expect(pitch).toHaveAttribute("data-camera-distance", "84");
+    expect(screen.queryByText(/화면 밖 \d+발/)).not.toBeInTheDocument();
   });
 
-  it("uses freefly by default and lets keyboard users walk after a preset jump", async () => {
+  it("uses freefly by default and lets keyboard users walk, pan, tilt and zoom", async () => {
     render(<SpatialPitch analysis={analysisWith({})} />);
     const pitch = await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
     expect(pitch).toHaveAttribute("data-camera-mode", "freefly");
-    fireEvent.click(screen.getByRole("button", { name: "좌측" }));
-    const presetPosition = pitch.getAttribute("data-camera-position");
+    const initialPosition = pitch.getAttribute("data-camera-position");
     fireEvent.keyDown(pitch, { key: "w" });
-    expect(pitch).not.toHaveAttribute("data-camera-position", presetPosition);
-    expect(screen.getByRole("button", { name: "좌측" })).toHaveAttribute("aria-pressed", "false");
+    expect(pitch).not.toHaveAttribute("data-camera-position", initialPosition);
     const walkedPosition = pitch.getAttribute("data-camera-position");
     fireEvent.pointerDown(pitch, { button: 0, pointerId: 1, clientX: 100, clientY: 100 });
     fireEvent.pointerMove(pitch, { pointerId: 1, clientX: 130, clientY: 115 });
@@ -171,12 +164,14 @@ describe("Three WebGL spatial pitch contract", () => {
     const wheelUp = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 });
     expect(fireEvent(pitch, wheelUp)).toBe(false);
     expect(wheelUp.defaultPrevented).toBe(true);
-    expect(pitch).not.toHaveAttribute("data-camera-position", draggedPosition);
+    expect(pitch).toHaveAttribute("data-camera-position", draggedPosition);
+    expect(pitch).not.toHaveAttribute("data-camera-zoom", "1");
     const raisedPosition = pitch.getAttribute("data-camera-position");
     const wheelDown = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 });
     expect(fireEvent(pitch, wheelDown)).toBe(false);
     expect(wheelDown.defaultPrevented).toBe(true);
-    expect(pitch).not.toHaveAttribute("data-camera-position", raisedPosition);
+    expect(pitch).toHaveAttribute("data-camera-position", raisedPosition);
+    expect(pitch).toHaveAttribute("data-camera-zoom", "1");
   });
 
   it("keeps tactical zones independently switchable with CCA disabled", async () => {
@@ -191,7 +186,7 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(container.querySelector('[data-layer=positional-grid]')).toBeInTheDocument();
   });
 
-  it("retains the tactical grid, both goals, full density, and 32x22 CCA input", async () => {
+  it("retains the tactical grid, both goals and full density without inventing a missing CCA display envelope", async () => {
     const point = { x: 81, y: 46 };
     const { container } = render(<SpatialPitch analysis={analysisWith({
       heatmapPointCount: 1, heatmapPoints: [point],
@@ -199,7 +194,8 @@ describe("Three WebGL spatial pitch contract", () => {
     })} fullActivityHeatmap={fullHeatmap([point])} />);
     await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
     // Five depth + four existing lane lines + the PK centre axis; no duplicate box sides.
-    expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(10);
+    expect(container.querySelector('[data-layer="positional-grid"]')).toHaveAttribute("data-zone-count", "20");
+    expect(container.querySelectorAll("[data-grid-segment]")).toHaveLength(11);
     expect(container.querySelectorAll("[data-goal]")).toHaveLength(2);
     expect(container.querySelectorAll("[data-density-dot]").length).toBeGreaterThan(0);
     expect(container.querySelectorAll("[data-density-dot]").length).toBeLessThanOrEqual(64 * 24);
@@ -207,7 +203,7 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(container.querySelector("[data-layer=heat]")).toHaveAttribute("data-density-source", "dot-matrix-64x24");
     expect(container.querySelector("[data-layer=heat]")).toHaveAttribute("data-blur-std-deviation", "0");
     expect(container.querySelector("[data-layer=heat]")).toHaveAttribute("data-density-mesh-builds", "1");
-    expect(container.querySelector("[data-layer=cca-contour]")).toBeInTheDocument();
+    expect(container.querySelector("[data-layer=cca-contour]")).not.toBeInTheDocument();
     expect(container.querySelector("[data-spatial-activity-note]")).toHaveTextContent("full Tier 3 활동 좌표 1개 · 전술 구획은 시각 안내선이며 브라우저에서 점수나 구역 값을 새로 계산하지 않습니다.");
     expect(container.querySelector("[data-spatial-shot-note]")).toHaveTextContent("슈팅 스냅샷 사용 불가 · 데이터 없음과 관측된 0은 구분합니다.");
   });
@@ -232,28 +228,22 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(screen.getByRole("list", { name: "서버 슈팅 이벤트" })).toHaveTextContent("블록");
   });
 
-  it("keeps server zone shares and the complete hover breakdown", async () => {
+  it("keeps 20-zone selection descriptive until its own server aggregate exists", async () => {
     const { container } = render(<SpatialPitch analysis={analysisWith({
       shotmapSnapshotAvailable: true, shotmapPointCount: 2,
       shotmapPoints: [{ x: 8, y: 10, outcome: "goal", xg: .3 }, { x: 80, y: 90, outcome: "on_target", xg: .2 }],
-      positionalGrid: [{ depth: 0, lane: 0, occupancyPct: 16.67 }],
     })} />);
     await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
-    const zone = container.querySelector<HTMLButtonElement>("[data-zone-shot-share='50.00']")!;
+    const zone = container.querySelector<HTMLButtonElement>("[data-zone-keyboard-target='14']")!;
     expect(zone).toBeInTheDocument();
     expect(zone).toBeEmptyDOMElement();
     expect(zone).toHaveAttribute("data-zone-keyboard-target");
-    expect(zone).toHaveAttribute("aria-label", "구역 1. 슈팅 비중 50.00%, 활동 16.67%.");
+    expect(zone).toHaveAttribute("aria-label", "14 · 공격 중앙 채널. 서버 구역 집계 준비 중");
     expect(screen.getByRole("img", { name: /3D 회랑 WebGL 피치/ })).toHaveAttribute("data-zone-hover-mode", "raycaster");
     fireEvent.focus(zone);
-    const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveTextContent("슈팅 비중");
-    expect(tooltip).toHaveTextContent("50.0%");
-    expect(tooltip).toHaveTextContent("활동 비중 16.7%");
-    expect(tooltip).toHaveTextContent("슈팅 비중 50.0%");
-    expect(tooltip).toHaveTextContent("슈팅 퀄리티");
-    expect(tooltip.querySelector('[data-zone-shooting-quality="unavailable"]')).toHaveTextContent("—");
-    expect(tooltip).toHaveTextContent("구역별 품질 데이터 미연결");
+    const tooltip = container.querySelector('[data-tactical-zone20-readout="14"]')!;
+    expect(tooltip).toHaveTextContent("서버 20구역 집계 준비 중");
+    expect(tooltip).toHaveTextContent("기존 30구역에서 재사용하거나 브라우저에서 계산하지 않습니다");
     const dock = container.querySelector('[data-pitch-info-dock]');
     expect(dock).toContainElement(tooltip);
     // Mobile-first, and never absolute-overlay at any breakpoint any more —
@@ -261,10 +251,9 @@ describe("Three WebGL spatial pitch contract", () => {
     // instead (see the dedicated dock-placement test below for the full rationale).
     expect(dock).toHaveClass('lg:w-80'); // ~320px, enough for a readable figure without shrinking type
     expect(dock.className).not.toMatch(/\babsolute\b/);
-    const rows = [...tooltip.querySelectorAll('p')].map(row => row.textContent);
-    expect(rows.at(-2)).toContain('활동 비중');
-    expect(rows.at(-1)).toContain('슈팅 비중');
-    expect(tooltip.querySelector('dl')).toHaveTextContent("슛1득점1xG0.30");
+    expect(tooltip).not.toHaveTextContent("슈팅 비중");
+    expect(tooltip).not.toHaveTextContent("활동 비중");
+    expect(tooltip.querySelector("dl")).toBeNull();
   });
 
   it("shares outcome visibility with markers and trajectories while keeping the raw event list", async () => {
@@ -332,27 +321,22 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(box).toHaveTextContent("일부 표본");
   });
 
-  it("clears both the legacy zone and box-region hover state on pointer leave and on camera reset — not only one of the two", async () => {
+  it("clears both 20-zone and box-region hover state when the pointer leaves", async () => {
     const boxSubregion: BoxSubregionStatsState = { kind: "ready", key: "k", data: boxFixture };
     const { container } = render(<SpatialPitch analysis={analysisWith({
       shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 8, y: 10, outcome: "goal", xg: .3 }],
-      positionalGrid: [{ depth: 0, lane: 0, occupancyPct: 16.67 }],
     })} boxSubregion={boxSubregion} />);
     const pitch = await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
     fireEvent.focus(container.querySelector<HTMLButtonElement>("[data-zone-keyboard-target]")!);
-    expect(container.querySelector('[data-zone-tooltip]')).toBeInTheDocument();
+    expect(container.querySelector('[data-tactical-zone20-readout]')).toBeInTheDocument();
     fireEvent.pointerLeave(pitch);
-    expect(container.querySelector('[data-zone-tooltip]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-tactical-zone20-readout]')).not.toBeInTheDocument();
 
     fireEvent.focus(container.querySelector<HTMLButtonElement>("[data-box-zone-keyboard-target='L4']")!);
     expect(container.querySelector('[data-box-zone-tooltip]')).toBeInTheDocument();
     fireEvent.pointerLeave(pitch);
     expect(container.querySelector('[data-box-zone-tooltip]')).not.toBeInTheDocument();
 
-    fireEvent.focus(container.querySelector<HTMLButtonElement>("[data-box-zone-keyboard-target='L4']")!);
-    expect(container.querySelector('[data-box-zone-tooltip]')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "기본 시점" })); // resetCamera
-    expect(container.querySelector('[data-box-zone-tooltip]')).not.toBeInTheDocument();
   });
 
   it("keeps the info dock as a sibling of the WebGL host, never absolutely overlapping it at any breakpoint", async () => {
@@ -394,13 +378,13 @@ describe("Three WebGL spatial pitch contract", () => {
 
   it("connects a real native-pitch-events selection to its own confirmed body part — a genuinely separate source from the FotMob shot layer, never joined by index/proximity", async () => {
     const native = nativePitchEventsEnvelopeSchema.parse(JSON.parse(readFileSync(
-      resolve(import.meta.dirname, "../../../../messi-specs/evidence/native-pitch-http-20260908-canonical-v2/included.json"),
+      resolve(process.cwd(), "../docs/fixtures/native_pitch_v2/canonical_response.json"),
       "utf-8",
     )));
     const nativePitchEvents: NativePitchEventsState = { kind: "ready", key: "k", data: native };
     const { container } = render(<SpatialPitch analysis={analysisWith({})} forcedMode="perspective" nativePitchEvents={nativePitchEvents} />);
     await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
-    const panel = container.querySelector("[data-native-pitch-events-panel]")!;
+    const panel = container.querySelector('[data-pitch-selection-card="overview"]')!;
     expect(panel).toBeInTheDocument();
     const select = screen.getByRole("combobox", { name: "재생할 슈팅" });
     // The canonical fixture contains a projected source origin with no
@@ -411,14 +395,14 @@ describe("Three WebGL spatial pitch contract", () => {
     expect(nativeMarkerOriginWorld(endpointUnavailable)).toEqual(pitchPercentToWorld({ x: endpointUnavailable.plot.x!, y: endpointUnavailable.plot.y! }, 0.185));
     expect(container.querySelectorAll("[data-native-event-key]")).toHaveLength(native.events.filter((event) => event.plot.state === "projected").length);
     expect(container.querySelectorAll("[data-shot-marker]")).toHaveLength(0);
-    expect(container.querySelector("[data-native-box-state]")).toHaveAttribute("data-native-box-state", "ready");
-    const leftFootGoal = native.events.find((event) => event.identity.matchId === 14056037 && event.identity.shotId === 5473386)!;
+    const leftFootGoal = native.events.find((event) => event.bodyPart === "leftFoot" && event.outcome === "goal" && event.plot.state === "projected")!;
+    expect(leftFootGoal).toBeDefined();
     fireEvent.change(select, { target: { value: leftFootGoal.key } });
-    const detail = container.querySelector("[data-native-pitch-event-detail]")!;
+    const detail = container.querySelector('[data-pitch-selection-card="shot"]')!;
     expect(detail).toBeInTheDocument();
-    expect(container.querySelector("[data-native-pitch-event-bodypart]")).toHaveTextContent("왼발 확정");
+    expect(container.querySelector("[data-native-pitch-event-bodypart]")).toHaveTextContent("왼발");
     expect(detail).toHaveTextContent("득점");
-    expect(container.querySelector("[data-bodypart-attribution-note]")).toHaveTextContent("선택한 실제 기록 슛의 부위: 왼발");
+    expect(within(detail as HTMLElement).getByRole("button", { name: /왼발.*1/ })).toHaveAttribute("aria-pressed", "true");
     expect(container.querySelector("[data-webgl-renderer]")).toHaveAttribute("data-native-pose-key", leftFootGoal.key);
     fireEvent.change(screen.getByRole("combobox", { name: "슈팅 데이터 원천" }), { target: { value: "fotmob" } });
     expect(container.querySelector("[data-webgl-renderer]")).toHaveAttribute("data-shot-source", "fotmob");
@@ -427,12 +411,12 @@ describe("Three WebGL spatial pitch contract", () => {
     // the 2D plan fallback must never receive this — 3D-only first integration, never implicitly relabelled onto 2D.
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     const { container: plan } = render(<SpatialPitch analysis={analysisWith({})} nativePitchEvents={nativePitchEvents} />);
-    expect(plan.querySelector("[data-native-pitch-events-panel]")).not.toBeInTheDocument();
+    expect(plan.querySelector("[data-pitch-selection-card]")).not.toBeInTheDocument();
   });
 
   it("never renders an unavailable SportsAPI envelope as observed zero", async () => {
     const native = nativePitchEventsEnvelopeSchema.parse(JSON.parse(readFileSync(
-      resolve(import.meta.dirname, "../../../../messi-specs/evidence/native-pitch-http-20260908-canonical-v2/included.json"), "utf-8")));
+      resolve(process.cwd(), "../docs/fixtures/native_pitch_v2/canonical_response.json"), "utf-8")));
     // The UI branch is driven by the strict transport's completeness field.
     // Event/body reconciliation is backend-owned and separately enforced by
     // its decoder tests; this isolates the presentation distinction.
@@ -445,7 +429,7 @@ describe("Three WebGL spatial pitch contract", () => {
 
   it("clears a selected native event when the pitch context changes — a stale native key never carries over", async () => {
     const native = nativePitchEventsEnvelopeSchema.parse(JSON.parse(readFileSync(
-      resolve(import.meta.dirname, "../../../../messi-specs/evidence/native-pitch-http-20260908-canonical-v2/included.json"),
+      resolve(process.cwd(), "../docs/fixtures/native_pitch_v2/canonical_response.json"),
       "utf-8",
     )));
     const nativePitchEvents: NativePitchEventsState = { kind: "ready", key: "k", data: native };
@@ -453,9 +437,10 @@ describe("Three WebGL spatial pitch contract", () => {
     await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
     const select = screen.getByRole("combobox", { name: "재생할 슈팅" });
     fireEvent.change(select, { target: { value: native.events[0].key } });
-    expect(container.querySelector("[data-native-pitch-event-detail]")).toBeInTheDocument();
+    expect(container.querySelector('[data-pitch-selection-card="shot"]')).toBeInTheDocument();
     rerender(<SpatialPitch analysis={analysisWith({})} forcedMode="perspective" contextIdentity="b" nativePitchEvents={nativePitchEvents} />);
-    expect(container.querySelector("[data-native-pitch-event-detail]")).not.toBeInTheDocument();
+    expect(container.querySelector('[data-pitch-selection-card="shot"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-pitch-selection-card="overview"]')).toBeInTheDocument();
   });
 
   it("shows a short always-visible replay-honesty label and keeps the full limitations text behind a details disclosure, not as two long always-visible paragraphs", async () => {

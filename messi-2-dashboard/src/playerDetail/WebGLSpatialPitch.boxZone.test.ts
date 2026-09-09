@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
-import { addBoxZoneHitMeshes, addZoneHitMeshes } from "./WebGLSpatialPitch";
+import { addBoxZoneHitMeshes, addZoneHitMeshes, TACTICAL_ZONE20_OVERLAYS } from "./WebGLSpatialPitch";
 import { pitchPercentToWorld, worldToPitchPercent } from "./pitchWebglGeometry";
 import { resolveBoxSubregionId, BOX_SUBREGION_X_MIN_INCLUSIVE } from "../api/boxSubregionContracts";
 
@@ -98,15 +98,15 @@ describe("box-region 3D ray hit — real THREE.Raycaster against the real produc
 
 /**
  * Independent review (1788851444.721799) found that the elevated box hit
- * surface, being the closest intersection wherever it overlaps the legacy
- * 30-zone mesh below it, silently swallowed legacy hover across its own
+ * surface, being the closest intersection wherever it overlaps the approved
+ * 20-zone mesh below it, silently swallowed tactical hover across its own
  * acquisition margin (x∈[83.79,84.29)): the box surface was hit, resolved to
  * no region, but carries no `zoneKey`, so looking at only the CLOSEST hit
  * lost the real legacy zone underneath. This exercises the actual combined
  * production layering (both real hit surfaces together, exactly as
  * `runtime.zoneHitRoot` holds them) and the same full-intersection-list
  * selection algorithm the component uses, proving 84.28 still resolves to
- * the legacy zone while 84.29 resolves to the box.
+ * its 20-zone guide while 84.29 resolves to the box.
  */
 function resolveHoverSelection(root: THREE.Group, x: number, y: number) {
   const target = pitchPercentToWorld({ x, y }, 0);
@@ -117,31 +117,27 @@ function resolveHoverSelection(root: THREE.Group, x: number, y: number) {
   const boxPoint = boxHit ? worldToPitchPercent(boxHit.point) : null;
   const boxRegionId = boxPoint ? resolveBoxSubregionId(boxPoint.x, boxPoint.y) : null;
   if (boxRegionId) return { kind: "box" as const, id: boxRegionId };
-  const zoneHit = hits.find((candidate) => typeof candidate.object.userData.zoneKey === "string");
-  return zoneHit ? { kind: "legacy" as const, zoneKey: zoneHit.object.userData.zoneKey as string } : { kind: "none" as const };
+  const zoneHit = hits.find((candidate) => typeof candidate.object.userData.tacticalZone20Id === "string");
+  return zoneHit ? { kind: "tactical20" as const, id: zoneHit.object.userData.tacticalZone20Id as string } : { kind: "none" as const };
 }
 
-describe("combined box + legacy hit layering — the actual production selection algorithm", () => {
+describe("combined box + 20-zone hit layering — the actual production selection algorithm", () => {
   const root = new THREE.Group();
-  // The real depth-5/lane-2 cell (x:[83.33,100], y:[37,63]) is exactly the
-  // legacy zone the box's own acquisition margin (x∈[83.79,84.29)) overlaps.
-  addZoneHitMeshes(root, [{
-    cell: { depth: 5, lane: 2, occupancyPct: 10 },
-    summary: { shots: 0, goals: 0, xg: 0, shotSharePct: 0 },
-    point: { x: (83.33 + 100) / 2, y: (37 + 63) / 2 },
-  }]);
+  // Zone 14 ends at the real 84.29 box boundary and is the one the
+  // box acquisition margin overlaps at y=50.
+  addZoneHitMeshes(root, TACTICAL_ZONE20_OVERLAYS);
   addBoxZoneHitMeshes(root);
   root.updateMatrixWorld(true);
 
-  it("84.28 (inside the box's acquisition margin, outside the real box) still resolves to the legacy zone underneath, not nothing", () => {
-    expect(resolveHoverSelection(root, 84.28, 50)).toEqual({ kind: "legacy", zoneKey: "5-2" });
+  it("84.28 (inside the box's acquisition margin, outside the real box) still resolves to the 20-zone underneath, not nothing", () => {
+    expect(resolveHoverSelection(root, 84.28, 50)).toEqual({ kind: "tactical20", id: "14" });
   });
 
-  it("84.29 (the real box boundary) resolves to the box region, not the legacy zone", () => {
+  it("84.29 (the real box boundary) resolves to the box region, not the 20-zone", () => {
     expect(resolveHoverSelection(root, 84.29, 50)).toEqual({ kind: "box", id: "L3L" });
   });
 
-  it("83.5 (safely outside the box's margin entirely) still resolves to the legacy zone", () => {
-    expect(resolveHoverSelection(root, 83.5, 50)).toEqual({ kind: "legacy", zoneKey: "5-2" });
+  it("83.5 (safely outside the box's margin entirely) still resolves to the 20-zone", () => {
+    expect(resolveHoverSelection(root, 83.5, 50)).toEqual({ kind: "tactical20", id: "14" });
   });
 });
