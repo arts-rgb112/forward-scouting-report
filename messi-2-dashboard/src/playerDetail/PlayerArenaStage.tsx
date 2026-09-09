@@ -71,12 +71,10 @@ function PlayerArenaBody({ player, analysis, history, config, dataset, data, cat
     </div>
     </div>
     {!detailOpen && <div data-layout="arena-opening" className="relative z-20 grid min-h-[34rem] gap-5 bg-gradient-to-r from-[#1c1f20]/95 via-[#1c1f20]/75 to-[#1c1f20]/40 p-4 sm:p-7 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8">
-      <div className="flex min-w-0 flex-col gap-6">
-        <ArenaProfileHud player={player} analysis={analysis} selected={dataset}/>
-        <div className="min-w-0 rounded-xl border border-white/15 bg-[#232628]/80 p-4 backdrop-blur-md"><OverviewSeasonRail player={player} analysis={analysis} selected={dataset} history={history} ariaLabel="시즌 · 대회"/></div>
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-white/15 pt-4"><p className="text-sm text-zinc-400">같은 시즌·대회에서 선수를 비교합니다.</p><a href={comparisonHref} className="inline-flex min-h-11 items-center rounded-full border border-white/25 px-5 text-sm font-semibold text-zinc-100 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[#e78b84]">선수 비교 <span aria-hidden="true" className="ml-3">↗</span></a></div>
-      </div>
-      <div className="min-w-0 rounded-xl border border-white/15 bg-[#232628]/85 p-4 shadow-[0_15px_45px_rgba(0,0,0,.2)] backdrop-blur-md"><OverviewCategoryVector categories={authoritative?.categories} state={state}/></div>
+      <div className="min-w-0 lg:col-start-1 lg:row-start-1"><ArenaProfileHud player={player} analysis={analysis} selected={dataset}/></div>
+      <div data-layout="opening-category" className="min-w-0 rounded-xl border border-white/15 bg-[#232628]/85 p-4 shadow-[0_15px_45px_rgba(0,0,0,.2)] backdrop-blur-md lg:col-start-2 lg:row-span-3 lg:row-start-1"><OverviewCategoryVector categories={authoritative?.categories} state={state}/></div>
+      <div data-layout="opening-season" className="min-w-0 rounded-xl border border-white/15 bg-[#232628]/80 p-4 backdrop-blur-md lg:col-start-1 lg:row-start-2"><OverviewSeasonRail player={player} analysis={analysis} selected={dataset} history={history} ariaLabel="시즌 · 대회"/></div>
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-white/15 pt-4 lg:col-start-1 lg:row-start-3"><p className="text-sm text-zinc-400">같은 시즌·대회에서 선수를 비교합니다.</p><a href={comparisonHref} className="inline-flex min-h-11 items-center rounded-full border border-white/25 px-5 text-sm font-semibold text-zinc-100 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[#e78b84]">선수 비교 <span aria-hidden="true" className="ml-3">↗</span></a></div>
     </div>}
     </div>
   </section>;

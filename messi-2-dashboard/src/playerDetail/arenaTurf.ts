@@ -1,9 +1,9 @@
 import * as THREE from "three";
 
-/** New arena-only procedural turf. No photographic tile or meadow dependency. */
-export function createArenaTurf() {
-  const material = new THREE.MeshStandardMaterial({ color: "#485639", roughness: .96, metalness: 0 });
-  material.name = "arena-olive-turf-v1";
+/** Arena-only original texture plus multiscale shading; no inherited turf/HDR. */
+export function createArenaTurf(map?: THREE.Texture, bumpMap?: THREE.Texture) {
+  const material = new THREE.MeshStandardMaterial({ color: map ? "#b3baa4" : "#485639", map: map ?? null, bumpMap: bumpMap ?? null, bumpScale: .018, roughness: .96, metalness: 0 });
+  material.name = "arena-olive-turf-v2";
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 turfWorld;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nturfWorld=(modelMatrix*vec4(position,1.0)).xyz;");
@@ -23,8 +23,11 @@ export function createArenaTurf() {
       float detail=1.0-smoothstep(.025,.13,footprint);
       float mowing=sin(metres.y*.59)*.035;
       diffuseColor.rgb *= .86 + broad*.14 + medium*.12 + (blade-.5)*.30*detail + mowing;
+    `).replace("#include <map_fragment>", `#include <map_fragment>
+      float turfLuma=dot(diffuseColor.rgb,vec3(.2126,.7152,.0722));
+      diffuseColor.rgb=mix(vec3(turfLuma),diffuseColor.rgb,.65);
     `);
   };
-  material.customProgramCacheKey = () => "arena-olive-turf-v1";
+  material.customProgramCacheKey = () => "arena-olive-turf-v2";
   return material;
 }

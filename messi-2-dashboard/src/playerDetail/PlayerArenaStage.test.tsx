@@ -70,6 +70,9 @@ describe("PlayerArenaStage", () => {
     const canvas = container.querySelector("canvas");
     const before = window.location.href;
     expect(container.querySelector('[data-layout="arena-opening"]')).toBeInTheDocument();
+    const category = container.querySelector('[data-layout="opening-category"]')!;
+    const season = container.querySelector('[data-layout="opening-season"]')!;
+    expect(category.compareDocumentPosition(season) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(canvas?.closest('[inert]')).not.toBeNull();
     expect(screen.getByRole("link", { name: "선수 비교" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "상세 분석" }));

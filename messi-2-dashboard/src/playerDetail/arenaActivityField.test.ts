@@ -10,9 +10,18 @@ describe("new arena visual language", () => {
     const turf = createArenaTurf();
     expect(turf.map).toBeNull();
     expect(turf.normalMap).toBeNull();
-    expect(turf.name).toBe("arena-olive-turf-v1");
+    expect(turf.name).toBe("arena-olive-turf-v2");
     expect(turf.roughness).toBeGreaterThan(.9);
     turf.dispose();
+  });
+  it("accepts only explicitly supplied original maps with bounded tactile relief", () => {
+    const map = new THREE.Texture(), bump = new THREE.Texture();
+    const turf = createArenaTurf(map, bump);
+    expect(turf.map).toBe(map);
+    expect(turf.bumpMap).toBe(bump);
+    expect(turf.bumpScale).toBe(.018);
+    expect(turf.normalMap).toBeNull();
+    turf.dispose(); map.dispose(); bump.dispose();
   });
   it("leaves empty density transparent and creates no dot accents", () => {
     const field = createArenaActivityField(Array(704).fill(0));
@@ -26,7 +35,7 @@ describe("new arena visual language", () => {
     const before = [...counts];
     const field = createArenaActivityField(counts);
     expect(counts).toEqual(before);
-    const expected = marchingSquares(normalizeDensity(fullActivityDensityGrid(counts)), .3);
+    const expected = marchingSquares(normalizeDensity(fullActivityDensityGrid(counts)), .5);
     const actual = (field.children[1] as THREE.LineSegments).geometry.getAttribute("position");
     expect(actual.count).toBe(expected.length * 2);
     expected.forEach(([x, y], i) => {
@@ -35,6 +44,11 @@ describe("new arena visual language", () => {
       expect(actual.getZ(i * 2)).toBeCloseTo(world.z, 4);
     });
     const positions = (field.children[0] as THREE.Mesh).geometry.getAttribute("position");
-    for (let i = 0; i < positions.count; i++) expect(positions.getY(i)).toBeLessThanOrEqual(.281);
+    for (let i = 0; i < positions.count; i++) expect(positions.getY(i)).toBeLessThanOrEqual(.511);
+    const rgba = (field.children[0] as THREE.Mesh).geometry.getAttribute("color");
+    const alphas = Array.from({ length: rgba.count }, (_, i) => rgba.getW(i));
+    expect(Math.max(...alphas)).toBeGreaterThan(.3);
+    expect(Math.max(...alphas)).toBeLessThanOrEqual(.421);
+    expect(field.children).toHaveLength(4);
   });
 });

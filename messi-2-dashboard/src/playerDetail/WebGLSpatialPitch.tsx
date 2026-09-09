@@ -716,7 +716,7 @@ export function WebGLSpatialPitch({
         surface.apply(gltf.scene);
         scene.environment = surface.environment; scene.environmentIntensity = .65;
         scene.add(surface.surround);
-        canvas.dataset.pitchSurface = presentation === "arena" ? "arena-olive-turf-v1" : PITCH_SURFACE_VERSION;
+        canvas.dataset.pitchSurface = presentation === "arena" ? "arena-olive-turf-v2" : PITCH_SURFACE_VERSION;
         scene.add(gltf.scene);
         runtime.asset = gltf.scene;
         setLoadState("ready");

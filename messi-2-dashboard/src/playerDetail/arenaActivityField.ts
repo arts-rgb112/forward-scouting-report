@@ -11,14 +11,15 @@ export function createArenaActivityField(counts: readonly number[]) {
   root.userData.encoding = "within-player-relative-density-display-height";
   const positions: number[] = [], colors: number[] = [], indices: number[] = [];
   const columns = 96, rows = 64;
-  const height = (density: number) => .06 + density * .22;
-  const tint = new THREE.Color("#c9d2c6");
+  const height = (density: number) => .06 + density * .45;
+  const lowTint = new THREE.Color("#869e9d"), highTint = new THREE.Color("#d5b995");
   for (let row = 0; row <= rows; row++) for (let column = 0; column <= columns; column++) {
     const x = column / columns * 100, y = row / rows * 100;
     const density = bilinearDensity(grid, x, y);
     const world = pitchPercentToWorld({ x, y }, height(density));
     positions.push(world.x, world.y, world.z);
-    colors.push(tint.r, tint.g, tint.b, .16 * density * density);
+    const tint = lowTint.clone().lerp(highTint, density * density);
+    colors.push(tint.r, tint.g, tint.b, .42 * density * density);
     if (row < rows && column < columns) {
       const a = row * (columns + 1) + column, b = a + columns + 1;
       indices.push(a, b, a + 1, a + 1, b, b + 1);
@@ -31,7 +32,7 @@ export function createArenaActivityField(counts: readonly number[]) {
   const surface = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
   surface.renderOrder = 2;
   root.add(surface);
-  for (const threshold of [.3, .5, .7, .9]) {
+  for (const threshold of [.5, .7, .9]) {
     const points: THREE.Vector3[] = [];
     for (const [x1, y1, x2, y2] of marchingSquares(grid, threshold)) {
       // marchingSquares outputs SVG-oriented Y; restore provider orientation.
@@ -40,7 +41,7 @@ export function createArenaActivityField(counts: readonly number[]) {
         points.push(new THREE.Vector3(p.x, p.y, p.z));
       }
     }
-    const contour = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: "#c9d2c6", transparent: true, opacity: .16 + threshold * .32, depthWrite: false, toneMapped: false }));
+    const contour = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: highTint, transparent: true, opacity: .12 + threshold * .32, depthWrite: false, toneMapped: false }));
     contour.name = `relative-density-${threshold}`;
     contour.renderOrder = 3;
     root.add(contour);
