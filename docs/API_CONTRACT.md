@@ -6,6 +6,8 @@
 
 ## 진행 중인 작업
 
+- DETAIL-MAIN 최종 연결 검수(2026-09-09): 동일 전용 작업 폴더에서 실제 d21ef95 시즌 왕복(36→26→36) 검증. 비교 링크 scope8은 보존되나 비교 입력은 config.scope7로 초기화되는 UI 연결 결함 발견, shared-context 초기값만 보강 중. 기존 양쪽 exact 비교 계약/요청 조건/점수 불변. Slack 전용 봇 관측 오류 지속, 연결 도구의 스레드 존재 확인과 구분 기록. OPEN_WORK 정본.
+
 - DETAIL-MAIN 시각 재검수 결과(2026-09-09): 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. d21ef95 Preview의 신규 잔디·골망·활동층·모바일 순서 독립 코드/실제 시각 GO, 전체854PASS/0FAIL/1SKIP. 현재 Arena 표현 범위만 통과이며 전체 목표·G+A×M.E.S.S.I. 산점도 계약은 미완. 원본 이벤트/정규화/CCA/API/production 변경 없음, OPEN_WORK 정본.
 
 - DETAIL-MAIN 새 시각 언어(2026-09-09): 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. 발주자 잔디·히트맵 재사용 폐기 지시로 arena만 신규 procedural olive turf/저채도 활동층·등고선으로 교체. 밀도 정규화/CCA/원본좌표/점수 불변, 표시높이는 실제높이 아님. 독립 검수·실제시각 QA 진행, full/production 보존. 정본 OPEN_WORK.md.

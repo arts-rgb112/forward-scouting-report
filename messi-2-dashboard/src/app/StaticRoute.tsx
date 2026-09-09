@@ -277,9 +277,27 @@ function ContextualComparePanel({ label, panel, onRetry }: { label: string; pane
 }
 function ContextualCompareRoute({ config }: { config?: MessiApiConfig }) {
   const canonical = parseDuelPressCompare(window.location.search); const legacyPlayers = new URLSearchParams(window.location.search).has("players");
-  const [left, setLeft] = useState<ManualSide>(() => canonical?.left ?? manualSide(0, config)); const [right, setRight] = useState<ManualSide>(() => canonical?.right ?? manualSide(0, config));
+  const entrySide = (): ManualSide | null => {
+    const fallback = manualSide(0, config);
+    const query = new URLSearchParams(window.location.search);
+    // A profile entry supplies context, not a complete two-player request.
+    // Never infer players from an ambiguous legacy or incomplete canonical link.
+    if (legacyPlayers || [...query.keys()].some(key => /^(left|right)/.test(key)) || !query.has("season") || !query.has("mode")) return null;
+    if (["season", "mode", "scope", "competition", "taxonomy"].some(key => query.getAll(key).length > 1)) return null;
+    const season = query.get("season")!;
+    const taxonomy = query.get("taxonomy");
+    if (!/^20\d{2}\/20\d{2}$/.test(season) || (taxonomy !== "duel-press-v1" && taxonomy !== "legacy-v1")) return null;
+    const mode = query.get("mode"), scope = Number(query.get("scope")), competition = query.get("competition");
+    if (mode === "league" && ["3", "5", "7", "8"].includes(query.get("scope") ?? "") && (competition === null || competition === "all")) return { ...fallback, taxonomy, context: { season, mode, scope: scope as 3 | 5 | 7 | 8, competition: "all" } };
+    if (mode === "europe" && (!query.has("scope") || query.get("scope") === "null") && (competition === "all" || competition === "ucl" || competition === "uel" || competition === "uecl")) return { ...fallback, taxonomy, context: { season, mode, scope: null, competition } };
+    return null;
+  };
+  const entry = entrySide();
+  const invalidEntry = !canonical && !entry && [...new URLSearchParams(window.location.search).keys()].some(key => ["season", "mode", "scope", "competition", "taxonomy"].includes(key) || /^(left|right)/.test(key));
+  const [left, setLeft] = useState<ManualSide>(() => canonical?.left ?? entry ?? manualSide(0, config)); const [right, setRight] = useState<ManualSide>(() => canonical?.right ?? entry ?? manualSide(0, config));
   const request = useMemo(() => left.playerId > 0 && right.playerId > 0 ? { comparisonVersion: "contextual-compare-v1" as const, left: { player: { idNamespace: "fotmob" as const, playerId: left.playerId }, taxonomy: left.taxonomy, context: left.context }, right: { player: { idNamespace: "fotmob" as const, playerId: right.playerId }, taxonomy: right.taxonomy, context: right.context } } : null, [left, right]);
   const resource = useContextualCompare(config, request); const href = request ? duelPressCompareHref(left, right) : undefined;
   const panels = resource.panels;
-  return <Page><FocusTitle>Player comparison</FocusTitle><p className="mt-2 text-sm text-zinc-400">Select each player and context independently. Requests use only the server contextual comparison contract.</p>{legacyPlayers && !canonical && <p role="alert" className="mt-3 text-sm text-amber-200">This legacy comparison link does not include each player’s full context. Choose both exact contexts before requesting a comparison.</p>}<div className="mt-5 grid gap-3 lg:grid-cols-2"><ManualSideFields label="Left player" side={left} onChange={setLeft} /><ManualSideFields label="Right player" side={right} onChange={setRight} /></div>{href ? <a href={href} className="mt-4 inline-flex min-h-11 items-center rounded bg-lime-300 px-4 text-sm font-black text-black">Open exact comparison URL</a> : <p role="alert" className="mt-4 text-sm text-amber-200">Enter two valid FotMob player IDs to request an exact comparison.</p>}<div className="mt-5 grid gap-3 lg:grid-cols-2"><ContextualComparePanel label="Left player" panel={panels.left} onRetry={resource.retry} /><ContextualComparePanel label="Right player" panel={panels.right} onRetry={resource.retry} /></div><div className="mt-6"><a href="/" className="text-lime-300 hover:underline">Leaderboard</a></div></Page>;
+  const entryNotice = invalidEntry ? <p role="alert" className="mt-3 text-sm text-amber-200">The incoming comparison context is invalid, incomplete, or unsupported. Defaults are shown; choose both exact contexts before comparing.</p> : null;
+  return <Page><FocusTitle>Player comparison</FocusTitle><p className="mt-2 text-sm text-zinc-400">Select each player and context independently. Requests use only the server contextual comparison contract.</p>{entryNotice}{legacyPlayers && !canonical && <p role="alert" className="mt-3 text-sm text-amber-200">This legacy comparison link does not include each player’s full context. Choose both exact contexts before requesting a comparison.</p>}<div className="mt-5 grid gap-3 lg:grid-cols-2"><ManualSideFields label="Left player" side={left} onChange={setLeft} /><ManualSideFields label="Right player" side={right} onChange={setRight} /></div>{href ? <a href={href} className="mt-4 inline-flex min-h-11 items-center rounded bg-lime-300 px-4 text-sm font-black text-black">Open exact comparison URL</a> : <p role="alert" className="mt-4 text-sm text-amber-200">Enter two valid FotMob player IDs to request an exact comparison.</p>}<div className="mt-5 grid gap-3 lg:grid-cols-2"><ContextualComparePanel label="Left player" panel={panels.left} onRetry={resource.retry} /><ContextualComparePanel label="Right player" panel={panels.right} onRetry={resource.retry} /></div><div className="mt-6"><a href="/" className="text-lime-300 hover:underline">Leaderboard</a></div></Page>;
 }
