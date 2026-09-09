@@ -3,16 +3,17 @@ import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { GroundedSkybox } from 'three/addons/objects/GroundedSkybox.js';
 import { createInfieldStudyMaterial } from './infieldStudy';
 import { createDesignSurround } from './pitchArtDirection';
+import { createArenaStudio } from './arenaStudio';
 
 export const PITCH_SURFACE_VERSION = 'grass001-fibre-v1';
 const ROOT = '/assets/infield-v1/';
 
 /** Approved study material packaged for the existing interactive pitch, without demo data. */
-export async function loadPitchSurfaceAssets() {
+export async function loadPitchSurfaceAssets(presentation: 'full' | 'arena' = 'full') {
   const loader = new THREE.TextureLoader();
   const results = await Promise.allSettled([
     ...['Color', 'NormalGL', 'Roughness', 'AmbientOcclusion'].map(name => loader.loadAsync(`${ROOT}${name}.webp`)),
-    new HDRLoader().setDataType(THREE.FloatType).loadAsync(`${ROOT}meadow-2-2k.hdr`),
+    ...(presentation === 'full' ? [new HDRLoader().setDataType(THREE.FloatType).loadAsync(`${ROOT}meadow-2-2k.hdr`)] : []),
   ]);
   const textures = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
   if (results.some(result => result.status === 'rejected')) {
@@ -25,18 +26,21 @@ export async function loadPitchSurfaceAssets() {
     texture.repeat.setScalar(2 / 1.4);
     texture.colorSpace = texture === map ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   }
-  environment.mapping = THREE.EquirectangularReflectionMapping;
+  if (environment) environment.mapping = THREE.EquirectangularReflectionMapping;
   const source = new THREE.MeshPhysicalMaterial({ map, normalMap, roughnessMap, aoMap, aoMapIntensity: .5 });
   const material = createInfieldStudyMaterial(source, true, true);
   source.dispose();
   material.color.setRGB(.80, .95, .70); material.normalScale.set(.55, .55);
   if (material instanceof THREE.MeshPhysicalMaterial) material.specularIntensity = .10;
   material.userData.sharedAssetTextures = true;
-  const backdrop = new GroundedSkybox(environment, 45, 350, 96); backdrop.position.y = 44.88;
-  const surround = createDesignSurround(); surround.add(backdrop);
+  const surround = presentation === 'arena' ? createArenaStudio() : createDesignSurround();
+  if (environment) {
+    const backdrop = new GroundedSkybox(environment, 45, 350, 96); backdrop.position.y = 44.88;
+    surround.add(backdrop);
+  }
   const replaced = new Set<THREE.Material>();
   return {
-    environment, surround,
+    environment: environment ?? null, surround,
     apply(root: THREE.Object3D) {
       root.traverse(object => {
         if (!(object instanceof THREE.Mesh)) return;

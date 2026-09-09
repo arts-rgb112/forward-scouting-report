@@ -39,7 +39,18 @@ describe("PlayerOverview", () => {
   const selected = { season: "2025/2026", mode: "league" as const, scope: 7 as const, competition: "all" as const };
   const history = { loading: false, entries: [], failed: 0, requestedSeasons: 0 };
 
-  afterEach(() => cleanup());
+  afterEach(() => { cleanup(); window.history.replaceState({}, "", "/"); });
+
+  it.each(["duel-press-v1", "duel-press-v2", "invalid", ""])("preserves only recognized taxonomy across season navigation: %s", (taxonomy) => {
+    window.history.replaceState({}, "", `/players/1?season=2025%2F2026&mode=league&scope=7&utm_source=continuity${taxonomy ? `&taxonomy=${taxonomy}` : ""}`);
+    const { container } = render(<PlayerOverview player={samplePlayers[0]} selected={selected} history={{ ...history, entries: [{ player: samplePlayers[0], context: { season: "2024/2025", mode: "league", scope: 8, competition: "all" } }] }} categoryState="unavailable" />);
+    const link = container.querySelector('a[aria-label*="2024/2025"]')!;
+    const query = new URL(link.getAttribute("href")!, window.location.origin).searchParams;
+    expect(query.get("taxonomy")).toBe(taxonomy.startsWith("duel-press-") ? taxonomy : null);
+    expect(query.get("season")).toBe("2024/2025");
+    expect(query.get("scope")).toBe("8");
+    expect(query.get("utm_source")).toBe("continuity");
+  });
 
   it("uses only authoritative unified category scores in one radar-and-vector card without a duplicate category rail", () => {
     const data = syntheticUnifiedDetail();

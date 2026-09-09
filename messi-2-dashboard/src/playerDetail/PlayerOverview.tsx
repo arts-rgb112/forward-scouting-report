@@ -50,7 +50,13 @@ type SeasonOverviewRow = ReturnType<typeof seasonScoreRows>[number];
 
 function seasonHref(playerId: number, context: DatasetRouteState) {
   const url = datasetHref(`/players/${playerId}`, context);
-  return typeof window === "undefined" ? url : preserveExternalQuery(url, window.location.search, dashboardQueryKeys);
+  if (typeof window === "undefined") return url;
+  const preserved = preserveExternalQuery(url, window.location.search, dashboardQueryKeys);
+  const taxonomy = new URLSearchParams(window.location.search).get("taxonomy");
+  // Taxonomy owns the detail readout request, independently of season/scope.
+  // Keep only recognized versions; never activate a missing or invalid one.
+  if (taxonomy !== "duel-press-v1" && taxonomy !== "duel-press-v2") return preserved;
+  return `${preserved}${preserved.includes("?") ? "&" : "?"}taxonomy=${taxonomy}`;
 }
 
 function OverviewSeasonRow({ row, player, analysis }: { row: SeasonOverviewRow; player: Player; analysis?: PlayerAnalysis }) {

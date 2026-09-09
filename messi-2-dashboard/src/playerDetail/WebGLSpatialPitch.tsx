@@ -628,7 +628,7 @@ export function WebGLSpatialPitch({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.85;
-    renderer.setClearColor(DAYLIGHT_BACKGROUND, 1);
+    renderer.setClearColor(presentation === "arena" ? 0x353939 : DAYLIGHT_BACKGROUND, 1);
 
     const scene = new THREE.Scene();
     let surface: Awaited<ReturnType<typeof loadPitchSurfaceAssets>> | undefined;
@@ -640,7 +640,7 @@ export function WebGLSpatialPitch({
     const initialTarget = freeflyLookTarget(initial);
     camera.lookAt(initialTarget.x, initialTarget.y, initialTarget.z);
 
-    scene.add(new THREE.HemisphereLight(0xcde5f4, 0x4a5231, .3));
+    if (presentation !== "arena") scene.add(new THREE.HemisphereLight(0xcde5f4, 0x4a5231, .3));
     const sun = new THREE.DirectionalLight(0xfff2d7, 1.4);
     sun.position.set(-50, 48, -30);
     sun.castShadow = true;
@@ -648,7 +648,7 @@ export function WebGLSpatialPitch({
     Object.assign(sun.shadow.camera, {left:-80,right:80,top:90,bottom:-90,near:1,far:210});
     sun.shadow.bias = -.0003;
     sun.shadow.normalBias = .035;
-    scene.add(sun);
+    if (presentation !== "arena") scene.add(sun);
     const overlayRoot = new THREE.Group();
     scene.add(overlayRoot);
     const zoneHitRoot = new THREE.Group();
@@ -705,7 +705,7 @@ export function WebGLSpatialPitch({
           }
         });
         let loadedSurface: Awaited<ReturnType<typeof loadPitchSurfaceAssets>>;
-        try { loadedSurface = await loadPitchSurfaceAssets(); }
+        try { loadedSurface = await loadPitchSurfaceAssets(presentation); }
         catch (error) { disposeObject(gltf.scene); throw error; }
         if (cancelled) { disposeObject(gltf.scene); disposeObject(loadedSurface.surround); loadedSurface.dispose(); return; }
         surface = loadedSurface;
