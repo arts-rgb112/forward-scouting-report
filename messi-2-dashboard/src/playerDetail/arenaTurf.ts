@@ -2,7 +2,7 @@ import * as THREE from "three";
 
 /** New arena-only procedural turf. No photographic tile or meadow dependency. */
 export function createArenaTurf() {
-  const material = new THREE.MeshStandardMaterial({ color: "#454c32", roughness: .96, metalness: 0 });
+  const material = new THREE.MeshStandardMaterial({ color: "#485639", roughness: .96, metalness: 0 });
   material.name = "arena-olive-turf-v1";
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 turfWorld;")
@@ -17,11 +17,12 @@ export function createArenaTurf() {
     `).replace("#include <color_fragment>", `#include <color_fragment>
       vec2 metres=turfWorld.xz;
       float broad=turfNoise(metres*.65);
+      float medium=turfNoise(metres*vec2(9.,14.));
       float blade=turfNoise(metres*vec2(95.,32.));
       float footprint=max(length(dFdx(metres)),length(dFdy(metres)));
       float detail=1.0-smoothstep(.025,.13,footprint);
       float mowing=sin(metres.y*.59)*.035;
-      diffuseColor.rgb *= .90 + broad*.16 + (blade-.5)*.23*detail + mowing;
+      diffuseColor.rgb *= .86 + broad*.14 + medium*.12 + (blade-.5)*.30*detail + mowing;
     `);
   };
   material.customProgramCacheKey = () => "arena-olive-turf-v1";

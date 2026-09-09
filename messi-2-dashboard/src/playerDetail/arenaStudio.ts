@@ -4,7 +4,7 @@ import { freeflyStateFromOrbit, pitchPercentToWorld } from "./pitchWebglGeometry
 /** Authored display architecture, not a reconstruction of a real stadium. */
 export const ARENA_STUDIO_VERSION = "concrete-studio-v1";
 export const ARENA_INITIAL_CAMERA = freeflyStateFromOrbit(
-  { azimuth: 0, elevation: 21, distance: 48 }, pitchPercentToWorld({ x: 88, y: 50 }),
+  { azimuth: 0, elevation: 19, distance: 30 }, pitchPercentToWorld({ x: 91, y: 50 }),
 );
 
 function concreteMaterial() {
@@ -46,10 +46,10 @@ export function createArenaStudio() {
   }
   box("studio-left-wall", [1.2, 36, 165], [-126.6, 17.7, -2]);
   box("studio-right-wall", [1.2, 36, 165], [126.6, 17.7, -2]);
-  // An open skylight and its structural beams create real cast shadows.
-  for (let index = 0; index < 5; index++) {
-    box(`studio-skylight-beam-${index}`, [252, 1.1, 1.4], [0, 35.1, 20 + index * 11], graphite);
-  }
+  // One cut-away roof edge creates a broad diagonal, rather than prison-like
+  // repeated stripes across the data surface. It remains actual shadow geometry.
+  const roof = box("studio-cutaway-roof", [130, 1.1, 65], [-57, 35.1, 40], graphite);
+  roof.rotation.y = -.42;
   const fill = new THREE.HemisphereLight(0xd7dce0, 0x33352f, 1.05);
   root.add(fill);
   const sun = new THREE.DirectionalLight(0xfff5e6, 3.1);

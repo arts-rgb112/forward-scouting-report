@@ -1273,7 +1273,7 @@ export function WebGLSpatialPitch({
       {loadState === "loading" && <div role="status" className="absolute inset-0 grid place-items-center bg-[#050a08]/70 text-sm font-bold text-zinc-200">3D 피치 자산 로딩…</div>}
       {(loadState === "error" || loadState === "unsupported") && <div role="alert" className="absolute inset-0 grid place-items-center bg-[#050a08] p-6 text-center text-sm font-bold text-rose-200">{loadState === "unsupported" ? "WebGL 피치를 표시할 수 없습니다." : "경기장 모델을 불러오지 못했습니다."} {loadError}</div>}
 
-      {layers.heatmap && <div hidden data-layer="heat" data-density-source="dot-matrix-64x24" data-density-input="full-tier3-32x22"
+      {layers.heatmap && <div hidden data-layer="heat" data-density-source={presentation === "arena" ? "relative-activity-field" : "dot-matrix-64x24"} data-density-input="full-tier3-32x22"
         data-ground-dot-columns="192" data-ground-dot-rows="124" data-ground-dot-subdivision="bilinear-native-density" data-ground-palette={presentation === "arena" ? "relative-density-contours" : "cyan-yellow-orange"} data-ground-dot-count={groundDots.length}
         data-density-dot-columns={WEBGL_DOTMATRIX_COLUMNS} data-density-dot-rows={WEBGL_DOTMATRIX_ROWS}
         data-blur-std-deviation="0" data-density-mesh-builds="1">
