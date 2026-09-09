@@ -633,7 +633,9 @@ export function WebGLSpatialPitch({
     const scene = new THREE.Scene();
     let surface: Awaited<ReturnType<typeof loadPitchSurfaceAssets>> | undefined;
     const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.05, 420);
-    const initial = INITIAL_PITCH_CAMERA;
+    const initial = presentation === "arena"
+      ? freeflyStateFromOrbit({ azimuth: 180, elevation: 21, distance: 48 }, pitchPercentToWorld({ x: 88, y: 50 }))
+      : INITIAL_PITCH_CAMERA;
     freeflyRef.current = initial;
     setFreeflyState(initial);
     camera.position.set(initial.position.x, initial.position.y, initial.position.z);

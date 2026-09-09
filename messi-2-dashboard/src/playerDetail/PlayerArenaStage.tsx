@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { MessiApiConfig } from "../api/env";
 import type { DuelPressV2DetailMetrics } from "../api/duelPressV2Contracts";
 import { boxSubregionResourceKey } from "../api/boxSubregionApi";
 import type { DatasetRouteState, Player, PlayerAnalysis } from "../dashboard/types";
+import { dashboardQueryKeys, datasetHref, preserveExternalQuery } from "../dashboard/datasetRoute";
 import { DEFAULT_PITCH_LAYERS } from "./pitchLayers";
 import { PitchPenaltyToggle } from "./PitchPenaltyContext";
 import { ArenaProfileHud, OverviewCategoryVector, OverviewSeasonRail, type PlayerOverviewHistory } from "./PlayerOverview";
@@ -29,6 +30,8 @@ function PlayerArenaBody({ player, analysis, history, config, dataset, data, cat
     : { kind: "loading" as const, key: requestedBoxKey };
   const nativePitchEvents = useNativePitchEventsV2(config, player.id, dataset);
   const [selection, setSelection] = useState<ArenaPitchSelection>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const modeButton = useRef<HTMLButtonElement>(null);
   useEffect(() => setSelection(null), [contextIdentity]);
   const authoritative = data?.ratingVersion === "messi-score-unified-v3" ? data : undefined;
   const state: OverviewReadoutState = authoritative ? "ready" : data ? "unavailable" : categoryState ?? "unavailable";
@@ -39,7 +42,17 @@ function PlayerArenaBody({ player, analysis, history, config, dataset, data, cat
   // one factual selection dock is visible.
   const selectionHud = selection ? null : <OverviewCategoryVector categories={authoritative?.categories} state={state} />;
 
-  return <section data-layout="player-arena-stage" aria-label="선수 피치 아레나" className="isolate min-w-0 overflow-hidden rounded-[1.5rem] border border-[#464a4c] bg-[#181a1b] shadow-[0_24px_60px_rgba(0,0,0,.28)]">
+  const comparisonBase = preserveExternalQuery(datasetHref("/compare", dataset), window.location.search, dashboardQueryKeys);
+  const taxonomy = new URLSearchParams(window.location.search).get("taxonomy");
+  const comparisonHref = taxonomy === "duel-press-v1" || taxonomy === "duel-press-v2"
+    ? `${comparisonBase}&taxonomy=${taxonomy}` : comparisonBase;
+  return <section data-layout="player-arena-stage" data-view={detailOpen ? "detail" : "overview"} aria-label="선수 피치 아레나" className="relative isolate min-w-0 overflow-hidden rounded-[1.5rem] border border-[#464a4c] bg-[#181a1b] shadow-[0_24px_60px_rgba(0,0,0,.28)]">
+    <div className="relative z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-[#232628]/90 px-4 py-3 text-zinc-200">
+      <span className="text-sm tracking-[.12em]">{detailOpen ? "피치 분석" : "선수 인사이트"}</span>
+      <button ref={modeButton} type="button" aria-expanded={detailOpen} onClick={() => { setDetailOpen((open) => !open); modeButton.current?.focus(); }} className="min-h-11 rounded-full border border-white/25 px-5 text-sm font-semibold hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e78b84]">{detailOpen ? "요약으로 돌아가기" : "상세 분석"}<span aria-hidden="true" className="ml-3">{detailOpen ? "↗" : "↘"}</span></button>
+    </div>
+    <div data-layout="arena-stage-content" className="relative">
+    <div aria-hidden={!detailOpen} inert={!detailOpen} className={detailOpen ? "relative" : "pointer-events-none absolute inset-0 overflow-hidden opacity-25 blur-[2px]"}>
     <div data-layout="arena-scene" className="relative min-h-[20rem] sm:min-h-[24rem]">
       <SpatialPitch presentation="arena" embedded analysis={analysis} contextIdentity={contextIdentity} layers={{ ...DEFAULT_PITCH_LAYERS, cca: false, trajectories: false }} fullActivityHeatmap={heatmap} fullActivityDisplay={display} boxSubregion={boxSubregion} nativePitchEvents={nativePitchEvents} onArenaSelectionChange={setSelection} />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-4">
@@ -55,6 +68,16 @@ function PlayerArenaBody({ player, analysis, history, config, dataset, data, cat
     <div className="relative z-20 border-t border-white/10 bg-[#232628]/95 p-3 lg:hidden">
       <details className="rounded-xl border border-white/10 p-3"><summary className="cursor-pointer text-sm font-black">시즌 기록</summary><div className="mt-3 max-h-[50svh] overflow-y-auto"><OverviewSeasonRail player={player} analysis={analysis} selected={dataset} history={history} ariaLabel="시즌 · 대회 모바일" /></div></details>
       {!selection && <details className="mt-2 rounded-xl border border-white/10 p-3"><summary className="cursor-pointer text-sm font-black">M.E.S.S.I. 카테고리</summary><div className="mt-3 max-h-[50svh] overflow-y-auto"><OverviewCategoryVector categories={authoritative?.categories} state={state} /></div></details>}
+    </div>
+    </div>
+    {!detailOpen && <div data-layout="arena-opening" className="relative z-20 grid min-h-[34rem] gap-5 bg-gradient-to-r from-[#1c1f20]/95 via-[#1c1f20]/75 to-[#1c1f20]/40 p-4 sm:p-7 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8">
+      <div className="flex min-w-0 flex-col gap-6">
+        <ArenaProfileHud player={player} analysis={analysis} selected={dataset}/>
+        <div className="min-w-0 rounded-xl border border-white/15 bg-[#232628]/80 p-4 backdrop-blur-md"><OverviewSeasonRail player={player} analysis={analysis} selected={dataset} history={history} ariaLabel="시즌 · 대회"/></div>
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-white/15 pt-4"><p className="text-sm text-zinc-400">같은 시즌·대회에서 선수를 비교합니다.</p><a href={comparisonHref} className="inline-flex min-h-11 items-center rounded-full border border-white/25 px-5 text-sm font-semibold text-zinc-100 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[#e78b84]">선수 비교 <span aria-hidden="true" className="ml-3">↗</span></a></div>
+      </div>
+      <div className="min-w-0 rounded-xl border border-white/15 bg-[#232628]/85 p-4 shadow-[0_15px_45px_rgba(0,0,0,.2)] backdrop-blur-md"><OverviewCategoryVector categories={authoritative?.categories} state={state}/></div>
+    </div>}
     </div>
   </section>;
 }

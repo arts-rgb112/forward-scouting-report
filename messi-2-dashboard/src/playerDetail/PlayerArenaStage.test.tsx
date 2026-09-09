@@ -25,12 +25,24 @@ const first = { season: "2025/2026", mode: "league" as const, scope: 7 as const,
 const second = { ...first, season: "2024/2025" };
 
 describe("PlayerArenaStage", () => {
-  afterEach(cleanup);
+  afterEach(() => { cleanup(); window.history.replaceState({}, "", "/"); });
+
+  it.each(["duel-press-v1", "duel-press-v2", "invalid", ""])("keeps valid taxonomy and attribution on comparison entry: %s", (taxonomy) => {
+    window.history.replaceState({}, "", `/?utm_source=arena${taxonomy ? `&taxonomy=${taxonomy}` : ""}`);
+    render(<PlayerArenaStage player={samplePlayers[0]} config={config} dataset={first} history={{ loading: false, entries: [], failed: 0, requestedSeasons: 0 }} />);
+    const url = new URL(screen.getByRole("link", { name: "선수 비교" }).getAttribute("href")!, window.location.origin);
+    expect(url.pathname).toBe("/compare");
+    expect(url.searchParams.get("taxonomy")).toBe(taxonomy.startsWith("duel-press-") ? taxonomy : null);
+    expect(url.searchParams.get("utm_source")).toBe("arena");
+    expect(url.searchParams.get("season")).toBe(first.season);
+    expect(url.searchParams.get("scope")).toBe("7");
+  });
 
   beforeEach(() => { mocks.activity = { kind: "loading", key: "activity" }; mocks.native = { kind: "loading", key: "native" }; mocks.box = { kind: "loading", key: boxSubregionResourceKey(samplePlayers[0].id, first) }; });
 
   it("uses one presentation arena canvas and exchanges the category HUD for a renderer selection", () => {
     const { container } = render(<PlayerArenaStage player={samplePlayers[0]} config={config} dataset={first} history={{ loading: false, entries: [], failed: 0, requestedSeasons: 0 }} categoryState="unavailable"/>);
+    fireEvent.click(screen.getByRole("button", { name: "상세 분석" }));
     expect(container.querySelectorAll("canvas")).toHaveLength(1);
     expect(screen.getByTestId("arena-pitch")).toHaveAttribute("data-presentation", "arena");
     expect(container.querySelector('[data-layout="arena-scene"]')).toHaveClass("min-h-[20rem]", "sm:min-h-[24rem]");
@@ -50,6 +62,23 @@ describe("PlayerArenaStage", () => {
     fireEvent.click(screen.getByRole("button", { name: "구역 선택" }));
     expect(container.querySelectorAll('[data-layout="overview-radar-card"]')).toHaveLength(0);
     expect(container.querySelector('[data-layout="arena-category-hud"]')).not.toBeInTheDocument();
+  });
+
+  it("opens on insights and keeps the same canvas and URL when entering and returning from detail", () => {
+    const { container } = render(<PlayerArenaStage player={samplePlayers[0]} config={config} dataset={first} history={{ loading: false, entries: [], failed: 0, requestedSeasons: 0 }} categoryState="unavailable"/>);
+    const canvas = container.querySelector("canvas");
+    const before = window.location.href;
+    expect(container.querySelector('[data-layout="arena-opening"]')).toBeInTheDocument();
+    expect(canvas?.closest('[inert]')).not.toBeNull();
+    expect(screen.getByRole("link", { name: "선수 비교" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "상세 분석" }));
+    expect(container.querySelector('[data-layout="arena-opening"]')).not.toBeInTheDocument();
+    expect(container.querySelector("canvas")).toBe(canvas);
+    expect(canvas?.closest('[inert]')).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "요약으로 돌아가기" }));
+    expect(container.querySelector('[data-layout="arena-opening"]')).toBeInTheDocument();
+    expect(container.querySelector("canvas")).toBe(canvas);
+    expect(window.location.href).toBe(before);
   });
 
   it("does not pass a prior box-subregion response into a different selected context", () => {
