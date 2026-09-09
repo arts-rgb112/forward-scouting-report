@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const transport = vi.hoisted(() => ({ detail: vi.fn(), duelDetail: vi.fn(), detailReadouts: vi.fn(), comparison: vi.fn(), quadrant: vi.fn(), quality: vi.fn(), options: vi.fn(), fullHeatmap: vi.fn() }));
@@ -151,7 +151,10 @@ describe("scope-8 direct-route capability gate", () => {
     render(<StaticRoute />);
     expect(await screen.findByRole("heading", { name: samplePlayers[0].name })).toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent("detail board unavailable");
-    expect(screen.getByRole("region", { name: "전술·공간 분석" })).toBeInTheDocument();
+    const workspace = screen.getByRole("group", { name: "전술·공간 분석" });
+    expect(workspace).toBeInTheDocument();
+    fireEvent.click(screen.getByText("보조 피치 분석"));
+    expect(within(workspace).getByRole("region", { name: "피치 분석" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Duel press detailed stats board" }).closest('[data-layout="detail-board-slot"]')).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Volume benchmark radar" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Aerial duels")).not.toBeInTheDocument();

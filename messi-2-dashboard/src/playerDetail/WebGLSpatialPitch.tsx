@@ -459,6 +459,8 @@ export function WebGLSpatialPitch({
   nativePitchEvents,
   shotSource,
   onShotSourceChange,
+  presentation = "full",
+  onArenaSelectionChange,
 }: {
   spatial: PlayerAnalysis["spatial"] | undefined;
   visibleOutcomes: ReadonlySet<ShotOutcome>;
@@ -471,6 +473,8 @@ export function WebGLSpatialPitch({
   nativePitchEvents?: NativePitchEventsState;
   shotSource: "sportsapi" | "fotmob";
   onShotSourceChange: (source: "sportsapi" | "fotmob") => void;
+  presentation?: "full" | "arena";
+  onArenaSelectionChange?: (selection: { kind: "shot" | "box" | "tactical20"; key: string } | null) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -523,6 +527,14 @@ export function WebGLSpatialPitch({
   const nativeBodyState = nativePitchEvents?.kind === "ready"
     ? { kind: "ready" as const, key: nativePitchEvents.key, data: nativePitchEvents.data.bodyParts }
     : nativePitchEvents ? { kind: nativePitchEvents.kind, key: nativePitchEvents.key } : undefined;
+
+  useEffect(() => {
+    if (!onArenaSelectionChange) return;
+    if (selectedZone) { onArenaSelectionChange({ kind: selectedZone.kind, key: selectedZone.id }); return; }
+    if (selectedNativeEventKey) { onArenaSelectionChange({ kind: "shot", key: selectedNativeEventKey }); return; }
+    if (replayIndex !== null) { onArenaSelectionChange({ kind: "shot", key: String(replayIndex) }); return; }
+    onArenaSelectionChange(null);
+  }, [onArenaSelectionChange, replayIndex, selectedNativeEventKey, selectedZone]);
 
   // A persistent zone is mutually exclusive with a selected shot: the dock
   // must never combine a native event's body/quality with an aggregate zone.
@@ -1155,7 +1167,7 @@ export function WebGLSpatialPitch({
       spatial.shotmapPoints.length ? `슛 ${spatial.shotmapPoints.length}개` : "관측된 슛 0개";
 
   return <>
-    {layers.markers && <div aria-label="슈팅 공 색상 범례" className="flex flex-wrap gap-4 bg-slate-900 px-3 py-2 text-sm text-white">
+    {presentation !== "arena" && <>{layers.markers && <div aria-label="슈팅 공 색상 범례" className="flex flex-wrap gap-4 bg-slate-900 px-3 py-2 text-sm text-white">
       {(Object.entries(SHOT_BALL_COLORS) as [ShotOutcome, number][]).map(([outcome, color]) => <span key={outcome} className="inline-flex items-center gap-2"><span aria-hidden="true" className="h-3 w-3 rounded-full" style={{ backgroundColor: `#${color.toString(16).padStart(6, '0')}` }} />{{ goal: '득점', on_target: '유효 슛', off_target: '빗나감', blocked: '블록' }[outcome]}</span>)}
     </div>}
     <div className="flex flex-wrap items-center gap-3 border-b border-white/15 bg-slate-900 px-3 py-2 text-white">
@@ -1196,9 +1208,9 @@ export function WebGLSpatialPitch({
         <output data-replay-progress={replayProgress.toFixed(3)}>{Math.round(replayProgress * 100)}%</output>
       </div>
       {replayError && <p role="alert">{replayError}</p>}
-    </section>}
-    <p className="border-b border-white/10 bg-black/25 px-3 py-2 text-sm text-zinc-200">WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p>
+    </section>}</>}
     <div data-pitch-stage className="relative isolate">
+    <p data-pitch-controls-help className={presentation === "arena" ? "absolute bottom-3 left-3 z-20 rounded-lg border border-white/15 bg-[#232628]/95 px-3 py-2 type-caption text-zinc-200 shadow-lg" : "border-b border-white/10 bg-black/25 px-3 py-2 text-sm text-zinc-200"}>WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p>
     <div ref={hostRef} role="img" tabIndex={0} onKeyDown={keyDown}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel}
       onLostPointerCapture={pointerCancel}
@@ -1337,10 +1349,9 @@ export function WebGLSpatialPitch({
     {/* Owner-requested in-pitch HUD: keep the canvas full width. The dock
         is a DOM sibling so its inputs never bubble into camera handlers.
         Small screens retain flow layout rather than clipping the body card. */}
-    <div data-pitch-info-dock className="mt-3 w-full lg:absolute lg:right-4 lg:top-4 lg:z-20 lg:mt-0 lg:max-h-[calc(100%_-_2rem)] lg:w-80 lg:overflow-y-auto lg:overscroll-contain">
+    {(presentation !== "arena" || selectedZone || selectedNativeEventKey || replayIndex !== null) && <div data-pitch-info-dock className={`mt-3 w-full lg:absolute lg:right-4 lg:top-4 lg:z-20 lg:mt-0 lg:max-h-[calc(100%_-_2rem)] lg:w-80 lg:overflow-y-auto lg:overscroll-contain ${presentation === "arena" ? "max-h-[50svh]" : ""}`}>
       {nativeMode ? nativePitchEvents?.kind === "ready" ? <>
-        {selectedZone?.kind === "tactical20" && <TacticalZone20SelectionCard zone={zonesById.get(selectedZone.id)!} onClose={() => selectZone(null)} />}
-        <NativePitchSelectionCard
+        {selectedZone?.kind === "tactical20" ? <TacticalZone20SelectionCard zone={zonesById.get(selectedZone.id)!} onClose={() => selectZone(null)} /> : <NativePitchSelectionCard
         key={`${nativePitchEvents.key}:${selectedNativeEvent?.key ?? selectedZone?.id ?? "overview"}`}
         data={nativePitchEvents.data} event={selectedNativeEvent} zone={selectedZone?.kind === "box" ? selectedZone : null}
         onClose={() => { selectZone(null); selectNativeShot(null); }}
@@ -1364,7 +1375,7 @@ export function WebGLSpatialPitch({
           {nativePoseState === "error" && <p role="alert" className="text-xs text-amber-200">신체 동작을 불러오지 못했습니다.</p>}
           {replayError && <p role="alert" className="text-xs text-amber-200">{replayError}</p>}
         </div>}
-        />
+        />}
       </> : <div role="status" className="rounded-2xl border border-white/15 bg-[#172131] p-4 text-sm text-slate-300">
         {nativePitchEvents?.kind === "loading" ? "슈팅 정보를 불러오는 중…" : "슈팅 정보를 사용할 수 없습니다."}
       </div> : <>
@@ -1394,7 +1405,7 @@ export function WebGLSpatialPitch({
         </div>;
       })()}
       </>}
-    </div>
+    </div>}
     </div>
   </>;
 }

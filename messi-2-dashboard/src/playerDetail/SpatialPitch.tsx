@@ -17,6 +17,7 @@ const panel = "min-w-0 rounded-xl border border-white/10 bg-[#101415] p-4 shadow
 const PITCH_VIEW_COPY = { perspective: "3D 회랑", plan: "2D 회랑" } as const;
 
 export type ViewMode = "perspective" | "plan";
+export type ArenaPitchSelection = { kind: "shot" | "box" | "tactical20"; key: string } | null;
 function usePrefersReducedMotion() {
   const query = "(prefers-reduced-motion: reduce)";
   const read = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches;
@@ -34,11 +35,15 @@ function usePrefersReducedMotion() {
 
 const outcomeLabel: Record<ShotmapPoint["outcome"], string> = { goal: "득점", on_target: "유효 슛", off_target: "빗나감", blocked: "블록" };
 
-export function SpatialPitch({ analysis, contextIdentity = "", forcedMode, embedded = false, layers = DEFAULT_PITCH_LAYERS, fullActivityHeatmap, fullActivityDisplay, boxSubregion, nativePitchEvents }: {
+export function SpatialPitch({ analysis, contextIdentity = "", forcedMode, embedded = false, presentation = "full", onArenaSelectionChange, layers = DEFAULT_PITCH_LAYERS, fullActivityHeatmap, fullActivityDisplay, boxSubregion, nativePitchEvents }: {
   analysis?: PlayerAnalysis;
   contextIdentity?: string;
   forcedMode?: ViewMode;
   embedded?: boolean;
+  /** Arena is a presentation-only shell: it never changes source selection or
+   * pitch data, and suppresses the duplicate in-renderer HUD. */
+  presentation?: "full" | "arena";
+  onArenaSelectionChange?: (selection: ArenaPitchSelection) => void;
   layers?: PitchLayerVisibility;
   fullActivityHeatmap?: FullActivityHeatmapData;
   fullActivityDisplay?: FullActivityDisplayEnvelope;
@@ -76,16 +81,25 @@ export function SpatialPitch({ analysis, contextIdentity = "", forcedMode, embed
   const markerLayerId = `spatial-shot-markers-${rawId}`;
   const visibleOutcomes = controller.presentOutcomes.filter((outcome) => controller.visibleOutcomes.has(outcome));
 
-  return <section className={embedded ? "min-w-0" : panel} aria-labelledby={embedded ? undefined : `spatial-pitch-${rawId}`} aria-label={embedded ? PITCH_VIEW_COPY[mode] : undefined}>
-    {!embedded && <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id={`spatial-pitch-${rawId}`} className="text-sm font-black">{PITCH_VIEW_COPY[mode]}</h2><p className="mt-1 type-caption text-zinc-400">공격 방향 왼쪽 → 오른쪽 · 20구역은 시각 안내선 · 슈팅 회랑은 별도 6레인 렌즈</p></div>{!forcedMode && <div role="group" aria-label="피치 보기" className="flex rounded-lg border border-white/15 bg-black/30 p-1"><button type="button" aria-pressed={mode === "perspective"} onClick={() => setManualMode("perspective")} className="min-h-9 rounded px-3 text-base font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">3D 회랑</button><button type="button" aria-pressed={mode === "plan"} onClick={() => setManualMode("plan")} className="min-h-9 rounded px-3 text-base font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">2D 회랑</button></div>}</div>}
-    {reducedMotion && manualMode === null && <p className="mt-2 text-base text-zinc-400">Reduced-motion preference detected; the 2D plan fallback is active.</p>}
-    {!nativeSourceSelected && layers.markers && controller.integrity && controller.presentOutcomes.length > 0 && <OutcomeControls outcomes={controller.presentOutcomes} counts={controller.counts} visible={controller.visibleOutcomes} markerLayerId={markerLayerId} onClick={controller.onClick} onDoubleClick={controller.onDoubleClick} showCounts={false} />}
+  const arena = presentation === "arena";
+  // Switching to the 2D accessibility fallback unmounts the WebGL dock.
+  // Clear its selection in the owning stage at the same time, so the
+  // category HUD cannot remain replaced by a no-longer-visible native card.
+  useEffect(() => {
+    if (arena && mode === "plan") onArenaSelectionChange?.(null);
+  }, [arena, mode, onArenaSelectionChange]);
+
+  return <section data-pitch-presentation={presentation} className={embedded || arena ? "relative min-w-0" : panel} aria-labelledby={embedded || arena ? undefined : `spatial-pitch-${rawId}`} aria-label={embedded || arena ? PITCH_VIEW_COPY[mode] : undefined}>
+    {!embedded && !arena && <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id={`spatial-pitch-${rawId}`} className="text-sm font-black">{PITCH_VIEW_COPY[mode]}</h2><p className="mt-1 type-caption text-zinc-400">공격 방향 왼쪽 → 오른쪽 · 20구역은 시각 안내선 · 슈팅 회랑은 별도 6레인 렌즈</p></div>{!forcedMode && <div role="group" aria-label="피치 보기" className="flex rounded-lg border border-white/15 bg-black/30 p-1"><button type="button" aria-pressed={mode === "perspective"} onClick={() => setManualMode("perspective")} className="min-h-9 rounded px-3 text-base font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">3D 회랑</button><button type="button" aria-pressed={mode === "plan"} onClick={() => setManualMode("plan")} className="min-h-9 rounded px-3 text-base font-bold aria-pressed:bg-orange-400 aria-pressed:text-zinc-950 focus-visible:ring-2 focus-visible:ring-orange-200">2D 회랑</button></div>}</div>}
+    {reducedMotion && manualMode === null && !arena && <p className="mt-2 text-base text-zinc-400">Reduced-motion preference detected; the 2D plan fallback is active.</p>}
+    {!arena && !nativeSourceSelected && layers.markers && controller.integrity && controller.presentOutcomes.length > 0 && <OutcomeControls outcomes={controller.presentOutcomes} counts={controller.counts} visible={controller.visibleOutcomes} markerLayerId={markerLayerId} onClick={controller.onClick} onDoubleClick={controller.onDoubleClick} showCounts={false} />}
     {!nativeSourceSelected && <p role="status" aria-live="polite" className="sr-only">표시 중인 슈팅 결과: {outcomeSummary(visibleOutcomes)}.</p>}
-    <div className="mt-3 min-w-0 overflow-hidden rounded-lg border border-white/10">{mode === "plan" ? <LegacySpatialPitchFigure analysis={displayAnalysis} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} showCounts={false} layers={layers} boxSubregion={boxSubregion} /> : <figure><Suspense fallback={<div role="status" className="grid min-h-80 place-items-center bg-[#050a08] text-sm font-bold text-zinc-200">WebGL 렌더러 로딩…</div>}><WebGLSpatialPitch spatial={displaySpatial} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} contextIdentity={contextIdentity} layers={layers} fullActivityHeatmap={fullActivityHeatmap} fullActivityDisplay={fullActivityDisplay} boxSubregion={boxSubregion} nativePitchEvents={nativePitchEvents} shotSource={shotSource} onShotSourceChange={setShotSource} /></Suspense><figcaption className="border-t border-white/10 bg-black/25 px-3 py-2 text-base text-zinc-300">{nativeSourceSelected ? "SportsAPI 기록 슛은 동일 원천 이벤트로 표시됩니다. 활동 히트맵은 별도 원천입니다." : "FotMob 슛 보기 · CCA는 전체 활동 데이터 기반 표시용 영역입니다."}</figcaption></figure>}</div>
-    <div className="mt-3 space-y-2 text-base leading-5 text-zinc-400" aria-live="polite">
+    {arena && mode === "plan" && <p data-arena-reduced-motion-source role="status" className="absolute left-3 top-3 z-30 rounded-lg border border-white/15 bg-[#232628]/95 px-3 py-2 type-caption text-zinc-200 shadow-lg">2D 접근성 대체 · FotMob 슛 · SportsAPI 동일 이벤트 미표시</p>}
+    <div className={`${arena ? "mt-0 rounded-none border-0" : "mt-3 rounded-lg border border-white/10"} min-w-0 overflow-hidden`}>{mode === "plan" ? <LegacySpatialPitchFigure analysis={displayAnalysis} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} showCounts={false} layers={layers} boxSubregion={boxSubregion} /> : <figure><Suspense fallback={<div role="status" className="grid min-h-80 place-items-center bg-[#050a08] text-sm font-bold text-zinc-200">WebGL 렌더러 로딩…</div>}><WebGLSpatialPitch spatial={displaySpatial} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} contextIdentity={contextIdentity} layers={layers} fullActivityHeatmap={fullActivityHeatmap} fullActivityDisplay={fullActivityDisplay} boxSubregion={boxSubregion} nativePitchEvents={nativePitchEvents} shotSource={shotSource} onShotSourceChange={setShotSource} presentation={presentation} onArenaSelectionChange={onArenaSelectionChange} /></Suspense>{!arena && <figcaption className="border-t border-white/10 bg-black/25 px-3 py-2 text-base text-zinc-300">{nativeSourceSelected ? "SportsAPI 기록 슛은 동일 원천 이벤트로 표시됩니다. 활동 히트맵은 별도 원천입니다." : "FotMob 슛 보기 · CCA는 전체 활동 데이터 기반 표시용 영역입니다."}</figcaption>}</figure>}</div>
+    {!arena && <div className="mt-3 space-y-2 text-base leading-5 text-zinc-400" aria-live="polite">
       <p data-spatial-activity-note>{activitySentence}</p>
       <p data-spatial-shot-note>{shotSentence}</p>
-    </div>
-    <details className="mt-3 rounded-lg border border-white/10 bg-black/20 text-base text-zinc-300"><summary className="min-h-11 cursor-pointer px-3 py-3 font-bold focus-visible:ring-2 focus-visible:ring-orange-200">피치와 슈팅 상세</summary><div className="border-t border-white/10 p-3">{nativeSourceSelected ? <p>3D 기본 원천은 SportsAPI 동일 이벤트 묶음입니다. 2D는 FotMob 보기를 유지하며 자동 조인은 하지 않습니다.</p> : <><p>3D와 2D는 동일한 서버 좌표계를 사용합니다. 20구역 수치는 서버 집계 준비 중이며, 6레인 회랑은 별도 표시 렌즈입니다.</p>{!controller.integrity ? <p className="mt-3">슈팅 이벤트 상세를 제공할 수 없습니다.</p> : displaySpatial!.shotmapPoints.length === 0 ? <p className="mt-3">관측된 슈팅 이벤트가 0건입니다.</p> : <ol aria-label="서버 슈팅 이벤트" className="mt-3 max-h-48 space-y-1 overflow-y-auto pr-1">{displaySpatial!.shotmapPoints.map((shot, index) => <li key={index} className="rounded bg-white/5 px-2 py-1">{index + 1}. {outcomeLabel[shot.outcome]} · xG {shot.xg == null ? "미상" : shot.xg.toFixed(2)} · xGOT {shot.xgot == null ? "미상" : shot.xgot.toFixed(2)} · ({shot.x.toFixed(1)}, {shot.y.toFixed(1)})</li>)}</ol>}</>}</div></details>
+    </div>}
+    {!arena && <details className="mt-3 rounded-lg border border-white/10 bg-black/20 text-base text-zinc-300"><summary className="min-h-11 cursor-pointer px-3 py-3 font-bold focus-visible:ring-2 focus-visible:ring-orange-200">피치와 슈팅 상세</summary><div className="border-t border-white/10 p-3">{nativeSourceSelected ? <p>3D 기본 원천은 SportsAPI 동일 이벤트 묶음입니다. 2D는 FotMob 보기를 유지하며 자동 조인은 하지 않습니다.</p> : <><p>3D와 2D는 동일한 서버 좌표계를 사용합니다. 20구역 수치는 서버 집계 준비 중이며, 6레인 회랑은 별도 표시 렌즈입니다.</p>{!controller.integrity ? <p className="mt-3">슈팅 이벤트 상세를 제공할 수 없습니다.</p> : displaySpatial!.shotmapPoints.length === 0 ? <p className="mt-3">관측된 슈팅 이벤트가 0건입니다.</p> : <ol aria-label="서버 슈팅 이벤트" className="mt-3 max-h-48 space-y-1 overflow-y-auto pr-1">{displaySpatial!.shotmapPoints.map((shot, index) => <li key={index} className="rounded bg-white/5 px-2 py-1">{index + 1}. {outcomeLabel[shot.outcome]} · xG {shot.xg == null ? "미상" : shot.xg.toFixed(2)} · xGOT {shot.xgot == null ? "미상" : shot.xgot.toFixed(2)} · ({shot.x.toFixed(1)}, {shot.y.toFixed(1)})</li>)}</ol>}</>}</div></details>}
   </section>;
 }

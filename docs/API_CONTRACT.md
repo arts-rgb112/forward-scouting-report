@@ -6,6 +6,10 @@
 
 ## 진행 중인 작업
 
+- DETAIL-MAIN Arena 검증(2026-09-09): 독립 코드 검수 GO(관련 53 PASS); 전체 회귀 831 PASS / 2 FAIL / 1 SKIP에서 새 접힘 구조 관련 StaticRoute 검증 보강 중. 실제 로컬 선수 로딩 실패로 시각 검수 미완, preview/production 미변경. 상세 증거와 후속 상태는 messi-specs/OPEN_WORK.md 정본 참조. API 규범·점수 변경 없음.
+
+- DETAIL-MAIN-20260908 공간형첫화면(2026-09-09): 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. 최신레퍼런스에맞춰기존3D+정본HUD를ArenaStage로통합; 기존3API/analysis재사용·한canvas·HUD교대·2D보존. schema/점수/원천불변, 새tracking/통계생성없음. 구현·시각검수진행, 정본OPEN_WORK.md.
+
 - DETAIL-MAIN-20260908 추가 표현 수정(2026-09-09): 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. 발주자 3D내부우상단HUD복원/콘크리트회색 디자인북극성에 따라 표현만 보강, 원천/점수/계약형태 불변. HUD29PASS·독립검수지적calc공백수정, 색감·시즌가독성 보강 후 프리뷰 재검수 예정. 정본 OPEN_WORK.md.
 
 - DETAIL-MAIN-20260908(2026-09-09) 디자인 전면 재개: 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. 발주자 기존 텍스트 중심 디자인 폐기 지시. 실제 API 값/스키마/점수 불변으로 athlete-first 첫 화면 재구성, 기존 기능 검수는 디자인 승인 아님. 독립 시각 재검수 예정, production 미변경. 정본 messi-specs/OPEN_WORK.md.

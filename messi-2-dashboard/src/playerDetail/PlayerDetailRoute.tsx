@@ -26,7 +26,7 @@ import { useTacticalSummaryV2 } from "./useTacticalSummaryV2";
 import { useVolumeBenchmark } from "./useVolumeBenchmark";
 import { DuelPressDetailReadoutBoard, DuelPressDetailReadoutUnavailable } from "./DuelPressDetailReadoutBoard";
 import { DuelPressV2CategoryDetails, DuelPressV2CategorySummary, DuelPressV2DataAudit, DuelPressV2DetailReadoutUnavailable } from "./DuelPressV2DetailReadoutBoard";
-import { PlayerOverview } from "./PlayerOverview";
+import { PlayerArenaStage } from "./PlayerArenaStage";
 
 const panel = "min-w-0 rounded-xl border border-[#464a4c] bg-[#232628] p-4 shadow-sm";
 const ROUTE_COPY = { back: "리더보드로 돌아가기", retry: "다시 시도", loading: "선수 프로필", notFound: "선수를 찾을 수 없습니다", unavailable: "선수 상세를 불러올 수 없습니다", configUnavailable: "대시보드 API 설정을 사용할 수 없습니다.", contextUnavailable: "선택한 문맥에서 이 선수를 불러올 수 없습니다." } as const;
@@ -158,18 +158,16 @@ export function Benchmark({ player, config, dataset }: { player: Player; config?
 export function PlayerDetailDossierLayout({ player, analysis, quadrant, quality, history, config, dataset, afterPanels, detailReadoutBoard, dataAuditBoard, detailReadouts, v2Readouts, overviewCategoryState, renewedDetailRequested = false }: { player: Player; analysis?: PlayerAnalysis; quadrant?: TacticalQuadrant; quality: QualityDisplay; history: PlayerHistoryState; config?: MessiApiConfig; dataset: DatasetRouteState; afterPanels?: ReactNode; detailReadoutBoard?: ReactNode; dataAuditBoard?: ReactNode; detailReadouts?: DuelPressDetailReadoutEnvelope; v2Readouts?: DuelPressV2DetailMetrics; overviewCategoryState?: "loading" | "error" | "unavailable" | "ready"; renewedDetailRequested?: boolean }) {
   const spatialContextIdentity = `${player.id}|${dataset.season}|${dataset.mode}|${dataset.scope}|${dataset.competition}`;
   const threeDHref = preserveExternalQuery(datasetHref(`/player/${player.id}/3d`, dataset), window.location.search, dashboardQueryKeys);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   return <>
     <PitchPenaltyProvider summaryShots={analysis?.spatial.shotmapPoints}>
       <div data-layout="detail-dossier-layout" className="mt-4 min-w-0">
-        <PlayerOverview player={player} analysis={analysis} selected={dataset} history={history} data={v2Readouts} categoryState={overviewCategoryState}/>
+        <PlayerArenaStage player={player} analysis={analysis} history={history} config={config} dataset={dataset} data={v2Readouts} categoryState={overviewCategoryState}/>
         <details data-layout="tactical-summary-slot" className="group mt-3 min-w-0 w-full rounded-xl border border-[#464a4c] bg-[#232628] shadow-sm"><summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"><span>전술 분석 노트</span><span className="type-caption font-medium text-zinc-500 group-open:hidden">필요할 때 열기</span><span className="hidden type-caption font-medium text-zinc-500 group-open:inline">접기</span></summary><div className="border-t border-white/10 p-3"><TacticalSummary player={player} analysis={analysis} quadrant={quadrant} quality={quality} config={config} dataset={dataset}/></div></details>
-        <section data-layout="tactical-spatial-workspace" className="mt-4 min-w-0 rounded-xl border border-[#464a4c] bg-[#181a1b] p-2 shadow-sm" aria-label="전술·공간 분석">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <PitchPenaltyToggle/>
-            <a href={threeDHref} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded border border-lime-300/40 px-4 text-sm font-black text-lime-300 hover:bg-lime-300/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300">3D로 보기</a>
-          </div>
-          <div data-layout="pitch-workspace-slot" className="mt-2 min-w-0"><PitchWorkspace analysis={analysis} contextIdentity={spatialContextIdentity} config={config} playerId={player.id} dataset={dataset}/></div>
-        </section>
+        <details data-layout="tactical-spatial-workspace" open={workspaceOpen} className="mt-4 min-w-0 rounded-xl border border-[#464a4c] bg-[#181a1b] shadow-sm" aria-label="전술·공간 분석">
+          <summary onClick={(event) => { event.preventDefault(); setWorkspaceOpen((open) => !open); }} className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"><span>보조 피치 분석</span><span className="type-caption font-medium text-zinc-500">2D 회랑 · 골대맵</span></summary>
+          {workspaceOpen && <div className="border-t border-white/10 p-2"><div className="flex flex-wrap items-center justify-between gap-2"><PitchPenaltyToggle/><a href={threeDHref} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded border border-lime-300/40 px-4 text-sm font-black text-lime-300 hover:bg-lime-300/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300">3D로 보기</a></div><div data-layout="pitch-workspace-slot" className="mt-2 min-w-0"><PitchWorkspace analysis={analysis} contextIdentity={spatialContextIdentity} config={config} playerId={player.id} dataset={dataset}/></div></div>}
+        </details>
       </div>
       <div data-layout="player-detail-section-stack" className="min-w-0">
         <div data-layout="category-summary-slot" className="mt-4 min-w-0 w-full">{v2Readouts ? <DuelPressV2CategorySummary data={v2Readouts}/> : <PercentileProfile player={player} analysis={analysis} quality={quality} layout="page"/>}</div>

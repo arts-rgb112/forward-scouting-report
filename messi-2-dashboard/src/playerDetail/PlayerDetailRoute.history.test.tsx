@@ -44,7 +44,8 @@ describe("player detail historical rail transport", () => {
     await waitFor(() => expect(pending).toHaveLength(8)); expect(maxInFlight).toBeLessThanOrEqual(4);
     pending.slice(4).forEach((request, index) => request.resolve(resultFor(request, 80 + index)));
     await waitFor(() => expect(screen.getByRole("region", { name: "시즌 · 대회" })).toHaveTextContent("2024/2025"));
-    for (const season of historicalSeasons.slice(1)) expect(screen.getByText(season)).toBeInTheDocument();
+    const rail = screen.getByRole("region", { name: "시즌 · 대회" });
+    for (const season of historicalSeasons.slice(1)) expect(rail).toHaveTextContent(season);
   });
 
   it("aborts old history on context change and unmount, ignoring deferred stale responses", async () => {

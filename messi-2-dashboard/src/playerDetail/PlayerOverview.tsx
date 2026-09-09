@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { DuelPressV2Category, DuelPressV2DetailMetrics } from "../api/duelPressV2Contracts";
 import type { PlayerHistoryEntry } from "../api/playerHistoryApi";
 import { dashboardQueryKeys, datasetHref, preserveExternalQuery } from "../dashboard/datasetRoute";
@@ -60,15 +61,16 @@ function OverviewSeasonRow({ row, player, analysis }: { row: SeasonOverviewRow; 
   return <li data-season={row.context.season} data-selected={row.selected ? "true" : "false"}>{row.selected ? <div className={rowClass}>{content}</div> : <a className={rowClass} href={seasonHref(player.id, row.context)} aria-label={`${row.context.season} ${contextText(row.context)} 선수 상세로 이동`}>{content}</a>}</li>;
 }
 
-function OverviewSeasonRail({ player, analysis, selected, history }: { player: Player; analysis?: PlayerAnalysis; selected: DatasetRouteState; history: PlayerOverviewHistory }) {
+export function OverviewSeasonRail({ player, analysis, selected, history, ariaLabel = "시즌 · 대회" }: { player: Player; analysis?: PlayerAnalysis; selected: DatasetRouteState; history: PlayerOverviewHistory; ariaLabel?: string }) {
+  const headingId = `overview-season-heading-${useId().replace(/:/g, "")}`;
   const candidates = seasonScoreRows(player, analysis, selected, history.entries);
   const selectedRow = candidates.find((row) => row.selected) ?? candidates[0];
   const historicalRows = candidates.filter((row) => !row.selected)
     .sort((left, right) => right.context.season.localeCompare(left.context.season))
     .slice(0, MAX_HISTORICAL_SEASON_ROWS);
   const rows = selectedRow ? [selectedRow, ...historicalRows] : historicalRows;
-  return <section aria-label="시즌 · 대회" className="min-w-0">
-    <h2 id="overview-season-heading" className="type-caption font-black tracking-[.16em] text-zinc-500">시즌 스파인</h2>
+  return <section aria-label={ariaLabel} className="min-w-0">
+    <h2 id={headingId} className="type-caption font-black tracking-[.16em] text-zinc-500">시즌 스파인</h2>
     <ol className="mt-2 flex gap-2 overflow-x-auto pb-1 xl:grid xl:gap-1 xl:overflow-visible" aria-label="시즌별 M.E.S.S.I. 이력">
       {history.loading ? <>{selectedRow && <OverviewSeasonRow row={selectedRow} player={player} analysis={analysis}/>} {Array.from({ length: MAX_HISTORICAL_SEASON_ROWS }, (_, index) => <li key={index} aria-hidden="true" className="h-14 min-w-40 animate-pulse rounded-lg bg-white/[.05] motion-reduce:animate-none xl:min-w-0" />)}</> : rows.map((row) => <OverviewSeasonRow key={`${row.context.season}-${row.context.mode}`} row={row} player={player} analysis={analysis}/>) }
     </ol>
@@ -82,12 +84,13 @@ function pointFor(index: number, value: number, total: number) {
   return `${(60 + Math.cos(angle) * radius).toFixed(2)},${(60 + Math.sin(angle) * radius).toFixed(2)}`;
 }
 
-function Radar({ categories, state }: { categories?: DuelPressV2Category[]; state: OverviewReadoutState }) {
+export function OverviewCategoryVector({ categories, state }: { categories?: DuelPressV2Category[]; state: OverviewReadoutState }) {
+  const headingId = `overview-radar-heading-${useId().replace(/:/g, "")}`;
   const usable = state === "ready" && categories?.every((category) => category.scoreState !== "unavailable") ? categories : undefined;
   const ring = (ratio: number) => Array.from({ length: 6 }, (_, index) => pointFor(index, ratio * 100, 6)).join(" ");
   const polygon = usable?.map((category, index) => pointFor(index, category.percentileScore, usable.length)).join(" ");
-  return <section data-layout="overview-radar-card" aria-labelledby="overview-radar-heading" className="flex min-w-0 flex-col p-4 sm:p-5">
-    <div className="flex items-baseline justify-between gap-2"><h2 id="overview-radar-heading" className="type-caption font-black tracking-[.16em] text-zinc-500">M.E.S.S.I. 벡터</h2><span className="type-caption tabular-nums text-zinc-600">06</span></div>
+  return <section data-layout="overview-radar-card" aria-labelledby={headingId} className="flex min-w-0 flex-col p-4 sm:p-5">
+    <div className="flex items-baseline justify-between gap-2"><h2 id={headingId} className="type-caption font-black tracking-[.16em] text-zinc-500">M.E.S.S.I. 벡터</h2><span className="type-caption tabular-nums text-zinc-600">06</span></div>
     <div className="relative mx-auto mt-1 aspect-square w-full max-w-[236px]" role="img" aria-label={usable ? "서버 제공 M.E.S.S.I. 6개 카테고리 레이더" : "M.E.S.S.I. 카테고리 레이더 데이터 없음"}>
       <svg viewBox="0 0 120 120" className="h-full w-full overflow-visible" aria-hidden="true">
         {[.25, .5, .75, 1].map((ratio) => <polygon key={ratio} points={ring(ratio)} fill="none" stroke="rgba(255,255,255,.14)" strokeWidth=".7" />)}
@@ -107,7 +110,7 @@ function Radar({ categories, state }: { categories?: DuelPressV2Category[]; stat
   </section>;
 }
 
-function PlayerIdentity({ player, analysis, selected }: { player: Player; analysis?: PlayerAnalysis; selected: DatasetRouteState }) {
+export function PlayerIdentity({ player, analysis, selected }: { player: Player; analysis?: PlayerAnalysis; selected: DatasetRouteState }) {
   const raw = analysis?.rawMetrics ?? {};
   const score = wholeScore(player, analysis);
   const color = tierColor(player);
@@ -137,6 +140,16 @@ function PlayerIdentity({ player, analysis, selected }: { player: Player; analys
   </section>;
 }
 
+/** Compact re-use of the dossier's authoritative score/tier presentation for
+ * the arena HUD. It deliberately owns no fetch or derived analytics. */
+export function ArenaProfileHud({ player, analysis, selected }: { player: Player; analysis?: PlayerAnalysis; selected: DatasetRouteState }) {
+  const color = tierColor(player);
+  const tier = resolveTierPresentation(player.tier);
+  return <section data-layout="arena-profile-hud" className="min-w-0 rounded-2xl border border-white/15 bg-[#232628]/95 p-3 text-zinc-100 shadow-[0_14px_34px_rgba(0,0,0,.28)] backdrop-blur-md">
+    <div className="flex min-w-0 items-center gap-3"><div className="size-12 shrink-0 overflow-hidden rounded-xl bg-[#343839]">{player.face ? <img src={player.face} alt={`${player.name} 선수 사진`} className="h-full w-full object-cover object-top" /> : <span className="grid h-full place-items-center font-black text-zinc-500" aria-hidden="true">{player.name[0]}</span>}</div><div className="min-w-0 flex-1"><h2 className="truncate text-lg font-black tracking-tight">{player.name}</h2><p className="truncate type-caption text-zinc-400">{player.club.name} · {player.position}</p><p className="mt-1 type-caption text-zinc-500">{selected.season} · {contextText(selected)}</p></div><div className="shrink-0 text-right"><b className="block text-3xl font-black tabular-nums" style={{ color }}>{wholeScore(player, analysis)}</b><span className="type-caption" style={{ color }}>{tier.glyph} {tier.label}</span></div></div>
+  </section>;
+}
+
 export function PlayerOverview({ player, analysis, selected, history, data, categoryState }: { player: Player; analysis?: PlayerAnalysis; selected: DatasetRouteState; history: PlayerOverviewHistory; data?: DuelPressV2DetailMetrics; categoryState?: OverviewReadoutState }) {
   // stat-pairs-v2 and the historical benchmark radars are diagnostics.  They
   // cannot be relabelled as the M.E.S.S.I. profile just because both have six
@@ -147,6 +160,6 @@ export function PlayerOverview({ player, analysis, selected, history, data, cate
   return <section data-layout="player-overview" aria-label="선수 첫 화면 요약" className="grid min-w-0 overflow-hidden rounded-[1.75rem] border border-[#464a4c] bg-[#181a1b] shadow-[0_24px_60px_rgba(0,0,0,.24)] xl:grid-cols-[12rem_minmax(0,1fr)_22rem] xl:items-stretch">
     <PlayerIdentity player={player} analysis={analysis} selected={selected}/>
     <aside data-layout="overview-rail" className="min-w-0 border-t border-white/10 p-4 xl:col-start-1 xl:row-start-1 xl:border-r xl:border-t-0 xl:p-4"><OverviewSeasonRail player={player} analysis={analysis} selected={selected} history={history}/></aside>
-    <div className="border-t border-white/10 xl:col-start-3 xl:row-start-1 xl:border-l xl:border-t-0"><Radar categories={authoritativeData?.categories} state={state}/></div>
+    <div className="border-t border-white/10 xl:col-start-3 xl:row-start-1 xl:border-l xl:border-t-0"><OverviewCategoryVector categories={authoritativeData?.categories} state={state}/></div>
   </section>;
 }

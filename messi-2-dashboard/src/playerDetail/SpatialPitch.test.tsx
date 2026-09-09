@@ -275,6 +275,22 @@ describe("Three WebGL spatial pitch contract", () => {
     await waitFor(() => expect(container.querySelector("[data-webgl-renderer]")).toBeInTheDocument());
   });
 
+  it("labels the arena reduced-motion fallback as FotMob-only rather than a SportsAPI native scene", () => {
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    render(<SpatialPitch presentation="arena" analysis={analysisWith({})} nativePitchEvents={{ kind: "loading", key: "native" }} />);
+    expect(screen.getByText("2D 접근성 대체 · FotMob 슛 · SportsAPI 동일 이벤트 미표시")).toHaveAttribute("role", "status");
+  });
+
+  it("clears the owning arena selection when the scene switches to the 2D accessibility fallback", async () => {
+    const onArenaSelectionChange = vi.fn();
+    const view = render(<SpatialPitch presentation="arena" forcedMode="perspective" analysis={analysisWith({})} onArenaSelectionChange={onArenaSelectionChange} />);
+    await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
+    onArenaSelectionChange.mockClear();
+    view.rerender(<SpatialPitch presentation="arena" forcedMode="plan" analysis={analysisWith({})} onArenaSelectionChange={onArenaSelectionChange} />);
+    expect(onArenaSelectionChange).toHaveBeenLastCalledWith(null);
+    expect(screen.getByText("2D 접근성 대체 · FotMob 슛 · SportsAPI 동일 이벤트 미표시")).toBeInTheDocument();
+  });
+
   it("distinguishes unavailable snapshots from observed zero", async () => {
     const unavailable = render(<SpatialPitch analysis={analysisWith({ shotmapSnapshotAvailable: false })} />);
     await screen.findByRole("img", { name: /슈팅 스냅샷 사용 불가/ });

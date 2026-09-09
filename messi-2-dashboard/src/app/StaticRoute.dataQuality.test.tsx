@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const transport = vi.hoisted(() => ({ detail: vi.fn(), quality: vi.fn(), quadrant: vi.fn() }));
@@ -38,10 +38,10 @@ describe("native detail semantics", () => {
     expect(within(summary).getAllByRole("listitem")).toHaveLength(3); expect(summary).toHaveTextContent("Complete forward");
   });
   it("renders unavailable, verified-zero, and populated actual shot states with one keyboard-readable SVG", async () => {
-    const unavailable = render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); let pitch = screen.getByRole("region", { name: "피치 분석" });
+    const unavailable = render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); let workspace = screen.getByRole("group", { name: "전술·공간 분석" }); fireEvent.click(within(workspace).getByText("보조 피치 분석")); let pitch = within(workspace).getByRole("region", { name: "피치 분석" });
     expect(within(pitch).getByRole("img", { name: /6레인 슈팅 회랑/ })).toHaveAccessibleName(/서버 슈팅 스냅샷 사용 불가/); expect(pitch).toHaveTextContent(/슛\s*—/); expect(pitch).not.toHaveTextContent(/슛\s*0/); unavailable.unmount();
-    transport.detail.mockResolvedValueOnce({ player: samplePlayers[0], analysis: { ...analysis, spatial: { ...analysis.spatial, shotmapSnapshotAvailable: true } } }); const zero = render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); pitch = screen.getByRole("region", { name: "피치 분석" }); expect(within(pitch).getByRole("img", { name: /6레인 슈팅 회랑/ })).toHaveAccessibleName(/PK 포함 슛 0발/); expect(pitch).toHaveTextContent(/슛\s*0/); zero.unmount();
-    transport.detail.mockResolvedValueOnce({ player: samplePlayers[0], analysis: { ...analysis, spatial: { ...analysis.spatial, available: true, heatmapPointCount: 1, heatmapPoints: [{ x: 50, y: 40 }], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 50, y: 40, outcome: "goal" as const, xg: 0.4, xgot: null }] } } }); render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); pitch = screen.getByRole("region", { name: "피치 분석" });
+    transport.detail.mockResolvedValueOnce({ player: samplePlayers[0], analysis: { ...analysis, spatial: { ...analysis.spatial, shotmapSnapshotAvailable: true } } }); const zero = render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); workspace = screen.getByRole("group", { name: "전술·공간 분석" }); fireEvent.click(within(workspace).getByText("보조 피치 분석")); pitch = within(workspace).getByRole("region", { name: "피치 분석" }); expect(within(pitch).getByRole("img", { name: /6레인 슈팅 회랑/ })).toHaveAccessibleName(/PK 포함 슛 0발/); expect(pitch).toHaveTextContent(/슛\s*0/); zero.unmount();
+    transport.detail.mockResolvedValueOnce({ player: samplePlayers[0], analysis: { ...analysis, spatial: { ...analysis.spatial, available: true, heatmapPointCount: 1, heatmapPoints: [{ x: 50, y: 40 }], shotmapSnapshotAvailable: true, shotmapPointCount: 1, shotmapPoints: [{ x: 50, y: 40, outcome: "goal" as const, xg: 0.4, xgot: null }] } } }); render(<StaticRoute />); await screen.findByRole("heading", { name: samplePlayers[0].name }); workspace = screen.getByRole("group", { name: "전술·공간 분석" }); fireEvent.click(within(workspace).getByText("보조 피치 분석")); pitch = within(workspace).getByRole("region", { name: "피치 분석" });
     expect(within(pitch).getByRole("img", { name: /6레인 슈팅 회랑/ })).toHaveAccessibleName(/PK 포함 슛 1발/); expect(pitch).toHaveTextContent(/슛\s*1/); expect(within(pitch).getByRole("button", { name: /goal 슛 상세/ })).toBeInTheDocument();
   });
 });
