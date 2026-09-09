@@ -54,6 +54,9 @@ export function BodyPartShootingPanel({ hasSelectedShot, selectedBodyPart, state
 
   const unobservedPart = { shots: null, goals: null, quality: undefined };
   const selectedAnatomicalPart: AnatomicalShotPart | null = selectedBodyPart === "head" || selectedBodyPart === "rightFoot" || selectedBodyPart === "leftFoot" ? selectedBodyPart : null;
+  // A selected native unknown/other shot must clear the
+  // previous aggregate-body highlight, not inherit it through ?? fallback.
+  const effectiveSelectedPart = hasSelectedShot && selectedBodyPart !== undefined ? selectedAnatomicalPart : selectedPart;
   const figureCounts: Record<AnatomicalShotPart, { shots: number | null; goals: number | null; quality?: { delta: number | null; state: "complete" | "partial" | "unavailable" } }> = {
     head: ready?.parts.head ?? unobservedPart,
     rightFoot: ready?.parts.rightFoot ?? unobservedPart,
@@ -83,14 +86,14 @@ export function BodyPartShootingPanel({ hasSelectedShot, selectedBodyPart, state
       <AnatomicalShotFigure
         className="mt-2"
         title="슈팅 부위 선택"
-        selectedPart={selectedAnatomicalPart ?? selectedPart}
+        selectedPart={effectiveSelectedPart}
         onSelect={(part) => setSelectedPart((current) => current === part ? null : part)}
         counts={figureCounts}
         labels={FIGURE_LABELS}
       />
 
-      {(selectedAnatomicalPart ?? selectedPart) && (
-        (() => { const part = selectedAnatomicalPart ?? selectedPart!; return (<p data-bodypart-selected-part={part} className="mt-1 text-[10px] leading-relaxed text-amber-200/80">
+      {effectiveSelectedPart && (
+        (() => { const part = effectiveSelectedPart; return (<p data-bodypart-selected-part={part} className="mt-1 text-[10px] leading-relaxed text-amber-200/80">
           {selectedAnatomicalPart ? `${FIGURE_LABELS[part]} — 선택한 실제 기록 슛의 부위` : `${FIGURE_LABELS[part]} 집계 선택됨 — 이 부위로 기록된 개별 슛을 가리키지 않음`}
         </p>); })()
       )}

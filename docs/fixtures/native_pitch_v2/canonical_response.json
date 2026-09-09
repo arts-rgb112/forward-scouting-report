@@ -1,0 +1,3447 @@
+{
+  "bodyParts": {
+    "completeness": "complete",
+    "context": {
+      "competition": null,
+      "mode": "league",
+      "playerId": 194165,
+      "scope": 8,
+      "season": "2025/2026"
+    },
+    "includePenalties": true,
+    "parts": {
+      "head": {
+        "goals": 0,
+        "quality": {
+          "delta": 0.2,
+          "eligible": 1,
+          "state": "complete",
+          "xg": 0.2,
+          "xgot": 0.4
+        },
+        "shots": 1
+      },
+      "leftFoot": {
+        "goals": 1,
+        "quality": {
+          "delta": 0.6,
+          "eligible": 3,
+          "state": "complete",
+          "xg": 0.6,
+          "xgot": 1.2
+        },
+        "shots": 3
+      },
+      "other": {
+        "goals": 0,
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shots": 0
+      },
+      "rightFoot": {
+        "goals": 0,
+        "quality": {
+          "delta": 0.2,
+          "eligible": 1,
+          "state": "complete",
+          "xg": 0.2,
+          "xgot": 0.4
+        },
+        "shots": 1
+      },
+      "unknown": {
+        "goals": 0,
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shots": 0
+      }
+    },
+    "provider": "sportsapi",
+    "schemaVersion": "native-body-part-stats-v2",
+    "sources": [
+      {
+        "competition": "Bundesliga",
+        "coverage": {
+          "expectedMatchIds": [
+            1
+          ],
+          "invalidMatchIds": [],
+          "invalidReasons": {},
+          "missingMatchIds": [],
+          "state": "complete",
+          "validMatchIds": [
+            1
+          ]
+        },
+        "fotmobPlayerId": 194165,
+        "mappingKey": "194165:35:77333",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.2,
+              "eligible": 1,
+              "state": "complete",
+              "xg": 0.2,
+              "xgot": 0.4
+            },
+            "shots": 1
+          },
+          "leftFoot": {
+            "goals": 1,
+            "quality": {
+              "delta": 0.6,
+              "eligible": 3,
+              "state": "complete",
+              "xg": 0.6,
+              "xgot": 1.2
+            },
+            "shots": 3
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.2,
+              "eligible": 1,
+              "state": "complete",
+              "xg": 0.2,
+              "xgot": 0.4
+            },
+            "shots": 1
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "provider": "sportsapi",
+        "season": "2025/2026",
+        "seasonId": 77333,
+        "sourcePlayerId": 108579,
+        "totals": {
+          "admittedShots": 5,
+          "excludedPenaltyGoals": 0,
+          "excludedPenaltyShots": 0,
+          "goals": 1,
+          "quality": {
+            "delta": 1.0,
+            "eligible": 5,
+            "state": "complete",
+            "xg": 1.0,
+            "xgot": 2.0
+          },
+          "shots": 5
+        },
+        "tournamentId": 35
+      }
+    ],
+    "totals": {
+      "admittedShots": 5,
+      "excludedPenaltyGoals": 0,
+      "excludedPenaltyShots": 0,
+      "goals": 1,
+      "quality": {
+        "delta": 1.0,
+        "eligible": 5,
+        "state": "complete",
+        "xg": 1.0,
+        "xgot": 2.0
+      },
+      "shots": 5
+    }
+  },
+  "box": {
+    "accounting": {
+      "inRegions": {
+        "goals": 1,
+        "quality": {
+          "delta": 1.0,
+          "eligible": 5,
+          "state": "complete",
+          "xg": 1.0,
+          "xgot": 2.0
+        },
+        "shots": 5,
+        "xg": 1.0,
+        "xgEligible": 5
+      },
+      "outside": {
+        "goals": 0,
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shots": 0,
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      "penalties": {
+        "goals": 0,
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shots": 0,
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      "reconciles": true,
+      "source": {
+        "goals": 1,
+        "quality": {
+          "delta": 1.0,
+          "eligible": 5,
+          "state": "complete",
+          "xg": 1.0,
+          "xgot": 2.0
+        },
+        "shots": 5,
+        "xg": 1.0,
+        "xgEligible": 5
+      },
+      "unlocated": {
+        "goals": 0,
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shots": 0,
+        "xg": 0.0,
+        "xgEligible": 0
+      }
+    },
+    "coordinateDefinition": "sportsapi-draw-pitch-display-v1",
+    "definitionVersion": "native-display-box-subregion-v1",
+    "denominator": 5,
+    "regionOrder": [
+      "L4",
+      "L3L",
+      "L3R",
+      "L2"
+    ],
+    "regions": {
+      "L2": {
+        "bounds": {
+          "xMinInclusive": 84.29,
+          "yMaxExclusive": 37.0,
+          "yMinInclusive": 21.82
+        },
+        "goals": 0,
+        "id": "L2",
+        "label": "박스 우",
+        "quality": {
+          "delta": 0.2,
+          "eligible": 1,
+          "state": "complete",
+          "xg": 0.2,
+          "xgot": 0.4
+        },
+        "shootingSharePct": 20.0,
+        "shots": 1,
+        "xg": 0.2,
+        "xgEligible": 1
+      },
+      "L3L": {
+        "bounds": {
+          "xMinInclusive": 84.29,
+          "yMaxExclusive": 63.0,
+          "yMinInclusive": 50.0
+        },
+        "goals": 1,
+        "id": "L3L",
+        "label": "박스 중좌",
+        "quality": {
+          "delta": 0.4,
+          "eligible": 2,
+          "state": "complete",
+          "xg": 0.4,
+          "xgot": 0.8
+        },
+        "shootingSharePct": 40.0,
+        "shots": 2,
+        "xg": 0.4,
+        "xgEligible": 2
+      },
+      "L3R": {
+        "bounds": {
+          "xMinInclusive": 84.29,
+          "yMaxExclusive": 50.0,
+          "yMinInclusive": 37.0
+        },
+        "goals": 0,
+        "id": "L3R",
+        "label": "박스 중우",
+        "quality": {
+          "delta": 0.4,
+          "eligible": 2,
+          "state": "complete",
+          "xg": 0.4,
+          "xgot": 0.8
+        },
+        "shootingSharePct": 40.0,
+        "shots": 2,
+        "xg": 0.4,
+        "xgEligible": 2
+      },
+      "L4": {
+        "bounds": {
+          "xMinInclusive": 84.29,
+          "yMaxExclusive": 78.18,
+          "yMinInclusive": 63.0
+        },
+        "goals": 0,
+        "id": "L4",
+        "label": "박스 좌",
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "xg": 0.0,
+        "xgEligible": 0
+      }
+    }
+  },
+  "context": {
+    "competition": null,
+    "mode": "league",
+    "playerId": 194165,
+    "scope": 8,
+    "season": "2025/2026"
+  },
+  "coordinateDefinition": "sportsapi-draw-pitch-display-v1",
+  "events": [
+    {
+      "bodyPart": "leftFoot",
+      "destination": {
+        "kind": "unavailable",
+        "observedHeightMeters": null,
+        "reason": "terminal_coordinate_unavailable_for_outcome",
+        "x": null,
+        "y": null
+      },
+      "identity": {
+        "mappingKey": "194165:35:77333",
+        "matchId": 1,
+        "shotId": 5472446,
+        "sourcePlayerId": 108579
+      },
+      "isPenalty": false,
+      "key": "sportsapi:194165:35:77333:108579:1:5472446",
+      "outcome": "off_target",
+      "plot": {
+        "reason": null,
+        "state": "projected",
+        "x": 86.4,
+        "y": 43.2
+      },
+      "quality": {
+        "delta": 0.2,
+        "eligible": 1,
+        "state": "complete",
+        "xg": 0.2,
+        "xgot": 0.4
+      },
+      "shotType": "miss",
+      "xg": 0.2,
+      "xgot": 0.4
+    },
+    {
+      "bodyPart": "leftFoot",
+      "destination": {
+        "kind": "block",
+        "observedHeightMeters": null,
+        "reason": null,
+        "x": 99.0,
+        "y": 47.5
+      },
+      "identity": {
+        "mappingKey": "194165:35:77333",
+        "matchId": 1,
+        "shotId": 5472520,
+        "sourcePlayerId": 108579
+      },
+      "isPenalty": false,
+      "key": "sportsapi:194165:35:77333:108579:1:5472520",
+      "outcome": "on_target",
+      "plot": {
+        "reason": null,
+        "state": "projected",
+        "x": 92.4,
+        "y": 32.8
+      },
+      "quality": {
+        "delta": 0.2,
+        "eligible": 1,
+        "state": "complete",
+        "xg": 0.2,
+        "xgot": 0.4
+      },
+      "shotType": "save",
+      "xg": 0.2,
+      "xgot": 0.4
+    },
+    {
+      "bodyPart": "leftFoot",
+      "destination": {
+        "kind": "goal_plane",
+        "observedHeightMeters": null,
+        "reason": null,
+        "x": 100.0,
+        "y": 45.7
+      },
+      "identity": {
+        "mappingKey": "194165:35:77333",
+        "matchId": 1,
+        "shotId": 5473386,
+        "sourcePlayerId": 108579
+      },
+      "isPenalty": false,
+      "key": "sportsapi:194165:35:77333:108579:1:5473386",
+      "outcome": "goal",
+      "plot": {
+        "reason": null,
+        "state": "projected",
+        "x": 92.0,
+        "y": 62.2
+      },
+      "quality": {
+        "delta": 0.2,
+        "eligible": 1,
+        "state": "complete",
+        "xg": 0.2,
+        "xgot": 0.4
+      },
+      "shotType": "goal",
+      "xg": 0.2,
+      "xgot": 0.4
+    },
+    {
+      "bodyPart": "rightFoot",
+      "destination": {
+        "kind": "unavailable",
+        "observedHeightMeters": null,
+        "reason": "terminal_coordinate_unavailable_for_outcome",
+        "x": null,
+        "y": null
+      },
+      "identity": {
+        "mappingKey": "194165:35:77333",
+        "matchId": 1,
+        "shotId": 6390464,
+        "sourcePlayerId": 108579
+      },
+      "isPenalty": false,
+      "key": "sportsapi:194165:35:77333:108579:1:6390464",
+      "outcome": "off_target",
+      "plot": {
+        "reason": null,
+        "state": "projected",
+        "x": 93.6,
+        "y": 43.2
+      },
+      "quality": {
+        "delta": 0.2,
+        "eligible": 1,
+        "state": "complete",
+        "xg": 0.2,
+        "xgot": 0.4
+      },
+      "shotType": "post",
+      "xg": 0.2,
+      "xgot": 0.4
+    },
+    {
+      "bodyPart": "head",
+      "destination": {
+        "kind": "block",
+        "observedHeightMeters": null,
+        "reason": null,
+        "x": 97.5,
+        "y": 50.4
+      },
+      "identity": {
+        "mappingKey": "194165:35:77333",
+        "matchId": 1,
+        "shotId": 6390845,
+        "sourcePlayerId": 108579
+      },
+      "isPenalty": false,
+      "key": "sportsapi:194165:35:77333:108579:1:6390845",
+      "outcome": "on_target",
+      "plot": {
+        "reason": null,
+        "state": "projected",
+        "x": 91.5,
+        "y": 56.6
+      },
+      "quality": {
+        "delta": 0.2,
+        "eligible": 1,
+        "state": "complete",
+        "xg": 0.2,
+        "xgot": 0.4
+      },
+      "shotType": "save",
+      "xg": 0.2,
+      "xgot": 0.4
+    }
+  ],
+  "includePenalties": true,
+  "provider": "sportsapi",
+  "schemaVersion": "native-pitch-events-v2",
+  "selectionZones": {
+    "box": [
+      {
+        "bounds": {
+          "includeMaxX": true,
+          "includeMaxY": false,
+          "xMax": 100.0,
+          "xMinInclusive": 84.29,
+          "yMax": 78.18,
+          "yMinInclusive": 63.0
+        },
+        "goals": 0,
+        "id": "L4",
+        "label": "박스 좌",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": true,
+          "includeMaxY": false,
+          "xMax": 100.0,
+          "xMinInclusive": 84.29,
+          "yMax": 63.0,
+          "yMinInclusive": 50.0
+        },
+        "goals": 1,
+        "id": "L3L",
+        "label": "박스 중좌",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.2,
+              "eligible": 1,
+              "state": "complete",
+              "xg": 0.2,
+              "xgot": 0.4
+            },
+            "shots": 1
+          },
+          "leftFoot": {
+            "goals": 1,
+            "quality": {
+              "delta": 0.2,
+              "eligible": 1,
+              "state": "complete",
+              "xg": 0.2,
+              "xgot": 0.4
+            },
+            "shots": 1
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.4,
+          "eligible": 2,
+          "state": "complete",
+          "xg": 0.4,
+          "xgot": 0.8
+        },
+        "shootingSharePct": 40.0,
+        "shots": 2,
+        "source": {
+          "records": 2,
+          "state": "complete"
+        },
+        "xg": 0.4,
+        "xgEligible": 2
+      },
+      {
+        "bounds": {
+          "includeMaxX": true,
+          "includeMaxY": false,
+          "xMax": 100.0,
+          "xMinInclusive": 84.29,
+          "yMax": 50.0,
+          "yMinInclusive": 37.0
+        },
+        "goals": 0,
+        "id": "L3R",
+        "label": "박스 중우",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.2,
+              "eligible": 1,
+              "state": "complete",
+              "xg": 0.2,
+              "xgot": 0.4
+            },
+            "shots": 1
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.2,
+              "eligible": 1,
+              "state": "complete",
+              "xg": 0.2,
+              "xgot": 0.4
+            },
+            "shots": 1
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.4,
+          "eligible": 2,
+          "state": "complete",
+          "xg": 0.4,
+          "xgot": 0.8
+        },
+        "shootingSharePct": 40.0,
+        "shots": 2,
+        "source": {
+          "records": 2,
+          "state": "complete"
+        },
+        "xg": 0.4,
+        "xgEligible": 2
+      },
+      {
+        "bounds": {
+          "includeMaxX": true,
+          "includeMaxY": false,
+          "xMax": 100.0,
+          "xMinInclusive": 84.29,
+          "yMax": 37.0,
+          "yMinInclusive": 21.82
+        },
+        "goals": 0,
+        "id": "L2",
+        "label": "박스 우",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.2,
+              "eligible": 1,
+              "state": "complete",
+              "xg": 0.2,
+              "xgot": 0.4
+            },
+            "shots": 1
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.2,
+          "eligible": 1,
+          "state": "complete",
+          "xg": 0.2,
+          "xgot": 0.4
+        },
+        "shootingSharePct": 20.0,
+        "shots": 1,
+        "source": {
+          "records": 1,
+          "state": "complete"
+        },
+        "xg": 0.2,
+        "xgEligible": 1
+      }
+    ],
+    "boxAccounting": {
+      "denominator": 5,
+      "inRegions": 5,
+      "outside": 0,
+      "penalties": 0,
+      "reconciles": true,
+      "source": 5,
+      "unlocated": 0
+    },
+    "grid": [
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 16.67,
+          "xMinInclusive": 0.0,
+          "yMax": 21.82,
+          "yMinInclusive": 0.0
+        },
+        "goals": 0,
+        "id": "depth1_lane1",
+        "label": "구역 1-1",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 16.67,
+          "xMinInclusive": 0.0,
+          "yMax": 37.0,
+          "yMinInclusive": 21.82
+        },
+        "goals": 0,
+        "id": "depth1_lane2",
+        "label": "구역 1-2",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 16.67,
+          "xMinInclusive": 0.0,
+          "yMax": 63.0,
+          "yMinInclusive": 37.0
+        },
+        "goals": 0,
+        "id": "depth1_lane3",
+        "label": "구역 1-3",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 16.67,
+          "xMinInclusive": 0.0,
+          "yMax": 78.18,
+          "yMinInclusive": 63.0
+        },
+        "goals": 0,
+        "id": "depth1_lane4",
+        "label": "구역 1-4",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": true,
+          "xMax": 16.67,
+          "xMinInclusive": 0.0,
+          "yMax": 100.0,
+          "yMinInclusive": 78.18
+        },
+        "goals": 0,
+        "id": "depth1_lane5",
+        "label": "구역 1-5",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 33.33,
+          "xMinInclusive": 16.67,
+          "yMax": 21.82,
+          "yMinInclusive": 0.0
+        },
+        "goals": 0,
+        "id": "depth2_lane1",
+        "label": "구역 2-1",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 33.33,
+          "xMinInclusive": 16.67,
+          "yMax": 37.0,
+          "yMinInclusive": 21.82
+        },
+        "goals": 0,
+        "id": "depth2_lane2",
+        "label": "구역 2-2",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 33.33,
+          "xMinInclusive": 16.67,
+          "yMax": 63.0,
+          "yMinInclusive": 37.0
+        },
+        "goals": 0,
+        "id": "depth2_lane3",
+        "label": "구역 2-3",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 33.33,
+          "xMinInclusive": 16.67,
+          "yMax": 78.18,
+          "yMinInclusive": 63.0
+        },
+        "goals": 0,
+        "id": "depth2_lane4",
+        "label": "구역 2-4",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": true,
+          "xMax": 33.33,
+          "xMinInclusive": 16.67,
+          "yMax": 100.0,
+          "yMinInclusive": 78.18
+        },
+        "goals": 0,
+        "id": "depth2_lane5",
+        "label": "구역 2-5",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 50.0,
+          "xMinInclusive": 33.33,
+          "yMax": 21.82,
+          "yMinInclusive": 0.0
+        },
+        "goals": 0,
+        "id": "depth3_lane1",
+        "label": "구역 3-1",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 50.0,
+          "xMinInclusive": 33.33,
+          "yMax": 37.0,
+          "yMinInclusive": 21.82
+        },
+        "goals": 0,
+        "id": "depth3_lane2",
+        "label": "구역 3-2",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 50.0,
+          "xMinInclusive": 33.33,
+          "yMax": 63.0,
+          "yMinInclusive": 37.0
+        },
+        "goals": 0,
+        "id": "depth3_lane3",
+        "label": "구역 3-3",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 50.0,
+          "xMinInclusive": 33.33,
+          "yMax": 78.18,
+          "yMinInclusive": 63.0
+        },
+        "goals": 0,
+        "id": "depth3_lane4",
+        "label": "구역 3-4",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": true,
+          "xMax": 50.0,
+          "xMinInclusive": 33.33,
+          "yMax": 100.0,
+          "yMinInclusive": 78.18
+        },
+        "goals": 0,
+        "id": "depth3_lane5",
+        "label": "구역 3-5",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 66.67,
+          "xMinInclusive": 50.0,
+          "yMax": 21.82,
+          "yMinInclusive": 0.0
+        },
+        "goals": 0,
+        "id": "depth4_lane1",
+        "label": "구역 4-1",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 66.67,
+          "xMinInclusive": 50.0,
+          "yMax": 37.0,
+          "yMinInclusive": 21.82
+        },
+        "goals": 0,
+        "id": "depth4_lane2",
+        "label": "구역 4-2",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 66.67,
+          "xMinInclusive": 50.0,
+          "yMax": 63.0,
+          "yMinInclusive": 37.0
+        },
+        "goals": 0,
+        "id": "depth4_lane3",
+        "label": "구역 4-3",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 66.67,
+          "xMinInclusive": 50.0,
+          "yMax": 78.18,
+          "yMinInclusive": 63.0
+        },
+        "goals": 0,
+        "id": "depth4_lane4",
+        "label": "구역 4-4",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": true,
+          "xMax": 66.67,
+          "xMinInclusive": 50.0,
+          "yMax": 100.0,
+          "yMinInclusive": 78.18
+        },
+        "goals": 0,
+        "id": "depth4_lane5",
+        "label": "구역 4-5",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 83.33,
+          "xMinInclusive": 66.67,
+          "yMax": 21.82,
+          "yMinInclusive": 0.0
+        },
+        "goals": 0,
+        "id": "depth5_lane1",
+        "label": "구역 5-1",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 83.33,
+          "xMinInclusive": 66.67,
+          "yMax": 37.0,
+          "yMinInclusive": 21.82
+        },
+        "goals": 0,
+        "id": "depth5_lane2",
+        "label": "구역 5-2",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 83.33,
+          "xMinInclusive": 66.67,
+          "yMax": 63.0,
+          "yMinInclusive": 37.0
+        },
+        "goals": 0,
+        "id": "depth5_lane3",
+        "label": "구역 5-3",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": false,
+          "xMax": 83.33,
+          "xMinInclusive": 66.67,
+          "yMax": 78.18,
+          "yMinInclusive": 63.0
+        },
+        "goals": 0,
+        "id": "depth5_lane4",
+        "label": "구역 5-4",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": false,
+          "includeMaxY": true,
+          "xMax": 83.33,
+          "xMinInclusive": 66.67,
+          "yMax": 100.0,
+          "yMinInclusive": 78.18
+        },
+        "goals": 0,
+        "id": "depth5_lane5",
+        "label": "구역 5-5",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": true,
+          "includeMaxY": false,
+          "xMax": 100.0,
+          "xMinInclusive": 83.33,
+          "yMax": 21.82,
+          "yMinInclusive": 0.0
+        },
+        "goals": 0,
+        "id": "depth6_lane1",
+        "label": "구역 6-1",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": true,
+          "includeMaxY": false,
+          "xMax": 100.0,
+          "xMinInclusive": 83.33,
+          "yMax": 37.0,
+          "yMinInclusive": 21.82
+        },
+        "goals": 0,
+        "id": "depth6_lane2",
+        "label": "구역 6-2",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.2,
+              "eligible": 1,
+              "state": "complete",
+              "xg": 0.2,
+              "xgot": 0.4
+            },
+            "shots": 1
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.2,
+          "eligible": 1,
+          "state": "complete",
+          "xg": 0.2,
+          "xgot": 0.4
+        },
+        "shootingSharePct": 20.0,
+        "shots": 1,
+        "source": {
+          "records": 1,
+          "state": "complete"
+        },
+        "xg": 0.2,
+        "xgEligible": 1
+      },
+      {
+        "bounds": {
+          "includeMaxX": true,
+          "includeMaxY": false,
+          "xMax": 100.0,
+          "xMinInclusive": 83.33,
+          "yMax": 63.0,
+          "yMinInclusive": 37.0
+        },
+        "goals": 1,
+        "id": "depth6_lane3",
+        "label": "구역 6-3",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.2,
+              "eligible": 1,
+              "state": "complete",
+              "xg": 0.2,
+              "xgot": 0.4
+            },
+            "shots": 1
+          },
+          "leftFoot": {
+            "goals": 1,
+            "quality": {
+              "delta": 0.4,
+              "eligible": 2,
+              "state": "complete",
+              "xg": 0.4,
+              "xgot": 0.8
+            },
+            "shots": 2
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.2,
+              "eligible": 1,
+              "state": "complete",
+              "xg": 0.2,
+              "xgot": 0.4
+            },
+            "shots": 1
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.8,
+          "eligible": 4,
+          "state": "complete",
+          "xg": 0.8,
+          "xgot": 1.6
+        },
+        "shootingSharePct": 80.0,
+        "shots": 4,
+        "source": {
+          "records": 4,
+          "state": "complete"
+        },
+        "xg": 0.8,
+        "xgEligible": 4
+      },
+      {
+        "bounds": {
+          "includeMaxX": true,
+          "includeMaxY": false,
+          "xMax": 100.0,
+          "xMinInclusive": 83.33,
+          "yMax": 78.18,
+          "yMinInclusive": 63.0
+        },
+        "goals": 0,
+        "id": "depth6_lane4",
+        "label": "구역 6-4",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      },
+      {
+        "bounds": {
+          "includeMaxX": true,
+          "includeMaxY": true,
+          "xMax": 100.0,
+          "xMinInclusive": 83.33,
+          "yMax": 100.0,
+          "yMinInclusive": 78.18
+        },
+        "goals": 0,
+        "id": "depth6_lane5",
+        "label": "구역 6-5",
+        "parts": {
+          "head": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "leftFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "other": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "rightFoot": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          },
+          "unknown": {
+            "goals": 0,
+            "quality": {
+              "delta": 0.0,
+              "eligible": 0,
+              "state": "complete",
+              "xg": 0.0,
+              "xgot": 0.0
+            },
+            "shots": 0
+          }
+        },
+        "quality": {
+          "delta": 0.0,
+          "eligible": 0,
+          "state": "complete",
+          "xg": 0.0,
+          "xgot": 0.0
+        },
+        "shootingSharePct": 0.0,
+        "shots": 0,
+        "source": {
+          "records": 0,
+          "state": "complete"
+        },
+        "xg": 0.0,
+        "xgEligible": 0
+      }
+    ],
+    "gridAccounting": {
+      "assigned": 5,
+      "reconciles": true,
+      "source": 5,
+      "unlocated": 0
+    }
+  },
+  "snapshotRevision": "7c616056d73db2231e72d8d07338f50523c9f00d5414664068642febe844f2ed",
+  "trajectoryDefinition": "source-validated-terminal-planar-schematic-v2"
+}

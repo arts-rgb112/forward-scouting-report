@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useId, useMemo, useState } from "react";
 
 import type { FullActivityHeatmapData } from "../api/fullActivityHeatmapContracts";
+import type { FullActivityDisplayEnvelope } from "../api/fullActivityDisplayContracts";
 import type { PlayerAnalysis, ShotmapPoint } from "../dashboard/types";
 import { LegacySpatialPitchFigure } from "./LegacySpatialPitch";
 import { DEFAULT_PITCH_LAYERS, type PitchLayerVisibility } from "./pitchLayers";
@@ -8,7 +9,7 @@ import { usePitchPenalty } from "./PitchPenaltyContext";
 import { excludePenaltyShots } from "./pitchPenalties";
 import { outcomeSummary, OutcomeControls, useShotOutcomeVisibility } from "./shotOutcomeVisibility";
 import type { BoxSubregionStatsState } from "./useBoxSubregionStats";
-import type { NativePitchEventsState } from "./useNativePitchEvents";
+import type { NativePitchEventsV2State as NativePitchEventsState } from "./useNativePitchEventsV2";
 
 const WebGLSpatialPitch = lazy(() => import("./WebGLSpatialPitch").then((module) => ({ default: module.WebGLSpatialPitch })));
 
@@ -33,13 +34,14 @@ function usePrefersReducedMotion() {
 
 const outcomeLabel: Record<ShotmapPoint["outcome"], string> = { goal: "득점", on_target: "유효 슛", off_target: "빗나감", blocked: "블록" };
 
-export function SpatialPitch({ analysis, contextIdentity = "", forcedMode, embedded = false, layers = DEFAULT_PITCH_LAYERS, fullActivityHeatmap, boxSubregion, nativePitchEvents }: {
+export function SpatialPitch({ analysis, contextIdentity = "", forcedMode, embedded = false, layers = DEFAULT_PITCH_LAYERS, fullActivityHeatmap, fullActivityDisplay, boxSubregion, nativePitchEvents }: {
   analysis?: PlayerAnalysis;
   contextIdentity?: string;
   forcedMode?: ViewMode;
   embedded?: boolean;
   layers?: PitchLayerVisibility;
   fullActivityHeatmap?: FullActivityHeatmapData;
+  fullActivityDisplay?: FullActivityDisplayEnvelope;
   boxSubregion?: BoxSubregionStatsState;
   /** 3D-only, per NATIVE_PITCH_EVENT_CONTRACT_20260908.md's "3D-only first
    * integration must explicitly label its source; 2D must not be implicitly
@@ -79,7 +81,7 @@ export function SpatialPitch({ analysis, contextIdentity = "", forcedMode, embed
     {reducedMotion && manualMode === null && <p className="mt-2 text-base text-zinc-400">Reduced-motion preference detected; the 2D plan fallback is active.</p>}
     {!nativeSourceSelected && layers.markers && controller.integrity && controller.presentOutcomes.length > 0 && <OutcomeControls outcomes={controller.presentOutcomes} counts={controller.counts} visible={controller.visibleOutcomes} markerLayerId={markerLayerId} onClick={controller.onClick} onDoubleClick={controller.onDoubleClick} showCounts={false} />}
     {!nativeSourceSelected && <p role="status" aria-live="polite" className="sr-only">표시 중인 슈팅 결과: {outcomeSummary(visibleOutcomes)}.</p>}
-    <div className="mt-3 min-w-0 overflow-hidden rounded-lg border border-white/10">{mode === "plan" ? <LegacySpatialPitchFigure analysis={displayAnalysis} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} showCounts={false} layers={layers} corridors boxSubregion={boxSubregion} /> : <figure><Suspense fallback={<div role="status" className="grid min-h-80 place-items-center bg-[#050a08] text-sm font-bold text-zinc-200">WebGL 렌더러 로딩…</div>}><WebGLSpatialPitch spatial={displaySpatial} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} contextIdentity={contextIdentity} layers={layers} fullActivityHeatmap={fullActivityHeatmap} boxSubregion={boxSubregion} nativePitchEvents={nativePitchEvents} shotSource={shotSource} onShotSourceChange={setShotSource} /></Suspense><figcaption className="border-t border-white/10 bg-black/25 px-3 py-2 text-base text-zinc-300">{nativeSourceSelected ? "SportsAPI 기록 슛은 동일 원천 이벤트로 표시됩니다. 활동 히트맵은 별도 원천입니다." : "FotMob 슛 보기 · CCA는 기존 점수 스냅샷 32×22 원천을 사용합니다."}</figcaption></figure>}</div>
+    <div className="mt-3 min-w-0 overflow-hidden rounded-lg border border-white/10">{mode === "plan" ? <LegacySpatialPitchFigure analysis={displayAnalysis} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} showCounts={false} layers={layers} corridors boxSubregion={boxSubregion} /> : <figure><Suspense fallback={<div role="status" className="grid min-h-80 place-items-center bg-[#050a08] text-sm font-bold text-zinc-200">WebGL 렌더러 로딩…</div>}><WebGLSpatialPitch spatial={displaySpatial} visibleOutcomes={controller.visibleOutcomes} markerLayerId={markerLayerId} contextIdentity={contextIdentity} layers={layers} fullActivityHeatmap={fullActivityHeatmap} fullActivityDisplay={fullActivityDisplay} boxSubregion={boxSubregion} nativePitchEvents={nativePitchEvents} shotSource={shotSource} onShotSourceChange={setShotSource} /></Suspense><figcaption className="border-t border-white/10 bg-black/25 px-3 py-2 text-base text-zinc-300">{nativeSourceSelected ? "SportsAPI 기록 슛은 동일 원천 이벤트로 표시됩니다. 활동 히트맵은 별도 원천입니다." : "FotMob 슛 보기 · CCA는 전체 활동 데이터 기반 표시용 영역입니다."}</figcaption></figure>}</div>
     <div className="mt-3 space-y-2 text-base leading-5 text-zinc-400" aria-live="polite">
       <p data-spatial-activity-note>{activitySentence}</p>
       <p data-spatial-shot-note>{shotSentence}</p>

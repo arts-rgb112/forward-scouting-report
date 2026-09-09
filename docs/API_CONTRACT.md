@@ -1,6 +1,16 @@
 # API contract notes
 
+## 피치 선택 v2·전체 활동 표시 추가 계약 (2026-09-09)
+
+새 `native-pitch-events-v2`와 `full-activity-display-v1`의 규범은 [PITCH_SELECTION_V2_CONTRACT.md](PITCH_SELECTION_V2_CONTRACT.md)에 정의한다. 기존 endpoint/점수/CSV 의미는 보존한다. 로컬 구현·독립 검수·브라우저 검증 완료, owner 릴리스 승인 전 배포하지 않는다.
+
 ## 진행 중인 작업
+
+- PITCH-FEEDBACK-RELEASE-20260909: 발주자 '라이브 배포 및 병합 승인' 수신. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-pitch-release-20260908. 검수된 피치 변경만 패키징·새 PR·CI·병합·기존 Render/Vercel 배포 및 라이브 검증 진행. origin/main6e8e13a0 확인, 기존 dirty CSV/미추적 에셋·원천 보존. 정본 messi-specs/OPEN_WORK.md.
+
+- PITCH-FEEDBACK-20260909: 로컬 구현·독립 코드/계약/시각 검수 및 실제 브라우저 검증 완료. 조작 통합·선택형 신체 카드·30+4구역·종점 기반 궤적·동일원천 CCA·부위 직접 코랄 강조. production build/두 tsconfig PASS. 원본/점수/기존 변경 보존. 미배포, owner 릴리스 승인 대기. 정본 messi-specs/OPEN_WORK.md; 증거 coral-macro/context-final/controls-final.
+
+- 피치 릴리스 완료(2026-09-09): PR328/329 main6e8e13a0,RenderLIVE 및실제messi.my desktop/mobile2D·3D 검증과최종독립시각GO. 엄격SHA LF핫픽스/필수LinuxCI통과,5API/3GLB200,4구역·부위별품질·3pose·전체궤적·PK·2D개선확인. 초기실패증거와자동화잔여는 OPEN_WORK.md에분리보존. 데이터/점수의미변경없음.
 
 - CSV 배포 바이트 핫픽스(2026-09-09): 라이브500 원인은 CRLF 로컬 CSV pin과 LF Git blob 불일치. 원본행/값과runtime엄격SHA검증은 유지, GitLF바이트로 index/provenance 재고정 및 .gitattributes 명시. exporter CRLF거부와 필수Gitblob회귀 추가; 독립검수/재배포/라이브재검증 전 완료아님. 정본 OPEN_WORK.md.
 

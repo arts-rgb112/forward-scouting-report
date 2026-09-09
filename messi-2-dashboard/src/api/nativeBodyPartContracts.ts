@@ -86,6 +86,10 @@ const quality = z.object({
   if (Math.abs(value.delta - expectedDelta) > 1e-9)
     ctx.addIssue({ code: "custom", message: "quality delta does not equal rounded xgot minus xg" });
 });
+// Re-exported without changing the v1/v2 body-part decoder's own semantics:
+// the native-pitch-events-v2 envelope embeds this exact server-owned quality
+// shape for its events and selection zones.
+export const nativeBodyPartQualitySchema = quality;
 type NativeQuality = z.infer<typeof quality>;
 
 /**
@@ -158,6 +162,7 @@ const bodyPartCounts = z.object({ shots: count.nullable(), goals: count.nullable
   if (value.shots !== null && value.goals! > value.shots) ctx.addIssue({ code: "custom", message: "body-part goals exceed shots" });
   checkQualityAgainstShots(value.shots, value.quality, ctx);
 });
+export const nativeBodyPartCountsSchema = bodyPartCounts;
 
 const totals = z.object({
   admittedShots: count.nullable(), excludedPenaltyShots: count.nullable(), excludedPenaltyGoals: count.nullable(),
@@ -200,6 +205,7 @@ const coverage = z.object({
 const partsMap = z.record(z.enum(PARTS), bodyPartCounts).superRefine((value, ctx) => {
   if (PARTS.some((part) => !(part in value))) ctx.addIssue({ code: "custom", message: "source part taxonomy is invalid" });
 });
+export const nativeBodyPartPartsSchema = partsMap;
 
 const source = z.object({
   provider: z.literal("sportsapi"),

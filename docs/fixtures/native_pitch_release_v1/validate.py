@@ -79,10 +79,32 @@ def verify():
     return metadata
 
 
+def verify_provider_only_refresh():
+    """Read-only approval evidence: no payload/source drift may be rebaselined."""
+    documents, metadata = build_documents()
+    expected = json.loads((HERE / "provenance.json").read_bytes())
+    old_provider = expected["providerSha256"]
+    comparison = dict(metadata, providerSha256=old_provider)
+    if comparison != expected:
+        raise AssertionError("Provider-only refresh refused: another provenance field changed")
+    for name, document in documents.items():
+        if (HERE / name).read_bytes() != canonical(document):
+            raise AssertionError(f"Provider-only refresh refused: payload changed: {name}")
+    return {"reason": "additive full_activity_sources accessor; all v1 payloads and source pins unchanged",
+            "previousProviderSha256": old_provider, "providerSha256": metadata["providerSha256"],
+            "verifiedUnchangedFiles": metadata["files"], "sourceIndexSha256": metadata["sourceIndexSha256"]}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write", action="store_true", help="Explicit one-time capture; different existing fixtures are never replaced")
+    parser.add_argument("--check-provider-only-refresh", action="store_true", help="Read-only proof permitting only the provider hash metadata field to change")
     args = parser.parse_args()
+    if args.check_provider_only_refresh:
+        if args.write:
+            raise ValueError("Refresh check cannot write fixtures")
+        print(json.dumps(verify_provider_only_refresh()))
+        return
     if args.write:
         documents, metadata = build_documents()
         for name, value in {**documents, "provenance.json": metadata}.items():

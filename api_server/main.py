@@ -250,8 +250,16 @@ def _pitch_player_lookup(context):
     return None if player is None else ResolvedPitchPlayer(player.id, player.league.name)
 
 
+def _pitch_full_heat(context):
+    return build_full_activity_heatmap(
+        context.playerId, context.season, context.mode,
+        context.scope if context.scope is not None else 8, context.competition or "all",
+    )
+
+
 app.include_router(create_pitch_router(
     Path(__file__).resolve().parents[1] / "data", _pitch_player_lookup, supported_seasons,
+    full_heat_provider=_pitch_full_heat,
 ))
 
 

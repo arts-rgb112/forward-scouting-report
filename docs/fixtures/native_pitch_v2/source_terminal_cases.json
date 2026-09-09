@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "native-pitch-events-v2-fixture-v1",
+  "coordinateDefinition": "sportsapi-draw-pitch-display-v1",
+  "trajectoryDefinition": "source-validated-terminal-planar-schematic-v2",
+  "observedHeightMeters": null,
+  "cases": [
+    {"matchId": 14056037, "shotId": 5473386, "shotType": "goal", "expectedKind": "goal_plane", "expectedY": 45.7},
+    {"matchId": 14056037, "shotId": 5472520, "shotType": "save", "expectedKind": "block", "expectedX": 99.0, "expectedY": 47.5},
+    {"matchId": 14062150, "shotId": 6390845, "shotType": "save", "expectedKind": "block", "expectedX": 97.5, "expectedY": 50.4},
+    {"matchId": 14056037, "shotId": 5472446, "shotType": "miss", "expectedKind": "unavailable", "expectedReason": "terminal_coordinate_unavailable_for_outcome"},
+    {"matchId": 14062150, "shotId": 6390464, "shotType": "post", "expectedKind": "unavailable", "expectedReason": "terminal_coordinate_unavailable_for_outcome"}
+  ]
+}
