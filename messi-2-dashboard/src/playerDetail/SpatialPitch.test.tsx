@@ -285,7 +285,7 @@ describe("Three WebGL spatial pitch contract", () => {
     const onArenaSelectionChange = vi.fn();
     const view = render(<SpatialPitch presentation="arena" forcedMode="perspective" analysis={analysisWith({})} onArenaSelectionChange={onArenaSelectionChange} />);
     await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
-    expect(document.querySelector("[data-pitch-controls-help]")).toHaveClass("relative", "lg:absolute", "lg:right-[15rem]");
+    expect(document.querySelector("[data-pitch-controls-help]")).not.toBeInTheDocument();
     onArenaSelectionChange.mockClear();
     view.rerender(<SpatialPitch presentation="arena" forcedMode="plan" analysis={analysisWith({})} onArenaSelectionChange={onArenaSelectionChange} />);
     expect(onArenaSelectionChange).toHaveBeenLastCalledWith(null);
@@ -424,6 +424,20 @@ describe("Three WebGL spatial pitch contract", () => {
     vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     const { container: plan } = render(<SpatialPitch analysis={analysisWith({})} nativePitchEvents={nativePitchEvents} />);
     expect(plan.querySelector("[data-pitch-selection-card]")).not.toBeInTheDocument();
+  });
+
+  it("keeps a selected arena native card in a bounded mobile-flow scroll dock", async () => {
+    const native = nativePitchEventsEnvelopeSchema.parse(JSON.parse(readFileSync(
+      resolve(process.cwd(), "../docs/fixtures/native_pitch_v2/canonical_response.json"), "utf-8",
+    )));
+    const nativePitchEvents: NativePitchEventsState = { kind: "ready", key: "arena-native", data: native };
+    const { container } = render(<SpatialPitch presentation="arena" analysis={analysisWith({})} forcedMode="perspective" nativePitchEvents={nativePitchEvents} />);
+    await screen.findByRole("img", { name: /3D 회랑 WebGL 피치/ });
+    fireEvent.click(container.querySelector<HTMLButtonElement>("[data-native-event-key]")!);
+    const dock = container.querySelector('[data-pitch-info-dock]')!;
+    expect(dock).toHaveClass("max-h-[50svh]", "overflow-y-auto", "overscroll-contain", "lg:absolute");
+    expect(dock.parentElement).toHaveAttribute("data-pitch-stage");
+    expect(dock.querySelector('[data-pitch-selection-card="shot"]')).toBeInTheDocument();
   });
 
   it("never renders an unavailable SportsAPI envelope as observed zero", async () => {

@@ -36,6 +36,10 @@ describe("PlayerArenaStage", () => {
     expect(container.querySelector('[data-layout="arena-scene"]')).toHaveClass("min-h-[20rem]", "sm:min-h-[24rem]");
     expect(container.querySelector('[data-layout="arena-category-hud"]')).toHaveClass("bg-[#181a1b]/95", "backdrop-blur-md");
     expect(container.querySelector('[data-layout="arena-season-rail"]')).toHaveClass("bg-[#181a1b]/95", "max-h-[min(15rem,calc(100%_-_6rem))]");
+    const scene = container.querySelector('[data-layout="arena-scene"]')!;
+    const controlsFooter = container.querySelector('[data-layout="arena-controls-footer"]')!;
+    expect(controlsFooter).toContainElement(container.querySelector('[data-arena-controls-help]'));
+    expect(scene.compareDocumentPosition(controlsFooter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const seasonHeadingIds = [...container.querySelectorAll('h2[id^="overview-season-heading-"]')].map((heading) => heading.id);
     expect(seasonHeadingIds).toHaveLength(2);
     expect(new Set(seasonHeadingIds).size).toBe(seasonHeadingIds.length);

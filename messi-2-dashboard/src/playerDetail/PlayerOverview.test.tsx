@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { duelPressV2DetailMetricsSchema } from "../api/duelPressV2Contracts";
 import type { PlayerAnalysis } from "../dashboard/types";
 import { samplePlayers } from "../test/fixtures/players";
-import { PlayerOverview } from "./PlayerOverview";
+import { ArenaProfileHud, PlayerOverview } from "./PlayerOverview";
 
 /**
  * No captured unified-v3 response is available in this checkout.  This helper
@@ -67,6 +67,17 @@ describe("PlayerOverview", () => {
     const compactMinutes = screen.getByText("1.9k분");
     expect(compactMinutes).toHaveAttribute("aria-label", "1,900분");
     expect(compactMinutes).toHaveAttribute("title", "1,900분");
+  });
+
+  it("preserves only approved actual profile metrics in the arena HUD, with compact mobile disclosure", () => {
+    const analysis = { score: { value: 84, rank: 3, topPercent: null, population: 50, archetype: "Type A" as const }, rawMetrics: { goals: 12, xg: 10.4, xgot: 11.1, minutesPlayed: 1900 } } as PlayerAnalysis;
+    const { container } = render(<ArenaProfileHud player={samplePlayers[0]} analysis={analysis} selected={selected} />);
+    const hud = container.querySelector('[data-layout="arena-profile-hud"]')!;
+    expect(hud.querySelectorAll('[data-layout="arena-profile-stats"]')).toHaveLength(2);
+    expect(within(hud).getAllByText("1.9k분")[0]).toHaveAttribute("aria-label", "1,900분");
+    expect(within(hud).getByText("기록 · 현재 프로필")).toBeInTheDocument();
+    expect(hud).toHaveTextContent(`현재 프로필 ${samplePlayers[0].age}세`);
+    expect(hud).toHaveTextContent("동포지션 3위/50명");
   });
 
   it("keeps the selected season visible while history loads and puts the profile first in the mobile DOM", () => {

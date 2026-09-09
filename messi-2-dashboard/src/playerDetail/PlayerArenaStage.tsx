@@ -39,16 +39,20 @@ function PlayerArenaBody({ player, analysis, history, config, dataset, data, cat
   // one factual selection dock is visible.
   const selectionHud = selection ? null : <OverviewCategoryVector categories={authoritative?.categories} state={state} />;
 
-  return <section data-layout="player-arena-stage" aria-label="선수 피치 아레나" className="relative isolate min-w-0 overflow-hidden rounded-[1.5rem] border border-[#464a4c] bg-[#181a1b] shadow-[0_24px_60px_rgba(0,0,0,.28)]">
-    <div data-layout="arena-scene" className="min-h-[20rem] sm:min-h-[24rem]"><SpatialPitch presentation="arena" embedded analysis={analysis} contextIdentity={contextIdentity} layers={{ ...DEFAULT_PITCH_LAYERS, cca: false, trajectories: false }} fullActivityHeatmap={heatmap} fullActivityDisplay={display} boxSubregion={boxSubregion} nativePitchEvents={nativePitchEvents} onArenaSelectionChange={setSelection} /></div>
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-4">
-      <div className="pointer-events-auto w-[min(100%,23rem)]"><ArenaProfileHud player={player} analysis={analysis} selected={dataset} /></div>
-      {!selection && <div data-layout="arena-category-hud" className="pointer-events-auto hidden w-72 max-h-[min(31rem,calc(100svh_-_3rem))] overflow-y-auto overscroll-contain rounded-xl border border-white/15 bg-[#181a1b]/95 p-3 text-zinc-100 shadow-[0_12px_30px_rgba(0,0,0,.34)] backdrop-blur-md lg:block">{selectionHud}</div>}
+  return <section data-layout="player-arena-stage" aria-label="선수 피치 아레나" className="isolate min-w-0 overflow-hidden rounded-[1.5rem] border border-[#464a4c] bg-[#181a1b] shadow-[0_24px_60px_rgba(0,0,0,.28)]">
+    <div data-layout="arena-scene" className="relative min-h-[20rem] sm:min-h-[24rem]">
+      <SpatialPitch presentation="arena" embedded analysis={analysis} contextIdentity={contextIdentity} layers={{ ...DEFAULT_PITCH_LAYERS, cca: false, trajectories: false }} fullActivityHeatmap={heatmap} fullActivityDisplay={display} boxSubregion={boxSubregion} nativePitchEvents={nativePitchEvents} onArenaSelectionChange={setSelection} />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 sm:p-4">
+        <div className="pointer-events-auto w-[min(100%,23rem)]"><ArenaProfileHud player={player} analysis={analysis} selected={dataset} /></div>
+        {!selection && <div data-layout="arena-category-hud" className="pointer-events-auto hidden w-72 max-h-[min(31rem,calc(100svh_-_3rem))] overflow-y-auto overscroll-contain rounded-xl border border-white/15 bg-[#181a1b]/95 p-3 text-zinc-100 shadow-[0_12px_30px_rgba(0,0,0,.34)] backdrop-blur-md lg:block">{selectionHud}</div>}
+      </div>
+      <div data-layout="arena-season-rail" className="pointer-events-auto absolute bottom-3 left-3 z-20 hidden max-h-[min(15rem,calc(100%_-_6rem))] w-56 overflow-y-auto rounded-xl border border-white/15 bg-[#181a1b]/95 p-3 shadow-[0_12px_30px_rgba(0,0,0,.34)] backdrop-blur-md lg:block"><OverviewSeasonRail player={player} analysis={analysis} selected={dataset} history={history} /></div>
     </div>
-    <div data-layout="arena-season-rail" className="pointer-events-auto absolute bottom-3 left-3 z-20 hidden max-h-[min(15rem,calc(100%_-_6rem))] w-56 overflow-y-auto rounded-xl border border-white/15 bg-[#181a1b]/95 p-3 shadow-[0_12px_30px_rgba(0,0,0,.34)] backdrop-blur-md lg:block"><OverviewSeasonRail player={player} analysis={analysis} selected={dataset} history={history} /></div>
-    <div className="pointer-events-auto absolute bottom-3 right-3 z-20 hidden lg:block"><PitchPenaltyToggle /></div>
+    <div data-layout="arena-controls-footer" className="relative z-20 flex min-h-12 flex-col gap-2 border-t border-white/10 bg-[#232628]/95 px-3 py-2 text-zinc-200 sm:flex-row sm:items-center sm:justify-between">
+      <p data-arena-controls-help className="type-caption">WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p>
+      <div className="shrink-0"><PitchPenaltyToggle /></div>
+    </div>
     <div className="relative z-20 border-t border-white/10 bg-[#232628]/95 p-3 lg:hidden">
-      <div className="mb-2 flex justify-end border-b border-white/10 pb-2"><PitchPenaltyToggle /></div>
       <details className="rounded-xl border border-white/10 p-3"><summary className="cursor-pointer text-sm font-black">시즌 기록</summary><div className="mt-3 max-h-[50svh] overflow-y-auto"><OverviewSeasonRail player={player} analysis={analysis} selected={dataset} history={history} ariaLabel="시즌 · 대회 모바일" /></div></details>
       {!selection && <details className="mt-2 rounded-xl border border-white/10 p-3"><summary className="cursor-pointer text-sm font-black">M.E.S.S.I. 카테고리</summary><div className="mt-3 max-h-[50svh] overflow-y-auto"><OverviewCategoryVector categories={authoritative?.categories} state={state} /></div></details>}
     </div>

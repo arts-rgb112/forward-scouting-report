@@ -1363,11 +1363,11 @@ export function WebGLSpatialPitch({
       })}
       <p className="sr-only">WebGL 장면 요약: 활동 좌표 {fullActivityHeatmap?.available ? fullActivityHeatmap.validPointCount : 0}개, 유효 슈팅 이벤트 {shotsValid ? spatial!.shotmapPoints.length : 0}개, 20구역 시각 가이드. 실제 GLTFLoader 모델과 Three.js 카메라를 사용합니다.</p>
     </div>
-    <p data-pitch-controls-help className={presentation === "arena" ? "relative z-20 border-t border-white/10 bg-[#232628]/95 px-3 py-2 type-caption text-zinc-200 lg:absolute lg:bottom-3 lg:right-[15rem] lg:rounded-lg lg:border lg:border-white/15 lg:shadow-lg" : "border-b border-white/10 bg-black/25 px-3 py-2 text-sm text-zinc-200"}>WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p>
+    {presentation !== "arena" && <p data-pitch-controls-help className="border-b border-white/10 bg-black/25 px-3 py-2 text-sm text-zinc-200">WASD 이동 · 좌드래그 앵글 · 우드래그 높이 · 휠 줌</p>}
     {/* Owner-requested in-pitch HUD: keep the canvas full width. The dock
         is a DOM sibling so its inputs never bubble into camera handlers.
         Small screens retain flow layout rather than clipping the body card. */}
-    {(presentation !== "arena" || selectedZone || selectedNativeEventKey || replayIndex !== null) && <div data-pitch-info-dock className={`mt-3 w-full lg:absolute lg:right-4 lg:top-4 lg:z-20 lg:mt-0 lg:max-h-[calc(100%_-_2rem)] lg:w-80 lg:overflow-y-auto lg:overscroll-contain ${presentation === "arena" ? "max-h-[50svh]" : ""}`}>
+    {(presentation !== "arena" || selectedZone || selectedNativeEventKey || replayIndex !== null) && <div data-pitch-info-dock className={`mt-3 w-full lg:absolute lg:right-4 lg:top-4 lg:z-20 lg:mt-0 lg:max-h-[calc(100%_-_2rem)] lg:w-80 lg:overflow-y-auto lg:overscroll-contain ${presentation === "arena" ? "max-h-[50svh] overflow-y-auto overscroll-contain" : ""}`}>
       {nativeMode ? nativePitchEvents?.kind === "ready" ? <>
         {selectedZone?.kind === "tactical20" ? <TacticalZone20SelectionCard zone={zonesById.get(selectedZone.id)!} onClose={() => selectZone(null)} /> : <NativePitchSelectionCard
         key={`${nativePitchEvents.key}:${selectedNativeEvent?.key ?? selectedZone?.id ?? "overview"}`}

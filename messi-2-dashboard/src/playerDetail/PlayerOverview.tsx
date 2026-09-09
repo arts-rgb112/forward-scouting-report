@@ -145,8 +145,22 @@ export function PlayerIdentity({ player, analysis, selected }: { player: Player;
 export function ArenaProfileHud({ player, analysis, selected }: { player: Player; analysis?: PlayerAnalysis; selected: DatasetRouteState }) {
   const color = tierColor(player);
   const tier = resolveTierPresentation(player.tier);
+  const raw = analysis?.rawMetrics ?? {};
+  const minutes = minuteDisplay(raw.minutesPlayed);
+  const primaryStats = [
+    { label: "득점", text: compactNumber(raw.goals, 0), full: undefined },
+    { label: "xG", text: compactNumber(raw.xg), full: undefined },
+    { label: "xGOT", text: compactNumber(raw.xgot), full: undefined },
+    { label: "출전", text: minutes.text, full: minutes.full },
+  ];
+  const positionRank = analysis?.score.rank ?? null;
+  const positionPopulation = analysis?.score.population && analysis.score.population > 0 ? analysis.score.population : null;
+  const profileContext = () => <p data-arena-profile-context className="type-caption text-zinc-400">{player.age === null ? "현재 프로필 나이 정보 없음" : `현재 프로필 ${player.age}세`} · 대회 전체 {player.rank}위 · 동포지션 {positionRank === null ? "—" : `${positionRank}위`}{positionPopulation === null ? "" : `/${positionPopulation}명`}</p>;
+  const statRow = () => <dl data-layout="arena-profile-stats" className="grid grid-cols-4 gap-2 border-t border-white/10 pt-2">{primaryStats.map(({ label, text, full }) => <div key={label} className="min-w-0"><dt className="type-caption text-zinc-500">{label}</dt><dd aria-label={full} title={full ?? text} className="truncate text-sm font-black tabular-nums text-zinc-100">{text}</dd></div>)}</dl>;
   return <section data-layout="arena-profile-hud" className="min-w-0 rounded-2xl border border-white/15 bg-[#232628]/95 p-3 text-zinc-100 shadow-[0_14px_34px_rgba(0,0,0,.28)] backdrop-blur-md">
     <div className="flex min-w-0 items-center gap-3"><div className="size-12 shrink-0 overflow-hidden rounded-xl bg-[#343839]">{player.face ? <img src={player.face} alt={`${player.name} 선수 사진`} className="h-full w-full object-cover object-top" /> : <span className="grid h-full place-items-center font-black text-zinc-500" aria-hidden="true">{player.name[0]}</span>}</div><div className="min-w-0 flex-1"><h2 className="truncate text-lg font-black tracking-tight">{player.name}</h2><p className="truncate type-caption text-zinc-400">{player.club.name} · {player.position}</p><p className="mt-1 type-caption text-zinc-500">{selected.season} · {contextText(selected)}</p></div><div className="shrink-0 text-right"><b className="block text-3xl font-black tabular-nums" style={{ color }}>{wholeScore(player, analysis)}</b><span className="type-caption" style={{ color }}>{tier.glyph} {tier.label}</span></div></div>
+    <div className="mt-3 hidden lg:block">{statRow()}<div className="mt-2">{profileContext()}</div></div>
+    <details className="mt-2 lg:hidden"><summary className="cursor-pointer type-caption font-bold text-zinc-300">기록 · 현재 프로필</summary><div className="mt-2">{statRow()}<div className="mt-2">{profileContext()}</div></div></details>
   </section>;
 }
 
