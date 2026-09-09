@@ -6,6 +6,14 @@
 
 ## 진행 중인 작업
 
+- DETAIL-MAIN 후보 검수(2026-09-09): 동일 전용 worktree에서 root 관련42/42 PASS, 구현자 build PASS. 독립 detail_overview_review 코드+격리합성 시각 GO(독립25/25 PASS; preview-candidate-final1440/390, mobile354px, 숫자잘림해결). 실제API/전체화면/라이브 GO 아님. 발주자 승인된 비운영 브랜치 push/프리뷰로 실제 검증 예정. 정본 OPEN_WORK.md 및 DETAIL_MAIN_VERIFICATION_20260909.md.
+
+- DETAIL-MAIN 프리뷰 승인(2026-09-09): 발주자 브랜치 push/프리뷰 검증 승인, production 별도. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909. 관련41테스트 PASS, 격리 모바일354px이나 숫자 잘림/회귀 양성검증 보강 중. 실데이터/프리뷰 미검증. 정본 messi-specs/OPEN_WORK.md.
+
+- DETAIL-MAIN 중간검수(2026-09-09): 위 전용 frontend checkout에서 summary-first 구현 및 Europe history URL 보강. 독립 code-only21PASS GO; fullsuite796PASS/20FAIL/1SKIP 후 관련회귀보강 중. 격리합성1440/390 errors0/nooverflow PASS이나 mobile높이 추가보강/실데이터QA미완. 운영API 개발Origin CORS거부로 실제 브라우저 gate 미통과, 설정변경없음. commit/push/배포없음, 증거 DETAIL_MAIN_VERIFICATION_20260909.md 및 OPEN_WORK.md.
+
+- DETAIL-MAIN-20260908(2026-09-09): 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-detail-main-20260909, agent/detail-main-20260909(base64b0ec7), 발주자 전용 worktree/구현 승인. compact 프로필·시즌/대회·정본 카테고리의 summary-first 표시 재구성. 기존 피치는 하단 보존, API/점수/데이터/기능 플래그 불변. 구현·독립검수·실화면 QA 진행, 배포 별도 승인. 정본 messi-specs/OPEN_WORK.md.
+
 - PITCH-FEEDBACK-RELEASE-20260909: 발주자 '라이브 배포 및 병합 승인' 수신. 작업 폴더 C:/Users/USER/Downloads/files/forward-scouting-report-pitch-release-20260908. 검수된 피치 변경만 패키징·새 PR·CI·병합·기존 Render/Vercel 배포 및 라이브 검증 진행. origin/main6e8e13a0 확인, 기존 dirty CSV/미추적 에셋·원천 보존. 정본 messi-specs/OPEN_WORK.md.
 
 - PITCH-FEEDBACK-20260909: 로컬 구현·독립 코드/계약/시각 검수 및 실제 브라우저 검증 완료. 조작 통합·선택형 신체 카드·30+4구역·종점 기반 궤적·동일원천 CCA·부위 직접 코랄 강조. production build/두 tsconfig PASS. 원본/점수/기존 변경 보존. 미배포, owner 릴리스 승인 대기. 정본 messi-specs/OPEN_WORK.md; 증거 coral-macro/context-final/controls-final.

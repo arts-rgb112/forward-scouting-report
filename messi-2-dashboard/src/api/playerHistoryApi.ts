@@ -11,12 +11,24 @@ const cache = new Map<string, PlayerHistoryEntry>();
 const keyFor = (config: MessiApiConfig, id: number, context: PlayerHistoryContext) => `${config.baseUrl}|${id}|${context.season}|${context.mode}|${context.scope}|${context.competition}`;
 const validSeason = (season: string) => /^\d{4}\/\d{4}$/.test(season) && Number(season.slice(5)) === Number(season.slice(0, 4)) + 1;
 
+/**
+ * The player endpoint has mutually exclusive dataset selectors.  `scope` is
+ * meaningful only for domestic league requests; sending the internal fallback
+ * scope alongside an Europe request is a contract violation (422).
+ */
+export function playerSummaryQuery(context: PlayerHistoryContext): URLSearchParams {
+  const query = new URLSearchParams({ season: context.season, mode: context.mode, includeAnalysis: "false" });
+  if (context.mode === "league") query.set("scope", String(context.scope));
+  else query.set("competition", context.competition);
+  return query;
+}
+
 /** Summary-only historical request. It validates the server player identity before caching it. */
 export async function fetchPlayerSummary(config: MessiApiConfig, id: number, context: PlayerHistoryContext, signal: AbortSignal): Promise<PlayerHistoryEntry> {
   if (!Number.isSafeInteger(id) || id <= 0 || !validSeason(context.season)) throw new MessiApiError("schema", "Player history request was invalid");
   const key = keyFor(config, id, context); const cached = cache.get(key); if (cached) return cached;
   const url = new URL(`/api/v2/players/${id}`, config.baseUrl);
-  url.search = new URLSearchParams({ season: context.season, mode: context.mode, scope: String(context.scope), competition: context.competition, includeAnalysis: "false" }).toString();
+  url.search = playerSummaryQuery(context).toString();
   let response: Response;
   try { response = await fetch(url, { headers: { Accept: "application/json" }, credentials: "omit", signal }); }
   catch (cause) { if (signal.aborted) throw cause; throw new MessiApiError("network", "Unable to reach the M.E.S.S.I. API"); }

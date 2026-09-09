@@ -1,0 +1,111 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import { readFileSync } from "node:fs";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { duelPressV2DetailMetricsSchema } from "../api/duelPressV2Contracts";
+import type { PlayerAnalysis } from "../dashboard/types";
+import { samplePlayers } from "../test/fixtures/players";
+import { PlayerOverview } from "./PlayerOverview";
+
+/**
+ * No captured unified-v3 response is available in this checkout.  This helper
+ * explicitly converts the checked-in legacy transport fixture into a schema
+ * valid unified-v3 *synthetic UI fixture*; it is never product/API evidence.
+ */
+function syntheticUnifiedDetail(mutate?: (detail: Record<string, unknown>) => void) {
+  const detail = JSON.parse(readFileSync("../docs/fixtures/duel_press_v2/complete_league.json", "utf8")).responses.detail;
+  detail.ratingVersion = "messi-score-unified-v3";
+  detail.ratingSnapshotId = "messi-score-unified-v3:0123456789abcdef";
+  detail.categories = detail.categories.map((category: { percentileScore: number }) => ({
+    ...category,
+    formulaId: "pressing-sector-score-v3",
+    formulaVersion: "messi-score-unified-v3",
+    scoreBreakdown: {
+      compositeScore: category.percentileScore,
+      volumeScore: category.percentileScore,
+      ratioScore: category.percentileScore,
+      volumeSample: { attempts: 12, minutes: 1800 },
+      ratioSample: { attempts: 12, minutes: 1800 },
+      sampleState: "observed",
+    },
+  }));
+  mutate?.(detail);
+  return duelPressV2DetailMetricsSchema.parse(detail);
+}
+
+describe("PlayerOverview", () => {
+  const selected = { season: "2025/2026", mode: "league" as const, scope: 7 as const, competition: "all" as const };
+  const history = { loading: false, entries: [], failed: 0, requestedSeasons: 0 };
+
+  afterEach(() => cleanup());
+
+  it("uses only authoritative unified category scores for the radar and compact category rail", () => {
+    const data = syntheticUnifiedDetail();
+    const { container } = render(<PlayerOverview player={samplePlayers[0]} selected={selected} history={history} data={data} />);
+    const overview = container.querySelector('[data-layout="player-overview"]')!;
+    expect(within(overview as HTMLElement).getByRole("img", { name: "서버 제공 M.E.S.S.I. 6개 카테고리 레이더" })).toBeInTheDocument();
+    expect(overview.querySelectorAll("polygon")).toHaveLength(5);
+    expect(within(overview as HTMLElement).getAllByText("박스 밖 슈팅")).toHaveLength(2);
+    expect(within(overview as HTMLElement).getAllByText("전방 압박")).toHaveLength(2);
+    expect(within(overview as HTMLElement).getByText("정본 점수")).toBeInTheDocument();
+  });
+
+  it("keeps unavailable data distinct from zero and exposes a clear loading state", () => {
+    const { rerender } = render(<PlayerOverview player={samplePlayers[0]} selected={selected} history={history} categoryState="loading" />);
+    expect(screen.getByText("정본 카테고리 점수를 불러오는 중입니다.")).toBeInTheDocument();
+    rerender(<PlayerOverview player={samplePlayers[0]} selected={selected} history={history} categoryState="unavailable" />);
+    expect(screen.getByText("선택된 문맥의 정본 카테고리 점수가 없습니다.")).toBeInTheDocument();
+  });
+
+  it("uses readable compact minutes on a four-cell mobile summary while retaining the exact server value for assistive technology", () => {
+    const analysis = { score: { value: 84, rank: 3, topPercent: null, population: 50, archetype: "Type A" as const }, rawMetrics: { minutesPlayed: 1900 } } as PlayerAnalysis;
+    render(<PlayerOverview player={samplePlayers[0]} analysis={analysis} selected={selected} history={history} categoryState="unavailable" />);
+    const compactMinutes = screen.getByText("1.9k분");
+    expect(compactMinutes).toHaveAttribute("aria-label", "1,900분");
+    expect(compactMinutes).toHaveAttribute("title", "1,900분");
+  });
+
+  it("keeps the selected season visible while history loads and puts the profile first in the mobile DOM", () => {
+    const { container } = render(<PlayerOverview player={samplePlayers[0]} selected={selected} history={{ ...history, loading: true }} categoryState="loading" />);
+    const overview = container.querySelector('[data-layout="player-overview"]')!;
+    expect(overview.firstElementChild).toHaveAttribute("aria-labelledby", "overview-profile-heading");
+    expect(overview.children[1]).toHaveAttribute("data-layout", "overview-rail");
+    expect(overview.querySelector('[data-selected="true"]')).toHaveAttribute("data-season", "2025/2026");
+    expect(overview.querySelectorAll('li[aria-hidden="true"]')).toHaveLength(5);
+  });
+
+  it("keeps attribution query keys when historical context navigation changes the dataset", () => {
+    window.history.pushState({}, "", "/players/1?season=2025%2F2026&mode=league&scope=7&utm_source=overview-test");
+    const priorSeason = { ...samplePlayers[0], score: 81.4 };
+    const { container } = render(<PlayerOverview player={samplePlayers[0]} selected={selected} history={{ ...history, entries: [{ player: priorSeason, context: { season: "2024/2025", mode: "europe", scope: 8, competition: "ucl" } }] }} categoryState="unavailable" />);
+    const historicalLink = container.querySelector('a[aria-label*="2024/2025"]');
+    expect(historicalLink).toHaveAttribute("href", "/players/1?season=2024%2F2025&mode=europe&competition=ucl&utm_source=overview-test");
+  });
+
+  it("does not relabel a legacy stat-pairs diagnostic envelope as a M.E.S.S.I. radar", () => {
+    const legacy = duelPressV2DetailMetricsSchema.parse(JSON.parse(readFileSync("../docs/fixtures/duel_press_v2/complete_league.json", "utf8")).responses.detail);
+    render(<PlayerOverview player={samplePlayers[0]} selected={selected} history={history} data={legacy} />);
+    expect(screen.getByRole("img", { name: "M.E.S.S.I. 카테고리 레이더 데이터 없음" })).toBeInTheDocument();
+    expect(screen.getByText("선택된 데이터 버전에서는 카테고리 정본 점수를 제공하지 않습니다.")).toBeInTheDocument();
+  });
+
+  it("renders server-declared synthetic fixture zero, unavailable, and imputed states without coercing them", () => {
+    const data = syntheticUnifiedDetail((detail) => {
+      const categories = detail.categories as Array<Record<string, unknown>>;
+      categories[0].percentileScore = 0;
+      categories[0].scoreBreakdown = { compositeScore: 0, volumeScore: 0, ratioScore: 0, volumeSample: { attempts: 0, minutes: 1800 }, ratioSample: { attempts: 0, minutes: 1800 }, sampleState: "observed" };
+      categories[1].scoreState = "unavailable";
+      categories[2].scoreState = "imputed";
+      categories[2].imputedComponents = ["synthetic-ui-fixture-only"];
+    });
+    const { container } = render(<PlayerOverview player={samplePlayers[0]} selected={selected} history={history} data={data} />);
+    const categoryList = screen.getByRole("heading", { name: "카테고리 스탯" }).parentElement!.parentElement!;
+    expect(within(categoryList).getByText("0", { exact: true })).toBeInTheDocument();
+    expect(within(categoryList).getByText("—", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("일부 카테고리에 서버 대체 구성요소가 포함되어 있습니다.")).toBeInTheDocument();
+    expect(container.querySelectorAll("span.opacity-60")).toHaveLength(1);
+    expect(screen.getByRole("img", { name: "M.E.S.S.I. 카테고리 레이더 데이터 없음" })).toBeInTheDocument();
+  });
+});

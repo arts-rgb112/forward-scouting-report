@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 import { duelPressDetailReadoutEnvelopeSchema } from "../api/duelPressDetailReadoutContracts";
 import { detailReadoutFixture } from "../test/fixtures/duelPressDetailReadouts";
 import { samplePlayers } from "../test/fixtures/players";
-import { PercentileProfile, PlayerDetailDossierLayout, PlayerTierCard, TacticalSummary, VolumeBenchmarkRadar } from "./PlayerDetailRoute";
+import { PercentileProfile, PlayerDetailDossierLayout, PlayerTierCard, TacticalSummary, v2ContextMatches, VolumeBenchmarkRadar } from "./PlayerDetailRoute";
+import { duelPressV2DetailMetricsSchema } from "../api/duelPressV2Contracts";
+import { readFileSync } from "node:fs";
 import { SpatialPitch } from "./SpatialPitch";
 
 const player = samplePlayers[0];
@@ -15,6 +17,13 @@ const axis = (id: string, score = 80) => ({ id, label: id, score, percentile: nu
 const analysis = { score: { value: 81.99, rank: null, topPercent: null, population: 1, archetype: "Type A" as const }, volumeRadar: { kind: "volume" as const, axes: [...ids].reverse().map((id) => axis(id)) }, ratioRadar: { kind: "ratio" as const, axes: ids.map((id) => axis(id, 70)) }, rawMetrics: {}, spatial: { available: false, heatmapPointCount: 0, heatmapPoints: [], shotmapSnapshotAvailable: false, shotmapPointCount: 0, shotmapPoints: [], laneRatios: [], source: "messi-static-cohort", continuousCore: {}, inBoxRatio: null, outBoxFinalRatio: null, midThirdRatio: null, finalThirdRatio: null, ccaAreaPct: null, depthRatios: [], positionalGrid: [], trueCore: {}, dangerZoneDensity: null, deepBoxZoneScore: null } } as never;
 
 describe("native player detail panels", () => {
+  it("rejects a v2 detail envelope when its exact player context differs from the selected page", () => {
+    const value = duelPressV2DetailMetricsSchema.parse(JSON.parse(readFileSync("../docs/fixtures/duel_press_v2/complete_league.json", "utf8")).responses.detail);
+    const context = { season: value.context.season, mode: "league" as const, scope: value.context.scope as 3 | 5 | 7 | 8, competition: "all" as const };
+    expect(v2ContextMatches(value, value.context.playerId, context)).toBe(true);
+    expect(v2ContextMatches(value, value.context.playerId, { ...context, season: "2024/2025" })).toBe(false);
+    expect(v2ContextMatches(value, value.context.playerId + 1, context)).toBe(false);
+  });
   it("floors the card score and exposes exactly six fixed metric abbreviations", () => {
     const { container } = render(<PlayerTierCard player={player} analysis={analysis} quality={{ kind: "idle" }} />);
     expect(screen.getByText("81")).toBeInTheDocument();
@@ -61,14 +70,13 @@ describe("native player detail panels", () => {
     render(<VolumeBenchmarkRadar player={player} dataset={{season:"2025/2026",mode:"league",scope:8,competition:"all"}} />); const section = screen.getByRole("region", { name: "Volume benchmark radar" });
     expect(section).toHaveTextContent("8-league benchmark is not enabled"); expect(section.querySelectorAll("[data-series]")).toHaveLength(0);
   });
-  it("uses a 3:9 hero, then full-width tactical summary and detail sections", () => {
+  it("puts the compact player summary before the tactical summary and preserves the pitch below it", () => {
     window.history.replaceState(null, "", "/players/1?season=2025%2F2026&mode=league&scope=8&utm_source=slack");
     const { container } = render(<PlayerDetailDossierLayout player={player} analysis={analysis} quality={{ kind: "idle" }} history={{ loading: false, entries: [], failed: 0, requestedSeasons: 0 }} dataset={{season:"2025/2026",mode:"league",scope:8,competition:"all"}} />);
-    const outer = container.querySelector('[data-layout="detail-dossier-layout"]'); const dossierSeason = container.querySelector('[data-layout="dossier-season"]'); const stack = container.querySelector('[data-layout="player-detail-section-stack"]'); const tacticalSlot = container.querySelector('[data-layout="tactical-summary-slot"]'); const summarySlot = container.querySelector('[data-layout="category-summary-slot"]'); const detailSlot = container.querySelector('[data-layout="category-detail-slot"]'); const radarSlot = container.querySelector('[data-layout="radar-slot"]'); const qualitySlot = container.querySelector('[data-layout="data-quality-slot"]');
-    expect(outer).toHaveClass("min-w-0", "xl:grid-cols-12", "xl:items-start");
-    expect(dossierSeason).toHaveClass("min-w-0", "xl:col-span-3"); expect(dossierSeason?.querySelector('[data-layout="approved-profile-card"]')).toHaveClass("w-full");
+    const outer = container.querySelector('[data-layout="detail-dossier-layout"]'); const overview = container.querySelector('[data-layout="player-overview"]'); const rail = container.querySelector('[data-layout="overview-rail"]'); const stack = container.querySelector('[data-layout="player-detail-section-stack"]'); const tacticalSlot = container.querySelector('[data-layout="tactical-summary-slot"]'); const summarySlot = container.querySelector('[data-layout="category-summary-slot"]'); const detailSlot = container.querySelector('[data-layout="category-detail-slot"]'); const radarSlot = container.querySelector('[data-layout="radar-slot"]'); const qualitySlot = container.querySelector('[data-layout="data-quality-slot"]');
+    expect(outer).toHaveClass("min-w-0"); expect(overview).toHaveClass("xl:grid-cols-[minmax(250px,.78fr)_minmax(0,1.6fr)_minmax(250px,.82fr)]"); expect(rail).toBeInTheDocument(); expect(within(overview as HTMLElement).getByRole("heading", { name: "시즌 · 대회" })).toBeInTheDocument(); expect(within(overview as HTMLElement).getByRole("img", { name: "M.E.S.S.I. 카테고리 레이더 데이터 없음" })).toBeInTheDocument();
     const workspace = within(outer!).getByRole("region", { name: "전술·공간 분석" }); const tactical = within(tacticalSlot!).getByRole("region", { name: "Tactical summary" }); const pitch = within(workspace).getByRole("region", { name: "피치 분석" }); const pitchSlot = workspace.querySelector('[data-layout="pitch-workspace-slot"]');
-    expect(workspace).toHaveClass("min-w-0", "xl:col-span-9"); expect(workspace).not.toContainElement(tactical); expect(workspace).toContainElement(pitch); expect(tacticalSlot).toHaveClass("mt-4", "min-w-0"); expect(within(pitch).getAllByRole("tab").length).toBeGreaterThanOrEqual(2); expect(within(pitch).getByRole("tab", { name: "2D 회랑" })).toHaveAttribute("aria-selected", "true");
+    expect(outer).toContainElement(overview); expect(overview!.compareDocumentPosition(tacticalSlot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(tacticalSlot!.compareDocumentPosition(workspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(workspace).not.toContainElement(tactical); expect(workspace).toContainElement(pitch); expect(tacticalSlot).toHaveClass("mt-4", "min-w-0"); expect(within(pitch).getAllByRole("tab").length).toBeGreaterThanOrEqual(2); expect(within(pitch).getByRole("tab", { name: "2D 회랑" })).toHaveAttribute("aria-selected", "true");
     const threeDLink = within(workspace).getByRole("link", { name: "3D로 보기" });
     expect(threeDLink).toHaveAttribute("href", `/player/${player.id}/3d?season=2025%2F2026&mode=league&scope=8&utm_source=slack`); expect(threeDLink).toHaveAttribute("target", "_blank");
     expect(within(pitch).queryByRole("tab", { name: "3D 회랑" })).not.toBeInTheDocument();
@@ -77,7 +85,7 @@ describe("native player detail panels", () => {
     expect(pitchSlot).toContainElement(pitch); expect(tacticalSlot).toContainElement(tactical);
     expect(workspace.compareDocumentPosition(stack!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const orderedSlots = Array.from(stack!.children).map((node) => node.getAttribute("data-layout"));
-    expect(orderedSlots).toEqual(["tactical-summary-slot", "category-summary-slot", "category-detail-slot", "radar-slot", "data-quality-slot"]);
+    expect(orderedSlots).toEqual(["category-summary-slot", "category-detail-slot", "radar-slot", "data-quality-slot"]);
     [tacticalSlot, summarySlot, detailSlot, radarSlot, qualitySlot].forEach((slot) => expect(slot).toHaveClass("min-w-0", "w-full"));
     const profileGrid = within(summarySlot!).getByRole("region", { name: "Percentile profile" }).querySelector('[data-layout="legacy-percentile-grid"]')!;
     expect(profileGrid).toHaveClass("sm:grid-cols-2", "lg:grid-cols-3"); expect(profileGrid).toHaveAttribute("data-desktop-columns", "3"); expect(profileGrid.children).toHaveLength(6);

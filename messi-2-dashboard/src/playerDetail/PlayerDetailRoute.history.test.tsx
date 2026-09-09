@@ -43,7 +43,7 @@ describe("player detail historical rail transport", () => {
     pending.slice(0, 4).forEach((request, index) => request.resolve(resultFor(request, 70 + index)));
     await waitFor(() => expect(pending).toHaveLength(8)); expect(maxInFlight).toBeLessThanOrEqual(4);
     pending.slice(4).forEach((request, index) => request.resolve(resultFor(request, 80 + index)));
-    await waitFor(() => expect(screen.getByRole("region", { name: "Season score rail" })).toHaveTextContent("2024/2025"));
+    await waitFor(() => expect(screen.getByRole("region", { name: "시즌 · 대회" })).toHaveTextContent("2024/2025"));
     for (const season of historicalSeasons.slice(1)) expect(screen.getByText(season)).toBeInTheDocument();
   });
 
@@ -69,7 +69,7 @@ describe("player detail historical rail transport", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(0); }); expect(pending).toHaveLength(4);
     await act(async () => { await vi.advanceTimersByTimeAsync(HISTORY_SUMMARY_TIMEOUT_MS); });
     expect(neverResolving.signal.aborted).toBe(true); expect(pending).toHaveLength(8); expect(maxInFlight).toBeLessThanOrEqual(4);
-    const rail = screen.getByRole("region", { name: "Season score rail" });
+    const rail = screen.getByRole("region", { name: "시즌 · 대회" });
     expect(rail).toHaveTextContent("71.0"); expect(rail).not.toHaveTextContent("시즌 이력을 불러오지 못했습니다."); expect(rail.querySelector(".animate-pulse")).toBeNull();
     pending.slice(4).forEach((request, index) => request.resolve(resultFor(request, 81 + index)));
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });

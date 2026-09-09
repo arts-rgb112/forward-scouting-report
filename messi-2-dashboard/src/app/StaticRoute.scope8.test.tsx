@@ -118,7 +118,7 @@ describe("scope-8 direct-route capability gate", () => {
     render(<StaticRoute />);
     await waitFor(() => expect(transport.detail).toHaveBeenCalledTimes(1));
     expect(transport.duelDetail).not.toHaveBeenCalled();
-    expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Volume benchmark radar" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Duel and pressing companion" })).not.toBeInTheDocument();
   });
 
@@ -140,7 +140,7 @@ describe("scope-8 direct-route capability gate", () => {
     expect(screen.queryByRole("region", { name: "Duel and pressing companion" })).not.toBeInTheDocument();
     expect(detailBoard.closest('[data-layout="detail-board-slot"]')).toBeInTheDocument();
     expect(detailBoard.closest("details")).not.toHaveAttribute("open");
-    expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Volume benchmark radar" })).not.toBeInTheDocument();
     expect(transport.detailReadouts).toHaveBeenCalledWith(expect.anything(), 1, { season: "2024/2025", mode: "league", scope: 5, competition: "all" }, expect.any(AbortSignal));
   });
 
@@ -151,9 +151,9 @@ describe("scope-8 direct-route capability gate", () => {
     render(<StaticRoute />);
     expect(await screen.findByRole("heading", { name: samplePlayers[0].name })).toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent("detail board unavailable");
-    expect(screen.getByRole("region", { name: "Tactical and spatial analysis" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "전술·공간 분석" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Duel press detailed stats board" }).closest('[data-layout="detail-board-slot"]')).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Volume benchmark radar" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Aerial duels")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Ground duels")).not.toBeInTheDocument();
   });
@@ -166,15 +166,15 @@ describe("scope-8 direct-route capability gate", () => {
     expect(await screen.findByRole("heading", { name: samplePlayers[0].name })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Duel press detailed stats board" })).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("region", { name: "Duel press detailed stats board" }).closest('[data-layout="detail-board-slot"]')).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Volume benchmark radar" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Volume benchmark radar" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Aerial duels")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Ground duels")).not.toBeInTheDocument();
   });
 
   it("drops a late detail-readout board response after the selected context changes", async () => {
     vi.stubEnv("VITE_DUEL_PRESS_LEADERBOARD_ENABLED", "true");
-    const stale = structuredClone(detailReadoutFixture); stale.categories[0].comparison = { ...stale.categories[0].comparison, percentile: 99.99 };
-    const current = structuredClone(detailReadoutFixture); current.categories[0].comparison = { ...current.categories[0].comparison, percentile: 12.34 }; current.context.season = "2024/2025";
+    const stale = structuredClone(detailReadoutFixture); stale.categories[0].score = 99; stale.context = { ...stale.context, playerId: 1, season: "2025/2026", scope: 7, competition: null }; stale.player = { ...stale.player, id: 1 };
+    const current = structuredClone(detailReadoutFixture); current.categories[0].score = 12; current.context = { ...current.context, playerId: 1, season: "2024/2025", scope: 5, competition: null }; current.player = { ...current.player, id: 1 };
     let resolveStale!: (value: typeof detailReadoutFixture) => void;
     transport.detailReadouts.mockImplementationOnce(() => new Promise<typeof detailReadoutFixture>((resolve) => { resolveStale = resolve; })).mockResolvedValueOnce(current);
     window.history.replaceState(null, "", "/players/1?season=2025%2F2026&scope=7&taxonomy=duel-press-v1");
@@ -184,8 +184,10 @@ describe("scope-8 direct-route capability gate", () => {
     view.rerender(<StaticRoute />);
     await waitFor(() => expect(transport.detailReadouts).toHaveBeenCalledTimes(2));
     fireEvent.click(await screen.findByText("상세 스탯 보드", { selector: "summary" }));
-    await waitFor(() => expect(screen.getByRole("progressbar", { name: "박스 밖 슈팅 비교 백분위" })).toHaveAttribute("aria-valuenow", "12"));
+    await waitFor(() => expect(screen.getByRole("progressbar", { name: "박스 밖 슈팅 점수" })).toHaveAttribute("aria-valuenow", "12"));
     await act(async () => { resolveStale(stale); await Promise.resolve(); });
-    expect(screen.getByRole("progressbar", { name: "박스 밖 슈팅 비교 백분위" })).toHaveAttribute("aria-valuenow", "12");
+    expect(screen.getByRole("progressbar", { name: "박스 밖 슈팅 점수" })).toHaveAttribute("aria-valuenow", "12");
+    expect(screen.queryByRole("progressbar", { name: "박스 밖 슈팅 점수" })).not.toHaveAttribute("aria-valuenow", "99");
+    expect(window.location.search).toContain("season=2024%2F2025");
   });
 });
