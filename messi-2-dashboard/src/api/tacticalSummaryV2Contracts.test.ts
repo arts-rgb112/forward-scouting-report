@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { tacticalSummaryV2EnvelopeSchema } from "./tacticalSummaryV2Contracts";
-import { tacticalSummaryV2Fixture } from "../test/fixtures/tacticalSummaryV2";
+import { tacticalSummaryV2Fixture, tacticalSummaryV2SubjectCoordinateLowFixture } from "../test/fixtures/tacticalSummaryV2";
 
 describe("tactical-summary-v2 strict contract", () => {
   it("accepts the exact observed, low-sample, and unavailable server states", () => {
@@ -16,15 +16,20 @@ describe("tactical-summary-v2 strict contract", () => {
     const observedTooSmall = { ...fixture, data: { ...fixture.data, positioning: { ...fixture.data.positioning, population: 19, provenance: { ...fixture.data.positioning.provenance, framePopulation: 19, eligiblePopulation: 19 } } } };
     const observedWithReason = { ...fixture, data: { ...fixture.data, positioning: { ...fixture.data.positioning, reason: "position_population_below_minimum" } } };
     const lowPopulationMismatch = tacticalSummaryV2Fixture("low_sample");
-    lowPopulationMismatch.data.positioning.population = 20;
-    lowPopulationMismatch.data.positioning.provenance.framePopulation = 20;
-    lowPopulationMismatch.data.positioning.provenance.eligiblePopulation = 20;
+    const lowRange = lowPopulationMismatch.data.activityRange.frontBackActivityRange;
+    lowRange.population = 20;
+    lowRange.provenance.framePopulation = 20;
+    lowRange.provenance.eligiblePopulation = 20;
     const lowWithoutReason = tacticalSummaryV2Fixture("low_sample");
-    lowWithoutReason.data.positioning.reason = null;
+    lowWithoutReason.data.activityRange.frontBackActivityRange.reason = null;
     expect(tacticalSummaryV2EnvelopeSchema.safeParse(observedTooSmall).success).toBe(false);
     expect(tacticalSummaryV2EnvelopeSchema.safeParse(observedWithReason).success).toBe(false);
     expect(tacticalSummaryV2EnvelopeSchema.safeParse(lowPopulationMismatch).success).toBe(false);
     expect(tacticalSummaryV2EnvelopeSchema.safeParse(lowWithoutReason).success).toBe(false);
+    // This is a distinct, contract-valid low-sample cause: adequate cohort
+    // population but too few valid subject coordinates. Do not reject it as
+    // the position-population minimum case above.
+    expect(tacticalSummaryV2EnvelopeSchema.safeParse(tacticalSummaryV2SubjectCoordinateLowFixture()).success).toBe(true);
   });
   it("requires top-level lowSample to follow the front-back readout state", () => {
     const observed = tacticalSummaryV2Fixture();

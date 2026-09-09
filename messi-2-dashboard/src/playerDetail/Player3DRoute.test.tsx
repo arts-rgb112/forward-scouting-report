@@ -2,14 +2,15 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fullActivityDisplayEnvelopeSchema } from "../api/fullActivityDisplayContracts";
 
 const mocks = vi.hoisted(() => ({
   fetchPlayerDetail: vi.fn(),
-  fullHeatmap: { available: true, validPointCount: 2, cellCounts: [1, 1], source: "messi-static-cohort" },
+  fullActivityDisplay: undefined as unknown,
 }));
 
 vi.mock("../api/leaderboardsApi", () => ({ fetchPlayerDetail: mocks.fetchPlayerDetail }));
-vi.mock("./useFullActivityHeatmap", () => ({ useFullActivityHeatmap: vi.fn(() => ({ kind: "ready", data: mocks.fullHeatmap })) }));
+vi.mock("./useFullActivityDisplay", () => ({ useFullActivityDisplay: vi.fn(() => ({ kind: "ready", key: "test-display", data: mocks.fullActivityDisplay })) }));
 vi.mock("./SpatialPitch", () => ({
   SpatialPitch: (props: { forcedMode?: string; embedded?: boolean; layers: Record<string, boolean>; contextIdentity?: string; fullActivityHeatmap?: unknown }) => <div
     data-testid="spatial-pitch"
@@ -17,7 +18,7 @@ vi.mock("./SpatialPitch", () => ({
     data-embedded={String(Boolean(props.embedded))}
     data-layers={JSON.stringify(props.layers)}
     data-context-identity={props.contextIdentity}
-    data-full-heatmap={String(props.fullActivityHeatmap === mocks.fullHeatmap)}
+    data-full-heatmap={String(props.fullActivityHeatmap === (mocks.fullActivityDisplay as { fullHeat?: unknown } | undefined)?.fullHeat)}
   />,
 }));
 
@@ -27,8 +28,28 @@ import { Player3DRoute } from "./Player3DRoute";
 const config = { baseUrl: "https://api.example.test", season: "2025/2026", scope: 7 as const, limit: 1000 };
 const dataset = { season: "2024/2025", mode: "league" as const, scope: 7 as const, competition: "all" as const };
 
+function strictFullActivityDisplayFixture() {
+  return fullActivityDisplayEnvelopeSchema.parse({
+    schemaVersion: "full-activity-display-v1",
+    context: { playerId: 1, season: "2024/2025", mode: "league", scope: 7, competition: null },
+    fullHeat: {
+      available: true, reason: null, definitionVersion: "full-tier3-count-weighted-histogram-32x22-v1", columns: 32, rows: 22,
+      cellCounts: [2, ...new Array(703).fill(0)], validPointCount: 2, activitySnapshotCount: 1,
+      sourceDefinitionVersion: "sportsapi-heatmap-points-count-weighted-full-v1",
+    },
+    fullSourceCca: {
+      available: true, reason: null, definitionVersion: "full-source-continuous-core-v1", formulaVersion: "fixed-n60-r20-v2",
+      inputDefinition: "sportsapi-data-points-count-expanded-v1", heatmapDefinition: "full-tier3-count-weighted-histogram-32x22-v1",
+      sourceRevision: "87b0d583a5d62b92abf2169476353032e5ef1a174faf04c07dc4a6d6eff2fbf0",
+      coverage: { expectedKeys: ["1:1:1"], observedKeys: ["1:1:1"], missingKeys: [] }, gridColumns: 32, gridRows: 22,
+      validPointCount: 2, standardizedTarget: 14.3, densityThreshold: 3.5, thresholdOfPeak: .48, coreAreaPct: 15.4, ccaAreaPct: 15.4, containedMassPct: 37.1, lowSample: false,
+    },
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.fullActivityDisplay = strictFullActivityDisplayFixture();
   mocks.fetchPlayerDetail.mockResolvedValue({ player: samplePlayers[0], analysis: { spatial: { shotmapPoints: [] } } });
   window.history.replaceState(null, "", "/player/1/3d?season=2024%2F2025&mode=league&scope=7&utm_source=slack");
 });
